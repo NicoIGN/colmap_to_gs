@@ -51,10 +51,10 @@ die() { echo "❌ $*" >&2; exit 1; }
 show_help() {
   cat << EOF
 Usage:
-  ./run_downstream.sh --dataset-dir <drone7> [options]
+  ./run.sh --dataset-dir <dossier> [options]
 
 Required:
-  --dataset-dir <dir>         Racine dataset (ex: drone7)
+  --dataset-dir <dir>         Racine dataset
 
 Expected layout:
   <dataset-dir>/
