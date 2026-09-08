@@ -182,6 +182,7 @@ fi
 # EXPORT CONFIG
 ############################
 
+BASENAME="model3d"
 NORMAL_METHOD="open3d"
 REMOVE_OUTLIERS=True
 MIXED_PRECISION=False
