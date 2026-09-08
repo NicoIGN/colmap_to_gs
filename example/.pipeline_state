@@ -1,7 +1,6 @@
 camera_georeferencing
 export
 feature_extraction
-georeferencing
 keypoints
 matching
 triangulation
