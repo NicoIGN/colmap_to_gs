@@ -12,7 +12,7 @@ LAUNCH_SLURM="$GIT_ROOT/environment/ign.slurm/launch.slurm"
 RUN_SH="$GIT_ROOT/run.sh"
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
-LOG_DIR="/mnt/common/hdd/slurm/logs"
+LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
 
 mkdir -p "$LOG_DIR"
