@@ -170,10 +170,6 @@ if [ -z "${SSIM_LAMBDA+x}" ]; then
   unset SSIM_LAMBDA
 fi
 
-if [ -z "${MAX_GAUSSIANS+x}" ]; then
-  unset MAX_GAUSSIANS
-fi
-
 ############################
 # TRAINING VIS MODE
 ############################
