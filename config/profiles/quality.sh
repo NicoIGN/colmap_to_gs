@@ -28,7 +28,7 @@ SKIP_IMAGE_PROCESSING=true
 MAX_ITER=8000
 
 # 🛑 STOP SPLIT PLUS TÔT
-# STOP_SPLIT_AT=6000            # ↓ stop plus tôt (important)
+STOP_SPLIT_AT=6000            # ↓ stop plus tôt (important)
 
 # ⚠️ CRITIQUE (qualité du gradient)
 TRAIN_RAYS_PER_BATCH=1024
