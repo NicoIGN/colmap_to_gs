@@ -4,9 +4,10 @@ set -euo pipefail
 VERBOSE="${VERBOSE:-false}"
 
 # Usage:
-# GIT_ROOT=/path/to/video_to_ply ./submit.sh
+# GIT_ROOT=/path/to/video_to_ply OUTPUT_DIR=/path/to/output ./launch.sh
 
-: "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/video_to_ply ./submit.sh}"
+: "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/video_to_ply ./launch.sh}"
+: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set. Example: OUTPUT_DIR=/path/to/output ./launch.sh}"
 
 LAUNCH_SLURM="$GIT_ROOT/environment/ign.slurm/launch.slurm"
 RUN_SH="$GIT_ROOT/run.sh"
@@ -24,6 +25,13 @@ log() {
   echo "$@"
 }
 
+is_verbose() {
+  case "${VERBOSE:-false}" in
+    1|true|TRUE|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 log "========================"
 log "🚀 SUBMIT CHECK"
 log "========================"
@@ -32,6 +40,7 @@ log "host      : $(hostname)"
 log "user      : $(whoami)"
 log "pwd       : $(pwd)"
 log "GIT_ROOT  : $GIT_ROOT"
+log "OUTPUT_DIR: $OUTPUT_DIR"
 log "verbose   : $VERBOSE"
 
 [ -d "$GIT_ROOT" ] || { log "❌ GIT_ROOT not found: $GIT_ROOT"; exit 1; }
@@ -54,13 +63,26 @@ if [ -z "${JOB_ID:-}" ]; then
   exit 1
 fi
 
-STDOUT_LOG="$LOG_DIR/gsplat-$JOB_ID.out"
-STDERR_LOG="$LOG_DIR/gsplat-$JOB_ID.err"
+# Resolve real stdout/stderr paths from Slurm (do not guess filenames)
+JOB_INFO=""
+for _ in $(seq 1 30); do
+  JOB_INFO="$(scontrol show job "$JOB_ID" 2>/dev/null || true)"
+  [ -n "$JOB_INFO" ] && break
+  sleep 1
+done
+
+STDOUT_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')"
+STDERR_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdErr=\([^ ]*\).*/\1/p')"
+
+# Fallback if scheduler did not return paths
+STDOUT_LOG="${STDOUT_LOG:-$LOG_DIR/slurm-$JOB_ID.out}"
+STDERR_LOG="${STDERR_LOG:-$LOG_DIR/slurm-$JOB_ID.err}"
 
 log "job id    : $JOB_ID"
 log "stdout    : $STDOUT_LOG"
 log "stderr    : $STDERR_LOG"
 log "queue cmd : squeue -j $JOB_ID"
+log "job info  : scontrol show job $JOB_ID"
 
 log
 log "========================"
@@ -74,6 +96,8 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
+# In case files are not created yet, create them so tail -F can attach
+mkdir -p "$(dirname "$STDOUT_LOG")" "$(dirname "$STDERR_LOG")"
 touch "$STDOUT_LOG" "$STDERR_LOG"
 
 log
@@ -81,7 +105,7 @@ log "========================"
 log "📡 STREAMING LOGS"
 log "========================"
 
-if [ "$VERBOSE" = "true" ]; then
+if is_verbose; then
   log "mode: verbose"
   tail -n0 -F "$STDOUT_LOG" "$STDERR_LOG" &
 else
