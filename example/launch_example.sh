@@ -3,6 +3,7 @@ set -euo pipefail
 
 export GIT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export GSPLAT_PROFILE="balanced"
+export DATASET_DIR=$GIT_ROOT/example
 export OUTPUT_DIR=$GIT_ROOT/example/output
 export CONFIG_SH=$GIT_ROOT/config/config.sh
 mkdir -p $OUTPUT_DIR

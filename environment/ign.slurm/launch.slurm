@@ -124,7 +124,7 @@ EXTRA_ARGS=()
 [ "${SKIP_TRAINING:-false}" = "true" ] && EXTRA_ARGS+=(--skip-training)
 [ "${SKIP_EXPORT:-false}" = "true" ] && EXTRA_ARGS+=(--skip-export)
 
-srun --unbuffered bash run.sh \
+srun --unbuffered bash scripts/run.sh \
   --dataset-dir "$DATASET_DIR" \
   --output_dir "$OUTPUT_DIR" \
   --name "$BASENAME" \
