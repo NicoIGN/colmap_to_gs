@@ -1,0 +1,13 @@
+{
+  "normalization_type": "translation_then_uniform_scale",
+  "translation_subtracted_world_xyz": [
+    498163.24025000015,
+    4379622.150750001,
+    187.3555000010239
+  ],
+  "uniform_scale_applied": 0.05215400548030483,
+  "camera_radius_before": 19.173982722719828,
+  "camera_radius_after": 1.0,
+  "forward_formula": "x_normalized = (x_world - translation_subtracted_world_xyz) * uniform_scale_applied",
+  "inverse_formula": "x_world = x_normalized / uniform_scale_applied + translation_subtracted_world_xyz"
+}
