@@ -17,6 +17,10 @@ LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
 mkdir -p "$LOG_DIR"
 
+# Force Slurm stdout/stderr into LOG_DIR
+export SLURM_STDOUT="$LOG_DIR/gsplat-%j.out"
+export SLURM_STDERR="$LOG_DIR/gsplat-%j.err"
+
 exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
 log() { echo "$@"; }
@@ -31,15 +35,18 @@ is_verbose() {
 log "========================"
 log "🚀 SUBMIT CHECK"
 log "========================"
-log "date      : $(date)"
-log "host      : $(hostname)"
-log "user      : $(whoami)"
-log "pwd       : $(pwd)"
-log "GIT_ROOT  : $GIT_ROOT"
-log "OUTPUT_DIR: $OUTPUT_DIR"
-log "CONFIG_SH : $CONFIG_SH"
-log "RUN_SH    : $RUN_SH"
-log "verbose   : $VERBOSE"
+log "date        : $(date)"
+log "host        : $(hostname)"
+log "user        : $(whoami)"
+log "pwd         : $(pwd)"
+log "GIT_ROOT    : $GIT_ROOT"
+log "OUTPUT_DIR  : $OUTPUT_DIR"
+log "LOG_DIR     : $LOG_DIR"
+log "CONFIG_SH   : $CONFIG_SH"
+log "RUN_SH      : $RUN_SH"
+log "SLURM_STDOUT: $SLURM_STDOUT"
+log "SLURM_STDERR: $SLURM_STDERR"
+log "verbose     : $VERBOSE"
 
 [ -d "$GIT_ROOT" ] || { log "❌ GIT_ROOT not found: $GIT_ROOT"; exit 1; }
 [ -f "$LAUNCH_SLURM" ] || { log "❌ launch.slurm missing: $LAUNCH_SLURM"; exit 1; }
@@ -57,25 +64,13 @@ log "$OUT"
 JOB_ID="$(echo "$OUT" | sed -n 's/.*Submitted batch job \([0-9]\+\).*/\1/p')"
 [ -n "${JOB_ID:-}" ] || { log "❌ Could not parse job ID from sbatch output"; exit 1; }
 
-# Resolve real stdout/stderr from Slurm metadata
-JOB_INFO=""
-for _ in $(seq 1 30); do
-  JOB_INFO="$(scontrol show job "$JOB_ID" 2>/dev/null || true)"
-  [ -n "$JOB_INFO" ] && break
-  sleep 1
-done
-
-STDOUT_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')"
-STDERR_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdErr=\([^ ]*\).*/\1/p')"
-
-STDOUT_LOG="${STDOUT_LOG:-$LOG_DIR/slurm-$JOB_ID.out}"
-STDERR_LOG="${STDERR_LOG:-$LOG_DIR/slurm-$JOB_ID.err}"
+STDOUT_LOG="$LOG_DIR/gsplat-$JOB_ID.out"
+STDERR_LOG="$LOG_DIR/gsplat-$JOB_ID.err"
 
 log "job id    : $JOB_ID"
 log "stdout    : $STDOUT_LOG"
 log "stderr    : $STDERR_LOG"
 log "queue cmd : squeue -j $JOB_ID"
-log "job info  : scontrol show job $JOB_ID"
 
 log
 log "========================"
@@ -89,7 +84,6 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-mkdir -p "$(dirname "$STDOUT_LOG")" "$(dirname "$STDERR_LOG")"
 touch "$STDOUT_LOG" "$STDERR_LOG"
 
 log

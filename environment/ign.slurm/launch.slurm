@@ -7,13 +7,14 @@
 #SBATCH --mem=16G
 #SBATCH --time=48:00:00
 #SBATCH --partition=jean-zellou
-#SBATCH -o /mnt/common/hdd/slurm/logs/gsplat-%j.out
-#SBATCH -e /mnt/common/hdd/slurm/logs/gsplat-%j.err
+
+# stdout/stderr are injected at submit-time by launch.sh:
+#   export SLURM_STDOUT="$LOG_DIR/gsplat-%j.out"
+#   export SLURM_STDERR="$LOG_DIR/gsplat-%j.err"
+#SBATCH -o ${SLURM_STDOUT}
+#SBATCH -e ${SLURM_STDERR}
 
 set -euo pipefail
-
-# This script assumes launch.sh already validated paths.
-# Keep only minimal runtime checks here.
 
 echo "CONFIG_SH: ${CONFIG_SH:-<unset>}"
 : "${CONFIG_SH:?❌ CONFIG_SH is not set}"
@@ -21,7 +22,6 @@ echo "CONFIG_SH: ${CONFIG_SH:-<unset>}"
 
 source "$CONFIG_SH"
 
-# Required runtime vars from config
 : "${GIT_ROOT:?❌ GIT_ROOT is not set in config.sh}"
 : "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set in config.sh}"
 : "${BASENAME:?❌ BASENAME is not set in config.sh}"
@@ -39,7 +39,6 @@ is_verbose() {
 
 cd "$GIT_ROOT"
 
-# Runtime env
 export PYTHONUNBUFFERED=1
 export NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
@@ -52,7 +51,6 @@ export XDG_RUNTIME_DIR="$HOME_SLURM/.runtime"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-# Conda
 CONDA_BASE="$(conda info --base 2>/dev/null || true)"
 [ -n "$CONDA_BASE" ] || { echo "❌ conda not found"; exit 1; }
 
@@ -61,7 +59,6 @@ set +u
 conda activate gsplat
 set -u
 
-# Minimal debug header
 echo "========================"
 echo "🚀 GSPLAT RUN ENV"
 echo "========================"
@@ -76,7 +73,6 @@ echo "GSPLAT_PROFILE=$GSPLAT_PROFILE"
 echo "DATASET_DIR=$DATASET_DIR"
 echo "VERBOSE=$VERBOSE"
 
-# Optional monitor
 MONITOR_PID=""
 cleanup() {
   if [ -n "${MONITOR_PID:-}" ]; then
@@ -100,7 +96,6 @@ if is_verbose; then
   MONITOR_PID=$!
 fi
 
-# Run
 EXTRA_ARGS=()
 [ "${SKIP_TRAINING:-false}" = "true" ] && EXTRA_ARGS+=(--skip-training)
 [ "${SKIP_EXPORT:-false}" = "true" ] && EXTRA_ARGS+=(--skip-export)
