@@ -66,6 +66,10 @@ if [ -z "${MODEL_IMPLEMENTATION+x}" ]; then
   # tcnn  -> GPU only (tiny-cuda-nn), plus rapide si stack compatible
 fi
 
+if [ -z "${BASENAME+x}" ]; then
+  BASENAME="model3d"
+fi
+
 ############################
 # TRAINING PARAMETERS
 ############################
@@ -182,7 +186,6 @@ fi
 # EXPORT CONFIG
 ############################
 
-BASENAME="model3d"
 NORMAL_METHOD="open3d"
 REMOVE_OUTLIERS=True
 MIXED_PRECISION=False
