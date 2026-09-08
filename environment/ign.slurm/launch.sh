@@ -10,7 +10,7 @@ VERBOSE="${VERBOSE:-false}"
 : "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set. Example: OUTPUT_DIR=/path/to/output ./launch.sh}"
 
 LAUNCH_SLURM="$GIT_ROOT/environment/ign.slurm/launch.slurm"
-RUN_SH="$GIT_ROOT/scripts/run.sh"
+export RUN_SH="$GIT_ROOT/scripts/run.sh"
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
 LOG_DIR="$OUTPUT_DIR/logs"
