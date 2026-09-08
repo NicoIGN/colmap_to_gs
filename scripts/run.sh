@@ -151,7 +151,7 @@ fi
 if [ "$SKIP_CONDA" = false ]; then
   source "$(conda info --base)/etc/profile.d/conda.sh"
   conda activate "$CONDA_ENV_NAME" || die "Cannot activate conda env: $CONDA_ENV_NAME"
-  bash scripts/check_torch_stack.sh
+  bash $SCRIPT_DIR/torch_stack_check.sh
 else
   echo "⏩ Skipping conda setup"
 fi
@@ -222,7 +222,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
     USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
-    bash scripts/train.sh
+    bash $SCRIPT_DIR/train.sh
 
     # Stage 2
     MAX_ITER=$((ORIG_MAX_ITER + 1000))
@@ -248,7 +248,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
     USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
-    bash scripts/train.sh
+    bash $SCRIPT_DIR/train.sh
   else
     DATA="$DATASET_DIR" RELOAD_FROM_CHECKPOINT="False" MODEL="$MODEL" \
     MODEL_IMPLEMENTATION="$MODEL_IMPLEMENTATION" DEVICE="$DEVICE" MAX_ITER="$MAX_ITER" \
@@ -265,7 +265,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
     USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
-    bash scripts/train.sh
+    bash $SCRIPT_DIR/train.sh
   fi
 
   print_step_time "TRAINING" "$STEP_START"
@@ -281,7 +281,7 @@ if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
   echo "🚀 Exporting..."
   OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" EXPORT_DIR="$OUTPUT_DIR" ZIP_RUN=0 \
-    bash scripts/export_splat_to_ply.sh
+    bash $SCRIPT_DIR/export_splat_to_ply.sh
   PLY_FILE=$(find "$OUTPUT_DIR" -type f -name "*.ply" | head -n 1 || true)
   [ -f "$PLY_FILE" ] || die "PLY export failed"
   print_step_time "EXPORT" "$STEP_START"
