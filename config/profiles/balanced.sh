@@ -24,11 +24,9 @@ SKIP_IMAGE_PROCESSING=true
 # TRAINING
 ########################################
 
-# ⚠️ CRITIQUE (temps de densification)
 MAX_ITER=6000
 
-# 🛑 STOP SPLIT PLUS TÔT
-# STOP_SPLIT_AT=6000            # ↓ stop plus tôt (important)
+STOP_SPLIT_AT=6000
 
 # ⚠️ CRITIQUE (qualité du gradient)
 TRAIN_RAYS_PER_BATCH=512
