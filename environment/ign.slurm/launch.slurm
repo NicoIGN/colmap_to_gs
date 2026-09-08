@@ -12,12 +12,21 @@
 
 set -euo pipefail
 
-# =========================
-# LOAD USER CONFIG
-# =========================
+# This script assumes launch.sh already validated paths.
+# Keep only minimal runtime checks here.
+
 echo "CONFIG_SH: ${CONFIG_SH:-<unset>}"
 : "${CONFIG_SH:?❌ CONFIG_SH is not set}"
+: "${RUN_SH:?❌ RUN_SH is not set}"
+
 source "$CONFIG_SH"
+
+# Required runtime vars from config
+: "${GIT_ROOT:?❌ GIT_ROOT is not set in config.sh}"
+: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set in config.sh}"
+: "${BASENAME:?❌ BASENAME is not set in config.sh}"
+: "${GSPLAT_PROFILE:?❌ GSPLAT_PROFILE is not set in config.sh}"
+: "${DATASET_DIR:?❌ DATASET_DIR is not set in config.sh}"
 
 VERBOSE="${VERBOSE:-false}"
 
@@ -28,30 +37,9 @@ is_verbose() {
   esac
 }
 
-# Required in config.sh:
-#   GIT_ROOT
-#   OUTPUT_DIR
-#   BASENAME
-#   GSPLAT_PROFILE
-#   DATASET_DIR
-# Optional:
-#   SKIP_TRAINING=true|false
-#   SKIP_EXPORT=true|false
-
-: "${GIT_ROOT:?❌ GIT_ROOT is not set in config.sh}"
-: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set in config.sh}"
-: "${BASENAME:?❌ BASENAME is not set in config.sh}"
-: "${GSPLAT_PROFILE:?❌ GSPLAT_PROFILE is not set in config.sh}"
-: "${DATASET_DIR:?❌ DATASET_DIR is not set in config.sh}"
-
-[ -d "$GIT_ROOT" ] || { echo "❌ GIT_ROOT does not exist: $GIT_ROOT"; exit 1; }
-[ -d "$DATASET_DIR" ] || { echo "❌ DATASET_DIR does not exist: $DATASET_DIR"; exit 1; }
-
 cd "$GIT_ROOT"
 
-# =========================
-# RUNTIME ENV
-# =========================
+# Runtime env
 export PYTHONUNBUFFERED=1
 export NCCL_BLOCKING_WAIT=1
 export NCCL_ASYNC_ERROR_HANDLING=1
@@ -64,9 +52,7 @@ export XDG_RUNTIME_DIR="$HOME_SLURM/.runtime"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
 
-# =========================
-# CONDA
-# =========================
+# Conda
 CONDA_BASE="$(conda info --base 2>/dev/null || true)"
 [ -n "$CONDA_BASE" ] || { echo "❌ conda not found"; exit 1; }
 
@@ -75,9 +61,7 @@ set +u
 conda activate gsplat
 set -u
 
-# =========================
-# DEBUG (minimal)
-# =========================
+# Minimal debug header
 echo "========================"
 echo "🚀 GSPLAT RUN ENV"
 echo "========================"
@@ -85,15 +69,14 @@ echo "job_id: ${SLURM_JOB_ID:-N/A}"
 echo "host  : $(hostname)"
 echo "pwd   : $(pwd)"
 echo "python: $(which python)"
+echo "RUN_SH=$RUN_SH"
 echo "OUTPUT_DIR=$OUTPUT_DIR"
 echo "BASENAME=$BASENAME"
 echo "GSPLAT_PROFILE=$GSPLAT_PROFILE"
 echo "DATASET_DIR=$DATASET_DIR"
 echo "VERBOSE=$VERBOSE"
 
-# =========================
-# OPTIONAL MONITOR
-# =========================
+# Optional monitor
 MONITOR_PID=""
 cleanup() {
   if [ -n "${MONITOR_PID:-}" ]; then
@@ -117,14 +100,12 @@ if is_verbose; then
   MONITOR_PID=$!
 fi
 
-# =========================
-# RUN
-# =========================
+# Run
 EXTRA_ARGS=()
 [ "${SKIP_TRAINING:-false}" = "true" ] && EXTRA_ARGS+=(--skip-training)
 [ "${SKIP_EXPORT:-false}" = "true" ] && EXTRA_ARGS+=(--skip-export)
 
-srun --unbuffered bash $RUN_SH \
+srun --unbuffered bash "$RUN_SH" \
   --dataset-dir "$DATASET_DIR" \
   --output_dir "$OUTPUT_DIR" \
   --name "$BASENAME" \

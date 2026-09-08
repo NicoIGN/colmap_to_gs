@@ -4,26 +4,22 @@ set -euo pipefail
 VERBOSE="${VERBOSE:-false}"
 
 # Usage:
-# GIT_ROOT=/path/to/video_to_ply OUTPUT_DIR=/path/to/output ./launch.sh
+# GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
 
-: "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/video_to_ply ./launch.sh}"
+: "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/repo ./launch.sh}"
 : "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set. Example: OUTPUT_DIR=/path/to/output ./launch.sh}"
 
 LAUNCH_SLURM="$GIT_ROOT/environment/ign.slurm/launch.slurm"
-export RUN_SH="$GIT_ROOT/scripts/run.sh"
+export RUN_SH="${RUN_SH:-$GIT_ROOT/scripts/run.sh}"
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
 LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
-
 mkdir -p "$LOG_DIR"
 
-# terminal + file
 exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
-log() {
-  echo "$@"
-}
+log() { echo "$@"; }
 
 is_verbose() {
   case "${VERBOSE:-false}" in
@@ -41,6 +37,8 @@ log "user      : $(whoami)"
 log "pwd       : $(pwd)"
 log "GIT_ROOT  : $GIT_ROOT"
 log "OUTPUT_DIR: $OUTPUT_DIR"
+log "CONFIG_SH : $CONFIG_SH"
+log "RUN_SH    : $RUN_SH"
 log "verbose   : $VERBOSE"
 
 [ -d "$GIT_ROOT" ] || { log "❌ GIT_ROOT not found: $GIT_ROOT"; exit 1; }
@@ -57,13 +55,9 @@ OUT="$(sbatch "$LAUNCH_SLURM")"
 log "$OUT"
 
 JOB_ID="$(echo "$OUT" | sed -n 's/.*Submitted batch job \([0-9]\+\).*/\1/p')"
+[ -n "${JOB_ID:-}" ] || { log "❌ Could not parse job ID from sbatch output"; exit 1; }
 
-if [ -z "${JOB_ID:-}" ]; then
-  log "❌ Could not parse job ID from sbatch output"
-  exit 1
-fi
-
-# Resolve real stdout/stderr paths from Slurm (do not guess filenames)
+# Resolve real stdout/stderr from Slurm metadata
 JOB_INFO=""
 for _ in $(seq 1 30); do
   JOB_INFO="$(scontrol show job "$JOB_ID" 2>/dev/null || true)"
@@ -74,7 +68,6 @@ done
 STDOUT_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdOut=\([^ ]*\).*/\1/p')"
 STDERR_LOG="$(echo "$JOB_INFO" | sed -n 's/.*StdErr=\([^ ]*\).*/\1/p')"
 
-# Fallback if scheduler did not return paths
 STDOUT_LOG="${STDOUT_LOG:-$LOG_DIR/slurm-$JOB_ID.out}"
 STDERR_LOG="${STDERR_LOG:-$LOG_DIR/slurm-$JOB_ID.err}"
 
@@ -96,7 +89,6 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-# In case files are not created yet, create them so tail -F can attach
 mkdir -p "$(dirname "$STDOUT_LOG")" "$(dirname "$STDERR_LOG")"
 touch "$STDOUT_LOG" "$STDERR_LOG"
 
@@ -115,7 +107,6 @@ else
       'RESOURCE SNAPSHOT|memory\.total|memory\.used|memory\.free|utilization\.gpu|used_gpu_memory|^Mem:|^Swap:|^pid, process_name|^index, name|^==> .* <==$|[0-9]+(\.[0-9]+)?it/s|step=[0-9]+|epoch=[0-9]+|loss=' \
     || true &
 fi
-
 TAIL_PID=$!
 
 cleanup() {
@@ -146,7 +137,6 @@ FINAL_STATE="$(
   sacct -j "$JOB_ID" --format=State --noheader 2>/dev/null \
     | awk 'NF {print $1; exit}'
 )"
-
 EXIT_CODE="$(
   sacct -j "$JOB_ID" --format=ExitCode --noheader 2>/dev/null \
     | awk 'NF {print $1; exit}'
@@ -157,10 +147,6 @@ log "final state : ${FINAL_STATE:-unknown}"
 log "exit code   : ${EXIT_CODE:-unknown}"
 
 case "${FINAL_STATE:-}" in
-  COMPLETED)
-    exit 0
-    ;;
-  *)
-    exit 1
-    ;;
+  COMPLETED) exit 0 ;;
+  *) exit 1 ;;
 esac
