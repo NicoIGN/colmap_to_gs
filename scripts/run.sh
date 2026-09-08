@@ -130,7 +130,7 @@ echo "🖥️ DEVICE : $DEVICE"
 # Load config + profile
 # =========================================
 NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
-  source "$SCRIPT_DIR/config/config.sh"
+  source "$SCRIPT_DIR/../config/config.sh"
 
 if [ -n "$GSPLAT_PROFILE" ]; then
   [ -f "config/profiles/${GSPLAT_PROFILE}.sh" ] || die "Profile not found: ${GSPLAT_PROFILE}"
@@ -171,7 +171,7 @@ mkdir -p "$OUTPUT_DIR" "$EXPORT_DIR" "$TRAIN_DIR"
 # Estimate near/far from existing COLMAP
 # =========================================
 echo "📏 Estimating near/far from COLMAP..."
-ESTIMATE_SCRIPT="$SCRIPT_DIR/python/estimate_planes.py"
+ESTIMATE_SCRIPT="$SCRIPT_DIR/../python/estimate_planes.py"
 [ -f "$ESTIMATE_SCRIPT" ] || die "Missing script: $ESTIMATE_SCRIPT"
 
 EST_OUTPUT=$(python3 "$ESTIMATE_SCRIPT" --input "$COLMAP_SPARSE_DIR")
