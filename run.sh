@@ -114,7 +114,7 @@ SPARSE_PC_PLY="$DATASET_DIR/sparse_pc.ply"
 [ -f "$COLMAP_SPARSE_DIR/images.bin" ] || die "Missing images.bin"
 [ -f "$COLMAP_SPARSE_DIR/points3D.bin" ] || die "Missing points3D.bin"
 [ -d "$IMAGE_DIR" ] || die "Missing image dir: $IMAGE_DIR"
-#[ -f "$TRANSFORMS_JSON" ] || die "Missing transforms.json: $TRANSFORMS_JSON"
+[ -f "$TRANSFORMS_JSON" ] || die "Missing transforms.json: $TRANSFORMS_JSON"
 [ -f "$SPARSE_PC_PLY" ] || die "Missing sparse_pc.ply: $SPARSE_PC_PLY"
 
 IMAGE_COUNT=$(find "$IMAGE_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | wc -l | tr -d ' ')

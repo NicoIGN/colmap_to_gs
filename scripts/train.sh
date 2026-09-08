@@ -61,10 +61,10 @@ if [[ -z "${DATA:-}" ]]; then
   exit 1
 fi
 
-#if [[ ! -f "$DATA/transforms.json" ]]; then
-#  echo "❌ Missing transforms.json in $DATA"
-#  exit 1
-#fi
+if [[ ! -f "$DATA/transforms.json" ]]; then
+  echo "❌ Missing transforms.json in $DATA"
+  exit 1
+fi
 
 # ======================
 # DEFAULTS
