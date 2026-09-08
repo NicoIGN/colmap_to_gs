@@ -133,8 +133,8 @@ NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
   source "$SCRIPT_DIR/../config/config.sh"
 
 if [ -n "$GSPLAT_PROFILE" ]; then
-  [ -f "config/profiles/${GSPLAT_PROFILE}.sh" ] || die "Profile not found: ${GSPLAT_PROFILE}"
-  source "config/profiles/${GSPLAT_PROFILE}.sh"
+  [ -f "$SCRIPT_DIR/../config/profiles/${GSPLAT_PROFILE}.sh" ] || die "Profile not found: ${GSPLAT_PROFILE}"
+  source "$SCRIPT_DIR/../config/profiles/${GSPLAT_PROFILE}.sh"
   echo "👉 using profile: ${GSPLAT_PROFILE}"
 fi
 
