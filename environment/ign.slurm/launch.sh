@@ -58,6 +58,11 @@ log "========================"
 log "📤 SUBMITTING"
 log "========================"
 
+log
+log "Commande sbatch :"
+log "GIT_ROOT=$GIT_ROOT RUN_SH=$RUN_SH CONFIG_SH=$CONFIG_SH SLURM_STDOUT=$SLURM_STDOUT SLURM_STDERR=$SLURM_STDERR sbatch $LAUNCH_SLURM"
+log
+
 OUT="$(sbatch "$LAUNCH_SLURM")"
 log "$OUT"
 

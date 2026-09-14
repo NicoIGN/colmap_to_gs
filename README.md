@@ -66,3 +66,19 @@ Le script génère un `.ply` final de Gaussian Splats, typiquement dans :
   --output_dir /path/to/output/data \
   --gsplat-profile quality
 ```
+
+## Lancement depuis l'environnement SLURM
+
+Pour lancer le traitement sur l'environnement **SLURM**, depuis le dossier de données, définir `GIT_ROOT` puis appeler le script `launch.sh` de l'environnement SLURM. Le répertoire `OUTPUT_DIR` correspond au dossier dans lequel seront placés les résultats du traitement.
+
+Par exemple, depuis le dossier contenant les données :
+
+```bash
+cd /path/to/data
+
+GIT_ROOT=/path/to/project \
+OUTPUT_DIR=/path/to/data/output \
+bash $GIT_ROOT/environment/ign.slurm/launch.sh
+```
+
+Le script `launch.sh` se charge ensuite de soumettre le traitement à SLURM avec la configuration prévue dans l'environnement du projet.
