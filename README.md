@@ -61,7 +61,7 @@ Le script génère un `.ply` final de Gaussian Splats, typiquement dans :
 ## Exemple
 
 ```bash
-./run.sh \
+./script/run.sh \
   --dataset-dir /path/to/colmap/data \
   --output_dir /path/to/output/data \
   --gsplat-profile quality

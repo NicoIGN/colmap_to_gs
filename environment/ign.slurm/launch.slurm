@@ -102,7 +102,7 @@ EXTRA_ARGS=()
 
 srun --unbuffered bash "$RUN_SH" \
   --dataset-dir "$DATASET_DIR" \
-  --output_dir "$OUTPUT_DIR" \
+  --output-dir "$OUTPUT_DIR" \
   --name "$BASENAME" \
   --gsplat-profile "$GSPLAT_PROFILE" \
   --skip-conda \

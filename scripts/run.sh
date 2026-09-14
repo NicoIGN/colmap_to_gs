@@ -64,7 +64,7 @@ Expected layout:
     └── transforms.json
 
 Options:
-  --output_dir, -o <dir>      Output root (default: runs/default)
+  --output-dir, -o <dir>      Output root (default: runs/default)
   --name <name>               Basename export PLY (default: gsplat_<timestamp>)
   --gsplat-profile <name>     fast | balanced | quality | quality_plus
   --max-jobs <int>            Parallel jobs
@@ -82,7 +82,7 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --dataset-dir) DATASET_DIR="$2"; shift 2 ;;
-    --output_dir|-o) OUTPUT_ROOT="$2"; shift 2 ;;
+    --output-dir|-o) OUTPUT_ROOT="$2"; shift 2 ;;
     --name) BASENAME="$2"; shift 2 ;;
     --gsplat-profile) GSPLAT_PROFILE="$2"; shift 2 ;;
     --max-jobs) MAX_JOBS="$2"; shift 2 ;;
