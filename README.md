@@ -76,9 +76,14 @@ Par exemple, depuis le dossier contenant les données :
 ```bash
 cd /path/to/data
 
-GIT_ROOT=/path/to/project \
-OUTPUT_DIR=/path/to/data/output \
+VERBOSE=1 \
+GIT_ROOT=/path/to/repo \
+OUTPUT_DIR=/path/to/output \
+DATASET_DIR=/path/to/dataset \
 bash $GIT_ROOT/environment/ign.slurm/launch.sh
 ```
 
 Le script `launch.sh` se charge ensuite de soumettre le traitement à SLURM avec la configuration prévue dans l'environnement du projet.
+
+
+
