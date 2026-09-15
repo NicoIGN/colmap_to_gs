@@ -1,5 +1,5 @@
 ########################################
-# PERFORMANCE PROFILE
+# PROFILE: force_split (agressif)
 ########################################
 
 TRAINING_PROFILE="gpu/fast"
@@ -13,40 +13,36 @@ TRAIN_VIS_MODE="tensorboard"
 # IMAGE / PREPROCESSING
 ########################################
 
-CAMERA_RES_SCALE_FACTOR=0.5
-MAX_RES=768
-
-NUM_DOWNSCALES=2
+CAMERA_RES_SCALE_FACTOR=0.75
+MAX_RES=1024
+NUM_DOWNSCALES=1
 SKIP_IMAGE_PROCESSING=true
 
 ########################################
 # TRAINING
 ########################################
 
-MAX_ITER=3500
-STOP_SPLIT_AT=3500
+MAX_ITER=6000
+STOP_SPLIT_AT=5500
+TRAIN_RAYS_PER_BATCH=768
 
-TRAIN_RAYS_PER_BATCH=384
-
-NUM_NERF_SAMPLES_PER_RAY=24
-NUM_PROPOSAL_SAMPLES_PER_RAY="48 24"
+NUM_NERF_SAMPLES_PER_RAY=32
+NUM_PROPOSAL_SAMPLES_PER_RAY="64 32"
 
 ########################################
-# GAUSSIAN SPLATTING (FAST SAFE)
+# GAUSSIAN SPLATTING (FORCE DENSIFY)
 ########################################
 
-# plus permissif pour éviter le collapse à 0 GS
-DENSIFY_GRAD_THRESH=0.00025
+# déclenche split très facilement
+DENSIFY_GRAD_THRESH=0.00003
+SPLIT_SCREEN_SIZE=0.008
+REFINE_EVERY=50
 
-# culling moins agressif en début de train
-CULL_ALPHA_THRESH=0.02
-CULL_SCALE_THRESH=0.10
-CULL_SCREEN_SIZE=0.15
-SPLIT_SCREEN_SIZE=0.03
-
-# raffinement plus fréquent mais plus stable
-REFINE_EVERY=200
-RESET_ALPHA_EVERY=100
+# évite de tuer les splats trop tôt
+CULL_ALPHA_THRESH=0.005
+CULL_SCALE_THRESH=0.05
+CULL_SCREEN_SIZE=0.05
+RESET_ALPHA_EVERY=200
 
 ########################################
 # QUALITY / REGULARIZATION
@@ -54,13 +50,12 @@ RESET_ALPHA_EVERY=100
 
 USE_BILATERAL_GRID=true
 USE_SCALE_REGULARIZATION=false
-
-MAX_GAUSS_RATIO=4.0
+MAX_GAUSS_RATIO=8.0
 SSIM_LAMBDA=0.20
 
 ########################################
-# EXPORT FAST
+# EXPORT
 ########################################
 
-EXPORT_NUM_POINTS=300000
-EXPORT_DOWNSAMPLE=2
+EXPORT_NUM_POINTS=1200000
+EXPORT_DOWNSAMPLE=1
