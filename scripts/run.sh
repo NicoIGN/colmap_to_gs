@@ -181,7 +181,7 @@ FAR=$(echo "$EST_OUTPUT" | grep FAR  | cut -d= -f2)
 
 export COLLIDER_NEAR="$NEAR"
 export COLLIDER_FAR="$FAR"
-export ENABLE_COLLIDER="True"
+export ENABLE_COLLIDER="False"
 echo "✅ near=$NEAR far=$FAR"
 
 # =========================================
