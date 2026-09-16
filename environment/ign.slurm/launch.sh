@@ -102,6 +102,7 @@ log
 
 OUT="$(
     sbatch \
+        --export=ALL,GIT_ROOT="$GIT_ROOT",OUTPUT_DIR="$OUTPUT_DIR",CONFIG_SH="$CONFIG_SH",RUN_SH="$RUN_SH",SLURM_STDOUT="$SLURM_STDOUT",SLURM_STDERR="$SLURM_STDERR" \
         --output="$SLURM_STDOUT" \
         --error="$SLURM_STDERR" \
         "$LAUNCH_SLURM"
