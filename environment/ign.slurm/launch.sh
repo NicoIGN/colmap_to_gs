@@ -2,6 +2,8 @@
 
 set -euo pipefail
 
+# Usage:
+# GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
 
 VERBOSE="${VERBOSE:-false}"
 
@@ -16,9 +18,6 @@ is_verbose() {
     esac
 }
 
-# Usage:
-# GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
-
 : "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/repo ./launch.sh}"
 
 # Source CONFIG_SH first, if it exists
@@ -30,7 +29,7 @@ else
     log "⚠️ CONFIG_SH not found, continuing without it: $CONFIG_SH"
 fi
 
-: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set."
+: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set.}"
 
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
