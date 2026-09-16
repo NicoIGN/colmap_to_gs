@@ -2,7 +2,19 @@
 
 set -euo pipefail
 
+
 VERBOSE="${VERBOSE:-false}"
+
+log() {
+    echo "$@"
+}
+
+is_verbose() {
+    case "${VERBOSE:-false}" in
+        1|true|TRUE|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
 
 # Usage:
 # GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
@@ -22,16 +34,6 @@ fi
 
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
-log() {
-    echo "$@"
-}
-
-is_verbose() {
-    case "${VERBOSE:-false}" in
-        1|true|TRUE|yes|YES) return 0 ;;
-        *) return 1 ;;
-    esac
-}
 
 LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
