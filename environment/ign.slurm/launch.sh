@@ -8,16 +8,22 @@ VERBOSE="${VERBOSE:-false}"
 # GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
 
 : "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/repo ./launch.sh}"
-
 : "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set. Example: OUTPUT_DIR=/path/to/output ./launch.sh}"
 
-LAUNCH_SLURM="$GIT_ROOT/environment/ign.slurm/launch.slurm"
-
-export RUN_SH="${RUN_SH:-$GIT_ROOT/scripts/run.sh}"
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
-LOG_DIR="$OUTPUT_DIR/logs"
+log() {
+    echo "$@"
+}
 
+is_verbose() {
+    case "${VERBOSE:-false}" in
+        1|true|TRUE|yes|YES) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
 
 mkdir -p "$LOG_DIR"
@@ -32,16 +38,18 @@ export SLURM_STDERR
 
 exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
-log() {
-    echo "$@"
-}
+# Source CONFIG_SH first, if it exists
+if [ -f "$CONFIG_SH" ]; then
+    # shellcheck disable=SC1090
+    source "$CONFIG_SH"
+    log "✅ Loaded CONFIG_SH: $CONFIG_SH"
+else
+    log "⚠️ CONFIG_SH not found, continuing without it: $CONFIG_SH"
+fi
 
-is_verbose() {
-    case "${VERBOSE:-false}" in
-        1|true|TRUE|yes|YES) return 0 ;;
-        *) return 1 ;;
-    esac
-}
+# Now that CONFIG_SH has been sourced, resolve defaults that may depend on it
+LAUNCH_SLURM="${LAUNCH_SLURM:-$GIT_ROOT/environment/ign.slurm/launch.slurm}"
+RUN_SH="${RUN_SH:-$GIT_ROOT/scripts/run.sh}"
 
 log "========================"
 log "🚀 SUBMIT CHECK"
@@ -56,6 +64,7 @@ log "OUTPUT_DIR  : $OUTPUT_DIR"
 log "LOG_DIR     : $LOG_DIR"
 log "CONFIG_SH   : $CONFIG_SH"
 log "RUN_SH      : $RUN_SH"
+log "LAUNCH_SLURM: $LAUNCH_SLURM"
 log "SLURM_STDOUT: $SLURM_STDOUT"
 log "SLURM_STDERR: $SLURM_STDERR"
 log "verbose     : $VERBOSE"
@@ -72,11 +81,6 @@ log "verbose     : $VERBOSE"
 
 [ -f "$RUN_SH" ] || {
     log "❌ run.sh missing: $RUN_SH"
-    exit 1
-}
-
-[ -f "$CONFIG_SH" ] || {
-    log "❌ config.sh missing: $CONFIG_SH"
     exit 1
 }
 
