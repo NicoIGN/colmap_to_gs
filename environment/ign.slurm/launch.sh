@@ -8,7 +8,17 @@ VERBOSE="${VERBOSE:-false}"
 # GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
 
 : "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/repo ./launch.sh}"
-: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set. Example: OUTPUT_DIR=/path/to/output ./launch.sh}"
+
+# Source CONFIG_SH first, if it exists
+if [ -f "$CONFIG_SH" ]; then
+    # shellcheck disable=SC1090
+    source "$CONFIG_SH"
+    log "✅ Loaded CONFIG_SH: $CONFIG_SH"
+else
+    log "⚠️ CONFIG_SH not found, continuing without it: $CONFIG_SH"
+fi
+
+: "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set."
 
 export CONFIG_SH="${CONFIG_SH:-./config.sh}"
 
@@ -38,14 +48,6 @@ export SLURM_STDERR
 
 exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
-# Source CONFIG_SH first, if it exists
-if [ -f "$CONFIG_SH" ]; then
-    # shellcheck disable=SC1090
-    source "$CONFIG_SH"
-    log "✅ Loaded CONFIG_SH: $CONFIG_SH"
-else
-    log "⚠️ CONFIG_SH not found, continuing without it: $CONFIG_SH"
-fi
 
 # Now that CONFIG_SH has been sourced, resolve defaults that may depend on it
 LAUNCH_SLURM="${LAUNCH_SLURM:-$GIT_ROOT/environment/ign.slurm/launch.slurm}"
