@@ -340,5 +340,30 @@ else
   echo "⏩ Skipping export"
 fi
 
+# =========================================
+# Cleaning exported PLY
+# =========================================
+if [ "$SKIP_EXPORT" = false ]; then
+  CLEAN_SCRIPT="$SCRIPT_DIR/clean.sh"
+
+  [ -f "$CLEAN_SCRIPT" ] || die "Missing cleaning script: $CLEAN_SCRIPT"
+
+  echo "🧹 Cleaning exported PLY..."
+
+  bash "$CLEAN_SCRIPT" \
+    --dataset-dir "$DATASET_DIR" \
+    --output-dir "$OUTPUT_DIR"
+
+  CLEANED_PLY="$OUTPUT_DIR/cleaned/$(basename "${PLY_FILE%.ply}")_cleaned.ply"
+
+  [ -f "$CLEANED_PLY" ] || die "Cleaned PLY not found: $CLEANED_PLY"
+
+  echo "✅ Cleaned PLY: $CLEANED_PLY"
+else
+  echo "⏩ Skipping PLY cleaning because export is disabled"
+fi
+
 echo "✅ Done: $EXPORT_DIR/${BASENAME}.ply"
+
+
 echo "⏱️  Total: $(format_duration $(( $(date +%s) - SCRIPT_START )))"
