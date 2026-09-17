@@ -22,8 +22,8 @@ SKIP_IMAGE_PROCESSING=true
 # TRAINING
 ########################################
 
-MAX_ITER=6000
-STOP_SPLIT_AT=5200
+MAX_ITER=3000
+STOP_SPLIT_AT=2000
 TRAIN_RAYS_PER_BATCH=768
 
 NUM_NERF_SAMPLES_PER_RAY=16
@@ -31,41 +31,35 @@ NUM_PROPOSAL_SAMPLES_PER_RAY="32 16"
 
 ########################################
 # GAUSSIAN SPLATTING
-# DENSIFICATION MODEREE
+# DENSIFICATION CONTROLEE
 ########################################
 
-# Intermédiaire entre :
-#   fast     = 0.00003
-#   balanced = 0.00045
-#
-# Plus la valeur est élevée, moins il y a de Gaussians candidats.
-DENSIFY_GRAD_THRESH=0.00015
+# Ancien fast : 0.00003
+# Valeur 10x plus stricte : moins de Gaussians dépassent le seuil gradient.
+DENSIFY_GRAD_THRESH=0.00030
 
-# Intermédiaire entre :
-#   fast     = 0.008
-#   balanced = 0.02
-SPLIT_SCREEN_SIZE=0.015
+# Ancien fast : 0.008
+# Augmenté : évite les splits de petits Gaussians à l'écran.
+SPLIT_SCREEN_SIZE=0.020
 
-# Densification toutes les 100 itérations au lieu de 50.
-# Cela laisse aux Gaussians le temps de converger entre deux raffinements.
-REFINE_EVERY=100
+# Ancien fast : 50
+# Seulement un raffinement toutes les 150 itérations.
+REFINE_EVERY=150
 
 ########################################
-# CULLING / CLEANING
+# CULLING / PRUNING
 ########################################
 
-# Plus strict que fast, mais beaucoup moins brutal que balanced=0.12.
-CULL_ALPHA_THRESH=0.03
+# Élimine plus tôt les Gaussians quasi transparents.
+CULL_ALPHA_THRESH=0.04
 
-# Supprime les Gaussians excessivement grands.
-# Valeur intermédiaire entre fast=0.05 et balanced=0.5.
+# Seuil modéré pour éliminer les splats devenus anormalement étendus.
 CULL_SCALE_THRESH=0.20
 
-# Nettoyage screen-space modéré.
-CULL_SCREEN_SIZE=0.12
+# Culling en espace écran plus strict que fast.
+CULL_SCREEN_SIZE=0.15
 
-# Le compteur est lié aux cycles de raffinement.
-# Avec REFINE_EVERY=100, 50 correspond à un reset vers 5000 steps.
+# Reset alpha plus fréquent pour éviter l'accumulation de splats inutiles.
 RESET_ALPHA_EVERY=50
 
 ########################################
@@ -75,8 +69,9 @@ RESET_ALPHA_EVERY=50
 USE_BILATERAL_GRID=true
 USE_SCALE_REGULARIZATION=false
 
-# Limite plus basse que fast=8, mais moins restrictive que balanced=4.
-MAX_GAUSS_RATIO=5.0
+# Plafond de croissance essentiel.
+# Avec 306075 points initiaux, objectif théorique <= ~918225 GS.
+MAX_GAUSS_RATIO=3.0
 
 SSIM_LAMBDA=0.22
 
@@ -84,5 +79,5 @@ SSIM_LAMBDA=0.22
 # EXPORT
 ########################################
 
-EXPORT_NUM_POINTS=800000
+EXPORT_NUM_POINTS=600000
 EXPORT_DOWNSAMPLE=1
