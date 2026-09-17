@@ -328,23 +328,37 @@ fi
 # Export
 # =========================================
 PLY_FILE=""
+
 if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
+
   echo "🚀 Exporting..."
-  OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" EXPORT_DIR="$OUTPUT_DIR" ZIP_RUN=0 \
-    bash $SCRIPT_DIR/export_splat_to_ply.sh
+
+  OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" \
+  EXPORT_DIR="$OUTPUT_DIR" \
+  ZIP_RUN=0 \
+    bash "$SCRIPT_DIR/export_splat_to_ply.sh"
+
   PLY_FILE=$(find "$OUTPUT_DIR" -type f -name "*.ply" | head -n 1 || true)
-  [ -f "$PLY_FILE" ] || die "PLY export failed"
+
+  [ -n "$PLY_FILE" ] || die "PLY export failed: no .ply found under $OUTPUT_DIR"
+  [ -f "$PLY_FILE" ] || die "PLY export failed: $PLY_FILE does not exist"
+
   print_step_time "EXPORT" "$STEP_START"
 else
   echo "⏩ Skipping export"
 fi
 
+
 # =========================================
 # Cleaning exported PLY
 # =========================================
+CLEANED_PLY=""
+
 if [ "$SKIP_EXPORT" = false ]; then
-  CLEAN_SCRIPT="$SCRIPT_DIR/clean.sh"
+  STEP_START=$(date +%s)
+
+  CLEAN_SCRIPT="$SCRIPT_DIR/clean_ply.sh"
 
   [ -f "$CLEAN_SCRIPT" ] || die "Missing cleaning script: $CLEAN_SCRIPT"
 
@@ -354,16 +368,36 @@ if [ "$SKIP_EXPORT" = false ]; then
     --dataset-dir "$DATASET_DIR" \
     --output-dir "$OUTPUT_DIR"
 
-  CLEANED_PLY="$OUTPUT_DIR/cleaned/$(basename "${PLY_FILE%.ply}")_cleaned.ply"
+  GENERATED_CLEANED_PLY="$OUTPUT_DIR/cleaned/$(basename "${PLY_FILE%.ply}")_cleaned.ply"
 
-  [ -f "$CLEANED_PLY" ] || die "Cleaned PLY not found: $CLEANED_PLY"
+  [ -f "$GENERATED_CLEANED_PLY" ] || die \
+    "Cleaned PLY not found: $GENERATED_CLEANED_PLY"
+
+  CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
+
+  if [ "$GENERATED_CLEANED_PLY" != "$CLEANED_PLY" ]; then
+    mv -f "$GENERATED_CLEANED_PLY" "$CLEANED_PLY"
+  fi
+
+  [ -f "$CLEANED_PLY" ] || die \
+    "Final cleaned PLY not found: $CLEANED_PLY"
+
+  print_step_time "CLEANING" "$STEP_START"
 
   echo "✅ Cleaned PLY: $CLEANED_PLY"
 else
   echo "⏩ Skipping PLY cleaning because export is disabled"
 fi
 
-echo "✅ Done: $EXPORT_DIR/${BASENAME}.ply"
+
+# =========================================
+# Final status
+# =========================================
+if [ "$SKIP_EXPORT" = false ]; then
+  echo "✅ Done: $CLEANED_PLY"
+else
+  echo "✅ Done: training completed; export and cleaning were skipped"
+fi
 
 
 echo "⏱️  Total: $(format_duration $(( $(date +%s) - SCRIPT_START )))"
