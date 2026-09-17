@@ -55,7 +55,23 @@ DATASET_DIR="$(cd "$DATASET_DIR" && pwd)"
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 
 COLMAP_SPARSE_DIR="$DATASET_DIR/colmap/sparse/0"
-TRANSFORM_FILE="$DATASET_DIR/transforms.json"
+# Transformation globale réellement appliquée par le dataparser Nerfstudio.
+# Ne pas utiliser DATASET_DIR/transforms.json : ses transform_matrix sont
+# des poses caméra individuelles.
+TRANSFORM_FILE="$(
+  find "$OUTPUT_DIR" \
+    -type f \
+    -name "dataparser_transforms.json" \
+    -print0 |
+  xargs -0 -r ls -1t |
+  head -n 1
+)"
+
+if [[ -z "$TRANSFORM_FILE" || ! -f "$TRANSFORM_FILE" ]]; then
+  echo "Missing Nerfstudio dataparser_transforms.json under: $OUTPUT_DIR" >&2
+  exit 1
+fi
+
 COLMAP_POINTS="$COLMAP_SPARSE_DIR/points3D.bin"
 
 if [[ ! -f "$TRANSFORM_FILE" ]]; then
