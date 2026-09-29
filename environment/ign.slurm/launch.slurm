@@ -6,7 +6,6 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=16G
 #SBATCH --time=48:00:00
-#SBATCH --partition=jean-zellou
 
 # stdout/stderr are injected at submit-time by launch.sh:
 #   export SLURM_STDOUT="$LOG_DIR/gsplat-%j.out"

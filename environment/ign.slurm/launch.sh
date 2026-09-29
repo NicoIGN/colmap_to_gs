@@ -3,7 +3,10 @@
 set -euo pipefail
 
 # Usage:
-# GIT_ROOT=/path/to/repo OUTPUT_DIR=/path/to/output CONFIG_SH=/path/to/config.sh ./launch.sh
+# GIT_ROOT=/path/to/repo \
+# OUTPUT_DIR=/path/to/output \
+# CONFIG_SH=/path/to/config.sh \
+# ./launch.sh [partition]
 
 VERBOSE="${VERBOSE:-false}"
 
@@ -20,7 +23,11 @@ is_verbose() {
 
 : "${GIT_ROOT:?❌ GIT_ROOT is not set. Example: GIT_ROOT=/path/to/repo ./launch.sh}"
 
-# Source CONFIG_SH first, if it exists
+# CONFIG_SH doit être défini avant son utilisation
+CONFIG_SH="${CONFIG_SH:-./config.sh}"
+export CONFIG_SH
+
+# Source CONFIG_SH si le fichier existe
 if [ -f "$CONFIG_SH" ]; then
     # shellcheck disable=SC1090
     source "$CONFIG_SH"
@@ -31,16 +38,22 @@ fi
 
 : "${OUTPUT_DIR:?❌ OUTPUT_DIR is not set.}"
 
-export CONFIG_SH="${CONFIG_SH:-./config.sh}"
+# Priorité :
+# 1. argument passé au script
+# 2. variable PARTITION
+# 3. valeur par défaut
+PARTITION="${1:-${PARTITION:-jean-zellou}}"
 
+export CONFIG_SH
+export PARTITION
 
 LOG_DIR="$OUTPUT_DIR/logs"
 SUBMIT_LOG="$LOG_DIR/submit.log"
 
 mkdir -p "$LOG_DIR"
 
-# Slurm stdout/stderr.
-# IMPORTANT: %j is interpreted directly by Slurm.
+# Fichiers stdout/stderr.
+# %j est interprété par Slurm.
 SLURM_STDOUT="$LOG_DIR/gsplat-%j.out"
 SLURM_STDERR="$LOG_DIR/gsplat-%j.err"
 
@@ -49,8 +62,7 @@ export SLURM_STDERR
 
 exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
-
-# Now that CONFIG_SH has been sourced, resolve defaults that may depend on it
+# Résolution des chemins après le chargement de config.sh
 LAUNCH_SLURM="${LAUNCH_SLURM:-$GIT_ROOT/environment/ign.slurm/launch.slurm}"
 RUN_SH="${RUN_SH:-$GIT_ROOT/scripts/run.sh}"
 
@@ -68,6 +80,7 @@ log "LOG_DIR     : $LOG_DIR"
 log "CONFIG_SH   : $CONFIG_SH"
 log "RUN_SH      : $RUN_SH"
 log "LAUNCH_SLURM: $LAUNCH_SLURM"
+log "PARTITION   : $PARTITION"
 log "SLURM_STDOUT: $SLURM_STDOUT"
 log "SLURM_STDERR: $SLURM_STDERR"
 log "verbose     : $VERBOSE"
@@ -93,15 +106,19 @@ log "========================"
 log "📤 SUBMITTING"
 log "========================"
 
-log
-
 log "Commande sbatch :"
-log "GIT_ROOT=$GIT_ROOT RUN_SH=$RUN_SH CONFIG_SH=$CONFIG_SH SLURM_STDOUT=$SLURM_STDOUT SLURM_STDERR=$SLURM_STDERR sbatch --output=\"$SLURM_STDOUT\" --error=\"$SLURM_STDERR\" \"$LAUNCH_SLURM\""
+
+log "sbatch \
+--partition=\"$PARTITION\" \
+--output=\"$SLURM_STDOUT\" \
+--error=\"$SLURM_STDERR\" \
+\"$LAUNCH_SLURM\""
 
 log
 
 OUT="$(
     sbatch \
+        --partition="$PARTITION" \
         --export=ALL,GIT_ROOT="$GIT_ROOT",OUTPUT_DIR="$OUTPUT_DIR",CONFIG_SH="$CONFIG_SH",RUN_SH="$RUN_SH",SLURM_STDOUT="$SLURM_STDOUT",SLURM_STDERR="$SLURM_STDERR" \
         --output="$SLURM_STDOUT" \
         --error="$SLURM_STDERR" \
@@ -153,17 +170,17 @@ if is_verbose; then
     log "mode: verbose"
 
     tail -n0 -F "$STDOUT_LOG" "$STDERR_LOG" &
-
+    TAIL_PID=$!
 else
     log "mode: filtered"
 
     tail -n0 -F "$STDOUT_LOG" "$STDERR_LOG" 2>/dev/null |
-        grep -vE \
+        grep --line-buffered -vE \
             'RESOURCE SNAPSHOT|memory\.total|memory\.used|memory\.free|utilization\.gpu|used_gpu_memory|^Mem:|^Swap:|^pid, process_name|^index, name|^==> .* <==|[0-9]+(\.[0-9]+)?it/s|step=[0-9]+|epoch=[0-9]+|loss=' \
         || true &
-fi
 
-TAIL_PID=$!
+    TAIL_PID=$!
+fi
 
 cleanup() {
     kill "$TAIL_PID" 2>/dev/null || true
