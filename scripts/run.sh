@@ -60,8 +60,9 @@ Expected layout:
   <dataset-dir>/
     ├── colmap/sparse/0/{cameras.bin,images.bin,points3D.bin}
     ├── images/
-    ├── sparse_pc.ply
-    └── transforms.json
+    └── sparse_pc.ply
+
+  transforms.json est généré automatiquement depuis le modèle COLMAP.
 
 Options:
   --output-dir, -o <dir>      Output root (default: runs/default)
@@ -107,6 +108,7 @@ COLMAP_SPARSE_DIR="$DATASET_DIR/colmap/sparse/0"
 IMAGE_DIR="$DATASET_DIR/images"
 TRANSFORMS_JSON="$DATASET_DIR/transforms.json"
 SPARSE_PC_PLY="$DATASET_DIR/sparse_pc.ply"
+TRANSFORMS_SCRIPT="$SCRIPT_DIR/../python/colmap_to_transforms.py"
 
 [ -d "$DATASET_DIR" ] || die "Dataset dir not found: $DATASET_DIR"
 [ -d "$COLMAP_SPARSE_DIR" ] || die "Missing: $COLMAP_SPARSE_DIR"
@@ -114,17 +116,45 @@ SPARSE_PC_PLY="$DATASET_DIR/sparse_pc.ply"
 [ -f "$COLMAP_SPARSE_DIR/images.bin" ] || die "Missing images.bin"
 [ -f "$COLMAP_SPARSE_DIR/points3D.bin" ] || die "Missing points3D.bin"
 [ -d "$IMAGE_DIR" ] || die "Missing image dir: $IMAGE_DIR"
-[ -f "$TRANSFORMS_JSON" ] || die "Missing transforms.json: $TRANSFORMS_JSON"
 [ -f "$SPARSE_PC_PLY" ] || die "Missing sparse_pc.ply: $SPARSE_PC_PLY"
+[ -f "$TRANSFORMS_SCRIPT" ] || die "Missing transforms generator: $TRANSFORMS_SCRIPT"
 
-IMAGE_COUNT=$(find "$IMAGE_DIR" -maxdepth 1 -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) | wc -l | tr -d ' ')
-[ "$IMAGE_COUNT" -ge 2 ] || die "At least 2 images required in $IMAGE_DIR (found: $IMAGE_COUNT)"
+IMAGE_COUNT=$(
+  find "$IMAGE_DIR" \
+    -type f \
+    \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" \) \
+    | wc -l \
+    | tr -d ' '
+)
 
-echo "📦 DATASET: $DATASET_DIR"
-echo "📦 IMAGES : $IMAGE_DIR"
-echo "📦 COLMAP : $COLMAP_SPARSE_DIR"
-echo "🧠 MODEL  : $MODEL"
-echo "🖥️ DEVICE : $DEVICE"
+[ "$IMAGE_COUNT" -ge 2 ] || die \
+  "At least 2 images required in $IMAGE_DIR (found: $IMAGE_COUNT)"
+
+# =========================================
+# Generate transforms.json from COLMAP
+# =========================================
+STEP_START=$(date +%s)
+
+echo "🧭 Generating transforms.json from COLMAP..."
+
+python3 "$TRANSFORMS_SCRIPT" \
+  --colmap-model "$COLMAP_SPARSE_DIR" \
+  --images-dir "$IMAGE_DIR" \
+  --output "$TRANSFORMS_JSON" \
+  --image-prefix "images" \
+  --ply-file-path "sparse_pc.ply"
+
+[ -s "$TRANSFORMS_JSON" ] || die \
+  "transforms.json generation failed: $TRANSFORMS_JSON"
+
+print_step_time "TRANSFORMS GENERATION" "$STEP_START"
+
+echo "📦 DATASET    : $DATASET_DIR"
+echo "📦 IMAGES     : $IMAGE_DIR"
+echo "📦 COLMAP     : $COLMAP_SPARSE_DIR"
+echo "🧭 TRANSFORMS : $TRANSFORMS_JSON"
+echo "🧠 MODEL      : $MODEL"
+echo "🖥️ DEVICE     : $DEVICE"
 
 # =========================================
 # Load config + profile
