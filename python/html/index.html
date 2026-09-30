@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gaussian Splat Viewer</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #111; font-family: system-ui, sans-serif; color: #eee; }
+  #viewer { position: absolute; inset: 0; }
+  .viewer-host { position: absolute; inset: 0; }
+  #panel {
+    position: absolute; top: 12px; left: 12px; z-index: 10;
+    background: rgba(20, 20, 20, 0.88); border: 1px solid #333; border-radius: 10px;
+    padding: 12px; width: 250px; user-select: none; backdrop-filter: blur(6px);
+  }
+  #panel h3 { margin: 0 0 8px; font-size: 14px; }
+  #panel .section { margin-top: 10px; font-size: 12px; color: #aaa; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 4px; }
+  button {
+    background: #2a2a2a; color: #eee; border: 1px solid #444; border-radius: 6px;
+    padding: 6px 0; cursor: pointer; font-size: 13px;
+  }
+  button:hover:not(:disabled) { background: #3a3a3a; }
+  button:disabled, input:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.wide { width: 100%; margin-top: 6px; padding: 7px 0; }
+  #fit { background: #2d4a6b; border-color: #3d6a9b; }
+  #fit:hover:not(:disabled) { background: #3d5f85; }
+  label { font-size: 12px; display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  input[type=range] { flex: 1; }
+  #status { margin-top: 8px; font-size: 12px; color: #8fd; min-height: 16px; word-break: break-word; }
+  #status.error { color: #f88; }
+  #drop {
+    position: absolute; inset: 0; z-index: 20; display: none;
+    align-items: center; justify-content: center; font-size: 24px;
+    background: rgba(0, 120, 255, 0.25); border: 3px dashed #4af; pointer-events: none;
+  }
+  #help { position: absolute; bottom: 10px; right: 12px; font-size: 11px; color: #888; z-index: 10; text-align: right; }
+</style>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="viewer"></div>
+<div id="drop">Déposer le fichier .ply</div>
+
+<div id="panel">
+  <h3>🟣 Gaussian Splats</h3>
+  <input type="file" id="fileInput" accept=".ply,.splat,.ksplat" />
+  <label><input type="checkbox" id="flipUp" /> Axe Y vers le bas (COLMAP)</label>
+
+  <button id="fit" class="wide" title="Cadrer toute la scène (R)">⛶ Recentrer / Tout voir</button>
+
+  <div class="section">Rotation</div>
+  <div class="grid">
+    <span></span><button data-rot="0,1">▲</button><span></span>
+    <button data-rot="1,0">◀</button><button id="recenterTarget" title="Recentrer la cible">⌖</button><button data-rot="-1,0">▶</button>
+    <span></span><button data-rot="0,-1">▼</button><span></span>
+  </div>
+
+  <div class="section">Translation</div>
+  <div class="grid">
+    <button data-move="0,0,1" title="Avancer">⤒</button><button data-move="0,1,0">↑</button><button data-move="0,0,-1" title="Reculer">⤓</button>
+    <button data-move="-1,0,0">←</button><span></span><button data-move="1,0,0">→</button>
+    <span></span><button data-move="0,-1,0">↓</button><span></span>
+  </div>
+
+  <div class="section">Zoom</div>
+  <div class="grid">
+    <button data-zoom="0.8">＋</button><span></span><button data-zoom="1.25">－</button>
+  </div>
+
+  <div class="section">Vues (cadrées)</div>
+  <div class="grid">
+    <button data-view="top">Dessus</button><button data-view="front">Face</button><button data-view="side">Côté</button>
+  </div>
+
+  <label>Pas <input type="range" id="step" min="1" max="50" value="10" /></label>
+
+  <div id="status">Aucun fichier chargé</div>
+</div>
+
+<div id="help">
+  Souris : gauche = rotation · droit = translation · molette = zoom<br />
+  Clavier : ZQSD/WASD = déplacer · A/E = monter/descendre · flèches = tourner · R = tout voir
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import * as GS from "@mkkellogg/gaussian-splats-3d";
+
+const container = document.getElementById("viewer");
+const statusEl  = document.getElementById("status");
+const flipUpEl  = document.getElementById("flipUp");
+const stepEl    = document.getElementById("step");
+const fileInput = document.getElementById("fileInput");
+
+let viewer     = null;
+let viewerHost = null;   // div dédié au viewer courant
+let currentUrl = null;
+let isLoading  = false;
+let loadSeq    = 0;
+
+const sceneBox    = new THREE.Box3();
+const sceneCenter = new THREE.Vector3();
+let sceneRadius   = 1;
+
+function setStatus(msg, isError = false) {
+  statusEl.textContent = msg;
+  statusEl.classList.toggle("error", isError);
+}
+
+function setUIEnabled(enabled) {
+  document.querySelectorAll("#panel button, #panel input").forEach((el) => { el.disabled = !enabled; });
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function formatFromName(name) {
+  const n = name.toLowerCase();
+  if (n.endsWith(".splat"))  return GS.SceneFormat.Splat;
+  if (n.endsWith(".ksplat")) return GS.SceneFormat.KSplat;
+  return GS.SceneFormat.Ply;
+}
+
+// ---------------------------------------------------------------------------
+// Cycle de vie du viewer
+// ---------------------------------------------------------------------------
+
+// Exécute fn en rendant removeChild tolérant : la lib tente parfois de retirer
+// un nœud déjà détaché, ce qui interrompt son dispose() à mi-chemin.
+async function withTolerantRemoveChild(fn) {
+  const original = Node.prototype.removeChild;
+  Node.prototype.removeChild = function (child) {
+    if (child && child.parentNode !== this) return child;
+    return original.call(this, child);
+  };
+  try {
+    return await fn();
+  } finally {
+    Node.prototype.removeChild = original;
+  }
+}
+
+async function destroyViewer() {
+  const oldViewer = viewer;
+  const oldHost   = viewerHost;
+  viewer = null;
+  viewerHost = null;
+
+  if (oldViewer) {
+    const renderer = oldViewer.renderer;
+
+    try { oldViewer.stop(); } catch (e) { console.warn("viewer.stop:", e); }
+
+    try {
+      await withTolerantRemoveChild(() => oldViewer.dispose());
+    } catch (e) {
+      console.warn("viewer.dispose:", e);
+    }
+
+    // Libère explicitement le contexte WebGL
+    try {
+      renderer?.forceContextLoss?.();
+      renderer?.dispose?.();
+    } catch (e) {
+      console.warn("renderer cleanup:", e);
+    }
+  }
+
+  if (oldHost && oldHost.parentNode) oldHost.parentNode.removeChild(oldHost);
+
+  await sleep(100);
+}
+
+function createViewer() {
+  viewerHost = document.createElement("div");
+  viewerHost.className = "viewer-host";
+  container.appendChild(viewerHost);
+
+  viewer = new GS.Viewer({
+    rootElement: viewerHost,
+    cameraUp: [0, 1, 0],
+    initialCameraPosition: [0, 0, 5],
+    initialCameraLookAt: [0, 0, 0],
+    sharedMemoryForWorkers: false,
+    dynamicScene: false,
+  });
+}
+
+function applyUpFlip() {
+  const mesh = viewer?.splatMesh;
+  if (!mesh) return;
+  mesh.rotation.x = flipUpEl.checked ? Math.PI : 0;
+  mesh.updateMatrixWorld(true);
+}
+
+async function resetAndLoad(url, name) {
+  const mySeq = ++loadSeq;
+  isLoading = true;
+  setUIEnabled(false);
+  setStatus(`Chargement de ${name}...`);
+
+  try {
+    await destroyViewer();
+    if (mySeq !== loadSeq) return;
+
+    createViewer();
+
+    await viewer.addSplatScene(url, {
+      format: formatFromName(name),
+      showLoadingUI: true,
+      progressiveLoad: false,
+      splatAlphaRemovalThreshold: 5,
+    });
+    if (mySeq !== loadSeq) return;
+
+    viewer.start();
+    await sleep(50);
+
+    applyUpFlip();
+    computeSceneBounds();
+    fitToView();
+
+    const count = viewer.getSplatMesh()?.getSplatCount() ?? 0;
+    const size  = sceneBox.getSize(new THREE.Vector3());
+    setStatus(`${name} — ${count.toLocaleString()} splats · bbox ${size.x.toFixed(1)}×${size.y.toFixed(1)}×${size.z.toFixed(1)}`);
+  } catch (err) {
+    console.error(err);
+    if (mySeq === loadSeq) setStatus(`Erreur : ${err?.message || err}`, true);
+  } finally {
+    if (mySeq === loadSeq) {
+      isLoading = false;
+      setUIEnabled(true);
+      fileInput.value = "";
+    }
+  }
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  const previousUrl = currentUrl;
+  currentUrl = URL.createObjectURL(file);
+  await resetAndLoad(currentUrl, file.name);
+  // Révoque l'ancienne URL seulement après le démontage de l'ancien viewer
+  if (previousUrl && previousUrl.startsWith("blob:")) {
+    try { URL.revokeObjectURL(previousUrl); } catch (e) { /* ignore */ }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Emprise (dans le repère monde, flip compris)
+// ---------------------------------------------------------------------------
+
+function computeSceneBounds() {
+  const mesh = viewer?.getSplatMesh();
+  if (!mesh) return;
+
+  const fallback = () => {
+    sceneBox.set(new THREE.Vector3(-1, -1, -1), new THREE.Vector3(1, 1, 1));
+    sceneBox.getCenter(sceneCenter);
+    sceneRadius = 1;
+  };
+
+  const count = mesh.getSplatCount();
+  if (!count) return fallback();
+
+  const stride = Math.max(1, Math.floor(count / 100000));
+  const xs = [], ys = [], zs = [];
+  const p = new THREE.Vector3();
+
+  for (let i = 0; i < count; i += stride) {
+    mesh.getSplatCenter(i, p);
+    if (flipUpEl.checked) { p.y = -p.y; p.z = -p.z; }   // rotation de π autour de X
+    if (Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)) {
+      xs.push(p.x); ys.push(p.y); zs.push(p.z);
+    }
+  }
+  if (!xs.length) return fallback();
+
+  const pct = (arr, q) => {
+    const s = Float64Array.from(arr).sort();
+    return s[Math.min(s.length - 1, Math.max(0, Math.floor(s.length * q)))];
+  };
+
+  sceneBox.set(
+    new THREE.Vector3(pct(xs, 0.01), pct(ys, 0.01), pct(zs, 0.01)),
+    new THREE.Vector3(pct(xs, 0.99), pct(ys, 0.99), pct(zs, 0.99)),
+  );
+
+  const size = sceneBox.getSize(new THREE.Vector3());
+  const eps = Math.max(size.x, size.y, size.z, 1e-3) * 1e-3;
+  sceneBox.expandByVector(new THREE.Vector3(eps, eps, eps));
+  sceneBox.getCenter(sceneCenter);
+  sceneRadius = Math.max(sceneBox.getBoundingSphere(new THREE.Sphere()).radius, 1e-3);
+}
+
+// ---------------------------------------------------------------------------
+// Cadrage
+// ---------------------------------------------------------------------------
+
+function distanceToFit(direction) {
+  const camera = viewer.camera;
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const hFov = 2 * Math.atan(Math.tan(vFov / 2) * camera.aspect);
+
+  const forward = direction.clone().normalize().negate();
+  let up = camera.up.clone().normalize();
+  if (Math.abs(forward.dot(up)) > 0.999) up = new THREE.Vector3(0, 0, 1);
+
+  const right  = new THREE.Vector3().crossVectors(forward, up).normalize();
+  const trueUp = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+  const half = sceneBox.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  const extent = (a) => Math.abs(half.x * a.x) + Math.abs(half.y * a.y) + Math.abs(half.z * a.z);
+
+  const distV = extent(trueUp) / Math.tan(vFov / 2);
+  const distH = extent(right)  / Math.tan(hFov / 2);
+
+  return (Math.max(distV, distH) + extent(forward)) * 1.08;
+}
+
+function fitToView(direction = null) {
+  if (!viewer) return;
+  const camera = viewer.camera, controls = viewer.controls;
+
+  let dir = direction ? direction.clone() : camera.position.clone().sub(controls.target);
+  if (dir.lengthSq() < 1e-12) dir = new THREE.Vector3(0, 0.6, 1);
+  dir.normalize();
+
+  const dist = distanceToFit(dir);
+
+  controls.target.copy(sceneCenter);
+  camera.position.copy(sceneCenter).addScaledVector(dir, dist);
+  camera.near = Math.max(dist * 1e-4, 1e-4);
+  camera.far  = dist + sceneRadius * 4;
+  camera.updateProjectionMatrix();
+  camera.lookAt(sceneCenter);
+  controls.update();
+}
+
+function setView(kind) {
+  if (!viewer) return;
+  const dir = kind === "top"   ? new THREE.Vector3(0, 1, 0)
+            : kind === "front" ? new THREE.Vector3(0, 0, 1)
+            :                    new THREE.Vector3(1, 0, 0);
+  fitToView(dir);
+}
+
+// ---------------------------------------------------------------------------
+// Navigation
+// ---------------------------------------------------------------------------
+
+const stepFactor = () => Number(stepEl.value) / 100;
+
+function rotate(dx, dy) {
+  if (!viewer) return;
+  const camera = viewer.camera, controls = viewer.controls;
+  const angle = THREE.MathUtils.degToRad(5 + 25 * stepFactor());
+  const up = camera.up.clone().normalize();
+  const offset = camera.position.clone().sub(controls.target);
+
+  if (dx) offset.applyAxisAngle(up, dx * angle);
+  if (dy) {
+    const right = new THREE.Vector3().crossVectors(offset, up).normalize();
+    const candidate = offset.clone().applyAxisAngle(right, dy * angle);
+    if (Math.abs(candidate.clone().normalize().dot(up)) < 0.995) offset.copy(candidate);
+  }
+
+  camera.position.copy(controls.target).add(offset);
+  camera.lookAt(controls.target);
+  controls.update();
+}
+
+function move(rx, uy, fz) {
+  if (!viewer) return;
+  const camera = viewer.camera, controls = viewer.controls;
+  const dist = sceneRadius * stepFactor();
+
+  const forward = new THREE.Vector3();
+  camera.getWorldDirection(forward);
+  const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+  const up    = new THREE.Vector3().crossVectors(right, forward).normalize();
+
+  const delta = new THREE.Vector3()
+    .addScaledVector(right, rx * dist)
+    .addScaledVector(up, uy * dist)
+    .addScaledVector(forward, fz * dist);
+
+  camera.position.add(delta);
+  controls.target.add(delta);
+  controls.update();
+}
+
+function zoom(factor) {
+  if (!viewer) return;
+  const camera = viewer.camera, controls = viewer.controls;
+  camera.position.copy(controls.target.clone().add(camera.position.clone().sub(controls.target).multiplyScalar(factor)));
+  controls.update();
+}
+
+function recenterTarget() {
+  if (!viewer) return;
+  const camera = viewer.camera, controls = viewer.controls;
+  const offset = camera.position.clone().sub(controls.target);
+  controls.target.copy(sceneCenter);
+  camera.position.copy(sceneCenter).add(offset);
+  camera.lookAt(sceneCenter);
+  controls.update();
+}
+
+// ---------------------------------------------------------------------------
+// UI
+// ---------------------------------------------------------------------------
+
+document.getElementById("fit").addEventListener("click", () => fitToView());
+document.getElementById("recenterTarget").addEventListener("click", recenterTarget);
+
+document.querySelectorAll("[data-rot]").forEach((b) =>
+  b.addEventListener("click", () => { const [x, y] = b.dataset.rot.split(",").map(Number); rotate(x, y); }));
+document.querySelectorAll("[data-move]").forEach((b) =>
+  b.addEventListener("click", () => { const [x, y, z] = b.dataset.move.split(",").map(Number); move(x, y, z); }));
+document.querySelectorAll("[data-zoom]").forEach((b) =>
+  b.addEventListener("click", () => zoom(Number(b.dataset.zoom))));
+document.querySelectorAll("[data-view]").forEach((b) =>
+  b.addEventListener("click", () => setView(b.dataset.view)));
+
+flipUpEl.addEventListener("change", () => {
+  if (!viewer || isLoading) return;
+  applyUpFlip();
+  computeSceneBounds();
+  fitToView();
+});
+
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files?.[0];
+  if (file && !isLoading) loadFile(file);
+});
+
+const drop = document.getElementById("drop");
+let dragDepth = 0;
+window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; drop.style.display = "flex"; });
+window.addEventListener("dragover",  (e) => e.preventDefault());
+window.addEventListener("dragleave", (e) => {
+  e.preventDefault();
+  if (--dragDepth <= 0) { dragDepth = 0; drop.style.display = "none"; }
+});
+window.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dragDepth = 0;
+  drop.style.display = "none";
+  const file = e.dataTransfer.files?.[0];
+  if (file && !isLoading) loadFile(file);
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || isLoading) return;
+  const actions = {
+    z: () => move(0, 0, 1),  w: () => move(0, 0, 1),
+    s: () => move(0, 0, -1),
+    q: () => move(-1, 0, 0), d: () => move(1, 0, 0),
+    a: () => move(0, -1, 0), e: () => move(0, 1, 0),
+    arrowleft: () => rotate(1, 0),  arrowright: () => rotate(-1, 0),
+    arrowup:   () => rotate(0, 1),  arrowdown:  () => rotate(0, -1),
+    r: () => fitToView(),
+    "+": () => zoom(0.8), "-": () => zoom(1.25),
+  };
+  const fn = actions[e.key.toLowerCase()];
+  if (fn) { e.preventDefault(); fn(); }
+});
+
+let resizeTimer = null;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (viewer && !isLoading) fitToView(); }, 150);
+});
+
+const fileParam = new URLSearchParams(location.search).get("file");
+if (fileParam) resetAndLoad(fileParam, fileParam.split("/").pop());
+</script>
+</body>
+</html>
