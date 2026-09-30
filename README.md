@@ -352,3 +352,8 @@ GSPLAT_PROFILE_PATH=/path/to/custom/profiles \
 GSPLAT_PROFILE=fast_compact \
 bash "$GIT_ROOT/environment/ign.slurm/launch.sh"
 ```
+
+
+NOTES:
+python $GIT_ROOT/python/images_to_colmap.py  --image_dir images/ --output_dir colmap_data  --camera_model OPENCV --matcher sequential --verbose --no-gpu
+
