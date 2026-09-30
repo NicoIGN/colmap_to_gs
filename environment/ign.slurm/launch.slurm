@@ -56,6 +56,19 @@ CONDA_BASE="$(conda info --base 2>/dev/null || true)"
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 set +u
 conda activate gsplat
+
+echo "=== PYTORCH DEBUG ==="
+which python
+python -V
+python -c "import sys; print(sys.executable)"
+python -c "import torch; print('torch=', torch.__version__)"
+python -c "import torch; print('cuda_version=', torch.version.cuda)"
+python -c "import torch; print('cuda_available=', torch.cuda.is_available())"
+python -c "import torch; print('torch_file=', torch.__file__)"
+python -c "import site; print(site.getsitepackages())"
+command -v nvidia-smi && nvidia-smi || true
+echo "====================="
+
 set -u
 
 echo "========================"
