@@ -14,31 +14,24 @@ dependencies:
   ########################################
   - cmake
   - ninja
-
-  # GCC 11 REQUIRED FOR CUDA 12.1 EXTENSIONS
   - gcc_linux-64=11
   - gxx_linux-64=11
 
   ########################################
   # PYTORCH CUDA 12.1
   ########################################
-  - pytorch=2.3.1
-  - torchvision=0.18.1
-  - torchaudio=2.3.1
-  - pytorch-cuda=12.1
+  - pytorch::pytorch=2.3.1
+  - pytorch::torchvision=0.18.1
+  - pytorch::torchaudio=2.3.1
+  - pytorch::pytorch-cuda=12.1
 
   ########################################
   # CUDA BUILD COMPONENTS ONLY
-  # IMPORTANT:
-  # DO NOT INSTALL cuda-toolkit
-  # DO NOT INSTALL cuda-libraries
-  # DO NOT INSTALL cuda-opencl
   ########################################
-  - cuda-nvcc=12.1
-  - cuda-cudart-dev=12.1
-  - cuda-cccl=12.1
-  - cuda-opencl=12.1
-  
+  - nvidia::cuda-nvcc=12.1
+  - nvidia::cuda-cudart-dev=12.1
+  - nvidia::cuda-cccl=12.1
+
   ########################################
   # SCIENTIFIC STACK
   ########################################
