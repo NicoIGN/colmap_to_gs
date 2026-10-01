@@ -159,64 +159,39 @@ echo "🖥️ DEVICE     : $DEVICE"
 # =========================================
 # Load config + profile
 # =========================================
+
 NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
-  source "$SCRIPT_DIR/../config/config.sh"
+    source "$SCRIPT_DIR/../config/config.sh"
 
 DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../config/profiles"
-GSPLAT_PROFILE_PATH="${GSPLAT_PROFILE_PATH:-}"
-
-resolve_gsplat_profile_file() {
-  local profile_name="$1"
-  local candidate=""
-
-  # 1) Dossier custom prioritaire si GSPLAT_PROFILE_PATH est renseigné.
-  if [ -n "$GSPLAT_PROFILE_PATH" ]; then
-    [ -d "$GSPLAT_PROFILE_PATH" ] || die "GSPLAT_PROFILE_PATH is not a directory: $GSPLAT_PROFILE_PATH"
-
-    candidate="$GSPLAT_PROFILE_PATH/${profile_name}.sh"
-    if [ -f "$candidate" ]; then
-      echo "$candidate"
-      return 0
-    fi
-
-    # Permet aussi --gsplat-profile mon_profile.sh si besoin.
-    candidate="$GSPLAT_PROFILE_PATH/${profile_name}"
-    if [ -f "$candidate" ]; then
-      echo "$candidate"
-      return 0
-    fi
-  fi
-
-  # 2) Fallback vers les profils du repo.
-  candidate="$DEFAULT_GSPLAT_PROFILE_DIR/${profile_name}.sh"
-  if [ -f "$candidate" ]; then
-    echo "$candidate"
-    return 0
-  fi
-
-  # Permet aussi --gsplat-profile fast.sh si besoin.
-  candidate="$DEFAULT_GSPLAT_PROFILE_DIR/${profile_name}"
-  if [ -f "$candidate" ]; then
-    echo "$candidate"
-    return 0
-  fi
-
-  return 1
-}
 
 if [ -n "$GSPLAT_PROFILE" ]; then
-  PROFILE_FILE="$(resolve_gsplat_profile_file "$GSPLAT_PROFILE")" || {
-    echo "❌ Profile not found: $GSPLAT_PROFILE" >&2
-    if [ -n "$GSPLAT_PROFILE_PATH" ]; then
-      echo "   searched custom:  $GSPLAT_PROFILE_PATH" >&2
-    fi
-    echo "   searched default: $DEFAULT_GSPLAT_PROFILE_DIR" >&2
-    exit 1
-  }
+    PROFILE_FILE=""
 
-  source "$PROFILE_FILE"
-  echo "👉 using profile: ${GSPLAT_PROFILE}"
-  echo "👉 profile file : ${PROFILE_FILE}"
+    # Priorité au dossier custom
+    for dir in "${GSPLAT_PROFILE_PATH:-}" "$DEFAULT_GSPLAT_PROFILE_DIR"; do
+        [ -n "$dir" ] || continue
+
+        for file in "$dir/$GSPLAT_PROFILE" "$dir/$GSPLAT_PROFILE.sh"; do
+            if [ -f "$file" ]; then
+                PROFILE_FILE="$file"
+                break 2
+            fi
+        done
+    done
+
+    if [ -z "$PROFILE_FILE" ]; then
+        echo "❌ Profile not found: $GSPLAT_PROFILE" >&2
+        [ -n "$GSPLAT_PROFILE_PATH" ] &&
+            echo "   searched custom : $GSPLAT_PROFILE_PATH" >&2
+        echo "   searched default: $DEFAULT_GSPLAT_PROFILE_DIR" >&2
+        exit 1
+    fi
+
+    source "$PROFILE_FILE"
+
+    echo "👉 using profile: ${GSPLAT_PROFILE}"
+    echo "👉 profile file : ${PROFILE_FILE}"
 fi
 
 # =========================================
