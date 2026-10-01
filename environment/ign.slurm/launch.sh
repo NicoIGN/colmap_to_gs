@@ -40,9 +40,11 @@ fi
 
 # Priorité :
 # 1. argument passé au script
-# 2. variable PARTITION
+# 2. variable d'environnement
 # 3. valeur par défaut
 PARTITION="${1:-${PARTITION:-jean-zellou}}"
+CPUS_PER_TASK="${2:-${CPUS_PER_TASK:-16}}"
+MEMORY="${3:-${MEMORY:-64G}}"
 
 export CONFIG_SH
 export PARTITION
@@ -81,6 +83,8 @@ log "CONFIG_SH   : $CONFIG_SH"
 log "RUN_SH      : $RUN_SH"
 log "LAUNCH_SLURM: $LAUNCH_SLURM"
 log "PARTITION   : $PARTITION"
+log "CPUS_PER_TASK   : $CPUS_PER_TASK"
+log "MEMORY   : $MEMORY"
 log "SLURM_STDOUT: $SLURM_STDOUT"
 log "SLURM_STDERR: $SLURM_STDERR"
 log "verbose     : $VERBOSE"
@@ -110,6 +114,8 @@ log "Commande sbatch :"
 
 log "sbatch \
 --partition=\"$PARTITION\" \
+--cpus-per-task=\"$CPUS_PER_TASK\" \
+--mem=\"$MEMORY\" \
 --output=\"$SLURM_STDOUT\" \
 --error=\"$SLURM_STDERR\" \
 \"$LAUNCH_SLURM\""
