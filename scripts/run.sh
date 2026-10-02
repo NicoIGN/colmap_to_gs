@@ -133,21 +133,28 @@ IMAGE_COUNT=$(
 # =========================================
 # Generate transforms.json from COLMAP
 # =========================================
+
 STEP_START=$(date +%s)
 
-echo "🧭 Generating transforms.json from COLMAP..."
+if [ -s "$TRANSFORMS_JSON" ]; then
+    echo "🧭 transforms.json already exists — keeping it:"
+    echo "   $TRANSFORMS_JSON"
+else
+    echo "🧭 Generating transforms.json from COLMAP..."
 
-python3 "$TRANSFORMS_SCRIPT" \
-  --colmap-model "$COLMAP_SPARSE_DIR" \
-  --images-dir "$IMAGE_DIR" \
-  --output "$TRANSFORMS_JSON" \
-  --image-prefix "images" \
-  --ply-file-path "sparse_pc.ply"
+    python3 "$TRANSFORMS_SCRIPT" \
+        --colmap-model "$COLMAP_SPARSE_DIR" \
+        --images-dir "$IMAGE_DIR" \
+        --output "$TRANSFORMS_JSON" \
+        --image-prefix "images" \
+        --ply-file-path "sparse_pc.ply"
 
-[ -s "$TRANSFORMS_JSON" ] || die \
-  "transforms.json generation failed: $TRANSFORMS_JSON"
+    [ -s "$TRANSFORMS_JSON" ] || die \
+        "transforms.json generation failed: $TRANSFORMS_JSON"
 
-print_step_time "TRANSFORMS GENERATION" "$STEP_START"
+    print_step_time "TRANSFORMS GENERATION" "$STEP_START"
+fi
+
 
 echo "📦 DATASET    : $DATASET_DIR"
 echo "📦 IMAGES     : $IMAGE_DIR"
