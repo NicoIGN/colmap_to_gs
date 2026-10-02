@@ -6,7 +6,7 @@ TRAINING_PROFILE="gpu/quality"
 
 DEVICE="gpu"
 MODEL="splatfacto"
-MODEL_IMPLEMENTATION="torch"
+MODEL_IMPLEMENTATION="tcnn"
 TRAIN_VIS_MODE="tensorboard"
 
 ########################################
@@ -26,28 +26,27 @@ MAX_ITER=30000
 STEPS_PER_SAVE=5000
 STEPS_PER_EVAL_ALL_IMAGES=2000
 
-# Densification pendant la première moitié de l'entraînement,
+# Densification pendant un peu plus de la première moitié de l'entraînement,
 # puis optimisation des Gaussians existants.
-STOP_SPLIT_AT=15000
-REFINE_EVERY=100
+STOP_SPLIT_AT=22000
+REFINE_EVERY=80
 
 ########################################
 # DENSIFICATION ET CULLING
 ########################################
 
-# Valeur par défaut du Nerfstudio actuel avec use_absgrad=True.
-# À vérifier si ta version utilise les gradients classiques.
-DENSIFY_GRAD_THRESH=0.0008
+# Seuil légèrement abaissé pour déclencher un peu plus de splits.
+DENSIFY_GRAD_THRESH=0.0006
 
 # Préserver davantage de Gaussians de faible opacité.
 CULL_ALPHA_THRESH=0.005
 
 CULL_SCREEN_SIZE=0.15
-SPLIT_SCREEN_SIZE=0.05
+SPLIT_SCREEN_SIZE=0.04
 CULL_SCALE_THRESH=0.5
 
 # Nombre de cycles de raffinement entre deux resets :
-# 30 × 100 = 3000 étapes.
+# 30 × 80 = 2400 étapes.
 RESET_ALPHA_EVERY=30
 
 ########################################
@@ -68,8 +67,6 @@ USE_GRAD_SCALER=False
 # PARAMÈTRES NeRF — NON PERTINENTS POUR SPLATFACTO
 ########################################
 
-# Définis vides car run.sh les référence.
-# train.sh doit éviter de les transmettre à Splatfacto.
 TRAIN_RAYS_PER_BATCH=""
 NUM_NERF_SAMPLES_PER_RAY=""
 NUM_PROPOSAL_SAMPLES_PER_RAY=""
