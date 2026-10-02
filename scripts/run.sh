@@ -19,6 +19,7 @@ SKIP_TRAINING=false
 SKIP_EXPORT=false
 TWO_STAGES=false
 IGNORE_PROXY=false
+USE_DEFAULTS=False
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -85,6 +86,7 @@ while [[ $# -gt 0 ]]; do
     --dataset-dir) DATASET_DIR="$2"; shift 2 ;;
     --output-dir|-o) OUTPUT_ROOT="$2"; shift 2 ;;
     --name) BASENAME="$2"; shift 2 ;;
+    --use-defaults) USE_DEFAULTS=True; shift 2 ;;
     --gsplat-profile) GSPLAT_PROFILE="$2"; shift 2 ;;
     --max-jobs) MAX_JOBS="$2"; shift 2 ;;
     --two-stages) TWO_STAGES=true; shift ;;

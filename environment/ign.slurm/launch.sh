@@ -87,7 +87,6 @@ log "CPUS_PER_TASK : $CPUS_PER_TASK"
 log "MEMORY        : $MEMORY"
 log "SLURM_STDOUT  : $SLURM_STDOUT"
 log "SLURM_STDERR  : $SLURM_STDERR"
-log "USE_DEFAULTS  : $USE_DEFAULTS"
 log "verbose       : $VERBOSE"
 
 [ -d "$GIT_ROOT" ] || {

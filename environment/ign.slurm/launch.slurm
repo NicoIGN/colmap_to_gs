@@ -112,6 +112,13 @@ EXTRA_ARGS=()
 [ "${SKIP_TRAINING:-false}" = "true" ] && EXTRA_ARGS+=(--skip-training)
 [ "${SKIP_EXPORT:-false}" = "true" ] && EXTRA_ARGS+=(--skip-export)
 
+case "${USE_DEFAULTS:-false}" in
+  true|True|1)
+    EXTRA_ARGS+=(--use-defaults)
+    ;;
+esac
+ 
+
 srun --unbuffered bash "$RUN_SH" \
   --dataset-dir "$DATASET_DIR" \
   --output-dir "$OUTPUT_DIR" \
