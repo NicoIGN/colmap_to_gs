@@ -172,35 +172,42 @@ NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
 
 DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../config/profiles"
 
-if [ -n "$GSPLAT_PROFILE" ]; then
-    PROFILE_FILE=""
+if [[ -n "${USE_DEFAULTS+x}" ]]; then
+    export USE_DEFAULTS=True
+    echo "👉 USE_DEFAULTS est définie : paramètres Nerfstudio par défaut, chargement du profil ignoré."
+else
+    export USE_DEFAULTS=False
 
-    # Priorité au dossier custom
-    for dir in "${GSPLAT_PROFILE_PATH:-}" "$DEFAULT_GSPLAT_PROFILE_DIR"; do
-        [ -n "$dir" ] || continue
+    if [ -n "$GSPLAT_PROFILE" ]; then
+        PROFILE_FILE=""
 
-        for file in "$dir/$GSPLAT_PROFILE" "$dir/$GSPLAT_PROFILE.sh"; do
-            if [ -f "$file" ]; then
-                PROFILE_FILE="$file"
-                break 2
-            fi
+        # Priorité au dossier custom
+        for dir in "${GSPLAT_PROFILE_PATH:-}" "$DEFAULT_GSPLAT_PROFILE_DIR"; do
+            [ -n "$dir" ] || continue
+
+            for file in "$dir/$GSPLAT_PROFILE" "$dir/$GSPLAT_PROFILE.sh"; do
+                if [ -f "$file" ]; then
+                    PROFILE_FILE="$file"
+                    break 2
+                fi
+            done
         done
-    done
 
-    if [ -z "$PROFILE_FILE" ]; then
-        echo "❌ Profile not found: $GSPLAT_PROFILE" >&2
-        [ -n "$GSPLAT_PROFILE_PATH" ] &&
-            echo "   searched custom : $GSPLAT_PROFILE_PATH" >&2
-        echo "   searched default: $DEFAULT_GSPLAT_PROFILE_DIR" >&2
-        exit 1
+        if [ -z "$PROFILE_FILE" ]; then
+            echo "❌ Profile not found: $GSPLAT_PROFILE" >&2
+            if [ -n "${GSPLAT_PROFILE_PATH:-}" ]; then
+                echo "   searched custom : $GSPLAT_PROFILE_PATH" >&2
+            fi
+            echo "   searched default: $DEFAULT_GSPLAT_PROFILE_DIR" >&2
+            exit 1
+        fi
+
+        source "$PROFILE_FILE"
+
+        echo "👉 using profile: ${GSPLAT_PROFILE}"
+        echo "👉 profile file : ${PROFILE_FILE}"
     fi
-
-    source "$PROFILE_FILE"
-
-    echo "👉 using profile: ${GSPLAT_PROFILE}"
-    echo "👉 profile file : ${PROFILE_FILE}"
 fi
-
 # =========================================
 # GPU check (required)
 # =========================================
@@ -284,7 +291,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     USE_SCALE_REGULARIZATION="$USE_SCALE_REGULARIZATION" SSIM_LAMBDA="$SSIM_LAMBDA" \
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
-    USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
+    USE_DEFAULTS=""$USE_DEFAULTS" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
     bash $SCRIPT_DIR/train.sh
 
     # Stage 2
@@ -310,7 +317,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     USE_SCALE_REGULARIZATION="$USE_SCALE_REGULARIZATION" SSIM_LAMBDA="$SSIM_LAMBDA" \
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
-    USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
+    USE_DEFAULTS="$USE_DEFAULTS" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
     bash $SCRIPT_DIR/train.sh
   else
     DATA="$DATASET_DIR" RELOAD_FROM_CHECKPOINT="False" MODEL="$MODEL" \
@@ -327,7 +334,7 @@ if [ "$SKIP_TRAINING" = false ]; then
     USE_SCALE_REGULARIZATION="$USE_SCALE_REGULARIZATION" SSIM_LAMBDA="$SSIM_LAMBDA" \
     COLLIDER_NEAR="$COLLIDER_NEAR" COLLIDER_FAR="$COLLIDER_FAR" \
     ENABLE_COLLIDER="$ENABLE_COLLIDER" USE_BILATERAL_GRID="$USE_BILATERAL_GRID" \
-    USE_DEFAULTS="False" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
+    USE_DEFAULTS="$USE_DEFAULTS" MIXED_PRECISION="$MIXED_PRECISION" USE_GRAD_SCALER="$USE_GRAD_SCALER" \
     bash $SCRIPT_DIR/train.sh
   fi
 
