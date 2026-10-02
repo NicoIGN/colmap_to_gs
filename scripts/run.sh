@@ -69,6 +69,7 @@ Options:
   --output-dir, -o <dir>      Output root (default: runs/default)
   --name <name>               Basename export PLY (default: gsplat_<timestamp>)
   --gsplat-profile <name>     fast | balanced | quality | quality_plus
+  --use-defaults              ignoring all customized params
   --max-jobs <int>            Parallel jobs
   --two-stages                Coarse -> full training
   --skip-conda
@@ -86,7 +87,7 @@ while [[ $# -gt 0 ]]; do
     --dataset-dir) DATASET_DIR="$2"; shift 2 ;;
     --output-dir|-o) OUTPUT_ROOT="$2"; shift 2 ;;
     --name) BASENAME="$2"; shift 2 ;;
-    --use-defaults) USE_DEFAULTS=True; shift 2 ;;
+    --use-defaults) USE_DEFAULTS=True; shift ;;
     --gsplat-profile) GSPLAT_PROFILE="$2"; shift 2 ;;
     --max-jobs) MAX_JOBS="$2"; shift 2 ;;
     --two-stages) TWO_STAGES=true; shift ;;
