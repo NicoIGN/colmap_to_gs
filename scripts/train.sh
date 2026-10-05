@@ -194,7 +194,8 @@ echo "✨ GAUSSIAN SPLATTING"
 echo "  - refine every            : $REFINE_EVERY"
 
 echo "  - densify grad threshold  : $DENSIFY_GRAD_THRESH"
-
+echo "  - densify size threshold  : $DENSIFY_SIZE_THRESH"
+    
 echo "  - cull alpha threshold    : $CULL_ALPHA_THRESH"
 echo "  - cull scale threshold    : $CULL_SCALE_THRESH"
 echo "  - cull screen size        : $CULL_SCREEN_SIZE"
@@ -353,6 +354,7 @@ if [[ "$DEVICE" == "gpu" ]]; then
         add_bool_arg MODEL_ARGS  --pipeline.datamanager.images-on-gpu False
         add_bool_arg MODEL_ARGS  --pipeline.datamanager.masks-on-gpu False
         add_arg MODEL_ARGS       --pipeline.model.densify-grad-thresh "$DENSIFY_GRAD_THRESH"
+        add_arg MODEL_ARGS       --pipeline.model.densify-size-thresh "$DENSIFY_SIZE_THRESH"
         add_arg MODEL_ARGS       --pipeline.model.cull-alpha-thresh "$CULL_ALPHA_THRESH"
         add_arg MODEL_ARGS       --pipeline.model.cull-screen-size "$CULL_SCREEN_SIZE"
         add_arg MODEL_ARGS       --pipeline.model.split-screen-size "$SPLIT_SCREEN_SIZE"

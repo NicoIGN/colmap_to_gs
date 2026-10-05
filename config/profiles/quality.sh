@@ -36,7 +36,8 @@ REFINE_EVERY=80
 ########################################
 
 # Seuil légèrement abaissé pour déclencher un peu plus de splits.
-DENSIFY_GRAD_THRESH=0.0006
+DENSIFY_GRAD_THRESH=0.0003
+DENSIFY_SIZE_THRESH=0.015
 
 # Préserver davantage de Gaussians de faible opacité.
 CULL_ALPHA_THRESH=0.005
