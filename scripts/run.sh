@@ -175,9 +175,9 @@ NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
 
 DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../config/profiles"
 
-if [[ -n "${USE_DEFAULTS+x}" ]]; then
+if [[ "${USE_DEFAULTS:-false}" =~ ^(1|true|TRUE|True|yes|YES)$ ]]; then
     export USE_DEFAULTS=True
-    echo "👉 USE_DEFAULTS est définie : paramètres Nerfstudio par défaut, chargement du profil ignoré."
+    echo "👉 USE_DEFAULTS activé : paramètres Nerfstudio par défaut, chargement du profil ignoré."
 else
     export USE_DEFAULTS=False
 
