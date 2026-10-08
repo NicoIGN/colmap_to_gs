@@ -4,20 +4,19 @@
 ---
 
 ## 1. Un Gaussian Splat, c'est quoi ?
-### Durée indicative : 1 min 30
 
 ### Les différentes manières de représenter une scène 3D
 
 Pour représenter une scène en trois dimensions, on utilisait en général :
-**un nuage de points** : des positions 3D, éventuellement accompagnées de couleurs ;
-- **un maillage texturé** : une surface composée de triangles, sur laquelle sont projetées des images.
+- **un maillage texturé** : une surface composée de triangles, sur laquelle sont projetées des images
+- **un nuage de points** : des positions 3D, éventuellement accompagnées de couleurs
 
 Récemment, deux approches paramétriques modernes se sont imposées :
-**Les NeRF (Neural Radiance Fields)** — un réseau neuronal encode la radiance (couleur + luminosité) en fonction de la position et de la direction d'observation.
+1- **Les NeRF (Neural Radiance Fields)** :  un réseau neuronal encode la radiance (couleur + luminosité) en fonction de la position et de la direction d'observation.
 - ✓ Qualité visuelle exceptionnelle
 - ✗ Rendu très lent (secondes par image)
 
-L**es 3D Gaussian Splatting** — la scène est décrite par un ensemble de **gaussiennes 3D** : des ellipsoïdes colorés avec une certaine opacité.
+2- L**es 3D Gaussian Splatting** : la scène est décrite par un ensemble de **gaussiennes 3D** : des ellipsoïdes colorés avec une certaine opacité.
 
 Chaque gaussienne possède :
 
@@ -26,8 +25,10 @@ Chaque gaussienne possède :
   - une **opacité** ;
   - des **attributs de couleur**, pouvant représenter une apparence qui varie selon la direction d'observation.
 
-<p align="center"><img src="images/splat.png" alt="un splat gaussien" width="400"> </p>
-source: https://brunzema.github.io/visualizations/gaussian-splatting
+<p align="center">
+  <img src="images/splat.png" alt="Un splat gaussien" width="400"><br>
+  <em>Source : <a href="https://brunzema.github.io/visualizations/gaussian-splatting">A visual exploration of Gaussian Splatting — Paul Brunzema</a></em>
+</p>
 
 Le rendu peut alors se faire en **temps réel.**
 
@@ -38,12 +39,13 @@ projetées et combinées, elles peuvent restituer une image très détaillée.
 
 Les gaussiennes sont projetées sur l’écran puis leurs contributions sont combinées pour former l’image.
 Leur forme et leur transparence permettent de produire un rendu continu, sans construire explicitement une surface triangulée.
+<p align="center">
+  <img src="images/splat-rendering.png" alt="Rendu de splats" width="600"><br>
+  <em>Source : <a href="https://github.com/Chamud/3DGS-101">3DGS-101 — Chamud</a></em>
+</p>
 
-<p align="center"><img src="images/splat-rendering.png" alt="rendu" de  splats" width="600"> </p>
-
-source: https://github.com/Chamud/3DGS-101
-
-Chaque Gaussian possède une opacité intrinsèque α, apprise pendant l'entraînement et stockée avec le splat. Le moteur de rendu évalue l'opacité du pixel en fonction de l'éloignement au centre du splat selon une courbe gaussienne. Ainsi, un splat avec α = 0.8 a une opacité effective proche de 0.8 au centre, mais beaucoup plus faible sur ses bords. C'est cet alpha effectif a(x) qui intervient ensuite dans la composition : le premier splat rencotnré par le moteur de rendu contribue avec a₁, le deuxième avec a₂(1-a₁), le troisième avec a₃(1-a₁)(1-a₂), etc.
+Chaque Gaussian possède une opacité intrinsèque \(\alpha\), apprise pendant l'entraînement et stockée avec le splat. Le moteur de rendu calcule ensuite l'opacité effective de chaque pixel en fonction de sa distance au centre du splat, selon la courbe gaussienne. 
+Ainsi, un splat avec \(\alpha=0.8\) aura une opacité proche de \(0.8\) au centre, mais progressivement plus faible vers les bords. C'est cet alpha effectif \(a(x)\) qui intervient dans le compositing : pour chaque pixel, le moteur parcourt les splats dans la direction de la caméra vers la scène, du plus proche au plus éloigné. Le premier contribue avec \(a_1\), le deuxième avec \(a_2(1-a_1)\), le troisième avec \(a_3(1-a_1)(1-a_2)\), etc.
 
 ---
 
