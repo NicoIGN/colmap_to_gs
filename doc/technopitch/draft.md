@@ -1,26 +1,21 @@
-# Des données géoréférencées aux splats gaussiens
-## Une nouvelle manière de représenter et de visualiser nos données en 3D
+# Les splats gaussiens, une nouvelle manière de représenter nos données 3D
 
----
 
 ## 1. Un Gaussian Splat, c'est quoi ?
-
-### Les différentes manières de représenter une scène 3D
+--
 
 Pour représenter une scène en trois dimensions, on utilisait en général :
 - **un maillage texturé** : une surface composée de triangles, sur laquelle sont projetées des images
 - **un nuage de points** : des positions 3D, éventuellement accompagnées de couleurs
 
 Récemment, deux approches paramétriques modernes se sont imposées :
-1- **Les NeRF (Neural Radiance Fields)** :  un réseau neuronal encode la radiance (couleur + luminosité) en fonction de la position et de la direction d'observation.
+a) **Les NeRF (Neural Radiance Fields)** :  un réseau neuronal encode la radiance (couleur + luminosité) en fonction de la position et de la direction d'observation.
 - ✓ Qualité visuelle exceptionnelle
 - ✗ Rendu très lent (secondes par image)
 
-2- L**es 3D Gaussian Splatting** : la scène est décrite par un ensemble de **gaussiennes 3D** : des ellipsoïdes colorés avec une certaine opacité.
-
+b) L**es 3D Gaussian Splatting** : la scène est décrite par un ensemble de **gaussiennes 3D** : des ellipsoïdes colorés avec une certaine opacité.
 Chaque gaussienne possède :
-
-  - une **position** dans l'espace ;
+une **position** dans l'espace ;
   - une **échelle** et une **rotation**, qui définissent sa forme et son orientation ;
   - une **opacité** ;
   - des **attributs de couleur**, pouvant représenter une apparence qui varie selon la direction d'observation.
@@ -30,101 +25,83 @@ Chaque gaussienne possède :
   <em>Source : <a href="https://brunzema.github.io/visualizations/gaussian-splatting">A visual exploration of Gaussian Splatting — Paul Brunzema</a></em>
 </p>
 
-Le rendu peut alors se faire en **temps réel.**
+Le rendu peut alors se faire en **temps réel**, permettant une navigation 3D immersive avec une finesse de rendu très au-dessus des approches plus classiques.
 
+[Démo interactive: Niseko Village — Snowy Ski Resort [Source : Splat Labs — Gaussian Splatting](https://cloud.splatlabs.ai/viewer/0729c1d5-8d65-4dbc-b4f4-a7ed4fbd6ce3)]
 
-### Comment obtient-on une image ?
-L’idée est de remplacer les points ou les triangles par de petites taches volumétriques. Vues individuellement, elles ne ressemblent pas à grand-chose ;
-projetées et combinées, elles peuvent restituer une image très détaillée.
+## 2. Pourquoi s'y intéresser maintenant ?
+---
 
-Les gaussiennes sont projetées sur l’écran puis leurs contributions sont combinées pour former l’image.
-Leur forme et leur transparence permettent de produire un rendu continu, sans construire explicitement une surface triangulée.
+### 2.1 Maturité de la technologie : d'un sujet de recherche à une brique standardisée
+Les Gaussian Splats ne sont plus une technique expérimentale confinée à la recherche académique. Ils s'imposent comme **le paradigme dominant pour la visualisation 3D immersive et interactive** à grande échelle.
+**Signaux forts de maturité technologique :**
+- **Standardisation dans l'écosystème glTF** : le groupe **Khronos**, qui définit la plupart des standards de rendu graphique 3D, a annoncé l'intégration des Gaussian Splats comme primitive 3D officielle dans les standards web et géospatiaux.
+- **Intégration dans les workflows de streaming géospatial** : **Cesium** offre désormais un support natif des Gaussian Splats dans les **3D Tiles**, avec gestion hiérarchique du LOD (Level of Detail) pour le streaming progressif de scènes massives.
+- **Exploration des formats 360°** : des outils comme **360 Splat Pro** appliquent la technologie aux panoramas, ouvrant de nouveaux usages de capture.
+- **Adoption par les géants de la cartographie** : **Google** (Immersive View) et **Apple** (Detailed City Experience) renforcent leurs offres de cartographie 3D photoréaliste immersive.
+
+### 2.2 Valoriser l’existant : enrichir les usages de nos données
+L’IGNF dispose d’un patrimoine de données géoréférencées dont les Gaussian Splats pourraient offrir une **nouvelle forme de restitution 3D photoréaliste** :
+- Prises de vues aériennes  (**PCRS**, autres PVA haute et très haute résolution)
+- Nuages de points **LiDAR**
+- **Acquisitions Stéréopolis**, pour restituer les environnements urbains depuis le sol
+- **Acquisitions à façon des Travaux Spéciaux**, pour des sites ou des besoins spécifiques
+
+L’intérêt serait de **tirer davantage de valeur des acquisitions existantes**, en proposant une exploration immersive complémentaire aux cartes, aux nuages de points et aux maillages : découverte d’un territoire, consultation à distance d’un site ou médiation auprès des utilisateurs.
+
+### 2.3 Explorer de nouvelles offres de capture et de restitution 3D
+Les Gaussian Splats invitent également à étudier des **dispositifs d’acquisition légers et ciblés** :**
+- véhicule (vélo ou autre) + téléphone portable + GPS : explorer la capture rapide de rues et d’itinéraires, avec un matériel peu coûteux
+- **Drone** : documenter un site depuis des points de vue complémentaires, selon les besoins et les contraintes de vol
+
+Pour l’IGNF, l’enjeu serait d’évaluer la possibilité de produire des **scènes 3D immersives à la demande**, sur des zones ciblées ou lors d’acquisitions répétées.
+
+**Conclusion :**  
+Les Gaussian Splats sont en transition de **technologie de recherche** à **brique technologique standardisée**. Nous pensons que c'est une technologie en voie d'usage intensif et que l'IGNF doit assurer une veille technologique conséquente et en explorer les potentialités dans les contextes pertinents pour ses domaines d'expertise.
+
+---
+## 2. Comment génère-t-on des splats ?
+La génération de Gaussian Splats repose sur un apprentissage itératif. Il prend en entrée:
+1. des **images de la scène**, prises depuis plusieurs points de vue ;
+2. les **paramètres des caméras** : position, orientation et paramètres internes ;
+3. une **géométrie initiale**, sous la forme d’un nuage de points 3D peu dense, obtenu par photogrammétrie (on utilise en général colmap).
+### Étape 1 : Photogrammétrie et reconstruction de la géométrie initiale
+
+À partir d'un ensemble d'images de la scène, on utilise des méthodes de type **Structure-from-Motion (SfM)** (en général via **COLMAP**) pour :
+détecter les points caractéristiques dans chaque image ;
+- les mettre en correspondance entre les différentes vues ;
+- estimer la **position et l'orientation de chaque caméra** (paramètres extrinsèques) ;
+- estimer les **paramètres de calibration des caméras** (paramètres intrinsèques : focale, centre optique) ;
+- reconstruire un **nuage de points 3D peu dense** (sparse point cloud) représentant la géométrie grossière de la scène.
+
 <p align="center">
-  <img src="images/splat-rendering.png" alt="Rendu de splats" width="600"><br>
-  <em>Source : <a href="https://github.com/Chamud/3DGS-101">3DGS-101 — Chamud</a></em>
+  <img src="images/sfm.jpg" alt="Schéma du processus de Structure-from-Motion (SfM)" width="600"><br>
+  <em>Source : <a href="https://learnopencv.com/">LearnOpenCV</a></em>
 </p>
 
-Chaque Gaussian possède une opacité intrinsèque \(\alpha\), apprise pendant l'entraînement et stockée avec le splat. Le moteur de rendu calcule ensuite l'opacité effective de chaque pixel en fonction de sa distance au centre du splat, selon la courbe gaussienne. 
-Ainsi, un splat avec \(\alpha=0.8\) aura une opacité proche de \(0.8\) au centre, mais progressivement plus faible vers les bords. C'est cet alpha effectif \(a(x)\) qui intervient dans le compositing : pour chaque pixel, le moteur parcourt les splats dans la direction de la caméra vers la scène, du plus proche au plus éloigné. Le premier contribue avec \(a_1\), le deuxième avec \(a_2(1-a_1)\), le troisième avec \(a_3(1-a_1)(1-a_2)\), etc.
+### Étape 2 : Initialisation et optimisation des Gaussian Splats
+Le nuage de points 3D sparse sert à **initialiser une représentation de la scène**. Chaque point est converti en une gaussienne 3D caractérisée par :
+sa position dans l'espace, sa taille, son orientation, une opacité et une couleur.
+À partir de ces gaussiennes, un moteur d'optimisation sur GPU (typiquement **GSplat**) exécute une boucle d'apprentissage :
 
----
+1. rend une image de la scène depuis une caméra donnée ;
+2. la compare aux images réelles correspondantes ;
+3. calcule l'erreur entre le rendu et la réalité ;
+4. met à jour les paramètres des gaussiennes pour réduire cette erreur.
 
-## 2. Comment passe-t-on des images aux splats ?
-### Durée indicative : 1 min
+Au cours de l’optimisation, la représentation peut également évoluer pour mieux décrire la scène :**
+- **Split** : subdiviser des gaussiennes pour mieux représenter les zones complexes ou insuffisamment détaillées.
+* **Pruning** : supprimer les gaussiennes peu contributives ou dont l’opacité est trop faible.
+* **Culling** : écarter du rendu les éléments qui ne contribuent pas à l’image considérée, par exemple parce qu’ils sont hors du champ de vision.
 
-### Un apprentissage de l’apparence de la scène
+Ces opérations permettent d’ajuster progressivement la densité et la répartition des gaussiennes en fonction des détails de la scène.
 
-Le principe consiste à disposer :
+<p align="center">
+  <img src="images/learning.png" alt="Schéma du processus d'apprentissage des Gaussian Splats" width="600"><br>
+  <em>Source : <a href="https://zhangtemplar.github.io/3d-gaussian-splatting/">3D Gaussian Splatting for Real-Time Radiance Field Rendering (2023) — Qiang Zhang</a></em>
+</p>
 
-1. d’**images de la scène**, prises depuis plusieurs points de vue ;
-2. des **paramètres des caméras** : position, orientation et paramètres internes ;
-3. d’une **géométrie initiale**, par exemple un nuage de points.
-
-Le modèle produit des images depuis les points de vue des caméras.
-Ces images sont comparées aux photographies d’origine.
-
-Les paramètres des gaussiennes sont ensuite ajustés progressivement pour réduire les différences :
-
-- position et forme ;
-- opacité ;
-- couleur ;
-- nombre et répartition des gaussiennes, selon la méthode utilisée.
-
-### Deux étapes à distinguer
-
-- **L’entraînement** : calculer et optimiser la représentation de la scène.
-- **La visualisation** : afficher la représentation déjà entraînée depuis un nouveau point de vue.
-
-Le 3D Gaussian Splatting, popularisé par les travaux de 2023, se distingue notamment par la possibilité d’un **rendu interactif**, selon la taille de la scène et le matériel utilisé.
-
-> **Message clé :** on investit du calcul pour construire la représentation,
-> afin de pouvoir ensuite naviguer dans la scène de manière fluide.
-
-**Visuel conseillé :**
-Images + caméras + points 3D → optimisation → scène navigable.
-
----
-
-## 3. Pourquoi s’y intéresser dans notre contexte ?
-### Durée indicative : 1 min 15
-
-### Valoriser les données dont nous disposons déjà
-
-Nos jeux de données géographiques peuvent réunir :
-
-- des **images aériennes à haute résolution** ;
-- leurs **orientations et paramètres de caméra** ;
-- des **nuages de points LiDAR géoréférencés**.
-
-Ces données apportent deux informations complémentaires :
-
-- les images décrivent principalement **l’apparence** de la scène ;
-- le LiDAR fournit une **géométrie mesurée**, utile pour initialiser la représentation.
-
-L’intérêt est donc d’explorer comment transformer ces données existantes en une représentation 3D permettant une consultation visuelle immersive et interactive.
-
-### Un objectif complémentaire aux produits classiques
-
-Les splats gaussiens peuvent être intéressants pour :
-
-- restituer l’apparence d’un territoire depuis différents points de vue ;
-- faciliter l’exploration visuelle des données ;
-- proposer des démonstrateurs accessibles dans un viewer compatible ;
-- étudier une alternative ou un complément aux maillages texturés.
-
-Il ne s’agit pas de considérer qu’ils remplacent automatiquement les autres représentations.
-
-Un nuage LiDAR, un maillage et un modèle de splats ne répondent pas exactement aux mêmes besoins.
-
-> **Message clé :** l’enjeu est de valoriser nos données géographiques
-> dans une nouvelle représentation visuelle, et d’en évaluer l’intérêt réel.
-
-**À l’oral :**
-« Nous ne partons pas uniquement de photographies : nous disposons déjà
-d’orientations et d’une géométrie LiDAR. La question est de savoir comment
-exploiter ces acquis pour produire une autre manière de voir nos données. »
-
----
+--
 
 ## 4. Notre approche : des données métier à une scène visualisable
 ### Durée indicative : 1 min 15
