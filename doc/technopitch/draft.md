@@ -39,6 +39,7 @@ Les Gaussian Splats ne sont plus une technique expérimentale confinée à la re
 - **Intégration dans les workflows de streaming géospatial** : **Cesium** offre désormais un support natif des Gaussian Splats dans les **3D Tiles**, avec gestion hiérarchique du LOD (Level of Detail) pour le streaming progressif de scènes massives.
 - **Exploration des formats 360°** : des outils comme **360 Splat Pro** appliquent la technologie aux panoramas, ouvrant de nouveaux usages de capture.
 - **Adoption par les géants de la cartographie** : **Google** (Immersive View) et **Apple** (Detailed City Experience) renforcent leurs offres de cartographie 3D photoréaliste immersive.
+- **Accessibilité croissante du calcul GPU** : les ressources GPU deviennent progressivement standardisées dans les environnements informatiques (cloud, serveurs HPC, workstations). Cette démocratisation du calcul GPU rend les méthodes d'entraînement autrefois réservées à la recherche de plus en plus accessibles pour des usages opérationnels.
 
 ### 2.2 Valoriser l’existant : enrichir les usages de nos données
 L’IGNF dispose d’un patrimoine de données géoréférencées dont les Gaussian Splats pourraient offrir une **nouvelle forme de restitution 3D photoréaliste** :
@@ -101,6 +102,197 @@ Ces opérations permettent d’ajuster progressivement la densité et la répart
   <em>Source : <a href="https://zhangtemplar.github.io/3d-gaussian-splatting/">3D Gaussian Splatting for Real-Time Radiance Field Rendering (2023) — Qiang Zhang</a></em>
 </p>
 
+## 4. Écosystème technologique et outils disponibles
+
+### 4.1 Solutions commerciales fermées
+
+Plusieurs solutions commerciales proposent des logiciels simplifiés de capture, reconstruction et visualisation de Gaussian Splats, visant la facilité d'usage au prix d'un contrôle limité sur les paramètres internes :
+
+| Solution | Type | Open source | Modèle | Usage principal |
+|----------|------|-------------|--------|-----------------|
+| **Luma AI** | Cloud SaaS | ❌ | Freemium | Capture et reconstruction 3D automatisées (web/mobile) |
+| **Polycam** | Application/SaaS | ❌ | Freemium | Capture terrain, photogrammétrie et Gaussian Splats |
+| **Scaniverse** | Mobile | ❌ | Gratuit + Pro | Capture mobile et reconstruction 3D |
+| **Postshot** | Desktop | ❌ | Freemium | Reconstruction locale de Gaussian Splats |
+| **vid2scene** | SaaS/Local | ✅ (Apache 2.0) | Gratuit | Conversion vidéo → Gaussian Splat |
+
+### 4.2 Frameworks et bibliothèques open source
+
+L'écosystème open source constitue le principal moteur d'innovation. Les différents projets couvrent des besoins complémentaires :
+
+| Projet | Type | Entraînement | Visualisation | Pipeline complet |
+|--------|------|--------------|---------------|-----------------|
+| **3D Gaussian Splatting (GraphDECO)** | Référence académique de l'INRIA | ✅ | ⚠️ | ❌ |
+| **GSplat** | Bibliothèque GPU | ✅ | ❌ | ❌ |
+| **Nerfstudio** | Framework complet | ✅ | ✅ | ✅ |
+| **OpenSplat** | Implémentation légère | ✅ | ⚠️ | ❌ |
+| **Spirula** | Framework multi-backends | ✅ | ✅ | ✅ |
+Deux frameworks open source complets se distinguent pour les pipelines de production :
+-** Nerfstudio** s'appuie sur **GSplat** comme moteur de rasterisation et d'entraînement. GSplat constitue la couche de calcul GPU (CUDA/PyTorch), tandis que Nerfstudio fournit l'ensemble du pipeline (prétraitement, entraînement, gestion des expériences, visualisation, export).
+-** Spirula** propose une architecture plus intégrée, avec une interface et le support de données géoréférencées : intégration directe du GPS et du LiDAR . Cette approche facilite le traitement de données calibrées et géolocalisées, répondant directement aux besoins des données IGNF. 
+Nerfstudio a constitué la solution principale d'expérimentation dans ces travaux. Spirula ayant été découvert récemment, le recul manque pour une comparaison approfondie au-delà des éléments mentionnés ci-dessus.
+
+---
+
+## 5. Expérimentations réalisées
+
+Les expérimentations qui suivent visent à évaluer comment les Gaussian Splats fonctionnent sur différents types de données géospatiales. Elles ont été menées avec **Nerfstudio** comme solution principale, et en parallèle avec **Spirula** pour comparer les approches.
+
+### 5.1 Choix des frameworks
+
+**Nerfstudio** a été retenu comme solution principale car il s'agit d'un **framework open source complet** permettant de gérer l'ensemble de la chaîne de production des Gaussian Splats, depuis l'acquisition des données jusqu'à la visualisation finale. Il agit comme une **couche d'orchestration** qui assemble plusieurs briques logicielles spécialisées :
+- **COLMAP** pour la reconstruction photogrammétrique et l'estimation des poses de caméras
+- **GSplat** comme backend d'optimisation GPU pour l'entraînement des Gaussian Splats
+- des modules internes pour la gestion des données, l'entraînement et la visualisation
+
+**Spirula** a également été testé pour évaluer les possibilités offertes par une architecture indépendante de CUDA, notamment pour la flexibilité des environnements de calcul et la compatibilité avec des architectures GPU alternatives.
+
+### 5.2 Environnement de calcul
+
+Il est important de préciser que seule la phase d'**entraînement des Gaussian Splats** nécessite des ressources de calcul GPU. Les étapes de reconstruction photogrammétrique (COLMAP / HLOC), de préparation des données et d'export restent entièrement exécutables sur CPU.
+
+Deux environnements de calcul ont été utilisés :
+
+- **Google Colab** : environ 5h de calcul GPU tous les 48h avec un compte gratuit. Performances médiocres et données non pérennes, utilisable pour tests exploratoires sur petites scènes.
+- **SLURM sur cluster HPC (Jean-Zellou)** : exécution de pipelines complets et reproductibles sur jeux volumineux, avec GPU NVIDIA A40.
+
+### 5.3 Jeux de données utilisés
+
+Quatre types de données ont été testés pour évaluer la robustesse du pipeline :
+
+1. **Captures smartphone (iPhone 8)** : vidéos autour d'objets simples (arbuste, statue)
+2. **PCRS + LiDAR** : orthophotographies aériennes + nuage LiDAR structuré
+3. **Drone ISPRS** : 224 images aériennes (7952 × 5304 px, altitude 80m, recouvrement 80%, résolution 1.7 cm/pixel)
+4. **Panoramas 360°** : vidéo GoPro Max 2 à vélo (8K équirectangulaire, ~1100 images extraites)
+
+### 5.4 Expérience 1 : Vidéos non structurées
+
+**Objectif :** Valider le fonctionnement du pipeline sur données simples non calibrées.
+
+**Processus :**
+1. Extraction des frames via ffmpeg
+2. Lancement SfM COLMAP complet
+3. Entraînement splatfacto
+4. Export et nettoyage du `.ply`
+
+**Résultats :**
+- ✓ Reconstruction réussie pour objets simples
+- ✓ Navigation fluide en temps réel
+- ✗ Artefacts en bords de scène
+
+**Bilan :** Appropriation réussie du pipeline de base. Limitations sur les bords et présence de splats parasites.
+
+### 5.5 Expérience 2 : PCRS + LiDAR
+
+**Objectif :** Exploiter données aériennes géoréférencées avec initialisation LiDAR.
+
+**Processus :**
+1. Conversion CON/XML + LiDAR vers format COLMAP (con_laz_to_colmap.py)
+2. Sous-échantillonnage des images (résolution très élevée : 26460 × 17004 px)
+3. Entraînement avec profils adaptés (PCRS, PCRS2, PCRS3)
+4. Nettoyage spatial basé sur géométrie LiDAR
+
+**Résultats :**
+- ✓ Reconstruction convaincante de centres-villes (ex. Aubigny-sur-Nère)
+- ✓ Restitution fine des détails architecturaux
+- ✓ LiDAR aide à stabiliser la géométrie
+- ✗ Temps de traitement élevé
+- ✗ Gestion difficile de très haute résolution
+
+**Bilan :** Potentiel réel pour valorisation patrimoniale urbaine. Défis : optimisation du sous-échantillonnage, gestion des artefacts de bord.
+
+### 5.6 Expérience 3 : Drone haute-résolution (ISPRS)
+
+**Objectif :** Évaluer reconstruction sur données aériennes bien structurées.
+
+**Données :**
+- 224 images aériennes (dataset ISPRS UseGeo)
+- Résolution : 7952 × 5304 px
+- Altitude : 80 m, recouvrement : 80%, résolution spatiale : 1.7 cm/pixel
+
+**Résultats :**
+- ✓ Reconstruction précise à l'échelle métrique
+- ✓ Très bonne géométrie fine, peu d'artefacts
+- ✓ Couverture homogène et bien contrainte
+- ✓ Images bien calibrées => SfM fiable
+
+**Bilan :** Cas d'usage prometteur pour monitoring environnemental et archéologie. La qualité du recouvrement est déterminante. Les données drone standard produisent d'excellents résultats.
+
+### 5.7 Expérience 4 : Paris à vélo (GoPro 360°)
+
+**Objectif :** Tester reconstruction depuis vidéo panoramique 360° en environnement urbain.
+
+**Données :**
+- GoPro Max 2 (8K équirectangulaire)
+- Capture à vélo dans rue commerçante de Paris
+- ~14 sous-images par panoramique, total ~1100 images
+
+**Résultats :**
+- ✓ Reconstruction fluide de l'environnement urbain
+- ✓ Bonne restitution des façades et détails
+- ✗ Splats parasites en arrière-plan
+- ✗ Difficultés zones peu texturées (ciel)
+- ✗ Manque de variété angulaire (capture linéaire)
+
+**Bilan :** Faisable pour couverture rapide de rues. Limitations : manque de profondeur angulaire, nécessite nettoyage agressif.
+
+---
+
+## 6. Limites observées
+
+À l'issue de ces quatre expériences, plusieurs défis pratiques sont apparus :
+
+- **Temps de traitement** : phases de préparation, d'entraînement et de post-traitement restent coûteuses en temps pour jeux volumineux.
+
+- **Difficultés avec très haute résolution** : sous-échantillonnage des images PCRS (26460 × 17004 px) pose problèmes de mémoire GPU.
+
+- **Maîtrise des bords de scène** : limites de la zone reconstruite difficiles à contrôler, artefacts fréquents en périphérie.
+
+- **Splats parasites** : gaussiennes isolées ou incohérentes en zones peu contraintes, arrière-plans, transitions de profondeur.
+
+- **Difficulté d'évaluation objective** : reste difficile de quantifier la qualité finale et d'identifier paramètres optimaux.
+
+- **Dépendance forte à la configuration de prise de vue** : meilleurs résultats avec bon recouvrement (80%+), angles variés, couverture homogène. Qualité se dégrade avec angles peu variés ou couverture insuffisante.
+
+---
+
+## 7. Bilan et perspectives
+
+### 7.1 Synthèse des résultats
+
+Les quatre expériences confirment que **les Gaussian Splats constituent une piste crédible pour la représentation photoréaliste** à condition que les données respectent certaines conditions :
+
+| Contexte | Résultats | Prérequis clés |
+|----------|-----------|----------------|
+| **Vidéos simples** | Bons (objets, petites scènes) | Bonne couverture angulaire |
+| **PCRS + LiDAR** | Convaincants (urbain) | Sous-échantillonnage, profils adaptés |
+| **Drone ISPRS** | Excellents (milieux ouverts) | Recouvrement 80%, résolution 1.7 cm/px |
+| **Panoramas 360°** | Acceptables (rues) | Extraction multi-images, nettoyage agressif |
+
+### 7.2 Travaux complémentaires nécessaires
+
+**Court terme :**
+- Stabiliser les profils d'entraînement selon types de données
+- Optimiser l'injection du LiDAR dans le calcul des gaussiennes
+- Améliorer le nettoyage et la gestion des artefacts de bord
+
+**Moyen terme :**
+- Évaluer la pertinence par type de données (coût/qualité/temps)
+- Concevoir des workflows de capture optimisés
+- Prototyper des outils de visualisation web
+
+### 7.3 Recommandations
+
+L'IGNF devrait :
+
+1. Poursuivre l'expérimentation sur d'autres jeux de données
+2. Investir dans l'optimisation des pipelines
+3. Explorer les nouveaux usages (consultation immersive, monitoring temporel, services à la demande)
+4. Assurer la veille sur évolutions technologiques et standards (glTF, 3D Tiles, Spirula, Nerfstudio)
+
+> **Conclusion :** Les Gaussian Splats offrent une réelle opportunité pour valoriser nos données.
+> Les travaux menés ont montré la faisabilité, mais des efforts d'optimisation demeurent nécessaires
+> avant un passage à l'échelle.
 --
 ## 4. Expérimentations réalisées
 
