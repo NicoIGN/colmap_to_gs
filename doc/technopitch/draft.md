@@ -102,81 +102,267 @@ Ces opérations permettent d’ajuster progressivement la densité et la répart
 </p>
 
 --
+## 4. Expérimentations réalisées
 
-## 4. Notre approche : des données métier à une scène visualisable
-### Durée indicative : 1 min 15
+Les expérimentations qui suivent visent à évaluer comment les Gaussian Splats fonctionnent sur différents types de données géospatiales. Elles ont toutes été menées avec **Nerfstudio**, un framework open source complet qui orchestre l'ensemble de la chaîne (COLMAP, GSplat, visualisation).
 
-### Le rôle du pipeline `aerial_data_to_gaussian_splats`
+### 4.1 Expérience 1 : Vidéos non structurées
 
-Le pipeline développé relie les données géoréférencées aux outils d’entraînement et de visualisation des splats gaussiens.
+**Objectif :** Valider le fonctionnement du pipeline sur des données simples et non calibrées.
 
-### Étape 1 — Préparer les données
+**Données :**
+- Captures smartphone (iPhone 8) : vidéos prises en tournant autour d'objets
+- Pas d'orientation pré-estimée, nécessite une reconstruction SfM complète
 
-**Entrées :**
+**Processus :**
+1. Extraction des frames via ffmpeg
+2. Lancement du pipeline Nerfstudio (SfM COLMAP + entraînement splatfacto)
+3. Export du `.ply` final
 
-- images orientées au format **IGNF CON/XML** ;
-- nuage de points **LiDAR au format `.laz`**.
+**Résultats :**
+- ✓ Reconstruction réussie pour objets simples (arbuste, statue)
+- ✓ Navigation fluide en temps réel
+- ✗ Difficultés sur les bords de scène (artefacts périphériques)
 
-Les images, les paramètres caméra et les points LiDAR sont convertis vers une structure compatible avec **COLMAP et Nerfstudio**.
+<table>
+  <tr>
+    <th colspan="3">Arbuste sous différents angles</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/arbuste1.png" alt="Vue 1" width="300"><br>
+      <sub>Vue 1</sub>
+    </td>
+    <td align="center">
+      <img src="images/arbuste2.png" alt="Vue 2" width="300"><br>
+      <sub>Vue 2</sub>
+    </td>
+    <td align="center">
+      <img src="images/arbuste3.png" alt="Vue 3" width="300"><br>
+      <sub>Vue 3</sub>
+    </td>
+  </tr>
+</table>
 
-Cette préparation comprend notamment :
+<table>
+  <tr>
+    <th colspan="3">Statue sous différents angles</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/statue1.png" alt="Vue 1" width="300"><br>
+      <sub>Vue 1</sub>
+    </td>
+    <td align="center">
+      <img src="images/statue2.png" alt="Vue 2" width="300"><br>
+      <sub>Vue 2</sub>
+    </td>
+    <td align="center">
+      <img src="images/statue3.png" alt="Vue 3" width="300"><br>
+      <sub>Vue 3</sub>
+    </td>
+  </tr>
+</table>
 
-- le sous-échantillonnage des images et du LiDAR ;
-- la conversion des paramètres caméra ;
-- la reprojection des points LiDAR dans les images ;
-- la production des fichiers nécessaires à l’entraînement.
-
-**Particularité importante :**
-dans cette voie de traitement, on ne réestime pas les orientations par une reconstruction photogrammétrique classique à partir de correspondances entre images.
-
-On exploite **des orientations déjà connues et un nuage LiDAR existant**.
-
-### Étape 2 — Entraîner et exporter
-
-Le pipeline :
-
-- estime les limites proches et lointaines utiles à l’entraînement ;
-- entraîne un modèle **`splatfacto` de Nerfstudio** ;
-- exporte les gaussiennes ;
-- applique un nettoyage spatial fondé sur la proximité à la géométrie de référence.
-
-La préparation des données ne nécessite pas de GPU.
-L’entraînement est réalisé sur GPU, dans un environnement prévu notamment pour des exécutions sur serveur ou cluster Slurm.
-
-### Le livrable : un `.ply` enrichi
-
-Le résultat est un fichier **`.ply` contenant les paramètres des gaussiennes** :
-positions, échelles, rotations, opacités et attributs d’apparence.
-
-Ce n’est donc **pas un simple nuage de points**, même si l’extension est identique.
-
-Il peut être ouvert dans un outil compatible avec les Gaussian Splats, comme **SuperSplat**.
-
-**Visuel conseillé :**
-Images orientées + LiDAR → conversion COLMAP/Nerfstudio
-→ entraînement → export et nettoyage → viewer.
+**Bilan :** Appropriation réussie du pipeline de base. Limitations observées : artefacts en bord de scène, présence de splats parasites.
 
 ---
 
-## 5. Le point de vigilance à garder en tête
-### Durée indicative : 30 s
+### 4.2 Expérience 2 : PCRS + LiDAR
 
-### Qualité visuelle et qualité géométrique ne sont pas équivalentes
+**Objectif :** Exploiter des données aériennes géoréférencées avec initialisation LiDAR.
 
-Une scène peut être visuellement convaincante sans que sa géométrie soit suffisamment exacte pour un usage de mesure.
+**Données :**
+- Images PCRS (orthophotographies haute résolution)
+- Nuage de points LiDAR géoréférencé
+- Orientations CON/XML pré-estimées
 
-Inversement, une géométrie bien mesurée ne garantit pas un rendu satisfaisant depuis tous les points de vue.
+**Processus :**
+1. Conversion des données vers format COLMAP/Nerfstudio (con_laz_to_colmap.py)
+2. Initialisation avec le LiDAR
+3. Sous-échantillonnage des images (résolution extrêmement élevée : 26460 × 17004 px)
+4. Entraînement avec profil adapté (PCRS, PCRS2, PCRS3)
+5. Nettoyage spatial basé sur la géométrie LiDAR
 
-L’utilisation du LiDAR comme initialisation et référence de nettoyage est un atout, mais elle ne suffit pas à garantir l’exactitude géométrique du modèle final.
+**Résultats :**
+- ✓ Reconstruction convaincante de centres-villes (ex. Aubigny-sur-Nère)
+- ✓ Restitution fine des détails architecturaux
+- ✓ LiDAR aide à stabiliser la géométrie
+- ✗ Temps de traitement élevé
+- ✗ Gestion difficile de la très haute résolution
 
-Il faut donc distinguer :
+<table>
+  <tr>
+    <th colspan="3">Centre-ville d'Aubigny-sur-Nère (Cher)</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/Aubigny1.png" alt="Vue 1" width="300"><br>
+      <sub>Vue 1</sub>
+    </td>
+    <td align="center">
+      <img src="images/Aubigny2.png" alt="Vue 2" width="300"><br>
+      <sub>Vue 2</sub>
+    </td>
+    <td align="center">
+      <img src="images/Aubigny3.png" alt="Vue 3" width="300"><br>
+      <sub>Vue 3</sub>
+    </td>
+  </tr>
+</table>
 
-- la **fidélité visuelle** aux images ;
-- la **cohérence géométrique** ;
-- la **couverture des points de vue** ;
-- les **performances de calcul et de visualisation**.
+**Bilan :** Potentiel réel pour la valorisation du patrimoine urbain. Le LiDAR améliore la stabilité. Défis : optimisation du sous-échantillonnage, gestion des artefacts de bord.
 
-> **Conclusion de l’introduction :**
-> les splats gaussiens constituent une piste prometteuse pour la visualisation
-> de nos données. Nos travaux visent à comprendre comment les produire à partir
-> de nos jeux de données, avec quelles qualités et quelles limites.
+---
+
+### 4.3 Expérience 3 : Drone haute-résolution (ISPRS)
+
+**Objectif :** Évaluer la reconstruction sur données aériennes bien structurées.
+
+**Données :**
+- 224 images aériennes (dataset ISPRS UseGeo)
+- Résolution : 7952 × 5304 px
+- Altitude : 80 m
+- Recouvrement : 80% avant / 60% latéral
+- Résolution spatiale : 1.7 cm/pixel
+- Zone couverte : ~1100 × 650 m
+
+**Processus :**
+1. Lancement SfM COLMAP sur l'ensemble des images
+2. Entraînement splatfacto (profil "quality" ou "balanced")
+3. Export et nettoyage
+
+**Résultats :**
+- ✓ Reconstruction précise à l'échelle métrique
+- ✓ Restitution fidèle des zones agricoles et des détails fins
+- ✓ Très bonne couverture géométrique
+- ✓ Peu d'artefacts grâce au bon recouvrement
+- ✓ Images bien calibrées => SfM fiable
+
+<table>
+  <tr>
+    <th colspan="3">Données drones ISPRS</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/ISPRS1.png" alt="Vue 1" width="300"><br>
+      <sub>Vue 1</sub>
+    </td>
+    <td align="center">
+      <img src="images/ISPRS2.png" alt="Vue 2" width="300"><br>
+      <sub>Vue 2</sub>
+    </td>
+    <td align="center">
+      <img src="images/ISPRS3.png" alt="Vue 3" width="300"><br>
+      <sub>Vue 3</sub>
+    </td>
+  </tr>
+</table>
+
+**Bilan :** Cas d'usage prometteur pour le monitoring environnemental et l'archéologie. La qualité du recouvrement est déterminante. Les données drone standard produisent d'excellents résultats.
+
+---
+
+### 4.4 Expérience 4 : Paris à vélo (GoPro 360°)
+
+**Objectif :** Tester la reconstruction depuis vidéo panoramique 360° en environnement urbain.
+
+**Données :**
+- Vidéo GoPro Max 2 (2 capteurs, 8K équirectangulaire)
+- Capture à vélo dans une rue commerçante de Paris
+- ~14 sous-images extraites par panoramique
+- Total : ~1100 images
+
+**Processus :**
+1. Extraction des images depuis le panorama 8K (14 par pano)
+2. Lancement SfM COLMAP sur l'ensemble
+3. Entraînement splatfacto
+4. Export
+
+**Résultats :**
+- ✓ Reconstruction fluide de l'environnement urbain
+- ✓ Bien-être de la navigation le long de la rue
+- ✓ Restitution des façades, vitrines, détails urbains
+- ✗ Présence de splats parasites en arrière-plan
+- ✗ Difficultés avec les zones peu texturées (ciel)
+- ✗ Manque de variété angulaire (capture linéaire)
+
+<table>
+  <tr>
+    <th colspan="3">Rue de Paris (Panos GoPro 8k)</th>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="images/Paris1.png" alt="Vue 1" width="300"><br>
+      <sub>Vue 1</sub>
+    </td>
+    <td align="center">
+      <img src="images/Paris2.png" alt="Vue 2" width="300"><br>
+      <sub>Vue 2</sub>
+    </td>
+    <td align="center">
+      <img src="images/Paris3.png" alt="Vue 3" width="300"><br>
+      <sub>Vue 3</sub>
+    </td>
+  </tr>
+</table>
+
+**Bilan :** Faisable pour une couverture rapide de rues. Limitations : manque de profondeur angulaire, artefacts en arrière-plan. Nécessite un traitement de nettoyage plus agressif.
+
+---
+
+## 5. Limites observées
+
+À l'issue de ces quatre expériences, plusieurs défis pratiques sont apparus :
+
+- **Temps de traitement** : malgré l'optimisation GPU, les phases de préparation, d'entraînement et de post-traitement restent coûteuses en temps, surtout pour les jeux volumineux.
+
+- **Difficultés avec les images de très haute résolution** : le sous-échantillonnage des images PCRS (26460 × 17004 px) pose des problèmes de charge mémoire GPU.
+
+- **Maîtrise des bords de scène** : les limites de la zone reconstruite restent délicates à contrôler. On observe fréquemment des artefacts en périphérie.
+
+- **Présence de splats parasites** : certaines reconstructions font apparaître des gaussiennes isolées ou incohérentes, en particulier dans les zones peu contraintes ou aux transitions de profondeur.
+
+- **Dépendance forte à la configuration de prise de vue** : les meilleurs résultats sont obtenus avec un **bon recouvrement** (80%+), des **angles variés** et une **couverture homogène**. La qualité se dégrade nettement lorsque ces conditions ne sont pas réunies.
+
+- **Difficulté d'évaluation objective** : il reste difficile de quantifier la qualité finale et d'identifier les paramètres optimaux. Le lien entre réglages, qualité visuelle et stabilité n'est pas toujours évident.
+
+---
+
+## 6. Bilan et perspectives
+
+### 6.1 Synthèse des résultats
+
+Les quatre expériences confirment que **les Gaussian Splats constituent une piste crédible pour la représentation photoréaliste de scènes 3D dans des contextes géospatiaux**, à condition que les données respectent certaines conditions :
+
+| Contexte | Résultats | Prérequis clés |
+|----------|-----------|----------------|
+| **Vidéos simples** | Bons (objets, petites scènes) | Bonne couverture angulaire |
+| **PCRS + LiDAR** | Convaincants (urbain) | Sous-échantillonnage, profils adaptés |
+| **Drone ISPRS** | Excellents (milieux ouverts) | Recouvrement 80%, résolution 1.7 cm/px |
+| **Panoramas 360°** | Acceptables (rues) | Extraction multi-images, nettoyage agressif |
+
+### 6.2 Travaux complémentaires nécessaires
+
+**Court terme :**
+- Stabiliser les profils d'entraînement (balanced, quality, PCRS) selon les types de données
+- Optimiser l'injection du LiDAR dans le calcul des gaussiennes
+- Améliorer le nettoyage et la gestion des artefacts de bord
+
+**Moyen terme :**
+- Évaluer la pertinence par type de données (coût / qualité / temps)
+- Concevoir des workflows de capture optimisés pour chaque contexte
+- Prototyper des outils de visualisation web
+
+### 6.3 Recommandations
+
+L'IGNF devrait :
+
+1. **Poursuivre l'expérimentation** sur d'autres jeux de données (zones urbaines denses, patrimoine, sites d'étude)
+2. **Investir dans l'optimisation** des pipelines de préparation et de nettoyage
+3. **Explorer les nouveaux usages** : consultation immersive, monitoring temporel, services à la demande
+4. **Assurer la veille** sur les évolutions technologiques et les standards (glTF, 3D Tiles)
+
+> **Conclusion :** Les Gaussian Splats offrent une réelle opportunité pour valoriser nos données
+> et proposer de nouvelles expériences utilisateur. Les travaux menés ont montré la faisabilité,
+> mais des efforts d'optimisation et de caractérisation demeurent nécessaires avant un passage à l'échelle.
