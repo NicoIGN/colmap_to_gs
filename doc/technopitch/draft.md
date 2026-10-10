@@ -127,6 +127,7 @@ L'écosystème open source constitue le principal moteur d'innovation. Les diff�
 | **Nerfstudio** | Framework complet | ✅ | ✅ | ✅ |
 | **OpenSplat** | Implémentation légère | ✅ | ⚠️ | ❌ |
 | **Spirula** | Framework multi-backends | ✅ | ✅ | ✅ |
+
 Deux frameworks open source complets se distinguent pour les pipelines de production :
 -** Nerfstudio** s'appuie sur **GSplat** comme moteur de rasterisation et d'entraînement. GSplat constitue la couche de calcul GPU (CUDA/PyTorch), tandis que Nerfstudio fournit l'ensemble du pipeline (prétraitement, entraînement, gestion des expériences, visualisation, export).
 -** Spirula** propose une architecture plus intégrée, avec une interface et le support de données géoréférencées : intégration directe du GPS et du LiDAR . Cette approche facilite le traitement de données calibrées et géolocalisées, répondant directement aux besoins des données IGNF. 
