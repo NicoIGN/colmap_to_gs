@@ -171,7 +171,10 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 
 **Bilan :** Appropriation réussie du pipeline de base. Limitations sur les bords et présence de splats parasites.
 
-**Démo vidéo :** [Vido d'une statue statue](file:///Users/nbellaiche/DATA/dev/gsplat/TECHNO_PITCH/examples/statue/Video_20260515_1755_16_064.MOV)
+**Vidéo source :** [Voir la vidéo de la statue](../../../TECHNO_PITCH/examples/statue/)
+
+**Résultat interactif :** [Ouvrir la démo interactive](http://127.0.0.1:8000/?file=%2F__local_splat__%2Fsplat.ply&camera_pos=-0.0187528210976%2C0.305861713961%2C0.0793449395382%2C0.0165060195376%2C-0.0647172667606%2C0.0836543172032%2C-0.000276639507042%2C-0.0178272347754%2C0.999841043952)
+
 
 
 ### 5.5 Expérience 2 : PCRS + LiDAR
@@ -187,7 +190,8 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 - ✓ Le LiDAR aide beaucoup à stabiliser la géométrie, une PVA aérienne n'est pas adaptée à ce type de calcul
 -  ✗ Gestion difficile de très haute résolution
 
-**Bilan :** Il faudra refaire des tests quand on aura une meilleure maitrise de cette technologie mais il est peu probable qu'on obtienne de bons résultats sans données comlémentaires.
+**Bilan :** Il faudra refaire des tests quand on aura une meilleure maitrise de cette technologie mais il est peu probable qu'on obtienne de bons résultats sans données complémentaires. La faible varieté d'angles n'est pas adapté à cette technlogie
+
 
 ### 5.6 Expérience 3 : Drone haute-résolution (ISPRS)
 
