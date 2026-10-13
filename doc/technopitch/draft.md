@@ -133,45 +133,31 @@ Deux frameworks open source complets se distinguent pour les pipelines de produc
 -** Nerfstudio** s'appuie sur **GSplat** comme moteur de rasterisation et d'entraînement. GSplat constitue la couche de calcul GPU (CUDA/PyTorch), tandis que Nerfstudio fournit l'ensemble du pipeline (prétraitement, entraînement, gestion des expériences, visualisation, export).
 
 -** Spirula** propose une architecture plus intégrée, avec une interface et le support de données géoréférencées : intégration directe du GPS et du LiDAR . Cette approche facilite le traitement de données calibrées et géolocalisées, répondant directement aux besoins des données IGNF. 
-Nerfstudio a constitué la solution principale d'expérimentation dans ces travaux. Spirula ayant été découvert récemment, le recul manque pour une comparaison approfondie au-delà des éléments mentionnés ci-dessus.
+Nerfstudio a constitué la solution principale d'expérimentation dans ces travaux. Spirula ayant été identifié récemment (release publique datant d'aout 2026, merci à Alexandre Devaux pour la veille techno).
 
 ---
 
 ## 5. Expérimentations réalisées
-
-Les expérimentations qui suivent visent à évaluer comment les Gaussian Splats fonctionnent sur différents types de données géospatiales. Elles ont été menées avec **Nerfstudio** comme solution principale, et en parallèle avec **Spirula** pour comparer les approches.
-
-### 5.1 Choix des frameworks
-
-**Nerfstudio** a été retenu comme solution principale car il s'agit d'un **framework open source complet** permettant de gérer l'ensemble de la chaîne de production des Gaussian Splats, depuis l'acquisition des données jusqu'à la visualisation finale. Il agit comme une **couche d'orchestration** qui assemble plusieurs briques logicielles spécialisées :
-- **COLMAP** pour la reconstruction photogrammétrique et l'estimation des poses de caméras
-- **GSplat** comme backend d'optimisation GPU pour l'entraînement des Gaussian Splats
-- des modules internes pour la gestion des données, l'entraînement et la visualisation
-
-**Spirula** a également été testé pour évaluer les possibilités offertes par une architecture indépendante de CUDA, notamment pour la flexibilité des environnements de calcul et la compatibilité avec des architectures GPU alternatives.
-
+Les expérimentations qui suivent visent à évaluer comment les Gaussian Splats fonctionnent sur différents types de données géospatiales. Elles ont été menées avec **Nerfstudio** comme solution principale.
+**Spirula Studio **a également été testé mais plus récemment,  le recul manque pour une comparaison approfondie au-delà des éléments mentionnés ci-dessus.
 ### 5.2 Environnement de calcul
+Seule la phase d’**entraînement des Gaussian Splats** nécessite des ressources de calcul GPU. 
+Les étapes de reconstruction photogrammétrique (COLMAP / HLOC), de préparation des données et d’export restent exécutables sur CPU.
+Deux environnements ont été utilisés avec Nerfstudio :
+- **Google Colab** : premiers tests exploratoires sur de petites scènes, avec les limites du compte gratuit en matière de disponibilité des ressources GPU (environ 5 h de calcul tous les 48 h) et de pérennité des données.
+- **SLURM sur le cluster HPC Jean-Zellou** : environnement principal pour l’exécution de pipelines complets et reproductibles sur des jeux de données volumineux, avec des GPU NVIDIA A40. Nerfstudio s’appuie sur CUDA pour l’entraînement accéléré par GPU, ce qui oriente son utilisation vers des GPU NVIDIA compatibles.
 
-Il est important de préciser que seule la phase d'**entraînement des Gaussian Splats** nécessite des ressources de calcul GPU. Les étapes de reconstruction photogrammétrique (COLMAP / HLOC), de préparation des données et d'export restent entièrement exécutables sur CPU.
-
-Deux environnements de calcul ont été utilisés :
-
-- **Google Colab** : environ 5h de calcul GPU tous les 48h avec un compte gratuit. Performances médiocres et données non pérennes, utilisable pour tests exploratoires sur petites scènes.
-- **SLURM sur cluster HPC (Jean-Zellou)** : exécution de pipelines complets et reproductibles sur jeux volumineux, avec GPU NVIDIA A40.
+**Spirula Studio** a également été testé comme alternative. Grâce à la prise en charge de **Vulkan**, il permet d’exploiter le GPU intégré des Mac Apple Silicon, notamment sur macOS, sans dépendre de CUDA. Il prend également en charge les environnements équipés de GPU NVIDIA via CUDA, offrant ainsi une plus grande flexibilité dans le choix de l’environnement de calcul.
 
 ### 5.3 Jeux de données utilisés
-
-Quatre types de données ont été testés pour évaluer la robustesse du pipeline :
-
+Quatre types de données ont été testés pour évaluer l'intérêt de la technologie :**
 1. **Captures smartphone (iPhone 8)** : vidéos autour d'objets simples (arbuste, statue)
 2. **PCRS + LiDAR** : orthophotographies aériennes + nuage LiDAR structuré
-3. **Drone ISPRS** : 224 images aériennes (7952 × 5304 px, altitude 80m, recouvrement 80%, résolution 1.7 cm/pixel)
-4. **Panoramas 360°** : vidéo GoPro Max 2 à vélo (8K équirectangulaire, ~1100 images extraites)
+3. A**cquisition drone OpenData de l'ISPRS** : 224 images aériennes (7952 × 5304 px, altitude 80m, recouvrement 80%, résolution 1.7 cm/pixel)
+4. **Panoramas 360°** : vidéo GoPro Max 2  acquis en vélo (8K équirectangulaire, ~1100 images extraites)
 
 ### 5.4 Expérience 1 : Vidéos non structurées
-
-**Objectif :** Valider le fonctionnement du pipeline sur données simples non calibrées.
-
+**Objectif :** S'approprier la technologie, valider le fonctionnement du pipeline sur des données simples non calibrées.
 **Processus :**
 1. Extraction des frames via ffmpeg
 2. Lancement SfM COLMAP complet
@@ -185,24 +171,23 @@ Quatre types de données ont été testés pour évaluer la robustesse du pipeli
 
 **Bilan :** Appropriation réussie du pipeline de base. Limitations sur les bords et présence de splats parasites.
 
+**Démo vidéo :** [Vido d'une statue statue](file:///Users/nbellaiche/DATA/dev/gsplat/TECHNO_PITCH/examples/statue/Video_20260515_1755_16_064.MOV)
+
+
 ### 5.5 Expérience 2 : PCRS + LiDAR
-
 **Objectif :** Exploiter données aériennes géoréférencées avec initialisation LiDAR.
-
 **Processus :**
 1. Conversion CON/XML + LiDAR vers format COLMAP (con_laz_to_colmap.py)
 2. Sous-échantillonnage des images (résolution très élevée : 26460 × 17004 px)
-3. Entraînement avec profils adaptés (PCRS, PCRS2, PCRS3)
+3. Entraînement
 4. Nettoyage spatial basé sur géométrie LiDAR
 
 **Résultats :**
-- ✓ Reconstruction convaincante de centres-villes (ex. Aubigny-sur-Nère)
-- ✓ Restitution fine des détails architecturaux
-- ✓ LiDAR aide à stabiliser la géométrie
-- ✗ Temps de traitement élevé
-- ✗ Gestion difficile de très haute résolution
+- ✓ Reconstruction médiocre (jeu test sur Aubigny-sur-Nère, Cher)
+- ✓ Le LiDAR aide beaucoup à stabiliser la géométrie, une PVA aérienne n'est pas adaptée à ce type de calcul
+-  ✗ Gestion difficile de très haute résolution
 
-**Bilan :** Potentiel réel pour valorisation patrimoniale urbaine. Défis : optimisation du sous-échantillonnage, gestion des artefacts de bord.
+**Bilan :** Il faudra refaire des tests quand on aura une meilleure maitrise de cette technologie mais il est peu probable qu'on obtienne de bons résultats sans données comlémentaires.
 
 ### 5.6 Expérience 3 : Drone haute-résolution (ISPRS)
 
