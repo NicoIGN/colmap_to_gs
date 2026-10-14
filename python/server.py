@@ -8,17 +8,25 @@ import os
 import webbrowser
 from functools import partial
 from pathlib import Path
-from urllib.parse import quote, unquote, urlencode, urlsplit
+from urllib.parse import unquote, urlencode, urlsplit
 
 
 HOST = "127.0.0.1"
 ROOT = Path(__file__).resolve().parent
 HTML_DIR = ROOT / "html"
+DATA_PREFIX = "/__datasets__/"
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
-    def __init__(self, *args, splat_file=None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        splat_file=None,
+        data_directory=None,
+        **kwargs,
+    ):
         self.splat_file = splat_file
+        self.data_directory = data_directory
         self.splat_path = (
             f"/__local_splat__/{splat_file.name}"
             if splat_file is not None
@@ -28,21 +36,57 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def send_head(self):
         request_path = unquote(urlsplit(self.path).path)
+        file_path = None
 
-        if self.splat_file is None or request_path != self.splat_path:
+        if request_path.startswith(DATA_PREFIX):
+            if self.data_directory is None:
+                self.send_error(
+                    404,
+                    "Aucun dossier de données configuré",
+                )
+                return None
+
+            relative_path = request_path[len(DATA_PREFIX):]
+
+            try:
+                file_path = (
+                    self.data_directory / relative_path
+                ).resolve()
+
+                # Refuse les chemins et liens symboliques qui
+                # sortent du dossier de données.
+                file_path.relative_to(self.data_directory)
+
+                if not file_path.is_file():
+                    self.send_error(404, "Fichier introuvable")
+                    return None
+            except ValueError:
+                self.send_error(403, "Chemin interdit")
+                return None
+            except (OSError, RuntimeError):
+                self.send_error(404, "Chemin inaccessible")
+                return None
+
+        elif (
+            self.splat_file is not None
+            and request_path == self.splat_path
+        ):
+            file_path = self.splat_file
+
+        else:
+            # Sert le viewer et ses ressources depuis HTML_DIR.
             return super().send_head()
 
-        # Sert uniquement le fichier fourni au lancement.
         try:
-            file = self.splat_file.open("rb")
+            file = file_path.open("rb")
         except OSError:
-            self.send_error(404, "Fichier splat inaccessible")
+            self.send_error(404, "Fichier inaccessible")
             return None
 
         try:
             stat = os.fstat(file.fileno())
             content_type = (
-                mimetypes.guess_type(self.splat_file.name)[0]
+                mimetypes.guess_type(file_path.name)[0]
                 or "application/octet-stream"
             )
 
@@ -60,7 +104,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             raise
 
     def log_message(self, format, *args):
-        print(f"[HTTP] {self.address_string()} - {format % args}")
+        print(
+            f"[HTTP] {self.address_string()} - {format % args}",
+            flush=True,
+        )
 
 
 def parse_camera_pos(value):
@@ -111,6 +158,14 @@ def main():
         help="Fichier splat local à charger (optionnel).",
     )
     parser.add_argument(
+        "--data-directory",
+        type=Path,
+        help=(
+            "Dossier contenant les fichiers accessibles "
+            "via /__datasets__/."
+        ),
+    )
+    parser.add_argument(
         "--port",
         type=int,
         default=8000,
@@ -124,7 +179,7 @@ def main():
     parser.add_argument(
         "--flip-up",
         action="store_true",
-        help="Active l'option flipUp au chargement.",
+        help="Active flipUp dans l'URL ouverte au lancement.",
     )
     parser.add_argument(
         "--camera-pos",
@@ -154,11 +209,22 @@ def main():
         if not splat_file.is_file():
             parser.error(f"Fichier splat introuvable : {splat_file}")
 
-    handler = partial(Handler, splat_file=splat_file)
+    data_directory = None
+    if args.data_directory is not None:
+        data_directory = args.data_directory.expanduser().resolve()
+        if not data_directory.is_dir():
+            parser.error(f"Dossier introuvable : {data_directory}")
+
+    handler = partial(
+        Handler,
+        splat_file=splat_file,
+        data_directory=data_directory,
+    )
 
     try:
         server = http.server.ThreadingHTTPServer(
-            (HOST, args.port), handler
+            (HOST, args.port),
+            handler,
         )
     except OSError as exc:
         parser.error(f"Impossible de démarrer le serveur : {exc}")
@@ -168,9 +234,8 @@ def main():
 
         params = {}
         if splat_file is not None:
-            params["file"] = "/__local_splat__/" + quote(
-                splat_file.name, safe=""
-            )
+            # urlencode assure l'encodage des paramètres.
+            params["file"] = f"/__local_splat__/{splat_file.name}"
         if args.flip_up:
             params["flipUp"] = "1"
         if args.camera_pos is not None:
@@ -183,16 +248,19 @@ def main():
         print("========================================")
         print(" Gaussian Splat Viewer")
         print("========================================")
-        print(f" Dossier : {HTML_DIR}")
+        print(f" HTML    : {HTML_DIR}")
         if splat_file is not None:
             print(f" Splat   : {splat_file}")
+        if data_directory is not None:
+            print(f" Données : {data_directory}")
+            print(f" Route   : {DATA_PREFIX}<chemin relatif>")
         print(f" FlipUp  : {'oui' if args.flip_up else 'non'}")
         if args.camera_pos is not None:
             print(f" Caméra  : {args.camera_pos}")
         print(f" URL     : {url}")
         print(" Ctrl+C pour arrêter le serveur")
         print("========================================")
-        print()
+        print(flush=True)
 
         try:
             if not args.no_browser:
@@ -200,7 +268,7 @@ def main():
 
             server.serve_forever()
         except KeyboardInterrupt:
-            print("\nArrêt du serveur.")
+            print("\nArrêt du serveur.", flush=True)
 
 
 if __name__ == "__main__":
