@@ -102,9 +102,9 @@ Ces opérations permettent d’ajuster progressivement la densité et la répart
   <em>Source : <a href="https://zhangtemplar.github.io/3d-gaussian-splatting/">3D Gaussian Splatting for Real-Time Radiance Field Rendering (2023) — Qiang Zhang</a></em>
 </p>
 
-## 4. Écosystème technologique et outils disponibles
+## 3. Écosystème technologique et outils disponibles
 
-### 4.1 Solutions commerciales fermées
+### 3.1 Solutions commerciales fermées
 
 Plusieurs solutions commerciales proposent des logiciels simplifiés de capture, reconstruction et visualisation de Gaussian Splats, visant la facilité d'usage au prix d'un contrôle limité sur les paramètres internes :
 
@@ -116,7 +116,7 @@ Plusieurs solutions commerciales proposent des logiciels simplifiés de capture,
 | **Postshot** | Desktop | ❌ | Freemium | Reconstruction locale de Gaussian Splats |
 | **vid2scene** | SaaS/Local | ✅ (Apache 2.0) | Gratuit | Conversion vidéo → Gaussian Splat |
 
-### 4.2 Frameworks et bibliothèques open source
+### 3.2 Frameworks et bibliothèques open source
 
 L'écosystème open source constitue le principal moteur d'innovation. Les différents projets couvrent des besoins complémentaires :
 
@@ -137,10 +137,10 @@ Nerfstudio a constitué la solution principale d'expérimentation dans ces trava
 
 ---
 
-## 5. Expérimentations réalisées
+## 4. Expérimentations réalisées
 Les expérimentations qui suivent visent à évaluer comment les Gaussian Splats fonctionnent sur différents types de données géospatiales. Elles ont été menées avec **Nerfstudio** comme solution principale.
 **Spirula Studio **a également été testé mais plus récemment,  le recul manque pour une comparaison approfondie au-delà des éléments mentionnés ci-dessus.
-### 5.2 Environnement de calcul
+### 4.2 Environnement de calcul
 Seule la phase d’**entraînement des Gaussian Splats** nécessite des ressources de calcul GPU. 
 Les étapes de reconstruction photogrammétrique (COLMAP / HLOC), de préparation des données et d’export restent exécutables sur CPU.
 Deux environnements ont été utilisés avec Nerfstudio :
@@ -149,14 +149,14 @@ Deux environnements ont été utilisés avec Nerfstudio :
 
 **Spirula Studio** a également été testé comme alternative. Grâce à la prise en charge de **Vulkan**, il permet d’exploiter le GPU intégré des Mac Apple Silicon, notamment sur macOS, sans dépendre de CUDA. Il prend également en charge les environnements équipés de GPU NVIDIA via CUDA, offrant ainsi une plus grande flexibilité dans le choix de l’environnement de calcul.
 
-### 5.3 Jeux de données utilisés
+### 4.3 Jeux de données utilisés
 Quatre types de données ont été testés pour évaluer l'intérêt de la technologie :**
 1. **Captures smartphone (iPhone 8)** : vidéos autour d'objets simples (arbuste, statue)
 2. **PCRS + LiDAR** : orthophotographies aériennes + nuage LiDAR structuré
 3. A**cquisition drone OpenData de l'ISPRS** : 224 images aériennes (7952 × 5304 px, altitude 80m, recouvrement 80%, résolution 1.7 cm/pixel)
 4. **Panoramas 360°** : vidéo GoPro Max 2  acquis en vélo (8K équirectangulaire, ~1100 images extraites)
 
-### 5.4 Expérience 1 : Vidéos non structurées
+### 4.4 Expérience 1 : Vidéos non structurées
 **Objectif :** S'approprier la technologie, valider le fonctionnement du pipeline sur des données simples non calibrées.
 **Processus :**
 1. Extraction des frames via ffmpeg
@@ -171,12 +171,12 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 
 **Vidéo source :** [Voir la vidéo de la statue](../../../TECHNO_PITCH/examples/statue/)
 
-**Résultat interactif :** <a href="http://127.0.0.1:8000/?file=%2F__datasets__%2Fexamples%2Fstatue%2Fsplat.ply&flipUp=0&camera_pos=-0.0187528210976%2C0.305861713961%2C0.0793449395382%2C0.0165060195376%2C-0.0647172667606%2C0.0836543172032%2C-0.000276639507042%2C-0.0178272347754%2C0.999841043952" target="_blank" rel="noopener noreferrer">Ouvrir la démo interactive</a>
+**Résultat interactif :** <a href="http://127.0.0.1:8000/?file=%2F__datasets__%2Fexamples%2Fstatue%2Fsplat.ply&flipUp=0&camera_pos=0.00603432696582,0.288282880779,0.0980095024881,-0.0130298620721,0.0384080264849,0.0680299727369,-0.0219747022422,-0.117442163726,0.992836567941" target="_blank" rel="noopener noreferrer">Ouvrir la démo interactive</a>
 
 **Bilan :** Appropriation réussie du pipeline de base. Limitations sur les bords et présence de splats parasites.
 
 
-### 5.5 Expérience 2 : PCRS + LiDAR
+### 4.5 Expérience 2 : PCRS + LiDAR
 **Objectif :** Exploiter données aériennes géoréférencées avec initialisation LiDAR.
 **Processus :**
 1. Conversion CON/XML + LiDAR vers format COLMAP
@@ -195,7 +195,7 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
  
 **Bilan :** Il faudra refaire des tests quand on aura une meilleure maitrise de cette technologie mais il est peu probable qu'on obtienne de bons résultats sans données complémentaires. La faible varieté d'angles n'est pas adapté à cette technlogie
 
-### 5.6 Expérience 3 : Drone haute-résolution (jeu test Open Data de l'ISPRS)
+### 4.6 Expérience 3 : Drone haute-résolution (jeu test Open Data de l'ISPRS)
 **Objectif :** Évaluer reconstruction sur des données drone.
 **Données :**
 - 224 images aériennes (dataset ISPRS UseGeo)
@@ -218,12 +218,12 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 - Cas d'usage prometteur, si l'IGNF souhaite exploiter des donneés drone.
 - Données terrestres des Travaux Spéciaux à étudier avec un pipeline similaire (dans ma TO-DO list)
 
-### 5.7 Expérience 4 : Paris à vélo (GoPro 360°)
+### 4.7 Expérience 4 : Paris à vélo (GoPro 360°)
 
 >> **ALEXANDRE DEVAUX**
 ---
 
-## 6. Limites observées
+## 5. Limites observées
 
 À l'issue de ces quatre expériences, plusieurs défis pratiques sont apparus :
 
@@ -246,7 +246,7 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 
 ---
 
-## 7. Bilan et perspectives
+## 6. Bilan et perspectives
 
 1. Poursuivre l'expérimentation sur d'autres jeux de données
 2. Investir dans l'optimisation des pipelines
