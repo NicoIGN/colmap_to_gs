@@ -74,7 +74,7 @@ const gifState = {
   pendingCapture: false,
   width: 0,
   height: 0,
-  delay: 500,
+  delay: 100,
   downloadUrl: null,
 };
 
@@ -577,10 +577,26 @@ function orbit(dx, dy) {
 function panPixels(dx, dy, height) {
   const { camera, controls } = viewer;
 
-  const scale =
-    2 * camera.position.distanceTo(controls.target) *
+  // Sensibilité de base : trois fois le déplacement précédent.
+  const PAN_GAIN = 3;
+
+  // Le curseur « Vitesse » agit désormais aussi sur le clic droit.
+  // Valeur 10 = sensibilité normale.
+  const speed = Number($("step").value) / 10;
+
+  // Éviter une translation presque nulle si la cible est trop proche.
+  const referenceDistance = Math.max(
+    camera.position.distanceTo(controls.target),
+    sceneRadius * 0.1
+  );
+
+  const unitsPerPixel =
+    2 *
+    referenceDistance *
     Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) /
     Math.max(height, 1);
+
+  const scale = unitsPerPixel * PAN_GAIN * speed;
 
   const right = new THREE.Vector3(1, 0, 0)
     .applyQuaternion(camera.quaternion);
@@ -592,6 +608,7 @@ function panPixels(dx, dy, height) {
     .multiplyScalar(-dx * scale)
     .addScaledVector(up, dy * scale);
 
+  // Déplacer ensemble la caméra et sa cible conserve la visée.
   camera.position.add(delta);
   controls.target.add(delta);
 }
