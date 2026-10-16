@@ -517,10 +517,28 @@ async function resetAndLoad(url, name) {
       
       if ($("collisionEnabled").checked) {
         try {
+          console.log("[collision-load] buildCollisionGrid:start", {
+            sceneCount,
+            centersCount: centers ? centers.length / 3 : 0,
+            sceneRadius,
+          });
+
           await buildCollisionGrid();
+
+          console.log("[collision-load] buildCollisionGrid:success", {
+            occupiedCells: collisionState.cells?.size || 0,
+            cellSize: collisionState.cellSize,
+          });
+
           checkCurrentCollisionPosition();
         } catch (error) {
+          console.error("[collision-load] buildCollisionGrid:error", error);
+
           $("collisionEnabled").checked = false;
+
+          console.warn("[collision-load] auto-uncheck", {
+            reason: error?.message || String(error),
+          });
 
           setCollisionStatus(
             `Anticollision indisponible : ${error?.message || error}`,
@@ -899,7 +917,7 @@ function getPointerRayDirection(clientX, clientY) {
   return raycaster.ray.direction.clone().normalize();
 }
 
-function moveCameraAlongRay(direction, worldDistance) {
+function moveCameraAlongRayWithCollision(direction, worldDistance) {
   if (
     !Number.isFinite(worldDistance) ||
     worldDistance === 0 ||
@@ -916,8 +934,7 @@ function moveCameraAlongRay(direction, worldDistance) {
     collisionState.cellSize > 0;
 
   if (!collisionEnabled) {
-    const delta = normalizedDirection
-      .multiplyScalar(worldDistance);
+    const delta = normalizedDirection.multiplyScalar(worldDistance);
 
     camera.position.add(delta);
     target.add(delta);
@@ -925,16 +942,18 @@ function moveCameraAlongRay(direction, worldDistance) {
     return;
   }
 
-  // Petits pas déterminés par la grille, pas par la distance
-  // à la cible. Chaque trajet est également vérifié par
-  // navigateWithCollision().
-  const stepSize = collisionState.cellSize * 0.5;
+  // Fractionnement obligatoire pour pouvoir avancer
+  // jusqu’au contact, au lieu de bloquer tout le mouvement.
+  const baseStep = Math.max(
+    collisionState.cellSize * 0.35,
+    sceneRadius * 0.0005
+  );
 
   const steps = Math.min(
-    512,
+    COLLISION_MAX_STEPS,
     Math.max(
       1,
-      Math.ceil(Math.abs(worldDistance) / stepSize)
+      Math.ceil(Math.abs(worldDistance) / baseStep)
     )
   );
 
@@ -943,12 +962,14 @@ function moveCameraAlongRay(direction, worldDistance) {
   );
 
   for (let i = 0; i < steps; i++) {
-    const accepted = navigateWithCollision(() => {
+    const moved = navigateWithCollision(() => {
       camera.position.add(delta);
       target.add(delta);
     });
 
-    if (!accepted) break;
+    if (!moved) {
+      break;
+    }
   }
 }
 
@@ -1134,10 +1155,10 @@ function installMouseControls() {
         ? event.deltaY * canvas.clientHeight
         : event.deltaY;
 
-    if (!Number.isFinite(pixels) || pixels === 0) return;
+    if (!Number.isFinite(pixels) || pixels === 0) {
+      return;
+    }
 
-    // Utiliser la position du curseur au moment exact
-    // de l’événement, même sans pointermove préalable.
     const direction = getPointerRayDirection(
       event.clientX,
       event.clientY
@@ -1146,27 +1167,25 @@ function installMouseControls() {
     if (!direction) return;
 
     const speed = Number($("step").value) / 10;
-
-    // Limiter les événements exceptionnellement grands.
     const wheelDelta = THREE.MathUtils.clamp(
       pixels,
       -400,
       400
     );
 
-    // Le rayon pointe de la caméra vers la scène :
-    // pixels négatifs -> distance positive -> avancer.
-    // pixels positifs -> distance négative -> reculer.
+    // Négatif = avancer, positif = reculer.
     const worldDistance =
       -wheelDelta * sceneRadius * 0.0003 * speed;
 
-    moveCameraAlongRay(direction, worldDistance);
+    moveCameraAlongRayWithCollision(
+      direction,
+      worldDistance
+    );
 
     syncCamera();
     requestGifCapture();
 
     clearTimeout(wheelTimer);
-
     wheelTimer = setTimeout(() => {
       wheelTimer = null;
       requestGifCapture();
@@ -1934,8 +1953,16 @@ $("flipUp").addEventListener("change", () => {
   );
 });
 
-$("collisionEnabled").addEventListener("change", async () => {
+$("collisionEnabled").addEventListener("change", async (event) => {
   clearNavigation();
+
+  console.log("[collision-toggle]", {
+    checked: $("collisionEnabled").checked,
+    sceneReady,
+    isLoading,
+    eventType: event.type,
+    stack: new Error("collisionEnabled change").stack,
+  });
 
   if (!$("collisionEnabled").checked) {
     setCollisionStatus("Anticollision désactivée.");
@@ -1949,16 +1976,32 @@ $("collisionEnabled").addEventListener("change", async () => {
     return;
   }
 
-  // Interdire les mouvements et les nouveaux chargements
-  // pendant la construction de la grille.
   isLoading = true;
   refreshUI();
 
   try {
+    console.log("[collision-toggle] buildCollisionGrid:start", {
+      sceneCount,
+      centersCount: centers ? centers.length / 3 : 0,
+      sceneRadius,
+    });
+
     await buildCollisionGrid();
+
+    console.log("[collision-toggle] buildCollisionGrid:success", {
+      occupiedCells: collisionState.cells?.size || 0,
+      cellSize: collisionState.cellSize,
+    });
+
     checkCurrentCollisionPosition();
   } catch (error) {
+    console.error("[collision-toggle] buildCollisionGrid:error", error);
+
     $("collisionEnabled").checked = false;
+
+    console.warn("[collision-toggle] auto-uncheck", {
+      reason: error?.message || String(error),
+    });
 
     setCollisionStatus(
       `Anticollision indisponible : ${error?.message || error}`,
@@ -2042,7 +2085,8 @@ const collisionState = {
 };
 
 // Limite de mémoire : on abandonne proprement au-delà.
-const COLLISION_MAX_CELLS = 500000;
+const COLLISION_MAX_CELLS = 300000;
+
 
 // Limite de travail par mouvement.
 // Si un déplacement est trop grand, il est refusé plutôt que
@@ -2069,64 +2113,161 @@ async function buildCollisionGrid() {
     throw new Error("Aucune scène disponible.");
   }
 
-  if (collisionState.cells) return;
+  if (collisionState.cells) {
+    console.log("[collision-grid] reuse-existing-grid", {
+      occupiedCells: collisionState.cells.size,
+      cellSize: collisionState.cellSize,
+    });
+
+    return;
+  }
 
   collisionState.building = true;
 
-  // Environ 320 cellules sur le diamètre de la scène.
-  const cellSize = Math.max(sceneRadius / 160, 1e-6);
-  const cells = new Map();
-
-  // Garder une référence stable pendant la construction.
   const source = centers;
   const count = source.length / 3;
 
-  setCollisionStatus("Construction de la grille de densité…");
+  // Commencer fin, puis agrandir seulement si nécessaire.
+  let cellSize = Math.max(sceneRadius / 160, 1e-6);
+
+  const maxAttempts = 8;
 
   try {
-    for (let i = 0; i < count; i++) {
-      const x = source[i * 3];
-      const y = source[i * 3 + 1];
-      const z = source[i * 3 + 2];
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const cells = new Map();
 
-      if (
-        Number.isFinite(x) &&
-        Number.isFinite(y) &&
-        Number.isFinite(z)
-      ) {
-        const key = collisionKey(
-          Math.floor(x / cellSize),
-          Math.floor(y / cellSize),
-          Math.floor(z / cellSize)
-        );
+      let overflow = false;
+      let validCenters = 0;
+      let invalidCenters = 0;
 
-        // Les seuils de l’interface ne dépassent pas 50.
-        // Inutile de conserver des compteurs supérieurs.
-        cells.set(key, Math.min(50, (cells.get(key) || 0) + 1));
+      setCollisionStatus(
+        `Construction de la grille — tentative ${attempt}…`
+      );
 
-        if (cells.size > COLLISION_MAX_CELLS) {
-          throw new Error(
-            "Scène trop dispersée : limite de la grille atteinte."
+      console.log("[collision-grid] attempt", {
+        attempt,
+        count,
+        cellSize,
+        maxCells: COLLISION_MAX_CELLS,
+        sampling: false,
+        normalization: false,
+      });
+
+      for (let i = 0; i < count; i++) {
+        const x = source[i * 3];
+        const y = source[i * 3 + 1];
+        const z = source[i * 3 + 2];
+
+        if (
+          Number.isFinite(x) &&
+          Number.isFinite(y) &&
+          Number.isFinite(z)
+        ) {
+          validCenters++;
+
+          const key = collisionKey(
+            Math.floor(x / cellSize),
+            Math.floor(y / cellSize),
+            Math.floor(z / cellSize)
           );
+
+          const previousCount = cells.get(key);
+
+          if (previousCount !== undefined) {
+            // Valeur réelle jusqu’à 50, puis saturation.
+            // Suffisant pour tous les seuils de l’interface.
+            cells.set(key, Math.min(50, previousCount + 1));
+          } else {
+            if (cells.size >= COLLISION_MAX_CELLS) {
+              overflow = true;
+              break;
+            }
+
+            cells.set(key, 1);
+          }
+        } else {
+          invalidCenters++;
+        }
+
+        if (i > 0 && i % 100000 === 0) {
+          setCollisionStatus(
+            `Grille — tentative ${attempt} : ` +
+            `${Math.round(i / count * 100)} %…`
+          );
+
+          await sleep(0);
+
+          if (centers !== source) {
+            throw new Error(
+              "La scène a changé pendant la construction."
+            );
+          }
         }
       }
 
-      if (i > 0 && i % 50000 === 0) {
-        setCollisionStatus(
-          `Construction de la grille : ` +
-          `${Math.round(i / count * 100)} %…`
-        );
+      if (overflow) {
+        console.warn("[collision-grid] retry-coarser", {
+          attempt,
+          occupiedCells: cells.size,
+          previousCellSize: cellSize,
+          nextCellSize: cellSize * 2,
+        });
 
-        // Laisser le navigateur afficher la progression.
+        // Libérer cette tentative avant de recommencer.
+        cells.clear();
+        cellSize *= 2;
+
         await sleep(0);
+        continue;
       }
+
+      if (!validCenters) {
+        throw new Error("Aucun centre de splat exploitable.");
+      }
+
+      if (centers !== source) {
+        throw new Error(
+          "La scène a changé pendant la construction."
+        );
+      }
+
+      const threshold = Number($("collisionDensity").value);
+
+      let denseCells = 0;
+      let maxDensity = 0;
+
+      for (const density of cells.values()) {
+        if (density >= threshold) denseCells++;
+        maxDensity = Math.max(maxDensity, density);
+      }
+
+      collisionState.cells = cells;
+      collisionState.cellSize = cellSize;
+
+      console.log("[collision-grid] done", {
+        count,
+        validCenters,
+        invalidCenters,
+        occupiedCells: cells.size,
+        denseCells,
+        cellSize,
+        threshold,
+        maxDensityCappedAt50: maxDensity,
+        sampling: false,
+        normalization: false,
+      });
+
+      setCollisionStatus(
+        `Grille prête : ${cells.size.toLocaleString()} cellules · ` +
+        `${denseCells.toLocaleString()} obstacles · ` +
+        "comptage des centres, sans normalisation."
+      );
+
+      return;
     }
 
-    collisionState.cells = cells;
-    collisionState.cellSize = cellSize;
-
-    setCollisionStatus(
-      `Grille prête : ${cells.size.toLocaleString()} cellules occupées.`
+    throw new Error(
+      "Impossible de construire la grille dans la limite mémoire."
     );
   } finally {
     collisionState.building = false;
@@ -2146,7 +2287,7 @@ function cameraToCollisionSpace(position) {
 }
 
 // Intersection sphère / cellule dense.
-function intersectsDenseCells(position, radius) {
+/*function intersectsDenseCells(position, radius) {
   const { cells, cellSize } = collisionState;
 
   if (!cells || !cellSize) return false;
@@ -2201,6 +2342,24 @@ function intersectsDenseCells(position, radius) {
   }
 
   return false;
+}*/
+
+function intersectsDenseCells(position, radius = 0) {
+  const { cells, cellSize } = collisionState;
+
+  if (!cells || !cellSize) return false;
+
+  const threshold = Number($("collisionDensity").value);
+
+  // Mode simple et beaucoup moins agressif :
+  // on teste essentiellement la cellule contenant la caméra.
+  // Le radius est conservé dans la signature pour compatibilité,
+  // mais n’élargit plus le test à tout un voisinage.
+  const x = Math.floor(position.x / cellSize);
+  const y = Math.floor(position.y / cellSize);
+  const z = Math.floor(position.z / cellSize);
+
+  return (cells.get(collisionKey(x, y, z)) || 0) >= threshold;
 }
 
 function collisionPathIsClear(fromWorld, toWorld) {
@@ -2208,33 +2367,63 @@ function collisionPathIsClear(fromWorld, toWorld) {
   const to = cameraToCollisionSpace(toWorld);
 
   const distance = from.distanceTo(to);
-
-  if (distance < 1e-12) return true;
-
   const cellSize = collisionState.cellSize;
+
+  const diagnostic = {
+    fromWorld: fromWorld.toArray(),
+    toWorld: toWorld.toArray(),
+    fromCollisionSpace: from.toArray(),
+    toCollisionSpace: to.toArray(),
+    distance,
+    cellSize,
+    steps: 0,
+    cameraRadius: 0,
+    testRadius: 0,
+    blockedAt: null,
+    reason: null,
+  };
+
+  if (distance < 1e-12) {
+    diagnostic.reason = "no-displacement";
+    collisionDebug.lastCheck = diagnostic;
+    return true;
+  }
+
+  // Plus de sur-échantillonnage agressif : on veut surtout
+  // savoir si la caméra finit ou passe dans une cellule dense,
+  // pas élargir artificiellement l’obstacle.
   const steps = Math.max(
     1,
-    Math.ceil(distance / (cellSize * 0.5))
+    Math.ceil(distance / Math.max(cellSize * 0.5, 1e-6))
   );
 
-  if (steps > COLLISION_MAX_STEPS) return false;
+  diagnostic.steps = steps;
 
-  const cameraRadius =
-    cellSize * Number($("collisionMargin").value);
-
-  // Élargissement conservateur : les sphères échantillonnées
-  // couvrent aussi l’espace entre deux échantillons.
-  const testRadius = cameraRadius + distance / steps * 0.5;
+  if (steps > COLLISION_MAX_STEPS) {
+    diagnostic.reason = "step-limit";
+    collisionDebug.lastCheck = diagnostic;
+    return false;
+  }
 
   const position = new THREE.Vector3();
 
   for (let i = 0; i <= steps; i++) {
     position.lerpVectors(from, to, i / steps);
 
-    if (intersectsDenseCells(position, testRadius)) {
+    if (intersectsDenseCells(position, 0)) {
+      diagnostic.reason = "dense-cell";
+      diagnostic.blockedAt = {
+        sample: i,
+        position: position.toArray(),
+      };
+
+      collisionDebug.lastCheck = diagnostic;
       return false;
     }
   }
+
+  diagnostic.reason = "path-clear";
+  collisionDebug.lastCheck = diagnostic;
 
   return true;
 }
@@ -2255,12 +2444,24 @@ function reportCollisionBlock() {
 // Transaction : appliquer un mouvement, vérifier le trajet,
 // restaurer entièrement l’état si le mouvement est interdit.
 function navigateWithCollision(move) {
-  const enabled =
-    $("collisionEnabled").checked &&
-    !!collisionState.cells;
+  collisionDebug.counters.calls++;
+
+  const optionChecked = $("collisionEnabled").checked;
+  const gridAvailable = !!collisionState.cells;
+  const enabled = optionChecked && gridAvailable;
 
   if (!enabled) {
+    collisionDebug.counters.bypassed++;
+    collisionDebug.lastCheck = null;
+
     move();
+
+    collisionDebugLog("bypassed", {
+      reason: !optionChecked
+        ? "option-disabled"
+        : "grid-missing",
+    });
+
     return true;
   }
 
@@ -2271,16 +2472,27 @@ function navigateWithCollision(move) {
   move();
 
   if (collisionPathIsClear(previousPosition, camera.position)) {
+    collisionDebug.counters.accepted++;
+
+    collisionDebugLog("accepted", {
+      check: collisionDebug.lastCheck,
+    });
+
     return true;
   }
+
+  collisionDebug.counters.blocked++;
 
   camera.position.copy(previousPosition);
   target.copy(previousTarget);
   camera.up.copy(previousUp);
 
-  // Certains mouvements ont déjà actualisé le quaternion.
   camera.lookAt(target);
   camera.updateMatrixWorld(true);
+
+  collisionDebugLog("blocked", {
+    check: collisionDebug.lastCheck,
+  });
 
   reportCollisionBlock();
 
@@ -2295,21 +2507,144 @@ function checkCurrentCollisionPosition() {
     return;
   }
 
-  const radius =
-    collisionState.cellSize * Number($("collisionMargin").value);
-
   const position = cameraToCollisionSpace(camera.position);
 
-  if (intersectsDenseCells(position, radius)) {
+  if (intersectsDenseCells(position, 0)) {
     setCollisionStatus(
-      "Attention : caméra déjà dans une zone dense. " +
-      "Désactive l’option pour te dégager ou utilise « Cadrer ».",
+      "Attention : caméra dans une cellule dense.",
       true
     );
   } else {
-    setCollisionStatus("Anticollision active.");
+    setCollisionStatus(
+      "Anticollision active (mode cellules denses)."
+    );
   }
 }
+
+const collisionDebug = {
+  enabled: true,
+  lastLogAt: 0,
+  lastCheck: null,
+  counters: {
+    calls: 0,
+    bypassed: 0,
+    accepted: 0,
+    blocked: 0,
+  },
+};
+
+function collisionDebugLog(event, details = {}) {
+  if (!collisionDebug.enabled) return;
+
+  const now = performance.now();
+
+  if (now - collisionDebug.lastLogAt < 1000) return;
+
+  collisionDebug.lastLogAt = now;
+
+  // JSON plutôt qu’un objet inspecté ultérieurement :
+  // les valeurs restent celles du moment du log.
+  console.log(
+    "[collision-debug] " +
+    JSON.stringify({
+      event,
+      optionChecked: $("collisionEnabled").checked,
+      gridAvailable: !!collisionState.cells,
+      occupiedCells: collisionState.cells?.size || 0,
+      cellSize: collisionState.cellSize,
+      threshold: Number($("collisionDensity").value),
+      margin: Number($("collisionMargin").value),
+      flipUp: $("flipUp").checked,
+      counters: { ...collisionDebug.counters },
+      ...details,
+    })
+  );
+}
+
+function collisionDebugSnapshot() {
+  const cells = collisionState.cells;
+  const threshold = Number($("collisionDensity").value);
+
+  let denseCells = 0;
+  let maxDensity = 0;
+
+  const histogram = {
+    "1": 0,
+    "2-3": 0,
+    "4-7": 0,
+    "8-15": 0,
+    "16-31": 0,
+    "32-50": 0,
+  };
+
+  if (cells) {
+    for (const density of cells.values()) {
+      maxDensity = Math.max(maxDensity, density);
+
+      if (density >= threshold) denseCells++;
+
+      if (density === 1) histogram["1"]++;
+      else if (density <= 3) histogram["2-3"]++;
+      else if (density <= 7) histogram["4-7"]++;
+      else if (density <= 15) histogram["8-15"]++;
+      else if (density <= 31) histogram["16-31"]++;
+      else histogram["32-50"]++;
+    }
+  }
+
+  const localCamera = cameraToCollisionSpace(camera.position);
+  const radius =
+    collisionState.cellSize * Number($("collisionMargin").value);
+
+  const report = {
+    optionChecked: $("collisionEnabled").checked,
+    sceneReady,
+    isLoading,
+    building: collisionState.building,
+    sceneCount,
+    centersCount: centers ? centers.length / 3 : 0,
+    sceneRadius,
+    gridAvailable: !!cells,
+    occupiedCells: cells?.size || 0,
+    denseCells,
+    maxDensity,
+    histogram,
+    cellSize: collisionState.cellSize,
+    threshold,
+    margin: Number($("collisionMargin").value),
+    cameraRadius: radius,
+    flipUp: $("flipUp").checked,
+    cameraWorld: camera.position.toArray(),
+    cameraCollisionSpace: localCamera.toArray(),
+    target: target.toArray(),
+
+    cameraCurrentlyBlocked: cells
+      ? intersectsDenseCells(localCamera, radius)
+      : null,
+
+    // Vérification du repère : la grille utilise les centres
+    // locaux, et cameraToCollisionSpace() suppose seulement flipUp.
+    modelWorldMatrix: splatEntity
+      ? Array.from(splatEntity.getWorldTransform().data)
+      : null,
+
+    counters: { ...collisionDebug.counters },
+    lastCheck: collisionDebug.lastCheck,
+  };
+
+  const text = JSON.stringify(report, null, 2);
+
+  console.log("[collision-debug] SNAPSHOT\n" + text);
+
+  return text;
+}
+
+// Accessible depuis la console, malgré le script type="module".
+window.collisionDebugSnapshot = collisionDebugSnapshot;
+
+window.setCollisionDebug = (enabled) => {
+  collisionDebug.enabled = Boolean(enabled);
+};
 
 // ---------------------------------------------------------------------------
 // Initialisation
