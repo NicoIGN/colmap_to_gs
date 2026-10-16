@@ -25,6 +25,19 @@ une **position** dans l'espace ;
   <em>Source : <a href="https://brunzema.github.io/visualizations/gaussian-splatting">A visual exploration of Gaussian Splatting — Paul Brunzema</a></em>
 </p>
 
+
+Pour rendre une image à partir de splats gaussiens:
+- chaque gaussienne est projetée depuis le point de vue de la caméra. Elle apparaît comme une ellipse de couleur à opacité décroissante sur le plan de l’image.​
+- Les contributions des splats qui couvrent le pixel sont fusionnées de l’avant vers l’arrière. Leur couleur est pondérée par leur opacité et par la transparence restante des splats précédents.​
+- le calcul est parallélisé sur GPU pour un rendu rapide
+
+<p align="center">
+  <img src="images/rendering.jpeg" alt="Pipeline de rendu 3D Gaussian Splatting" width="400"><br>
+  <em>Source : <a href="https://doi.org/10.1145/3807511">A Survey on 3D Gaussian Splatting — Guikun Chen et Wenguan Wang, figure 2</a></em>
+</p>
+
+​
+
 Le rendu peut alors se faire en **temps réel**, permettant une navigation 3D immersive avec une finesse de rendu très au-dessus des approches plus classiques.
 
 [Démo interactive: Niseko Village — Snowy Ski Resort [Source : Splat Labs — Gaussian Splatting](https://cloud.splatlabs.ai/viewer/0729c1d5-8d65-4dbc-b4f4-a7ed4fbd6ce3)]
@@ -83,19 +96,19 @@ détecter les points caractéristiques dans chaque image ;
 ### Étape 2 : Initialisation et optimisation des Gaussian Splats
 Le nuage de points 3D sparse sert à **initialiser une représentation de la scène**. Chaque point est converti en une gaussienne 3D caractérisée par :
 sa position dans l'espace, sa taille, son orientation, une opacité et une couleur.
-À partir de ces gaussiennes, un moteur d'optimisation sur GPU (typiquement **GSplat**) exécute une boucle d'apprentissage :
+Un moteur d’optimisation sur GPU (par exemple, **GSplat**) exécute ensuite une boucle d’apprentissage itérative :
+1. **Rendu** : génère une image de la scène depuis le point de vue d’une caméra.
+2. **Comparaison** : compare l’image rendue à l’image originale correspondante.
+3. **Calcul de l’erreur** : mesure les différences entre les deux images.
+4. **Optimisation** : ajuste les paramètres des gaussiennes pour réduire progressivement cette erreur.
 
-1. rend une image de la scène depuis une caméra donnée ;
-2. la compare aux images réelles correspondantes ;
-3. calcule l'erreur entre le rendu et la réalité ;
-4. met à jour les paramètres des gaussiennes pour réduire cette erreur.
+Au cours de l’optimisation, un **contrôle adaptatif de la densité** fait évoluer la représentation à l’aide de méthodes heuristiques :
+- **Pruning** : supprime les gaussiennes peu contributives ou dont l’opacité est trop faible.
+- **Culling** : écarte du rendu les gaussiennes qui ne contribuent pas à l’image considérée, par exemple lorsqu’elles sont hors du champ de vision.
+- **Cloning** : duplique certaines gaussiennes pour mieux représenter les zones insuffisamment couvertes.
+- **Splitting** : subdivise certaines gaussiennes pour représenter plus finement les zones complexes et les détails.
 
-Au cours de l’optimisation, la représentation peut également évoluer pour mieux décrire la scène :**
-- **Split** : subdiviser des gaussiennes pour mieux représenter les zones complexes ou insuffisamment détaillées.
-* **Pruning** : supprimer les gaussiennes peu contributives ou dont l’opacité est trop faible.
-* **Culling** : écarter du rendu les éléments qui ne contribuent pas à l’image considérée, par exemple parce qu’ils sont hors du champ de vision.
-
-Ces opérations permettent d’ajuster progressivement la densité et la répartition des gaussiennes en fonction des détails de la scène.
+Ces opérations permettent d’**ajuster progressivement la densité et la répartition des gaussiennes** afin d’améliorer la fidélité visuelle de la reconstruction tout en maîtrisant le coût du rendu.
 
 <p align="center">
   <img src="images/learning.png" alt="Schéma du processus d'apprentissage des Gaussian Splats" width="600"><br>
@@ -130,10 +143,10 @@ L'écosystème open source constitue le principal moteur d'innovation. Les diff�
 
 Deux frameworks open source complets se distinguent pour les pipelines de production :
 
--** Nerfstudio** s'appuie sur **GSplat** comme moteur de rasterisation et d'entraînement. GSplat constitue la couche de calcul GPU (CUDA/PyTorch), tandis que Nerfstudio fournit l'ensemble du pipeline (prétraitement, entraînement, gestion des expériences, visualisation, export).
+-** Nerfstudio** s'appuie sur **GSplat** comme moteur de rasterisation et d'entraînement. GSplat constitue la couche de calcul GPU (CUDA/PyTorch), tandis que Nerfstudio fournit l'ensemble du pipeline (prétraitement, entraînement, gestion des expériences, visualisation, export). Il est issu d'un projet de recherche universitaire de l'Université de Californie à Berkeley.
 
 -** Spirula** propose une architecture plus intégrée, avec une interface et le support de données géoréférencées : intégration directe du GPS et du LiDAR . Cette approche facilite le traitement de données calibrées et géolocalisées, répondant directement aux besoins des données IGNF. 
-Nerfstudio a constitué la solution principale d'expérimentation dans ces travaux. Spirula ayant été identifié récemment (release publique datant d'aout 2026, merci à Alexandre Devaux pour la veille techno).
+Nerfstudio a constitué la solution principale d'expérimentation dans ces travaux. Spirula ayant été identifié récemment (release publique datant d'aout 2026, merci à Alexandre Devaux pour la veille techno). Je n'ai pas réussi à identifier l'auteur mais le README mentionne qu'il n'y a qu'un développeur derrière le projet.
 
 ---
 
@@ -179,13 +192,13 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 ### 4.5 Expérience 2 : PCRS + LiDAR
 **Objectif :** Exploiter données aériennes géoréférencées avec initialisation LiDAR.
 **Processus :**
-1. Conversion CON/XML + LiDAR vers format COLMAP
+1. Conversion CON/XML + LiDAR vers format COLMAP  (jeu test sur Aubigny-sur-Nère, Cher)
 2. Sous-échantillonnage des images (résolution native incompatible avec le pipeline de NerfStudio : 26460 × 17004 px)
 3. Entraînement
 4. Nettoyage spatial basé sur géométrie LiDAR
 
 **Résultats :**
-- ✓ Reconstruction médiocre (jeu test sur Aubigny-sur-Nère, Cher)
+- ✓ Reconstruction médiocre dès qu'on s'eloigne du point de vue des caméras
 - ✓ Le LiDAR aide beaucoup à stabiliser la géométrie, mais une PVA aérienne n'est pas adaptée à ce type de calcul
 - ✗ Gestion difficile de très haute résolution
 
@@ -204,23 +217,27 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 
 **Calcul :**
 - Difficulté à m'approprier le format d'orientation des caméras (probablement la calibration de la camera) donc à fusionner correctement le LidAR
-- Problème des parties cachées (tentative de Z-Buffer)
+- Problème des parties cachées (tentative de Z-Buffer avec un petit rayon)
 
 **Résultats :**
 - ✓ Reconstruction intéressante mais nécessiterait une meilleure maîtrise de la géométrie
-- ✓ Rendu végétation très réaliste
+- ✓ Rendu végétation prometteur
 
 **Données :** [Voir l'inspecteur photogrammétrique]
 
 **Résultat interactif :** <a href="http://127.0.0.1:8000/?file=%2F__datasets__%2Fexamples%2Fdrone%2Fdrone_ISPRS.ply&flipUp=1&camera_pos=0.13649458068%2C-0.324329047252%2C-0.31929885544%2C0.056428973799%2C-0.0316349491067%2C0.000948168820011%2C-0.267862696535%2C0.676887099571%2C-0.685619012454" target="_blank" rel="noopener noreferrer">Ouvrir la démo interactive</a>
+
+
+
 
 **Bilan :** 
 - Cas d'usage prometteur, si l'IGNF souhaite exploiter des donneés drone.
 - Données terrestres des Travaux Spéciaux à étudier avec un pipeline similaire (dans ma TO-DO list)
 
 ### 4.7 Expérience 4 : Paris à vélo (GoPro 360°)
+**Résultat interactif :** <a href="http://127.0.0.1:8000/?file=%2F__datasets__%2Fexamples%2F360deg%2Fsplatmartyrs.sog&flipUp=1&camera_pos=3.03368248249%2C0.0139471080442%2C0.655307179468%2C3.03485617035%2C0.0132159018371%2C0.64610959932%2C0.00995139653233%2C0.996904950149%2C-0.0779839090821" target="_blank" rel="noopener noreferrer">Ouvrir la démo interactive</a>
 
->> **ALEXANDRE DEVAUX**
+**ALEXANDRE DEVAUX**
 ---
 
 ## 5. Limites observées
@@ -242,6 +259,7 @@ Quatre types de données ont été testés pour évaluer l'intérêt de la techn
 - **Géoréférencement**
 - **Tuilage**
 - **Optimisation des temps de traitement**
+- Environnement technologique qui bouge très vite. Difficulté à garantir un ecosystème stable et pérenne avec une communauté active.
 
 
 ---
