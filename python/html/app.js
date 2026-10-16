@@ -34,6 +34,10 @@ camera.up.set(0, 1, 0);
 
 const target = new THREE.Vector3();
 
+let loadedFileSource = null;
+let loadedFileName = null;
+let loadedFileIsLocal = false;
+
 let app = null;
 let cameraEntity = null;
 let splatEntity = null;
@@ -419,7 +423,7 @@ function filenameFromUrl(url) {
   }
 }
 
-async function resetAndLoad(url, name) {
+async function loadSceneInternal(url, name) {
   if (
     !app ||
     isLoading ||
@@ -573,6 +577,74 @@ async function resetAndLoad(url, name) {
 
     refreshUI();
   }
+}
+
+
+async function resetAndLoad(url, name) {
+  if (
+    !app ||
+    isLoading ||
+    fatalError ||
+    gifState.encoding ||
+    gifState.finalizing
+  ) {
+    return;
+  }
+
+  if (!/\.(sog|ply|splat|ksplat)$/i.test(name)) {
+    setStatus(
+      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
+      true
+    );
+    return;
+  }
+
+  loadedFileSource = null;
+  loadedFileName = null;
+  loadedFileIsLocal = false;
+
+  await loadSceneInternal(url, name);
+
+  if (!sceneReady) return;
+
+  loadedFileName = name;
+
+  const resolvedUrl = new URL(url, location.href);
+
+  if (
+    resolvedUrl.protocol === "http:" ||
+    resolvedUrl.protocol === "https:"
+  ) {
+    loadedFileSource = url;
+    loadedFileIsLocal = false;
+  } else {
+    loadedFileSource = null;
+    loadedFileIsLocal = true;
+  }
+
+  rememberCamera();
+}
+
+function getViewUrl() {
+  if (loadedFileIsLocal || !loadedFileSource) {
+    return null;
+  }
+
+  const url = new URL(location.href);
+
+  url.searchParams.delete("file");
+  url.searchParams.delete("flipUp");
+  url.searchParams.delete("camera_pos");
+  url.searchParams.delete("camera_up");
+
+  url.searchParams.set("file", loadedFileSource);
+  url.searchParams.set(
+    "flipUp",
+    $("flipUp").checked ? "1" : "0"
+  );
+  url.searchParams.set("camera_pos", getCameraString());
+
+  return url.href;
 }
 
 async function loadFile(file) {
@@ -1292,15 +1364,29 @@ function applyCameraString(value, upValue = null) {
 function rememberCamera() {
   const url = new URL(location.href);
 
-  url.searchParams.set("camera_pos", getCameraString());
+  url.searchParams.delete("file");
   url.searchParams.delete("camera_up");
-  url.searchParams.set("flipUp", $("flipUp").checked ? "1" : "0");
+  url.searchParams.delete("camera_pos");
+  url.searchParams.delete("flipUp");
+
+  if (!loadedFileIsLocal && loadedFileSource) {
+    url.searchParams.set("file", loadedFileSource);
+  }
+
+  url.searchParams.set(
+    "flipUp",
+    $("flipUp").checked ? "1" : "0"
+  );
+
+  url.searchParams.set("camera_pos", getCameraString());
 
   try {
-    history.replaceState(null, "", url);
+    history.replaceState(null, "", url.href);
   } catch (error) {
     console.warn("Mise à jour de l’URL :", error);
   }
+
+  return url.href;
 }
 
 async function exportCamera() {
@@ -1308,21 +1394,52 @@ async function exportCamera() {
 
   clearNavigation();
 
-  const value = getCameraString();
+  const cameraString = getCameraString();
 
-  $("cameraValue").value = value;
+  $("cameraValue").value = cameraString;
   $("cameraSection").open = true;
 
-  rememberCamera();
+  const href = rememberCamera();
+  const viewUrl = getViewUrl();
 
+  if (viewUrl) {
+    try {
+      await navigator.clipboard.writeText(viewUrl);
+
+      setStatus(
+        `URL complète copiée · ${loadedFileName} · ` +
+        "caméra et flipUp inclus."
+      );
+    } catch {
+      window.prompt(
+        "Copie cette URL complète avec Ctrl/Cmd+C :",
+        viewUrl
+      );
+
+      setStatus(
+        "Copie automatique indisponible : URL présentée " +
+        "pour copie manuelle."
+      );
+    }
+
+    return;
+  }
+
+  // Cas fichier local : on ne peut pas fournir une URL rechargeable fiable.
   try {
-    await navigator.clipboard.writeText(value);
-    setStatus(`Caméra copiée : --camera-pos="${value}"`);
+    await navigator.clipboard.writeText(cameraString);
+
+    setStatus(
+      "Fichier local : position caméra copiée " +
+      "(sans paramètre file)."
+    );
   } catch {
     $("cameraValue").focus();
     $("cameraValue").select();
 
-    setStatus("Copier le texte sélectionné avec Ctrl/Cmd+C.");
+    setStatus(
+      "Fichier local : copie la position caméra avec Ctrl/Cmd+C."
+    );
   }
 }
 
@@ -2522,7 +2639,7 @@ function checkCurrentCollisionPosition() {
 }
 
 const collisionDebug = {
-  enabled: true,
+  enabled: false,
   lastLogAt: 0,
   lastCheck: null,
   counters: {
