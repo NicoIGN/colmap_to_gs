@@ -4,15 +4,31 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <title>Gaussian Splat Viewer</title>
+  <title>Gaussian Splat Viewer · PlayCanvas</title>
 
   <link rel="stylesheet" href="./style.css" />
+
+  <style>
+    /* Complément indépendant du style existant. */
+    #viewer {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+    }
+
+    #viewer > canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      touch-action: none;
+    }
+  </style>
 
   <script type="importmap">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "@mkkellogg/gaussian-splats-3d": "https://unpkg.com/@mkkellogg/gaussian-splats-3d@0.4.7/build/gaussian-splats-3d.module.js"
+      "playcanvas": "https://cdn.jsdelivr.net/npm/playcanvas@2.23.1/build/playcanvas.mjs"
     }
   }
   </script>
@@ -24,7 +40,7 @@
   <div id="viewer"></div>
 
   <div id="drop">
-    Déposer un fichier .ply, .splat ou .ksplat
+    Déposer un fichier .sog, .ply, .splat ou .ksplat
   </div>
 
   <aside id="panel" aria-label="Commandes du viewer">
@@ -32,7 +48,7 @@
       <div>
         <h1><span class="brand">◉</span> Gaussian Splats</h1>
         <div class="subtitle">
-          Explorer · cadrer · sauvegarder · capturer
+          PlayCanvas · explorer · cadrer · sauvegarder · capturer
         </div>
       </div>
 
@@ -51,7 +67,7 @@
           class="visually-hidden"
           type="file"
           id="fileInput"
-          accept=".ply,.splat,.ksplat"
+          accept=".sog,.ply,.splat,.ksplat"
         />
       </label>
 
@@ -95,16 +111,14 @@
 
           <div class="nav-grid">
             <span></span>
-            <button
-              data-hold="orbitUp"
-              aria-label="Orbiter vers le haut"
-            >↑</button>
+            <button data-hold="orbitUp" aria-label="Orbiter vers le haut">
+              ↑
+            </button>
             <span></span>
 
-            <button
-              data-hold="orbitLeft"
-              aria-label="Orbiter vers la gauche"
-            >←</button>
+            <button data-hold="orbitLeft" aria-label="Orbiter vers la gauche">
+              ←
+            </button>
 
             <button
               id="recenterTarget"
@@ -112,16 +126,14 @@
               aria-label="Recentrer la cible"
             >⌖</button>
 
-            <button
-              data-hold="orbitRight"
-              aria-label="Orbiter vers la droite"
-            >→</button>
+            <button data-hold="orbitRight" aria-label="Orbiter vers la droite">
+              →
+            </button>
 
             <span></span>
-            <button
-              data-hold="orbitDown"
-              aria-label="Orbiter vers le bas"
-            >↓</button>
+            <button data-hold="orbitDown" aria-label="Orbiter vers le bas">
+              ↓
+            </button>
             <span></span>
           </div>
         </div>
@@ -144,61 +156,41 @@
               id="orbitPrincipal"
               class="wide primary"
               data-hold="orbitPrincipal"
-              title="Maintenir : rotation autour de l’axe principal passant par le premier splat visé au centre"
+              title="Maintenir : rotation autour de l’axe principal passant par le point visé au centre"
             >
               ↻ Tourner autour de l’axe principal
             </button>
           </div>
 
-          <p id="principalAxisHelp" class="hint">
-            Axe Z du monde, passant par le premier splat visé.
-          </p>
+          <p id="principalAxisHelp" class="hint"></p>
         </div>
 
         <div class="section">
           <div class="section-title">DÉPLACER LA VUE</div>
 
           <div class="nav-grid">
-            <button
-              data-hold="forward"
-              aria-label="Avancer"
-              title="Avancer"
-            >↗</button>
+            <button data-hold="forward" aria-label="Avancer" title="Avancer">
+              ↗
+            </button>
+            <button data-hold="up" aria-label="Monter" title="Monter">
+              ↑
+            </button>
+            <button data-hold="backward" aria-label="Reculer" title="Reculer">
+              ↙
+            </button>
 
-            <button
-              data-hold="up"
-              aria-label="Monter"
-              title="Monter"
-            >↑</button>
-
-            <button
-              data-hold="backward"
-              aria-label="Reculer"
-              title="Reculer"
-            >↙</button>
-
-            <button
-              data-hold="left"
-              aria-label="Gauche"
-              title="Gauche"
-            >←</button>
+            <button data-hold="left" aria-label="Gauche" title="Gauche">
+              ←
+            </button>
+            <span></span>
+            <button data-hold="right" aria-label="Droite" title="Droite">
+              →
+            </button>
 
             <span></span>
-
-            <button
-              data-hold="right"
-              aria-label="Droite"
-              title="Droite"
-            >→</button>
-
-            <span></span>
-
-            <button
-              data-hold="down"
-              aria-label="Descendre"
-              title="Descendre"
-            >↓</button>
-
+            <button data-hold="down" aria-label="Descendre" title="Descendre">
+              ↓
+            </button>
             <span></span>
           </div>
         </div>
@@ -210,13 +202,7 @@
 
         <label class="slider">
           Vitesse
-          <input
-            type="range"
-            id="step"
-            min="1"
-            max="50"
-            value="10"
-          />
+          <input type="range" id="step" min="1" max="50" value="10" />
           <output id="stepValue">10</output>
         </label>
 
@@ -278,7 +264,7 @@
           </label>
 
           <select id="gifDelay">
-            <option value="40" selected>0,04 s · 25 images/s</option>
+            <option value="40">0,04 s · 25 images/s</option>
             <option value="100" selected>0,1 s · 10 images/s</option>
             <option value="250">0,25 s · 4 images/s</option>
             <option value="500">0,5 s · 2 images/s</option>
@@ -296,18 +282,10 @@
           <button id="gifStop" disabled>
             ■ Terminer et exporter
           </button>
-
-          <button id="gifCancel" disabled>
-            Annuler
-          </button>
+          <button id="gifCancel" disabled>Annuler</button>
         </div>
 
-        <p
-          id="gifStatus"
-          class="hint"
-          role="status"
-          aria-live="polite"
-        >
+        <p id="gifStatus" class="hint" role="status" aria-live="polite">
           Aucun enregistrement.
         </p>
 

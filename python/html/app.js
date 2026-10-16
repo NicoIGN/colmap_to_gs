@@ -1,5 +1,8 @@
+import * as pc from "playcanvas";
 import * as THREE from "three";
-import * as GS from "@mkkellogg/gaussian-splats-3d";
+
+// Three.js : calculs uniquement. Aucun WebGLRenderer Three.js.
+// PlayCanvas : chargement natif PLY/SOG, rendu et picking.
 
 // ---------------------------------------------------------------------------
 // État général
@@ -9,16 +12,147 @@ const $ = (id) => document.getElementById(id);
 const container = $("viewer");
 const params = new URLSearchParams(location.search);
 
+const sleep = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 const pressedKeys = new Set();
 const heldButtons = new Map();
 
 const sceneBox = new THREE.Box3();
 const sceneCenter = new THREE.Vector3();
+
 const principalAxes = {
   x: new THREE.Vector3(1, 0, 0),
   y: new THREE.Vector3(0, 1, 0),
   z: new THREE.Vector3(0, 0, 1),
 };
+
+// Caméra mathématique, synchronisée avec la caméra PlayCanvas.
+const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
+camera.position.set(0, 0, 5);
+camera.up.set(0, 1, 0);
+
+const target = new THREE.Vector3();
+
+let app = null;
+let cameraEntity = null;
+let splatEntity = null;
+let sceneAsset = null;
+let picker = null;
+let centers = null;
+
+let sceneReady = false;
+let isLoading = false;
+let fatalError = false;
+let sceneRadius = 1;
+let sceneCount = 0;
+let mouseDrag = null;
+let wheelTimer = null;
+
+let pendingCamera = params.get("camera_pos");
+let pendingUp = params.get("camera_up");
+
+// Invalidation des résultats de picking asynchrones.
+let pickSerial = 0;
+let picking = false;
+
+const canvas = document.createElement("canvas");
+canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
+container.appendChild(canvas);
+
+const canNavigate = () =>
+  !!app &&
+  sceneReady &&
+  !isLoading &&
+  !fatalError &&
+  !picking &&
+  !gifState.encoding &&
+  !gifState.finalizing;
+
+// ---------------------------------------------------------------------------
+// GIF
+// ---------------------------------------------------------------------------
+
+const GIF_MAX_FRAMES = 60;
+const GIF_MAX_WIDTH = 640;
+const GIF_MAX_HEIGHT = 480;
+const GIF_SETTLE_MS = 600;
+
+const gifState = {
+  recording: false,
+  encoding: false,
+  finalizing: false,
+  frames: [],
+  width: 0,
+  height: 0,
+  delay: 100,
+  pendingCapture: false,
+  lastCapturedSignature: null,
+  observedSignature: null,
+  changedAt: 0,
+  downloadUrl: null,
+};
+
+let gifEncoderPromise = null;
+let legacyConverterPromise = null;
+
+// ---------------------------------------------------------------------------
+// Interface
+// ---------------------------------------------------------------------------
+
+function setStatus(message, error = false) {
+  $("status").textContent = message;
+  $("status").classList.toggle("error", error);
+}
+
+function setGifStatus(message, error = false) {
+  $("gifStatus").textContent = message;
+  $("gifStatus").classList.toggle("error", error);
+  $("gifStatus").classList.toggle(
+    "recording",
+    gifState.recording && !error
+  );
+}
+
+function updateGifUI() {
+  const blocked =
+    isLoading ||
+    fatalError ||
+    gifState.encoding ||
+    gifState.finalizing;
+
+  $("gifStart").disabled =
+    blocked || !sceneReady || gifState.recording;
+
+  $("gifStop").disabled =
+    blocked ||
+    (!gifState.recording && !gifState.frames.length);
+
+  $("gifCancel").disabled =
+    blocked ||
+    (!gifState.recording && !gifState.frames.length);
+
+  $("gifDelay").disabled =
+    blocked || gifState.recording;
+}
+
+function refreshUI() {
+  const blocked =
+    isLoading ||
+    fatalError ||
+    gifState.encoding ||
+    gifState.finalizing;
+
+  document.querySelectorAll(
+    "#panel button, #panel input, #panel select, #panel textarea"
+  ).forEach((element) => {
+    if (element.id !== "togglePanel") {
+      element.disabled = blocked;
+    }
+  });
+
+  updateGifUI();
+}
 
 function getPrincipalAxisName() {
   const value = $("principalAxis").value;
@@ -33,79 +167,28 @@ function updatePrincipalAxisHelp() {
   const axis = getPrincipalAxisName().toUpperCase();
 
   $("principalAxisHelp").textContent =
-    `Axe ${axis} du monde, passant par le premier splat visé.`;
+    `Axe ${axis} du monde, passant par le point visé au centre.`;
 
   $("orbitPrincipal").title =
     `Maintenir : rotation autour de l’axe ${axis} du monde ` +
-    "passant par le premier splat visé au centre";
+    "passant par le point visé au centre";
 }
 
-
-let viewer = null;
-let viewerHost = null;
-let currentUrl = null;
-let mouseDrag = null;
-let sceneReady = false;
-let isLoading = false;
-let sceneRadius = 1;
-
-let pendingCamera = params.get("camera_pos");
-let pendingUp = params.get("camera_up");
-
-const sleep = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
-
-const canNavigate = () =>
-  viewer && sceneReady && !isLoading;
-
-// ---------------------------------------------------------------------------
-// État de la capture GIF
-// ---------------------------------------------------------------------------
-
-const GIF_MAX_FRAMES = 60;
-const GIF_MAX_WIDTH = 640;
-const GIF_MAX_HEIGHT = 480;
-
-const gifState = {
-  recording: false,
-  encoding: false,
-  frames: [],
-  lastCapturedSignature: null,
-  pendingCapture: false,
-  width: 0,
-  height: 0,
-  delay: 100,
-  downloadUrl: null,
-};
-
-let gifEncoderModulePromise = null;
-
-// ---------------------------------------------------------------------------
-// Interface et navigation
-// ---------------------------------------------------------------------------
-
-function setStatus(message, error = false) {
-  $("status").textContent = message;
-  $("status").classList.toggle("error", error);
-}
-
-function setUIEnabled(enabled) {
-  document.querySelectorAll(
-    "#panel button, #panel input, #panel select, #panel textarea"
-  ).forEach((element) => {
-    if (element.id !== "togglePanel") {
-      element.disabled = !enabled;
-    }
-  });
-
-  updateGifUI();
+function updateKeyboardHelp() {
+  $("keyboardHelp").textContent =
+    $("keyboardLayout").value === "azerty"
+      ? "ZQSD : déplacer · A/E : descendre / monter"
+      : "WASD : déplacer · Q/E : descendre / monter";
 }
 
 function clearNavigation() {
-  const wasNavigating =
+  const wasMoving =
     heldButtons.size > 0 ||
     !!mouseDrag?.moved ||
     [...pressedKeys].some((key) => !!actionForKey(key));
+
+  pickSerial++;
+  picking = false;
 
   pressedKeys.clear();
 
@@ -116,120 +199,292 @@ function clearNavigation() {
   heldButtons.clear();
   mouseDrag = null;
 
-  if (wasNavigating) {
-    requestGifCapture();
-  }
+  clearTimeout(wheelTimer);
+  wheelTimer = null;
+
+  if (wasMoving) requestGifCapture();
 }
 
 // ---------------------------------------------------------------------------
-// Cycle de vie
+// PlayCanvas
 // ---------------------------------------------------------------------------
 
-async function withTolerantRemoveChild(fn) {
-  const original = Node.prototype.removeChild;
+function resizeViewer() {
+  if (!app) return;
 
-  Node.prototype.removeChild = function(child) {
-    if (child && child.parentNode !== this) {
-      return child;
-    }
+  const width = Math.max(1, container.clientWidth);
+  const height = Math.max(1, container.clientHeight);
 
-    return original.call(this, child);
-  };
+  app.resizeCanvas(width, height);
 
-  try {
-    return await fn();
-  } finally {
-    Node.prototype.removeChild = original;
-  }
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+
+  syncCamera();
+  requestGifCapture();
 }
 
-async function destroyViewer() {
-  cancelGifRecording();
+function updateClipping() {
+  const distance = camera.position.distanceTo(target);
 
-  clearNavigation();
-  sceneReady = false;
+  camera.near = Math.max(
+    Math.min(distance, sceneRadius) * 1e-4,
+    1e-6
+  );
 
-  const oldViewer = viewer;
-  const oldHost = viewerHost;
+  camera.far = Math.max(
+    camera.near * 100,
+    camera.position.distanceTo(sceneCenter) + sceneRadius * 4,
+    distance * 2
+  );
 
-  viewer = null;
-  viewerHost = null;
-
-  if (oldViewer) {
-    try {
-      oldViewer.stop();
-      await withTolerantRemoveChild(() => oldViewer.dispose());
-    } catch (error) {
-      console.warn("Nettoyage du viewer :", error);
-    }
-  }
-
-  oldHost?.remove();
+  camera.updateProjectionMatrix();
 }
 
-function createViewer() {
-  viewerHost = document.createElement("div");
-  viewerHost.className = "viewer-host";
-  container.appendChild(viewerHost);
+function syncCamera() {
+  camera.lookAt(target);
+  camera.updateMatrixWorld(true);
+  updateClipping();
 
-  viewer = new GS.Viewer({
-    rootElement: viewerHost,
-    cameraUp: [0, 1, 0],
-    initialCameraPosition: [0, 0, 5],
-    initialCameraLookAt: [0, 0, 0],
-    useBuiltInControls: false,
-    sharedMemoryForWorkers: false,
-    dynamicScene: false,
+  if (!cameraEntity) return;
+
+  cameraEntity.setPosition(
+    camera.position.x,
+    camera.position.y,
+    camera.position.z
+  );
+
+  // Les deux moteurs utilisent une caméra regardant vers -Z.
+  const q = camera.quaternion;
+
+  cameraEntity.setRotation(q.x, q.y, q.z, q.w);
+  cameraEntity.camera.fov = camera.fov;
+  cameraEntity.camera.horizontalFov = false;
+  cameraEntity.camera.nearClip = camera.near;
+  cameraEntity.camera.farClip = camera.far;
+}
+
+function nextRenderedFrame() {
+  return new Promise((resolve) => {
+    app.once("postrender", resolve);
   });
-
-  const camera = viewer.camera;
-  const target = new THREE.Vector3();
-
-  viewer.controls = {
-    target,
-    update() {
-      camera.lookAt(target);
-      camera.updateMatrixWorld(true);
-    },
-  };
-
-  installMouseControls(viewer);
 }
 
 function applyUpFlip() {
-  const mesh = viewer?.getSplatMesh();
-  if (!mesh) return;
+  if (!splatEntity) return;
 
-  mesh.rotation.x = $("flipUp").checked ? Math.PI : 0;
-  mesh.updateMatrixWorld(true);
+  // Même convention que le code initial :
+  // rotation de 180° autour de X, sans rotation implicite supplémentaire.
+  splatEntity.setLocalEulerAngles(
+    $("flipUp").checked ? 180 : 0,
+    0,
+    0
+  );
 }
 
-function formatFromName(name) {
-  if (/\.ksplat$/i.test(name)) return GS.SceneFormat.KSplat;
-  if (/\.splat$/i.test(name)) return GS.SceneFormat.Splat;
-  return GS.SceneFormat.Ply;
+function releaseScene() {
+  sceneReady = false;
+
+  splatEntity?.destroy();
+  splatEntity = null;
+
+  if (sceneAsset) {
+    sceneAsset.unload();
+    app.assets.remove(sceneAsset);
+    sceneAsset = null;
+  }
+
+  centers = null;
+  sceneCount = 0;
+}
+
+function loadNativeAsset(url, name) {
+  const asset = new pc.Asset(name, "gsplat", {
+    url: new URL(url, location.href).href,
+    filename: name,
+  });
+
+  sceneAsset = asset;
+  app.assets.add(asset);
+
+  return new Promise((resolve, reject) => {
+    const onLoad = () => {
+      asset.off("error", onError);
+      resolve(asset);
+    };
+
+    const onError = (error) => {
+      asset.off("load", onLoad);
+      reject(new Error(String(error)));
+    };
+
+    asset.once("load", onLoad);
+    asset.once("error", onError);
+
+    app.assets.load(asset);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Compatibilité SPLAT / KSPLAT
+// SOG ne passe jamais dans ce convertisseur.
+// ---------------------------------------------------------------------------
+
+function loadLegacyConverter() {
+  if (!legacyConverterPromise) {
+    legacyConverterPromise = import(
+      "https://esm.sh/@playcanvas/splat-transform@3.10.1?external=playcanvas"
+    ).catch((error) => {
+      legacyConverterPromise = null;
+      throw error;
+    });
+  }
+
+  return legacyConverterPromise;
+}
+
+async function convertLegacyToPly(url, extension) {
+  const {
+    readFile,
+    writeSource,
+    createChunkDataPool,
+    UrlReadFileSystem,
+    MemoryFileSystem,
+  } = await loadLegacyConverter();
+
+  const absoluteUrl = new URL(url, location.href).href;
+  const urlFs = new UrlReadFileSystem();
+
+  const [source] = await readFile({
+    filename: `input.${extension}`,
+    inputFormat: extension,
+    fileSystem: {
+      createSource() {
+        return urlFs.createSource(absoluteUrl);
+      },
+    },
+  });
+
+  if (!source) {
+    throw new Error("Aucune scène trouvée dans le fichier.");
+  }
+
+  try {
+    const output = new MemoryFileSystem();
+
+    await writeSource({
+      filename: "converted.ply",
+      outputFormat: "ply",
+      source,
+      pool: createChunkDataPool(),
+      options: {},
+    }, output);
+
+    const bytes = output.results.get("converted.ply");
+
+    if (!bytes?.byteLength) {
+      throw new Error("La conversion en PLY n’a produit aucune donnée.");
+    }
+
+    return URL.createObjectURL(
+      new Blob([bytes], {
+        type: "application/octet-stream",
+      })
+    );
+  } finally {
+    await source.close();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Chargement
+// ---------------------------------------------------------------------------
+
+function filenameFromUrl(url) {
+  try {
+    const leaf = new URL(url, location.href)
+      .pathname.split("/").pop();
+
+    return decodeURIComponent(leaf || "scene.ply");
+  } catch {
+    return url.split("/").pop().split(/[?#]/)[0] || "scene.ply";
+  }
 }
 
 async function resetAndLoad(url, name) {
-  if (isLoading) return;
+  if (
+    !app ||
+    isLoading ||
+    fatalError ||
+    gifState.encoding ||
+    gifState.finalizing
+  ) {
+    return;
+  }
+
+  if (!/\.(sog|ply|splat|ksplat)$/i.test(name)) {
+    setStatus(
+      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
+      true
+    );
+    return;
+  }
 
   isLoading = true;
-  setUIEnabled(false);
-  setStatus(`Chargement de ${name}…`);
+  clearNavigation();
+  cancelGifRecording();
+  refreshUI();
+
+  let convertedUrl = null;
 
   try {
-    await destroyViewer();
-    createViewer();
+    releaseScene();
 
-    await viewer.addSplatScene(url, {
-      format: formatFromName(name),
-      showLoadingUI: true,
-      progressiveLoad: false,
-      splatAlphaRemovalThreshold: 5,
+    setStatus(`Chargement de ${name}…`);
+
+    let loadUrl = url;
+    let loadName = name;
+
+    const extension = name.split(".").pop().toLowerCase();
+
+    if (extension === "splat" || extension === "ksplat") {
+      setStatus(`Conversion locale de ${name} en PLY…`);
+
+      convertedUrl = await convertLegacyToPly(url, extension);
+
+      loadUrl = convertedUrl;
+      loadName = name.replace(/\.(splat|ksplat)$/i, ".ply");
+    }
+
+    const asset = await loadNativeAsset(loadUrl, loadName);
+    const resource = asset.resource;
+
+    if (!resource) {
+      throw new Error("PlayCanvas n’a pas créé la ressource GSplat.");
+    }
+
+    // Centres CPU préparés par PlayCanvas pour le cadrage robuste.
+    centers = resource.centers;
+
+    if (!centers?.length) {
+      throw new Error(
+        "Les centres des splats ne sont pas disponibles pour le cadrage."
+      );
+    }
+
+    sceneCount = resource.numSplats || centers.length / 3;
+
+    splatEntity = new pc.Entity("Gaussian scene");
+    splatEntity.addComponent("gsplat", {
+      asset,
+      unified: true,
     });
 
-    viewer.start();
-    await sleep(50);
+    app.root.addChild(splatEntity);
+
+    camera.position.set(0, 0, 5);
+    camera.up.set(0, 1, 0);
+    target.set(0, 0, 0);
 
     applyUpFlip();
     computeSceneBounds();
@@ -248,49 +503,64 @@ async function resetAndLoad(url, name) {
       pendingUp = null;
     }
 
+    // Laisser le moteur préparer le premier rendu.
+    await nextRenderedFrame();
+
     sceneReady = true;
 
-    const count = viewer.getSplatMesh().getSplatCount();
     const size = sceneBox.getSize(new THREE.Vector3());
 
     const info =
-      `${name} — ${count.toLocaleString()} splats · ` +
-      `${size.x.toFixed(1)} × ` +
-      `${size.y.toFixed(1)} × ` +
-      `${size.z.toFixed(1)}`;
+      `${name} — ${sceneCount.toLocaleString()} splats · ` +
+      `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ` +
+      `${size.z.toFixed(1)} · PlayCanvas`;
 
     setStatus(
       cameraError ? `${info} · ${cameraError}` : info,
       !!cameraError
     );
   } catch (error) {
-    console.error(error);
+    console.error("Chargement :", error);
 
-    await destroyViewer();
+    releaseScene();
 
     setStatus(`Erreur : ${error?.message || error}`, true);
   } finally {
+    if (convertedUrl) URL.revokeObjectURL(convertedUrl);
+
     isLoading = false;
-    setUIEnabled(true);
     $("fileInput").value = "";
+
+    refreshUI();
   }
 }
 
 async function loadFile(file) {
-  if (!file || isLoading) return;
-
-  if (!/\.(ply|splat|ksplat)$/i.test(file.name)) {
-    setStatus("Format accepté : .ply, .splat ou .ksplat.", true);
+  if (
+    !file ||
+    !app ||
+    isLoading ||
+    gifState.encoding ||
+    gifState.finalizing
+  ) {
     return;
   }
 
-  const previousUrl = currentUrl;
-  currentUrl = URL.createObjectURL(file);
+  if (!/\.(sog|ply|splat|ksplat)$/i.test(file.name)) {
+    setStatus(
+      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
+      true
+    );
+    $("fileInput").value = "";
+    return;
+  }
 
-  await resetAndLoad(currentUrl, file.name);
+  const url = URL.createObjectURL(file);
 
-  if (previousUrl) {
-    URL.revokeObjectURL(previousUrl);
+  try {
+    await resetAndLoad(url, file.name);
+  } finally {
+    URL.revokeObjectURL(url);
   }
 }
 
@@ -299,25 +569,24 @@ async function loadFile(file) {
 // ---------------------------------------------------------------------------
 
 function computeSceneBounds() {
-  const mesh = viewer.getSplatMesh();
-  const count = mesh.getSplatCount();
-
+  const count = centers.length / 3;
   const coordinates = [[], [], []];
-  const point = new THREE.Vector3();
   const stride = Math.max(1, Math.ceil(count / 100000));
+  const flip = $("flipUp").checked ? -1 : 1;
 
   for (let i = 0; i < count; i += stride) {
-    mesh.getSplatCenter(i, point);
+    const x = centers[i * 3];
+    const y = centers[i * 3 + 1] * flip;
+    const z = centers[i * 3 + 2] * flip;
 
-    if ($("flipUp").checked) {
-      point.y = -point.y;
-      point.z = -point.z;
-    }
-
-    if (point.toArray().every(Number.isFinite)) {
-      coordinates[0].push(point.x);
-      coordinates[1].push(point.y);
-      coordinates[2].push(point.z);
+    if (
+      Number.isFinite(x) &&
+      Number.isFinite(y) &&
+      Number.isFinite(z)
+    ) {
+      coordinates[0].push(x);
+      coordinates[1].push(y);
+      coordinates[2].push(z);
     }
   }
 
@@ -332,19 +601,17 @@ function computeSceneBounds() {
     );
 
     const percentile = (values, q) =>
-      values[
-        Math.min(
-          values.length - 1,
-          Math.floor(values.length * q)
-        )
-      ];
+      values[Math.min(
+        values.length - 1,
+        Math.floor(values.length * q)
+      )];
 
     sceneBox.set(
       new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, .01))
+        ...sorted.map((values) => percentile(values, 0.01))
       ),
       new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, .99))
+        ...sorted.map((values) => percentile(values, 0.99))
       )
     );
 
@@ -363,34 +630,7 @@ function computeSceneBounds() {
   );
 }
 
-function updateClipping() {
-  if (!viewer) return;
-
-  const { camera, controls } = viewer;
-  const distance = camera.position.distanceTo(controls.target);
-
-  camera.near = Math.max(
-    Math.min(distance, sceneRadius) * 1e-4,
-    1e-6
-  );
-
-  camera.far = Math.max(
-    camera.near * 100,
-    camera.position.distanceTo(sceneCenter) + sceneRadius * 4,
-    distance * 2
-  );
-
-  camera.updateProjectionMatrix();
-}
-
-function syncCamera() {
-  viewer.controls.update();
-  updateClipping();
-}
-
 function distanceToFit(direction) {
-  const camera = viewer.camera;
-
   const vFov = THREE.MathUtils.degToRad(camera.fov);
   const hFov = 2 * Math.atan(
     Math.tan(vFov / 2) * camera.aspect
@@ -399,25 +639,19 @@ function distanceToFit(direction) {
   const forward = direction.clone().normalize().negate();
   const up = camera.up.clone().normalize();
 
-  if (Math.abs(forward.dot(up)) > .999) {
+  if (Math.abs(forward.dot(up)) > 0.999) {
     up.set(0, 0, 1);
-
-    if (Math.abs(forward.dot(up)) > .999) {
-      up.set(1, 0, 0);
-    }
+    if (Math.abs(forward.dot(up)) > 0.999) up.set(1, 0, 0);
   }
 
   const right = new THREE.Vector3()
-    .crossVectors(forward, up)
-    .normalize();
+    .crossVectors(forward, up).normalize();
 
   const trueUp = new THREE.Vector3()
-    .crossVectors(right, forward)
-    .normalize();
+    .crossVectors(right, forward).normalize();
 
-  const half = sceneBox
-    .getSize(new THREE.Vector3())
-    .multiplyScalar(.5);
+  const half = sceneBox.getSize(new THREE.Vector3())
+    .multiplyScalar(0.5);
 
   const extent = (axis) =>
     Math.abs(half.x * axis.x) +
@@ -433,17 +667,11 @@ function distanceToFit(direction) {
 }
 
 function fitToView(direction = null) {
-  if (!viewer) return;
-
-  const { camera, controls } = viewer;
-
   const dir = direction
     ? direction.clone()
-    : camera.position.clone().sub(controls.target);
+    : camera.position.clone().sub(target);
 
-  if (dir.lengthSq() < 1e-12) {
-    dir.set(0, .6, 1);
-  }
+  if (dir.lengthSq() < 1e-12) dir.set(0, 0.6, 1);
 
   dir.normalize();
 
@@ -452,7 +680,7 @@ function fitToView(direction = null) {
   if (camera.up.lengthSq() < 1e-12) {
     camera.up.set(0, 0, 1);
 
-    if (Math.abs(camera.up.dot(dir)) > .999) {
+    if (Math.abs(camera.up.dot(dir)) > 0.999) {
       camera.up.set(1, 0, 0);
     }
 
@@ -461,10 +689,9 @@ function fitToView(direction = null) {
 
   camera.up.normalize();
 
-  controls.target.copy(sceneCenter);
+  target.copy(sceneCenter);
 
-  camera.position
-    .copy(sceneCenter)
+  camera.position.copy(sceneCenter)
     .addScaledVector(dir, distanceToFit(dir));
 
   syncCamera();
@@ -475,8 +702,6 @@ function setView(kind) {
 
   clearNavigation();
 
-  const { camera, controls } = viewer;
-
   const axes = {
     front: new THREE.Vector3(0, 1, 0),
     top: new THREE.Vector3(0, 0, 1),
@@ -486,16 +711,14 @@ function setView(kind) {
   const up = axes[kind]?.clone();
   if (!up) return;
 
-  const forward = controls.target
-    .clone()
-    .sub(camera.position)
-    .normalize();
+  const forward = target.clone()
+    .sub(camera.position).normalize();
 
   up.addScaledVector(forward, -up.dot(forward));
 
   if (up.lengthSq() < 1e-12) {
     setStatus(
-      "Cet axe pointe dans la direction de visée : impossible " +
+      "Cet axe est parallèle à la visée : impossible " +
       "de le rendre vertical sans changer la visée.",
       true
     );
@@ -503,14 +726,11 @@ function setView(kind) {
   }
 
   camera.up.copy(up.normalize());
+
   syncCamera();
   requestGifCapture();
 
-  const axis = kind === "front"
-    ? "Y"
-    : kind === "top"
-      ? "Z"
-      : "X";
+  const axis = kind === "front" ? "Y" : kind === "top" ? "Z" : "X";
 
   setStatus(`${axis} vertical · vue conservée.`);
 }
@@ -520,11 +740,9 @@ function recenterTarget() {
 
   clearNavigation();
 
-  const { camera, controls } = viewer;
+  const offset = camera.position.clone().sub(target);
 
-  const offset = camera.position.clone().sub(controls.target);
-
-  controls.target.copy(sceneCenter);
+  target.copy(sceneCenter);
   camera.position.copy(sceneCenter).add(offset);
 
   syncCamera();
@@ -532,31 +750,26 @@ function recenterTarget() {
 }
 
 // ---------------------------------------------------------------------------
-// Rotation libre et déplacements
+// Rotation et déplacements
 // ---------------------------------------------------------------------------
 
 function rotateAroundAxis(axis, angle) {
   if (!angle) return;
 
-  const { camera, controls } = viewer;
-
   const rotation = new THREE.Quaternion()
     .setFromAxisAngle(axis.clone().normalize(), angle);
 
-  const offset = camera.position
-    .clone()
-    .sub(controls.target)
-    .applyQuaternion(rotation);
+  const offset = camera.position.clone()
+    .sub(target).applyQuaternion(rotation);
 
-  camera.position.copy(controls.target).add(offset);
+  camera.position.copy(target).add(offset);
   camera.up.applyQuaternion(rotation).normalize();
 
-  controls.update();
+  camera.lookAt(target);
+  camera.updateMatrixWorld(true);
 }
 
 function orbit(dx, dy) {
-  const camera = viewer.camera;
-
   if (dx) {
     rotateAroundAxis(
       new THREE.Vector3(0, 1, 0)
@@ -575,24 +788,16 @@ function orbit(dx, dy) {
 }
 
 function panPixels(dx, dy, height) {
-  const { camera, controls } = viewer;
-
-  // Sensibilité de base : trois fois le déplacement précédent.
   const PAN_GAIN = 3;
-
-  // Le curseur « Vitesse » agit désormais aussi sur le clic droit.
-  // Valeur 10 = sensibilité normale.
   const speed = Number($("step").value) / 10;
 
-  // Éviter une translation presque nulle si la cible est trop proche.
-  const referenceDistance = Math.max(
-    camera.position.distanceTo(controls.target),
+  const distance = Math.max(
+    camera.position.distanceTo(target),
     sceneRadius * 0.1
   );
 
   const unitsPerPixel =
-    2 *
-    referenceDistance *
+    2 * distance *
     Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) /
     Math.max(height, 1);
 
@@ -604,19 +809,15 @@ function panPixels(dx, dy, height) {
   const up = new THREE.Vector3(0, 1, 0)
     .applyQuaternion(camera.quaternion);
 
-  const delta = right
-    .multiplyScalar(-dx * scale)
+  const delta = right.multiplyScalar(-dx * scale)
     .addScaledVector(up, dy * scale);
 
-  // Déplacer ensemble la caméra et sa cible conserve la visée.
   camera.position.add(delta);
-  controls.target.add(delta);
+  target.add(delta);
 }
 
 function translate(x, y, z, distance) {
   if (!x && !y && !z) return;
-
-  const { camera, controls } = viewer;
 
   const delta = new THREE.Vector3(x, y, -z)
     .normalize()
@@ -624,13 +825,13 @@ function translate(x, y, z, distance) {
     .multiplyScalar(distance);
 
   camera.position.add(delta);
-  controls.target.add(delta);
+  target.add(delta);
 }
 
 function zoomBy(factor) {
-  const { camera, controls } = viewer;
+  const offset = camera.position.clone().sub(target);
 
-  const offset = camera.position.clone().sub(controls.target);
+  if (offset.lengthSq() < 1e-20) return;
 
   const distance = THREE.MathUtils.clamp(
     offset.length() * factor,
@@ -638,68 +839,101 @@ function zoomBy(factor) {
     sceneRadius * 1e5
   );
 
-  camera.position
-    .copy(controls.target)
+  camera.position.copy(target)
     .add(offset.setLength(distance));
 }
 
-function selectFirstPointInView() {
-  const mesh = viewer.getSplatMesh();
+// ---------------------------------------------------------------------------
+// Picking central PlayCanvas
+// ---------------------------------------------------------------------------
 
-  if (!mesh?.getSplatTree()) {
-    setStatus(
-      "Sélection indisponible : la structure des splats " +
-      "n’est pas prête.",
-      true
+async function selectPointInView(key, button) {
+  const serial = ++pickSerial;
+  picking = true;
+
+  try {
+    setStatus("Sélection du point visé au centre…");
+
+    // Le rendu précédent doit avoir préparé les splats.
+    await nextRenderedFrame();
+
+    if (
+      serial !== pickSerial ||
+      heldButtons.get(key) !== button ||
+      !sceneReady
+    ) {
+      return false;
+    }
+
+    picker.resize(
+      Math.max(1, canvas.width),
+      Math.max(1, canvas.height)
     );
-    return false;
-  }
 
-  const dimensions = new THREE.Vector2();
-  viewer.getRenderDimensions(dimensions);
+    const worldLayer = app.scene.layers.getLayerByName("World");
 
-  if (!dimensions.x || !dimensions.y) {
-    return false;
-  }
-
-  viewer.camera.updateMatrixWorld(true);
-  mesh.updateMatrixWorld(true);
-
-  const hits = [];
-
-  viewer.raycaster.setFromCameraAndScreenPosition(
-    viewer.camera,
-    dimensions.clone().multiplyScalar(.5),
-    dimensions
-  );
-
-  viewer.raycaster.intersectSplatMesh(mesh, hits);
-
-  if (!hits.length) {
-    setStatus(
-      "Aucun splat visé au centre de l’image.",
-      true
+    picker.prepare(
+      cameraEntity.camera,
+      app.scene,
+      [worldLayer]
     );
-    return false;
-  }
 
-  viewer.controls.target.copy(hits[0].origin);
-  syncCamera();
+    const point = await picker.getWorldPointAsync(
+      Math.floor(picker.width / 2),
+      Math.floor(picker.height / 2)
+    );
+
+    // Un relâchement du bouton ou un nouveau chargement
+    // invalide la sélection en cours.
+    if (
+      serial !== pickSerial ||
+      heldButtons.get(key) !== button ||
+      !sceneReady
+    ) {
+      return false;
+    }
+
+    if (!point) {
+      setStatus("Aucun splat visé au centre de l’image.", true);
+      return false;
+    }
+
+    target.set(point.x, point.y, point.z);
+
+    if (target.distanceToSquared(camera.position) < 1e-12) {
+      setStatus("Le point sélectionné est trop proche de la caméra.", true);
+      return false;
+    }
+
+    syncCamera();
+    requestGifCapture();
 
     setStatus(
-      "Rotation autour du premier splat visé · " +
-      `axe ${getPrincipalAxisName().toUpperCase()}.`
+      "Rotation autour du point visé · axe " +
+      `${getPrincipalAxisName().toUpperCase()}.`
     );
-    
-  return true;
+
+    return true;
+  } catch (error) {
+    if (serial === pickSerial) {
+      console.error("Picking :", error);
+      setStatus(
+        `Sélection impossible : ${error?.message || error}`,
+        true
+      );
+    }
+
+    return false;
+  } finally {
+    if (serial === pickSerial) picking = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Souris
 // ---------------------------------------------------------------------------
 
-function installMouseControls(instance) {
-  const canvas = instance.renderer.domElement;
+function installMouseControls() {
   canvas.style.touchAction = "none";
 
   canvas.addEventListener("contextmenu", (event) => {
@@ -707,9 +941,7 @@ function installMouseControls(instance) {
   });
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (!canNavigate() || mouseDrag || event.button > 2) {
-      return;
-    }
+    if (!canNavigate() || mouseDrag || event.button > 2) return;
 
     event.preventDefault();
     clearNavigation();
@@ -730,9 +962,7 @@ function installMouseControls(instance) {
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    if (!mouseDrag || mouseDrag.id !== event.pointerId) {
-      return;
-    }
+    if (!mouseDrag || mouseDrag.id !== event.pointerId) return;
 
     if (!event.buttons || !canNavigate()) {
       const moved = mouseDrag.moved;
@@ -746,33 +976,30 @@ function installMouseControls(instance) {
 
     mouseDrag.x = event.clientX;
     mouseDrag.y = event.clientY;
+
     if (dx || dy) mouseDrag.moved = true;
 
     if (mouseDrag.button === 0 && !event.shiftKey) {
-      orbit(-dx * .005, -dy * .005);
+      orbit(-dx * 0.005, -dy * 0.005);
     } else {
       panPixels(dx, dy, canvas.clientHeight);
     }
 
     syncCamera();
+    requestGifCapture();
   });
 
   const release = (event) => {
     if (mouseDrag?.id !== event.pointerId) return;
+
     const moved = mouseDrag.moved;
     mouseDrag = null;
+
     if (moved) requestGifCapture();
   };
 
-  [
-    "pointerup",
-    "pointercancel",
-    "lostpointercapture",
-  ].forEach((type) => {
-    canvas.addEventListener(type, release);
-  });
-
-  let wheelTimer = null;
+  ["pointerup", "pointercancel", "lostpointercapture"]
+    .forEach((type) => canvas.addEventListener(type, release));
 
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
@@ -784,21 +1011,24 @@ function installMouseControls(instance) {
         ? event.deltaY * canvas.clientHeight
         : event.deltaY;
 
-    zoomBy(
-      Math.exp(
-        THREE.MathUtils.clamp(pixels * .001, -1, 1)
-      )
-    );
+    zoomBy(Math.exp(
+      THREE.MathUtils.clamp(pixels * 0.001, -1, 1)
+    ));
 
     syncCamera();
+    requestGifCapture();
 
     clearTimeout(wheelTimer);
-    wheelTimer = setTimeout(requestGifCapture, 250);
+
+    wheelTimer = setTimeout(() => {
+      wheelTimer = null;
+      requestGifCapture();
+    }, 250);
   }, { passive: false });
 }
 
 // ---------------------------------------------------------------------------
-// Caméra : export / import
+// Caméra : import / export
 // ---------------------------------------------------------------------------
 
 function parseNumbers(value, count) {
@@ -820,21 +1050,18 @@ function parseNumbers(value, count) {
 }
 
 function serialize(values) {
-  return values
-    .map((value) => Number(value.toPrecision(12)))
-    .join(",");
+  return values.map((value) =>
+    Number(value.toPrecision(12))
+  ).join(",");
 }
 
 function getCameraString() {
-  const { camera, controls } = viewer;
-
   const up = new THREE.Vector3(0, 1, 0)
-    .applyQuaternion(camera.quaternion)
-    .normalize();
+    .applyQuaternion(camera.quaternion).normalize();
 
   return serialize([
     ...camera.position.toArray(),
-    ...controls.target.toArray(),
+    ...target.toArray(),
     ...up.toArray(),
   ]);
 }
@@ -843,28 +1070,21 @@ function applyCameraString(value, upValue = null) {
   const count = value.split(",").length;
 
   if (count !== 6 && count !== 9) {
-    throw new Error(
-      "Caméra invalide : fournir 6 ou 9 nombres."
-    );
+    throw new Error("Caméra invalide : fournir 6 ou 9 nombres.");
   }
 
-  const numbers = parseNumbers(value, count);
+  const values = parseNumbers(value, count);
 
-  const position = new THREE.Vector3(
-    ...numbers.slice(0, 3)
-  );
-
-  const target = new THREE.Vector3(
-    ...numbers.slice(3, 6)
-  );
+  const position = new THREE.Vector3(...values.slice(0, 3));
+  const newTarget = new THREE.Vector3(...values.slice(3, 6));
 
   const up = count === 9
-    ? new THREE.Vector3(...numbers.slice(6, 9))
+    ? new THREE.Vector3(...values.slice(6, 9))
     : upValue
       ? new THREE.Vector3(...parseNumbers(upValue, 3))
       : new THREE.Vector3(0, 1, 0);
 
-  const direction = target.clone().sub(position);
+  const direction = newTarget.clone().sub(position);
 
   if (direction.lengthSq() < 1e-12) {
     throw new Error(
@@ -873,14 +1093,11 @@ function applyCameraString(value, upValue = null) {
   }
 
   if (up.lengthSq() < 1e-12) {
-    throw new Error(
-      "Le vecteur vertical ne doit pas être nul."
-    );
+    throw new Error("Le vecteur vertical ne doit pas être nul.");
   }
 
   direction.normalize();
   up.normalize();
-
   up.addScaledVector(direction, -up.dot(direction));
 
   if (up.lengthSq() < 1e-12) {
@@ -892,18 +1109,17 @@ function applyCameraString(value, upValue = null) {
 
     up.set(0, 0, 1);
 
-    if (Math.abs(up.dot(direction)) > .999) {
-      up.set(1, 0, 0);
-    }
+    if (Math.abs(up.dot(direction)) > 0.999) up.set(1, 0, 0);
 
     up.addScaledVector(direction, -up.dot(direction));
   }
 
-  viewer.camera.position.copy(position);
-  viewer.camera.up.copy(up.normalize());
-  viewer.controls.target.copy(target);
+  camera.position.copy(position);
+  camera.up.copy(up.normalize());
+  target.copy(newTarget);
 
   syncCamera();
+
   $("cameraValue").value = getCameraString();
 }
 
@@ -912,11 +1128,7 @@ function rememberCamera() {
 
   url.searchParams.set("camera_pos", getCameraString());
   url.searchParams.delete("camera_up");
-
-  url.searchParams.set(
-    "flipUp",
-    $("flipUp").checked ? "1" : "0"
-  );
+  url.searchParams.set("flipUp", $("flipUp").checked ? "1" : "0");
 
   try {
     history.replaceState(null, "", url);
@@ -939,17 +1151,12 @@ async function exportCamera() {
 
   try {
     await navigator.clipboard.writeText(value);
-
-    setStatus(
-      "Caméra copiée : --camera-pos=\"" + value + "\""
-    );
+    setStatus(`Caméra copiée : --camera-pos="${value}"`);
   } catch {
     $("cameraValue").focus();
     $("cameraValue").select();
 
-    setStatus(
-      "Copier le texte sélectionné avec Ctrl/Cmd+C."
-    );
+    setStatus("Copier le texte sélectionné avec Ctrl/Cmd+C.");
   }
 }
 
@@ -961,49 +1168,46 @@ function importCamera() {
   try {
     applyCameraString($("cameraValue").value);
     rememberCamera();
+    requestGifCapture();
 
     setStatus("Caméra restaurée.");
-    requestGifCapture();
   } catch (error) {
     setStatus(error.message, true);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Capture GIF : une image par position de caméra
+// Capture GIF après stabilisation de la caméra
 // ---------------------------------------------------------------------------
 
-function setGifStatus(message, error = false) {
-  $("gifStatus").textContent = message;
-  $("gifStatus").classList.toggle("error", error);
-  $("gifStatus").classList.toggle(
-    "recording",
-    gifState.recording && !error
+function navigationIsActive() {
+  return (
+    picking ||
+    mouseDrag !== null ||
+    wheelTimer !== null ||
+    heldButtons.size > 0 ||
+    [...pressedKeys].some((key) => !!actionForKey(key))
   );
 }
 
-function updateGifUI() {
-  const ready = !!canNavigate();
+function cameraCaptureSignature() {
+  return [
+    ...camera.position.toArray(),
+    ...camera.quaternion.toArray(),
+    ...target.toArray(),
+    canvas.width,
+    canvas.height,
+    Number($("flipUp").checked),
+  ].map((value) =>
+    Number(value).toPrecision(8)
+  ).join(",");
+}
 
-  $("gifStart").disabled =
-    !ready ||
-    gifState.recording ||
-    gifState.encoding;
+function requestGifCapture() {
+  if (!gifState.recording) return;
 
-  $("gifStop").disabled =
-    isLoading ||
-    gifState.encoding ||
-    (!gifState.recording && gifState.frames.length === 0);
-
-  $("gifCancel").disabled =
-    isLoading ||
-    gifState.encoding ||
-    (!gifState.recording && gifState.frames.length === 0);
-
-  $("gifDelay").disabled =
-    isLoading ||
-    gifState.recording ||
-    gifState.encoding;
+  gifState.pendingCapture = true;
+  gifState.changedAt = performance.now();
 }
 
 function clearGifDownload() {
@@ -1016,92 +1220,13 @@ function clearGifDownload() {
   $("gifDownload").removeAttribute("href");
 }
 
-function navigationIsActive() {
-  return mouseDrag !== null ||
-    heldButtons.size > 0 ||
-    [...pressedKeys].some((key) => !!actionForKey(key));
-}
-
-function cameraCaptureSignature() {
-  const { camera, controls, renderer } = viewer;
-  const canvas = renderer.domElement;
-
-  return [
-    ...camera.position.toArray(),
-    ...camera.quaternion.toArray(),
-    ...controls.target.toArray(),
-    canvas.width,
-    canvas.height,
-    Number($("flipUp").checked),
-  ]
-    .map((value) => Number(value).toPrecision(8))
-    .join(",");
-}
-
-function requestGifCapture() {
-  if (gifState.recording) {
-    gifState.pendingCapture = true;
-  }
-}
-
-function processGifCapture() {
-  if (
-    !gifState.pendingCapture ||
-    !gifState.recording ||
-    !canNavigate() ||
-    navigationIsActive()
-  ) {
-    return;
-  }
-
-  gifState.pendingCapture = false;
-
-  try {
-    const signature = cameraCaptureSignature();
-
-    if (signature === gifState.lastCapturedSignature) {
-      return;
-    }
-
-    captureGifFrame();
-    gifState.lastCapturedSignature = signature;
-  } catch (error) {
-    console.error("Capture GIF :", error);
-
-    gifState.recording = false;
-
-    setGifStatus(
-      `Capture interrompue : ${error?.message || error}. ` +
-      (
-        gifState.frames.length
-          ? "Les images déjà capturées restent exportables."
-          : ""
-      ),
-      true
-    );
-
-    updateGifUI();
-  }
-}
-
 function startGifRecording() {
-  if (
-    !canNavigate() ||
-    gifState.encoding ||
-    gifState.recording
-  ) {
-    return;
-  }
+  if (!canNavigate() || gifState.recording) return;
 
   clearNavigation();
 
-  const canvas = viewer.renderer.domElement;
-
   if (!canvas.width || !canvas.height) {
-    setGifStatus(
-      "La vue 3D n’est pas encore prête.",
-      true
-    );
+    setGifStatus("La vue 3D n’est pas prête.", true);
     return;
   }
 
@@ -1113,79 +1238,58 @@ function startGifRecording() {
 
   clearGifDownload();
 
-  gifState.width = Math.max(
-    1,
-    Math.round(canvas.width * scale)
-  );
-
-  gifState.height = Math.max(
-    1,
-    Math.round(canvas.height * scale)
-  );
-
+  gifState.width = Math.max(1, Math.round(canvas.width * scale));
+  gifState.height = Math.max(1, Math.round(canvas.height * scale));
   gifState.delay = Number($("gifDelay").value);
   gifState.frames = [];
   gifState.lastCapturedSignature = null;
+  gifState.observedSignature = null;
   gifState.pendingCapture = false;
   gifState.recording = true;
 
-  setGifStatus("● Capture active.");
-  updateGifUI();
-
   requestGifCapture();
+
+  setGifStatus("● Capture active — attente de stabilisation…");
+  refreshUI();
 }
 
 function captureGifFrame() {
-  const source = viewer.renderer.domElement;
+  const output = document.createElement("canvas");
 
-  if (!source.width || !source.height) {
-    throw new Error("Le canvas 3D a une taille nulle.");
-  }
+  output.width = gifState.width;
+  output.height = gifState.height;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = gifState.width;
-  canvas.height = gifState.height;
-
-  const context = canvas.getContext("2d", {
+  const context = output.getContext("2d", {
     willReadFrequently: true,
   });
 
   if (!context) {
-    throw new Error(
-      "Impossible de créer le canvas de capture."
-    );
+    throw new Error("Impossible de créer le canvas de capture.");
   }
 
-  // Redessiner la scène puis copier immédiatement le canvas WebGL.
-  // Seule la vue 3D est capturée, pas le panneau HTML.
-  viewer.render();
-
   context.fillStyle = "#10131b";
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillRect(0, 0, output.width, output.height);
 
   const scale = Math.min(
-    canvas.width / source.width,
-    canvas.height / source.height
+    output.width / canvas.width,
+    output.height / canvas.height
   );
 
-  const width = source.width * scale;
-  const height = source.height * scale;
+  const width = canvas.width * scale;
+  const height = canvas.height * scale;
 
+  // Appel effectué dans postrender : le canvas contient
+  // l’image que PlayCanvas vient de produire.
   context.drawImage(
-    source,
-    (canvas.width - width) / 2,
-    (canvas.height - height) / 2,
+    canvas,
+    (output.width - width) / 2,
+    (output.height - height) / 2,
     width,
     height
   );
 
   gifState.frames.push(
-    context.getImageData(
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    ).data
+    context.getImageData(0, 0, output.width, output.height).data
   );
 
   if (gifState.frames.length >= GIF_MAX_FRAMES) {
@@ -1205,50 +1309,119 @@ function captureGifFrame() {
   updateGifUI();
 }
 
+function processGifCapture() {
+  if (
+    !gifState.recording ||
+    !sceneReady ||
+    isLoading ||
+    document.hidden
+  ) {
+    return;
+  }
+
+  try {
+    const now = performance.now();
+    const signature = cameraCaptureSignature();
+
+    if (signature !== gifState.observedSignature) {
+      gifState.observedSignature = signature;
+      gifState.changedAt = now;
+      gifState.pendingCapture = true;
+    }
+
+    if (
+      !gifState.pendingCapture ||
+      navigationIsActive() ||
+      now - gifState.changedAt < GIF_SETTLE_MS
+    ) {
+      return;
+    }
+
+    gifState.pendingCapture = false;
+
+    if (signature === gifState.lastCapturedSignature) return;
+
+    captureGifFrame();
+
+    gifState.lastCapturedSignature = signature;
+  } catch (error) {
+    console.error("Capture GIF :", error);
+
+    gifState.recording = false;
+
+    setGifStatus(
+      `Capture interrompue : ${error?.message || error}. ` +
+      "Les images déjà capturées restent exportables.",
+      true
+    );
+
+    updateGifUI();
+  }
+}
+
 function loadGifEncoder() {
-  if (!gifEncoderModulePromise) {
-    gifEncoderModulePromise = import(
+  if (!gifEncoderPromise) {
+    gifEncoderPromise = import(
       "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/+esm"
     ).catch((error) => {
-      gifEncoderModulePromise = null;
+      gifEncoderPromise = null;
       throw error;
     });
   }
 
-  return gifEncoderModulePromise;
+  return gifEncoderPromise;
 }
 
 async function stopAndExportGif() {
-  if (gifState.encoding) return;
+  if (
+    gifState.encoding ||
+    gifState.finalizing ||
+    isLoading
+  ) {
+    return;
+  }
 
-  gifState.recording = false;
-  gifState.pendingCapture = false;
+  // Bloquer les nouvelles interactions pendant la capture
+  // éventuelle de la dernière position.
+  clearNavigation();
+
+  gifState.finalizing = true;
+  refreshUI();
+
+  try {
+    if (gifState.recording && !document.hidden) {
+      requestGifCapture();
+
+      await sleep(GIF_SETTLE_MS + 50);
+      await nextRenderedFrame();
+    }
+  } finally {
+    gifState.recording = false;
+    gifState.pendingCapture = false;
+    gifState.finalizing = false;
+  }
 
   if (!gifState.frames.length) {
     setGifStatus(
-      "Aucune image capturée. Démarrer la capture, puis effectuer des changements de caméra."
+      "Aucune image capturée. Démarrer la capture puis " +
+      "laisser la caméra immobile pendant 600 ms."
     );
 
-    updateGifUI();
+    refreshUI();
     return;
   }
 
   gifState.encoding = true;
-  updateGifUI();
+  refreshUI();
 
   const frames = gifState.frames;
-  const width = gifState.width;
-  const height = gifState.height;
-  const delay = gifState.delay;
+  const { width, height, delay } = gifState;
 
   try {
     setGifStatus("Chargement de l’encodeur GIF…");
 
-    const {
-      GIFEncoder,
-      quantize,
-      applyPalette,
-    } = await loadGifEncoder();
+    const { GIFEncoder, quantize, applyPalette } =
+      await loadGifEncoder();
 
     const gif = GIFEncoder();
 
@@ -1259,11 +1432,10 @@ async function stopAndExportGif() {
 
       await sleep(0);
 
-      const rgba = frames[index];
-      const palette = quantize(rgba, 256);
-      const indexedPixels = applyPalette(rgba, palette);
+      const palette = quantize(frames[index], 256);
+      const pixels = applyPalette(frames[index], palette);
 
-      gif.writeFrame(indexedPixels, width, height, {
+      gif.writeFrame(pixels, width, height, {
         palette,
         delay,
         repeat: 0,
@@ -1277,10 +1449,10 @@ async function stopAndExportGif() {
     });
 
     clearGifDownload();
+
     gifState.downloadUrl = URL.createObjectURL(blob);
 
-    const timestamp = new Date()
-      .toISOString()
+    const timestamp = new Date().toISOString()
       .replace(/[:.]/g, "-");
 
     const link = $("gifDownload");
@@ -1308,24 +1480,23 @@ async function stopAndExportGif() {
     );
   } finally {
     gifState.encoding = false;
-    updateGifUI();
+    refreshUI();
   }
 }
 
 function cancelGifRecording() {
-  if (gifState.encoding) return;
+  if (gifState.encoding || gifState.finalizing) return;
 
   const hadRecording =
     gifState.recording || gifState.frames.length > 0;
 
   gifState.recording = false;
   gifState.frames = [];
-  gifState.lastCapturedSignature = null;
   gifState.pendingCapture = false;
+  gifState.lastCapturedSignature = null;
+  gifState.observedSignature = null;
 
-  if (hadRecording) {
-    setGifStatus("Enregistrement annulé.");
-  }
+  if (hadRecording) setGifStatus("Enregistrement annulé.");
 
   updateGifUI();
 }
@@ -1335,26 +1506,13 @@ function cancelGifRecording() {
 // ---------------------------------------------------------------------------
 
 document.querySelectorAll("[data-hold]").forEach((button) => {
-  function begin(key) {
-    if (!canNavigate() || heldButtons.has(key)) {
-      return false;
-    }
-
-      if (
-        button.dataset.hold === "orbitPrincipal" &&
-        !selectFirstPointInView()
-      ) {
-        return false;
-      }
-
-    heldButtons.set(key, button);
-    button.classList.add("held");
-
-    return true;
-  }
-
   function end(key) {
     if (!heldButtons.delete(key)) return;
+
+    if (button.dataset.hold === "orbitPrincipal" && picking) {
+      pickSerial++;
+      picking = false;
+    }
 
     if (![...heldButtons.values()].includes(button)) {
       button.classList.remove("held");
@@ -1363,54 +1521,59 @@ document.querySelectorAll("[data-hold]").forEach((button) => {
     requestGifCapture();
   }
 
-  button.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !canNavigate()) {
-      return;
+  async function begin(key) {
+    if (!canNavigate() || heldButtons.has(key)) return;
+
+    heldButtons.set(key, button);
+    button.classList.add("held");
+
+    if (button.dataset.hold === "orbitPrincipal") {
+      const selected = await selectPointInView(key, button);
+
+      if (!selected && heldButtons.get(key) === button) {
+        end(key);
+      }
     }
+  }
+
+  button.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0 || !canNavigate()) return;
 
     event.preventDefault();
+
     button.focus({ preventScroll: true });
     button.setPointerCapture(event.pointerId);
 
-    begin(event.pointerId);
+    void begin(event.pointerId);
   });
 
-  [
-    "pointerup",
-    "pointercancel",
-    "lostpointercapture",
-  ].forEach((type) => {
-    button.addEventListener(type, (event) => {
-      end(event.pointerId);
+  ["pointerup", "pointercancel", "lostpointercapture"]
+    .forEach((type) => {
+      button.addEventListener(type, (event) => {
+        end(event.pointerId);
+      });
     });
-  });
 
   button.addEventListener("keydown", (event) => {
-    if (!["Enter", " "].includes(event.key)) {
-      return;
-    }
+    if (!["Enter", " "].includes(event.key)) return;
 
     event.preventDefault();
 
-    if (!event.repeat) {
-      begin(button);
-    }
+    if (!event.repeat) void begin(button);
   });
 
   button.addEventListener("keyup", (event) => {
-    if (["Enter", " "].includes(event.key)) {
-      event.preventDefault();
-      end(button);
-    }
-  });
+    if (!["Enter", " "].includes(event.key)) return;
 
-  button.addEventListener("blur", () => {
+    event.preventDefault();
     end(button);
   });
+
+  button.addEventListener("blur", () => end(button));
 });
 
 // ---------------------------------------------------------------------------
-// Clavier et animation continue
+// Clavier et animation
 // ---------------------------------------------------------------------------
 
 const commonKeys = {
@@ -1445,9 +1608,9 @@ function actionForKey(key) {
   return commonKeys[key] || layout[key];
 }
 
-function isEditing(target) {
-  return target instanceof Element &&
-    !!target.closest(
+function isEditing(element) {
+  return element instanceof Element &&
+    !!element.closest(
       "input, textarea, select, button, summary, [contenteditable]"
     );
 }
@@ -1481,87 +1644,69 @@ window.addEventListener("keydown", (event) => {
 
 window.addEventListener("keyup", (event) => {
   const key = event.key.toLowerCase();
-  const wasMoving = pressedKeys.has(key) && !!actionForKey(key);
+  const moving = pressedKeys.has(key) && !!actionForKey(key);
 
   pressedKeys.delete(key);
 
-  if (wasMoving) {
-    requestGifCapture();
-  }
+  if (moving) requestGifCapture();
 });
 
 window.addEventListener("blur", clearNavigation);
 
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) {
-    clearNavigation();
-  }
+  if (document.hidden) clearNavigation();
 });
 
 $("panel").addEventListener("focusin", clearNavigation);
 
-let lastFrame = null;
+function navigationFrame(deltaTime) {
+  if (!canNavigate() || document.hidden) return;
 
-function navigationFrame(time) {
-  const dt = lastFrame === null
-    ? 0
-    : Math.min((time - lastFrame) / 1000, .05);
+  const dt = Math.min(deltaTime, 0.05);
+  const actions = new Set();
 
-  lastFrame = time;
+  heldButtons.forEach((button) => {
+    actions.add(button.dataset.hold);
+  });
 
-  if (canNavigate() && !document.hidden) {
-    const actions = new Set();
+  pressedKeys.forEach((key) => {
+    const action = actionForKey(key);
+    if (action) actions.add(action);
+  });
 
-    heldButtons.forEach((button) => {
-      actions.add(button.dataset.hold);
-    });
+  if (!actions.size) return;
 
-    pressedKeys.forEach((key) => {
-      const action = actionForKey(key);
+  const axis = (positive, negative) =>
+    Number(actions.has(positive)) -
+    Number(actions.has(negative));
 
-      if (action) {
-        actions.add(action);
-      }
-    });
+  const amount =
+    dt *
+    Number($("step").value) / 10 *
+    (pressedKeys.has("shift") ? 3 : 1);
 
-    if (actions.size) {
-      const axis = (positive, negative) =>
-        Number(actions.has(positive)) -
-        Number(actions.has(negative));
+  orbit(
+    axis("orbitLeft", "orbitRight") * amount,
+    axis("orbitDown", "orbitUp") * amount
+  );
 
-      const amount =
-        dt *
-        Number($("step").value) / 10 *
-        (pressedKeys.has("shift") ? 3 : 1);
-
-      orbit(
-        axis("orbitLeft", "orbitRight") * amount,
-        axis("orbitDown", "orbitUp") * amount
-      );
-
-        if (actions.has("orbitPrincipal")) {
-          rotateAroundAxis(getPrincipalAxis(), amount);
-        }
-
-      translate(
-        axis("right", "left"),
-        axis("up", "down"),
-        axis("forward", "backward"),
-        sceneRadius * amount * .6
-      );
-
-      const zoom = axis("zoomOut", "zoomIn");
-
-      if (zoom) {
-        zoomBy(Math.exp(zoom * amount));
-      }
-
-      syncCamera();
-    }
+  if (actions.has("orbitPrincipal")) {
+    rotateAroundAxis(getPrincipalAxis(), amount);
   }
 
-  processGifCapture();
-  requestAnimationFrame(navigationFrame);
+  translate(
+    axis("right", "left"),
+    axis("up", "down"),
+    axis("forward", "backward"),
+    sceneRadius * amount * 0.6
+  );
+
+  const zoom = axis("zoomOut", "zoomIn");
+
+  if (zoom) zoomBy(Math.exp(zoom * amount));
+
+  syncCamera();
+  requestGifCapture();
 }
 
 // ---------------------------------------------------------------------------
@@ -1579,6 +1724,7 @@ $("fit").addEventListener("click", () => {
 $("recenterTarget").addEventListener("click", recenterTarget);
 $("exportCam").addEventListener("click", exportCamera);
 $("importCam").addEventListener("click", importCamera);
+
 $("principalAxis").addEventListener("change", () => {
   clearNavigation();
   updatePrincipalAxisHelp();
@@ -1594,17 +1740,9 @@ $("step").addEventListener("input", () => {
   $("stepValue").value = $("step").value;
 });
 
-function updateKeyboardHelp() {
-  $("keyboardHelp").textContent =
-    $("keyboardLayout").value === "azerty"
-      ? "ZQSD : déplacer · A/E : descendre / monter"
-      : "WASD : déplacer · Q/E : descendre / monter";
-}
-
 $("keyboardLayout").addEventListener("change", () => {
   clearNavigation();
   updateKeyboardHelp();
-  updatePrincipalAxisHelp();
 });
 
 $("togglePanel").addEventListener("click", () => {
@@ -1613,71 +1751,32 @@ $("togglePanel").addEventListener("click", () => {
   const collapsed = $("panel").classList.toggle("collapsed");
 
   $("togglePanel").textContent = collapsed ? "+" : "−";
-
-  $("togglePanel").setAttribute(
-    "aria-expanded",
-    String(!collapsed)
-  );
-
+  $("togglePanel").setAttribute("aria-expanded", String(!collapsed));
   $("togglePanel").setAttribute(
     "aria-label",
-    collapsed
-      ? "Développer le panneau"
-      : "Réduire le panneau"
+    collapsed ? "Développer le panneau" : "Réduire le panneau"
   );
 });
 
-$("flipUp").addEventListener("change", async () => {
+$("flipUp").addEventListener("change", () => {
   if (!canNavigate()) return;
 
   clearNavigation();
 
-  const cameraState = getCameraString();
-  const fileParam = params.get("file");
+  // Aucun rechargement nécessaire avec PlayCanvas.
+  applyUpFlip();
+  computeSceneBounds();
+  syncCamera();
+  requestGifCapture();
 
-  if (!fileParam) {
-    applyUpFlip();
-    computeSceneBounds();
-    syncCamera();
-
-    setStatus(
-      `Axe Y ${
-        $("flipUp").checked
-          ? "vers le bas"
-          : "vers le haut"
-      } · vue conservée.`
-    );
-
-    requestGifCapture();
-    return;
-  }
-
-  pendingCamera = cameraState;
-  pendingUp = null;
-
-  let name = fileParam.split("/").pop();
-
-  try {
-    name = decodeURIComponent(name);
-  } catch {
-    // Conserver le nom brut si l'encodage est invalide.
-  }
-
-  await resetAndLoad(fileParam, name);
-
-  if (sceneReady) {
-    setStatus(
-      `Axe Y ${
-        $("flipUp").checked
-          ? "vers le bas"
-          : "vers le haut"
-      } · vue rechargée.`
-    );
-  }
+  setStatus(
+    `Axe Y ${$("flipUp").checked ? "vers le bas" : "vers le haut"} · ` +
+    "vue conservée."
+  );
 });
 
 $("fileInput").addEventListener("change", (event) => {
-  loadFile(event.target.files?.[0]);
+  void loadFile(event.target.files?.[0]);
 });
 
 $("gifStart").addEventListener("click", startGifRecording);
@@ -1693,11 +1792,7 @@ let dragDepth = 0;
 window.addEventListener("dragenter", (event) => {
   event.preventDefault();
 
-  if (
-    !Array.from(
-      event.dataTransfer?.types ?? []
-    ).includes("Files")
-  ) {
+  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
     return;
   }
 
@@ -1714,9 +1809,7 @@ window.addEventListener("dragleave", (event) => {
 
   dragDepth = Math.max(0, dragDepth - 1);
 
-  if (!dragDepth) {
-    $("drop").style.display = "none";
-  }
+  if (!dragDepth) $("drop").style.display = "none";
 });
 
 window.addEventListener("drop", (event) => {
@@ -1725,57 +1818,124 @@ window.addEventListener("drop", (event) => {
   dragDepth = 0;
   $("drop").style.display = "none";
 
-  loadFile(event.dataTransfer?.files?.[0]);
-});
-
-// ---------------------------------------------------------------------------
-// Nettoyage des téléchargements
-// ---------------------------------------------------------------------------
-
-window.addEventListener("pagehide", (event) => {
-  if (event.persisted) return;
-
-  if (gifState.downloadUrl) {
-    URL.revokeObjectURL(gifState.downloadUrl);
-  }
-
-  if (currentUrl) {
-    URL.revokeObjectURL(currentUrl);
-  }
+  void loadFile(event.dataTransfer?.files?.[0]);
 });
 
 // ---------------------------------------------------------------------------
 // Initialisation
 // ---------------------------------------------------------------------------
 
-$("flipUp").checked = ["1", "true"].includes(
-  params.get("flipUp")
-);
+$("flipUp").checked = ["1", "true"].includes(params.get("flipUp"));
 
 if (pendingCamera !== null) {
   $("cameraValue").value = pendingCamera;
 }
 
 updateKeyboardHelp();
-updateGifUI();
+updatePrincipalAxisHelp();
+refreshUI();
 
-requestAnimationFrame(navigationFrame);
+installMouseControls();
 
-const fileParam = params.get("file");
+let resizeObserver = null;
 
-if (fileParam) {
-  let name = fileParam.split("/").pop();
+async function initialize() {
+  isLoading = true;
+  refreshUI();
 
   try {
-    name = decodeURIComponent(
-      new URL(fileParam, location.href)
-        .pathname
-        .split("/")
-        .pop()
+    const graphicsDevice = await pc.createGraphicsDevice(canvas, {
+      deviceTypes: ["webgl2"],
+      antialias: false,
+      alpha: false,
+
+      // La capture se fait dans postrender, mais conserver le buffer
+      // simplifie aussi le comportement selon les navigateurs.
+      preserveDrawingBuffer: true,
+    });
+
+    app = new pc.Application(canvas, {
+      graphicsDevice,
+    });
+
+    app.setCanvasFillMode(pc.FILLMODE_NONE);
+    app.setCanvasResolution(pc.RESOLUTION_AUTO);
+
+    app.graphicsDevice.maxPixelRatio = Math.min(
+      window.devicePixelRatio || 1,
+      2
     );
-  } catch {
-    // Conserver le nom brut.
+
+    // Les centres sont utilisés par le cadrage percentile.
+    app.scene.gsplatCentersEnabled = true;
+
+    cameraEntity = new pc.Entity("Camera");
+
+    cameraEntity.addComponent("camera", {
+      clearColor: new pc.Color(
+        0x10 / 255,
+        0x13 / 255,
+        0x1b / 255
+      ),
+      fov: camera.fov,
+      nearClip: camera.near,
+      farClip: camera.far,
+    });
+
+    app.root.addChild(cameraEntity);
+
+    picker = new pc.Picker(app, 1, 1, true);
+
+    app.on("update", navigationFrame);
+    app.on("postrender", processGifCapture);
+
+    app.start();
+
+    resizeObserver = new ResizeObserver(resizeViewer);
+    resizeObserver.observe(container);
+
+    resizeViewer();
+
+    isLoading = false;
+    refreshUI();
+
+    const fileParam = params.get("file");
+
+    if (fileParam) {
+      await resetAndLoad(fileParam, filenameFromUrl(fileParam));
+    }
+  } catch (error) {
+    console.error("Initialisation PlayCanvas :", error);
+
+    isLoading = false;
+    fatalError = true;
+
+    setStatus(
+      `Initialisation impossible : ${error?.message || error}`,
+      true
+    );
+
+    refreshUI();
+  }
+}
+
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) return;
+
+  clearNavigation();
+
+  if (gifState.downloadUrl) {
+    URL.revokeObjectURL(gifState.downloadUrl);
   }
 
-  resetAndLoad(fileParam, name);
-}
+  resizeObserver?.disconnect();
+  picker?.destroy();
+
+  if (app) {
+    releaseScene();
+    app.destroy();
+    app = null;
+  }
+});
+
+void initialize();
