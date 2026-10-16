@@ -75,6 +75,53 @@
         <input type="checkbox" id="flipUp" />
         Axe Y vers le bas — COLMAP
       </label>
+      <details>
+        <summary>Anticollision</summary>
+
+        <label class="check">
+          <input type="checkbox" id="collisionEnabled" />
+          Éviter les zones denses
+        </label>
+
+        <label class="slider">
+          Seuil de densité
+          <input
+            type="range"
+            id="collisionDensity"
+            min="2"
+            max="50"
+            value="8"
+          />
+          <output id="collisionDensityValue">8</output>
+        </label>
+
+        <p class="hint">
+          Nombre minimal de centres de splats dans une cellule pour
+          la considérer comme un obstacle. Un seuil bas bloque davantage.
+        </p>
+
+        <label class="slider">
+          Marge de sécurité
+          <input
+            type="range"
+            id="collisionMargin"
+            min="0.5"
+            max="3"
+            step="0.25"
+            value="1"
+          />
+          <output id="collisionMarginValue">1</output>
+        </label>
+
+        <p class="hint">
+          Marge exprimée en cellules de la grille.
+          Les obstacles sont approximatifs et dépendent de la densité du modèle.
+        </p>
+
+        <p id="collisionStatus" class="hint" role="status" aria-live="polite">
+          Anticollision désactivée.
+        </p>
+      </details>
 
       <div class="section">
         <button id="fit" class="wide primary">
@@ -150,15 +197,26 @@
               <option value="z" selected>Z</option>
             </select>
           </div>
-
-          <div class="section">
+          
+          <div class="section row">
             <button
-              id="orbitPrincipal"
-              class="wide primary"
-              data-hold="orbitPrincipal"
-              title="Maintenir : rotation autour de l’axe principal passant par le point visé au centre"
+              id="orbitPrincipalNegative"
+              class="primary"
+              data-hold="orbitPrincipalNegative"
+              title="Maintenir : tourner dans le sens négatif"
+              aria-label="Tourner autour de l’axe principal dans le sens négatif"
             >
-              ↻ Tourner autour de l’axe principal
+              ↶ Tourner autour de l’axe principal
+            </button>
+
+            <button
+              id="orbitPrincipalPositive"
+              class="primary"
+              data-hold="orbitPrincipalPositive"
+              title="Maintenir : tourner dans le sens positif"
+              aria-label="Tourner autour de l’axe principal dans le sens positif"
+            >
+              ↷ Tourner autour de l’axe principal
             </button>
           </div>
 
@@ -195,10 +253,7 @@
           </div>
         </div>
 
-        <div class="section row">
-          <button data-hold="zoomIn">＋ Zoom</button>
-          <button data-hold="zoomOut">− Zoom</button>
-        </div>
+
 
         <label class="slider">
           Vitesse

@@ -49,6 +49,7 @@ let sceneCount = 0;
 let mouseDrag = null;
 let wheelTimer = null;
 
+
 let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
 
@@ -163,15 +164,22 @@ function getPrincipalAxis() {
   return principalAxes[getPrincipalAxisName()];
 }
 
+function isPrincipalAction(action) {
+  return action === "orbitPrincipalPositive" ||
+    action === "orbitPrincipalNegative";
+}
+
 function updatePrincipalAxisHelp() {
   const axis = getPrincipalAxisName().toUpperCase();
 
   $("principalAxisHelp").textContent =
     `Axe ${axis} du monde, passant par le point visé au centre.`;
 
-  $("orbitPrincipal").title =
-    `Maintenir : rotation autour de l’axe ${axis} du monde ` +
-    "passant par le point visé au centre";
+  $("orbitPrincipalNegative").title =
+    `Maintenir : rotation négative autour de l’axe ${axis}`;
+
+  $("orbitPrincipalPositive").title =
+    `Maintenir : rotation positive autour de l’axe ${axis}`;
 }
 
 function updateKeyboardHelp() {
@@ -284,7 +292,7 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
-
+  resetCollisionGrid();
   splatEntity?.destroy();
   splatEntity = null;
 
@@ -488,6 +496,7 @@ async function resetAndLoad(url, name) {
 
     applyUpFlip();
     computeSceneBounds();
+    checkCurrentCollisionPosition();
     fitToView();
 
     let cameraError = null;
@@ -505,7 +514,20 @@ async function resetAndLoad(url, name) {
 
     // Laisser le moteur préparer le premier rendu.
     await nextRenderedFrame();
+      
+      if ($("collisionEnabled").checked) {
+        try {
+          await buildCollisionGrid();
+          checkCurrentCollisionPosition();
+        } catch (error) {
+          $("collisionEnabled").checked = false;
 
+          setCollisionStatus(
+            `Anticollision indisponible : ${error?.message || error}`,
+            true
+          );
+        }
+      }
     sceneReady = true;
 
     const size = sceneBox.getSize(new THREE.Vector3());
@@ -842,6 +864,93 @@ function zoomBy(factor) {
   camera.position.copy(target)
     .add(offset.setLength(distance));
 }
+ 
+function getPointerRayDirection(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+
+  if (rect.width <= 0 || rect.height <= 0) {
+    return null;
+  }
+
+  const x = THREE.MathUtils.clamp(
+    (clientX - rect.left) / rect.width,
+    0,
+    1
+  );
+
+  const y = THREE.MathUtils.clamp(
+    (clientY - rect.top) / rect.height,
+    0,
+    1
+  );
+
+  const ndc = new THREE.Vector2(
+    x * 2 - 1,
+    1 - y * 2
+  );
+
+  camera.updateProjectionMatrix();
+  camera.updateMatrixWorld(true);
+
+  const raycaster = new THREE.Raycaster();
+
+  raycaster.setFromCamera(ndc, camera);
+
+  return raycaster.ray.direction.clone().normalize();
+}
+
+function moveCameraAlongRay(direction, worldDistance) {
+  if (
+    !Number.isFinite(worldDistance) ||
+    worldDistance === 0 ||
+    direction.lengthSq() < 1e-12
+  ) {
+    return;
+  }
+
+  const normalizedDirection = direction.clone().normalize();
+
+  const collisionEnabled =
+    $("collisionEnabled").checked &&
+    !!collisionState.cells &&
+    collisionState.cellSize > 0;
+
+  if (!collisionEnabled) {
+    const delta = normalizedDirection
+      .multiplyScalar(worldDistance);
+
+    camera.position.add(delta);
+    target.add(delta);
+
+    return;
+  }
+
+  // Petits pas déterminés par la grille, pas par la distance
+  // à la cible. Chaque trajet est également vérifié par
+  // navigateWithCollision().
+  const stepSize = collisionState.cellSize * 0.5;
+
+  const steps = Math.min(
+    512,
+    Math.max(
+      1,
+      Math.ceil(Math.abs(worldDistance) / stepSize)
+    )
+  );
+
+  const delta = normalizedDirection.multiplyScalar(
+    worldDistance / steps
+  );
+
+  for (let i = 0; i < steps; i++) {
+    const accepted = navigateWithCollision(() => {
+      camera.position.add(delta);
+      target.add(delta);
+    });
+
+    if (!accepted) break;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Picking central PlayCanvas
@@ -941,7 +1050,9 @@ function installMouseControls() {
   });
 
   canvas.addEventListener("pointerdown", (event) => {
-    if (!canNavigate() || mouseDrag || event.button > 2) return;
+    if (!canNavigate() || mouseDrag || event.button > 2) {
+      return;
+    }
 
     event.preventDefault();
     clearNavigation();
@@ -962,12 +1073,16 @@ function installMouseControls() {
   });
 
   canvas.addEventListener("pointermove", (event) => {
-    if (!mouseDrag || mouseDrag.id !== event.pointerId) return;
+    if (!mouseDrag || mouseDrag.id !== event.pointerId) {
+      return;
+    }
 
     if (!event.buttons || !canNavigate()) {
       const moved = mouseDrag.moved;
       mouseDrag = null;
+
       if (moved) requestGifCapture();
+
       return;
     }
 
@@ -979,11 +1094,13 @@ function installMouseControls() {
 
     if (dx || dy) mouseDrag.moved = true;
 
-    if (mouseDrag.button === 0 && !event.shiftKey) {
-      orbit(-dx * 0.005, -dy * 0.005);
-    } else {
-      panPixels(dx, dy, canvas.clientHeight);
-    }
+    navigateWithCollision(() => {
+      if (mouseDrag.button === 0 && !event.shiftKey) {
+        orbit(-dx * 0.005, -dy * 0.005);
+      } else {
+        panPixels(dx, dy, canvas.clientHeight);
+      }
+    });
 
     syncCamera();
     requestGifCapture();
@@ -998,11 +1115,17 @@ function installMouseControls() {
     if (moved) requestGifCapture();
   };
 
-  ["pointerup", "pointercancel", "lostpointercapture"]
-    .forEach((type) => canvas.addEventListener(type, release));
+  [
+    "pointerup",
+    "pointercancel",
+    "lostpointercapture",
+  ].forEach((type) => {
+    canvas.addEventListener(type, release);
+  });
 
   canvas.addEventListener("wheel", (event) => {
     event.preventDefault();
+
     if (!canNavigate()) return;
 
     const pixels = event.deltaMode === 1
@@ -1011,9 +1134,33 @@ function installMouseControls() {
         ? event.deltaY * canvas.clientHeight
         : event.deltaY;
 
-    zoomBy(Math.exp(
-      THREE.MathUtils.clamp(pixels * 0.001, -1, 1)
-    ));
+    if (!Number.isFinite(pixels) || pixels === 0) return;
+
+    // Utiliser la position du curseur au moment exact
+    // de l’événement, même sans pointermove préalable.
+    const direction = getPointerRayDirection(
+      event.clientX,
+      event.clientY
+    );
+
+    if (!direction) return;
+
+    const speed = Number($("step").value) / 10;
+
+    // Limiter les événements exceptionnellement grands.
+    const wheelDelta = THREE.MathUtils.clamp(
+      pixels,
+      -400,
+      400
+    );
+
+    // Le rayon pointe de la caméra vers la scène :
+    // pixels négatifs -> distance positive -> avancer.
+    // pixels positifs -> distance négative -> reculer.
+    const worldDistance =
+      -wheelDelta * sceneRadius * 0.0003 * speed;
+
+    moveCameraAlongRay(direction, worldDistance);
 
     syncCamera();
     requestGifCapture();
@@ -1509,7 +1656,7 @@ document.querySelectorAll("[data-hold]").forEach((button) => {
   function end(key) {
     if (!heldButtons.delete(key)) return;
 
-    if (button.dataset.hold === "orbitPrincipal" && picking) {
+    if (isPrincipalAction(button.dataset.hold) && picking) {
       pickSerial++;
       picking = false;
     }
@@ -1527,7 +1674,7 @@ document.querySelectorAll("[data-hold]").forEach((button) => {
     heldButtons.set(key, button);
     button.classList.add("held");
 
-    if (button.dataset.hold === "orbitPrincipal") {
+    if (isPrincipalAction(button.dataset.hold)) {
       const selected = await selectPointInView(key, button);
 
       if (!selected && heldButtons.get(key) === button) {
@@ -1685,28 +1832,40 @@ function navigationFrame(deltaTime) {
     Number($("step").value) / 10 *
     (pressedKeys.has("shift") ? 3 : 1);
 
-  orbit(
-    axis("orbitLeft", "orbitRight") * amount,
-    axis("orbitDown", "orbitUp") * amount
-  );
+    navigateWithCollision(() => {
+      orbit(
+        axis("orbitLeft", "orbitRight") * amount,
+        axis("orbitDown", "orbitUp") * amount
+      );
 
-  if (actions.has("orbitPrincipal")) {
-    rotateAroundAxis(getPrincipalAxis(), amount);
-  }
+      const principalDirection = axis(
+        "orbitPrincipalPositive",
+        "orbitPrincipalNegative"
+      );
 
-  translate(
-    axis("right", "left"),
-    axis("up", "down"),
-    axis("forward", "backward"),
-    sceneRadius * amount * 0.6
-  );
+      if (principalDirection) {
+        rotateAroundAxis(
+          getPrincipalAxis(),
+          principalDirection * amount
+        );
+      }
 
-  const zoom = axis("zoomOut", "zoomIn");
+      translate(
+        axis("right", "left"),
+        axis("up", "down"),
+        axis("forward", "backward"),
+        sceneRadius * amount * 0.6
+      );
 
-  if (zoom) zoomBy(Math.exp(zoom * amount));
+      const zoom = axis("zoomOut", "zoomIn");
 
-  syncCamera();
-  requestGifCapture();
+      if (zoom) {
+        zoomBy(Math.exp(zoom * amount));
+      }
+    });
+
+    syncCamera();
+    requestGifCapture();
 }
 
 // ---------------------------------------------------------------------------
@@ -1775,6 +1934,56 @@ $("flipUp").addEventListener("change", () => {
   );
 });
 
+$("collisionEnabled").addEventListener("change", async () => {
+  clearNavigation();
+
+  if (!$("collisionEnabled").checked) {
+    setCollisionStatus("Anticollision désactivée.");
+    return;
+  }
+
+  if (!sceneReady) {
+    setCollisionStatus(
+      "L’anticollision sera préparée au prochain chargement."
+    );
+    return;
+  }
+
+  // Interdire les mouvements et les nouveaux chargements
+  // pendant la construction de la grille.
+  isLoading = true;
+  refreshUI();
+
+  try {
+    await buildCollisionGrid();
+    checkCurrentCollisionPosition();
+  } catch (error) {
+    $("collisionEnabled").checked = false;
+
+    setCollisionStatus(
+      `Anticollision indisponible : ${error?.message || error}`,
+      true
+    );
+  } finally {
+    isLoading = false;
+    refreshUI();
+  }
+});
+
+$("collisionDensity").addEventListener("input", () => {
+  $("collisionDensityValue").value =
+    $("collisionDensity").value;
+
+  checkCurrentCollisionPosition();
+});
+
+$("collisionMargin").addEventListener("input", () => {
+  $("collisionMarginValue").value =
+    $("collisionMargin").value;
+
+  checkCurrentCollisionPosition();
+});
+
 $("fileInput").addEventListener("change", (event) => {
   void loadFile(event.target.files?.[0]);
 });
@@ -1820,6 +2029,287 @@ window.addEventListener("drop", (event) => {
 
   void loadFile(event.dataTransfer?.files?.[0]);
 });
+
+// ---------------------------------------------------------------------------
+// Anticollision approximative par grille de densité
+// ---------------------------------------------------------------------------
+
+const collisionState = {
+  cells: null,
+  cellSize: 0,
+  building: false,
+  lastWarningAt: 0,
+};
+
+// Limite de mémoire : on abandonne proprement au-delà.
+const COLLISION_MAX_CELLS = 500000;
+
+// Limite de travail par mouvement.
+// Si un déplacement est trop grand, il est refusé plutôt que
+// de réduire la précision et risquer de traverser un obstacle.
+const COLLISION_MAX_STEPS = 512;
+
+function collisionKey(x, y, z) {
+  return `${x},${y},${z}`;
+}
+
+function setCollisionStatus(message, error = false) {
+  $("collisionStatus").textContent = message;
+  $("collisionStatus").classList.toggle("error", error);
+}
+
+function resetCollisionGrid() {
+  collisionState.cells = null;
+  collisionState.cellSize = 0;
+  collisionState.lastWarningAt = 0;
+}
+
+async function buildCollisionGrid() {
+  if (!centers?.length) {
+    throw new Error("Aucune scène disponible.");
+  }
+
+  if (collisionState.cells) return;
+
+  collisionState.building = true;
+
+  // Environ 320 cellules sur le diamètre de la scène.
+  const cellSize = Math.max(sceneRadius / 160, 1e-6);
+  const cells = new Map();
+
+  // Garder une référence stable pendant la construction.
+  const source = centers;
+  const count = source.length / 3;
+
+  setCollisionStatus("Construction de la grille de densité…");
+
+  try {
+    for (let i = 0; i < count; i++) {
+      const x = source[i * 3];
+      const y = source[i * 3 + 1];
+      const z = source[i * 3 + 2];
+
+      if (
+        Number.isFinite(x) &&
+        Number.isFinite(y) &&
+        Number.isFinite(z)
+      ) {
+        const key = collisionKey(
+          Math.floor(x / cellSize),
+          Math.floor(y / cellSize),
+          Math.floor(z / cellSize)
+        );
+
+        // Les seuils de l’interface ne dépassent pas 50.
+        // Inutile de conserver des compteurs supérieurs.
+        cells.set(key, Math.min(50, (cells.get(key) || 0) + 1));
+
+        if (cells.size > COLLISION_MAX_CELLS) {
+          throw new Error(
+            "Scène trop dispersée : limite de la grille atteinte."
+          );
+        }
+      }
+
+      if (i > 0 && i % 50000 === 0) {
+        setCollisionStatus(
+          `Construction de la grille : ` +
+          `${Math.round(i / count * 100)} %…`
+        );
+
+        // Laisser le navigateur afficher la progression.
+        await sleep(0);
+      }
+    }
+
+    collisionState.cells = cells;
+    collisionState.cellSize = cellSize;
+
+    setCollisionStatus(
+      `Grille prête : ${cells.size.toLocaleString()} cellules occupées.`
+    );
+  } finally {
+    collisionState.building = false;
+  }
+}
+
+function cameraToCollisionSpace(position) {
+  const result = position.clone();
+
+  // Inverse de la rotation de 180° autour de X.
+  if ($("flipUp").checked) {
+    result.y = -result.y;
+    result.z = -result.z;
+  }
+
+  return result;
+}
+
+// Intersection sphère / cellule dense.
+function intersectsDenseCells(position, radius) {
+  const { cells, cellSize } = collisionState;
+
+  if (!cells || !cellSize) return false;
+
+  const threshold = Number($("collisionDensity").value);
+  const radiusSq = radius * radius;
+
+  const minX = Math.floor((position.x - radius) / cellSize);
+  const minY = Math.floor((position.y - radius) / cellSize);
+  const minZ = Math.floor((position.z - radius) / cellSize);
+
+  const maxX = Math.floor((position.x + radius) / cellSize);
+  const maxY = Math.floor((position.y + radius) / cellSize);
+  const maxZ = Math.floor((position.z + radius) / cellSize);
+
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      for (let z = minZ; z <= maxZ; z++) {
+        if (
+          (cells.get(collisionKey(x, y, z)) || 0) < threshold
+        ) {
+          continue;
+        }
+
+        const closestX = THREE.MathUtils.clamp(
+          position.x,
+          x * cellSize,
+          (x + 1) * cellSize
+        );
+
+        const closestY = THREE.MathUtils.clamp(
+          position.y,
+          y * cellSize,
+          (y + 1) * cellSize
+        );
+
+        const closestZ = THREE.MathUtils.clamp(
+          position.z,
+          z * cellSize,
+          (z + 1) * cellSize
+        );
+
+        const dx = position.x - closestX;
+        const dy = position.y - closestY;
+        const dz = position.z - closestZ;
+
+        if (dx * dx + dy * dy + dz * dz <= radiusSq) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+function collisionPathIsClear(fromWorld, toWorld) {
+  const from = cameraToCollisionSpace(fromWorld);
+  const to = cameraToCollisionSpace(toWorld);
+
+  const distance = from.distanceTo(to);
+
+  if (distance < 1e-12) return true;
+
+  const cellSize = collisionState.cellSize;
+  const steps = Math.max(
+    1,
+    Math.ceil(distance / (cellSize * 0.5))
+  );
+
+  if (steps > COLLISION_MAX_STEPS) return false;
+
+  const cameraRadius =
+    cellSize * Number($("collisionMargin").value);
+
+  // Élargissement conservateur : les sphères échantillonnées
+  // couvrent aussi l’espace entre deux échantillons.
+  const testRadius = cameraRadius + distance / steps * 0.5;
+
+  const position = new THREE.Vector3();
+
+  for (let i = 0; i <= steps; i++) {
+    position.lerpVectors(from, to, i / steps);
+
+    if (intersectsDenseCells(position, testRadius)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function reportCollisionBlock() {
+  const now = performance.now();
+
+  if (now - collisionState.lastWarningAt < 1000) return;
+
+  collisionState.lastWarningAt = now;
+
+  setCollisionStatus(
+    "Mouvement bloqué. Si la caméra est déjà dans une zone dense, " +
+    "désactive l’option pour en sortir ou utilise « Cadrer »."
+  );
+}
+
+// Transaction : appliquer un mouvement, vérifier le trajet,
+// restaurer entièrement l’état si le mouvement est interdit.
+function navigateWithCollision(move) {
+  const enabled =
+    $("collisionEnabled").checked &&
+    !!collisionState.cells;
+
+  if (!enabled) {
+    move();
+    return true;
+  }
+
+  const previousPosition = camera.position.clone();
+  const previousTarget = target.clone();
+  const previousUp = camera.up.clone();
+
+  move();
+
+  if (collisionPathIsClear(previousPosition, camera.position)) {
+    return true;
+  }
+
+  camera.position.copy(previousPosition);
+  target.copy(previousTarget);
+  camera.up.copy(previousUp);
+
+  // Certains mouvements ont déjà actualisé le quaternion.
+  camera.lookAt(target);
+  camera.updateMatrixWorld(true);
+
+  reportCollisionBlock();
+
+  return false;
+}
+
+function checkCurrentCollisionPosition() {
+  if (
+    !$("collisionEnabled").checked ||
+    !collisionState.cells
+  ) {
+    return;
+  }
+
+  const radius =
+    collisionState.cellSize * Number($("collisionMargin").value);
+
+  const position = cameraToCollisionSpace(camera.position);
+
+  if (intersectsDenseCells(position, radius)) {
+    setCollisionStatus(
+      "Attention : caméra déjà dans une zone dense. " +
+      "Désactive l’option pour te dégager ou utilise « Cadrer ».",
+      true
+    );
+  } else {
+    setCollisionStatus("Anticollision active.");
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Initialisation
