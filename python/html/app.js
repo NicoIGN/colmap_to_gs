@@ -1,12 +1,8 @@
 import * as pc from "playcanvas";
 import * as THREE from "three";
-
-// Three.js : calculs uniquement. Aucun WebGLRenderer Three.js.
-// PlayCanvas : chargement natif PLY/SOG, rendu et picking.
-
-// ---------------------------------------------------------------------------
-// État général
-// ---------------------------------------------------------------------------
+import { createCollisionSystem } from "./viewer/collision.js";
+import { createGifRecorder } from "./viewer/gif.js";
+import { createNavigationSystem } from "./viewer/navigation.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -14,9 +10,6 @@ const params = new URLSearchParams(location.search);
 
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
-
-const pressedKeys = new Set();
-const heldButtons = new Map();
 
 const sceneBox = new THREE.Box3();
 const sceneCenter = new THREE.Vector3();
@@ -27,16 +20,11 @@ const principalAxes = {
   z: new THREE.Vector3(0, 0, 1),
 };
 
-// Caméra mathématique, synchronisée avec la caméra PlayCanvas.
 const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
 camera.position.set(0, 0, 5);
 camera.up.set(0, 1, 0);
 
 const target = new THREE.Vector3();
-
-let loadedFileSource = null;
-let loadedFileName = null;
-let loadedFileIsLocal = false;
 
 let app = null;
 let cameraEntity = null;
@@ -45,21 +33,26 @@ let sceneAsset = null;
 let picker = null;
 let centers = null;
 
+let loadedFileSource = null;
+let loadedFileName = null;
+let loadedFileIsLocal = false;
+
 let sceneReady = false;
 let isLoading = false;
 let fatalError = false;
 let sceneRadius = 1;
 let sceneCount = 0;
-let mouseDrag = null;
-let wheelTimer = null;
-
 
 let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
 
-// Invalidation des résultats de picking asynchrones.
 let pickSerial = 0;
 let picking = false;
+
+let navigation = null;
+let collision = null;
+let gifRecorder = null;
+let legacyConverterPromise = null;
 
 const canvas = document.createElement("canvas");
 canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
@@ -71,92 +64,12 @@ const canNavigate = () =>
   !isLoading &&
   !fatalError &&
   !picking &&
-  !gifState.encoding &&
-  !gifState.finalizing;
-
-// ---------------------------------------------------------------------------
-// GIF
-// ---------------------------------------------------------------------------
-
-const GIF_MAX_FRAMES = 60;
-const GIF_MAX_WIDTH = 640;
-const GIF_MAX_HEIGHT = 480;
-const GIF_SETTLE_MS = 600;
-
-const gifState = {
-  recording: false,
-  encoding: false,
-  finalizing: false,
-  frames: [],
-  width: 0,
-  height: 0,
-  delay: 100,
-  pendingCapture: false,
-  lastCapturedSignature: null,
-  observedSignature: null,
-  changedAt: 0,
-  downloadUrl: null,
-};
-
-let gifEncoderPromise = null;
-let legacyConverterPromise = null;
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
+  !gifRecorder?.state.encoding &&
+  !gifRecorder?.state.finalizing;
 
 function setStatus(message, error = false) {
   $("status").textContent = message;
   $("status").classList.toggle("error", error);
-}
-
-function setGifStatus(message, error = false) {
-  $("gifStatus").textContent = message;
-  $("gifStatus").classList.toggle("error", error);
-  $("gifStatus").classList.toggle(
-    "recording",
-    gifState.recording && !error
-  );
-}
-
-function updateGifUI() {
-  const blocked =
-    isLoading ||
-    fatalError ||
-    gifState.encoding ||
-    gifState.finalizing;
-
-  $("gifStart").disabled =
-    blocked || !sceneReady || gifState.recording;
-
-  $("gifStop").disabled =
-    blocked ||
-    (!gifState.recording && !gifState.frames.length);
-
-  $("gifCancel").disabled =
-    blocked ||
-    (!gifState.recording && !gifState.frames.length);
-
-  $("gifDelay").disabled =
-    blocked || gifState.recording;
-}
-
-function refreshUI() {
-  const blocked =
-    isLoading ||
-    fatalError ||
-    gifState.encoding ||
-    gifState.finalizing;
-
-  document.querySelectorAll(
-    "#panel button, #panel input, #panel select, #panel textarea"
-  ).forEach((element) => {
-    if (element.id !== "togglePanel") {
-      element.disabled = blocked;
-    }
-  });
-
-  updateGifUI();
 }
 
 function getPrincipalAxisName() {
@@ -166,11 +79,6 @@ function getPrincipalAxisName() {
 
 function getPrincipalAxis() {
   return principalAxes[getPrincipalAxisName()];
-}
-
-function isPrincipalAction(action) {
-  return action === "orbitPrincipalPositive" ||
-    action === "orbitPrincipalNegative";
 }
 
 function updatePrincipalAxisHelp() {
@@ -193,33 +101,23 @@ function updateKeyboardHelp() {
       : "WASD : déplacer · Q/E : descendre / monter";
 }
 
-function clearNavigation() {
-  const wasMoving =
-    heldButtons.size > 0 ||
-    !!mouseDrag?.moved ||
-    [...pressedKeys].some((key) => !!actionForKey(key));
+function refreshUI() {
+  const blocked =
+    isLoading ||
+    fatalError ||
+    gifRecorder?.state.encoding ||
+    gifRecorder?.state.finalizing;
 
-  pickSerial++;
-  picking = false;
-
-  pressedKeys.clear();
-
-  heldButtons.forEach((button) => {
-    button.classList.remove("held");
+  document.querySelectorAll(
+    "#panel button, #panel input, #panel select, #panel textarea"
+  ).forEach((element) => {
+    if (element.id !== "togglePanel") {
+      element.disabled = blocked;
+    }
   });
 
-  heldButtons.clear();
-  mouseDrag = null;
-
-  clearTimeout(wheelTimer);
-  wheelTimer = null;
-
-  if (wasMoving) requestGifCapture();
+  gifRecorder?.updateUI(sceneReady);
 }
-
-// ---------------------------------------------------------------------------
-// PlayCanvas
-// ---------------------------------------------------------------------------
 
 function resizeViewer() {
   if (!app) return;
@@ -266,7 +164,6 @@ function syncCamera() {
     camera.position.z
   );
 
-  // Les deux moteurs utilisent une caméra regardant vers -Z.
   const q = camera.quaternion;
 
   cameraEntity.setRotation(q.x, q.y, q.z, q.w);
@@ -282,11 +179,26 @@ function nextRenderedFrame() {
   });
 }
 
+function requestGifCapture() {
+  gifRecorder?.requestCapture(cameraCaptureSignature());
+}
+
+function cameraCaptureSignature() {
+  return [
+    ...camera.position.toArray(),
+    ...camera.quaternion.toArray(),
+    ...target.toArray(),
+    canvas.width,
+    canvas.height,
+    Number($("flipUp").checked),
+  ].map((value) =>
+    Number(value).toPrecision(8)
+  ).join(",");
+}
+
 function applyUpFlip() {
   if (!splatEntity) return;
 
-  // Même convention que le code initial :
-  // rotation de 180° autour de X, sans rotation implicite supplémentaire.
   splatEntity.setLocalEulerAngles(
     $("flipUp").checked ? 180 : 0,
     0,
@@ -296,7 +208,9 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
-  resetCollisionGrid();
+
+  collision?.reset();
+
   splatEntity?.destroy();
   splatEntity = null;
 
@@ -336,11 +250,6 @@ function loadNativeAsset(url, name) {
     app.assets.load(asset);
   });
 }
-
-// ---------------------------------------------------------------------------
-// Compatibilité SPLAT / KSPLAT
-// SOG ne passe jamais dans ce convertisseur.
-// ---------------------------------------------------------------------------
 
 function loadLegacyConverter() {
   if (!legacyConverterPromise) {
@@ -408,10 +317,6 @@ async function convertLegacyToPly(url, extension) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Chargement
-// ---------------------------------------------------------------------------
-
 function filenameFromUrl(url) {
   try {
     const leaf = new URL(url, location.href)
@@ -428,8 +333,8 @@ async function loadSceneInternal(url, name) {
     !app ||
     isLoading ||
     fatalError ||
-    gifState.encoding ||
-    gifState.finalizing
+    gifRecorder?.state.encoding ||
+    gifRecorder?.state.finalizing
   ) {
     return;
   }
@@ -443,8 +348,8 @@ async function loadSceneInternal(url, name) {
   }
 
   isLoading = true;
-  clearNavigation();
-  cancelGifRecording();
+  navigation.clearNavigation();
+  gifRecorder.cancel(sceneReady);
   refreshUI();
 
   let convertedUrl = null;
@@ -463,7 +368,6 @@ async function loadSceneInternal(url, name) {
       setStatus(`Conversion locale de ${name} en PLY…`);
 
       convertedUrl = await convertLegacyToPly(url, extension);
-
       loadUrl = convertedUrl;
       loadName = name.replace(/\.(splat|ksplat)$/i, ".ply");
     }
@@ -475,7 +379,6 @@ async function loadSceneInternal(url, name) {
       throw new Error("PlayCanvas n’a pas créé la ressource GSplat.");
     }
 
-    // Centres CPU préparés par PlayCanvas pour le cadrage robuste.
     centers = resource.centers;
 
     if (!centers?.length) {
@@ -500,8 +403,7 @@ async function loadSceneInternal(url, name) {
 
     applyUpFlip();
     computeSceneBounds();
-    checkCurrentCollisionPosition();
-    fitToView();
+    navigation.fitToView(sceneBox);
 
     let cameraError = null;
 
@@ -516,44 +418,24 @@ async function loadSceneInternal(url, name) {
       pendingUp = null;
     }
 
-    // Laisser le moteur préparer le premier rendu.
     await nextRenderedFrame();
-      
-      if ($("collisionEnabled").checked) {
-        try {
-          console.log("[collision-load] buildCollisionGrid:start", {
-            sceneCount,
-            centersCount: centers ? centers.length / 3 : 0,
-            sceneRadius,
-          });
 
-          await buildCollisionGrid();
-
-          console.log("[collision-load] buildCollisionGrid:success", {
-            occupiedCells: collisionState.cells?.size || 0,
-            cellSize: collisionState.cellSize,
-          });
-
-          checkCurrentCollisionPosition();
-        } catch (error) {
-          console.error("[collision-load] buildCollisionGrid:error", error);
-
-          $("collisionEnabled").checked = false;
-
-          console.warn("[collision-load] auto-uncheck", {
-            reason: error?.message || String(error),
-          });
-
-          setCollisionStatus(
-            `Anticollision indisponible : ${error?.message || error}`,
-            true
-          );
-        }
+    if ($("collisionEnabled").checked) {
+      try {
+        await collision.buildGrid();
+        collision.checkCurrentCollisionPosition(true);
+      } catch (error) {
+        $("collisionEnabled").checked = false;
+        collision.setCollisionStatus(
+          `Anticollision indisponible : ${error?.message || error}`,
+          true
+        );
       }
+    }
+
     sceneReady = true;
 
     const size = sceneBox.getSize(new THREE.Vector3());
-
     const info =
       `${name} — ${sceneCount.toLocaleString()} splats · ` +
       `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ` +
@@ -567,35 +449,24 @@ async function loadSceneInternal(url, name) {
     console.error("Chargement :", error);
 
     releaseScene();
-
     setStatus(`Erreur : ${error?.message || error}`, true);
   } finally {
     if (convertedUrl) URL.revokeObjectURL(convertedUrl);
 
     isLoading = false;
     $("fileInput").value = "";
-
     refreshUI();
   }
 }
-
 
 async function resetAndLoad(url, name) {
   if (
     !app ||
     isLoading ||
     fatalError ||
-    gifState.encoding ||
-    gifState.finalizing
+    gifRecorder?.state.encoding ||
+    gifRecorder?.state.finalizing
   ) {
-    return;
-  }
-
-  if (!/\.(sog|ply|splat|ksplat)$/i.test(name)) {
-    setStatus(
-      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
-      true
-    );
     return;
   }
 
@@ -625,35 +496,13 @@ async function resetAndLoad(url, name) {
   rememberCamera();
 }
 
-function getViewUrl() {
-  if (loadedFileIsLocal || !loadedFileSource) {
-    return null;
-  }
-
-  const url = new URL(location.href);
-
-  url.searchParams.delete("file");
-  url.searchParams.delete("flipUp");
-  url.searchParams.delete("camera_pos");
-  url.searchParams.delete("camera_up");
-
-  url.searchParams.set("file", loadedFileSource);
-  url.searchParams.set(
-    "flipUp",
-    $("flipUp").checked ? "1" : "0"
-  );
-  url.searchParams.set("camera_pos", getCameraString());
-
-  return url.href;
-}
-
 async function loadFile(file) {
   if (
     !file ||
     !app ||
     isLoading ||
-    gifState.encoding ||
-    gifState.finalizing
+    gifRecorder?.state.encoding ||
+    gifRecorder?.state.finalizing
   ) {
     return;
   }
@@ -675,10 +524,6 @@ async function loadFile(file) {
     URL.revokeObjectURL(url);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Emprise et cadrage
-// ---------------------------------------------------------------------------
 
 function computeSceneBounds() {
   const count = centers.length / 3;
@@ -742,313 +587,6 @@ function computeSceneBounds() {
   );
 }
 
-function distanceToFit(direction) {
-  const vFov = THREE.MathUtils.degToRad(camera.fov);
-  const hFov = 2 * Math.atan(
-    Math.tan(vFov / 2) * camera.aspect
-  );
-
-  const forward = direction.clone().normalize().negate();
-  const up = camera.up.clone().normalize();
-
-  if (Math.abs(forward.dot(up)) > 0.999) {
-    up.set(0, 0, 1);
-    if (Math.abs(forward.dot(up)) > 0.999) up.set(1, 0, 0);
-  }
-
-  const right = new THREE.Vector3()
-    .crossVectors(forward, up).normalize();
-
-  const trueUp = new THREE.Vector3()
-    .crossVectors(right, forward).normalize();
-
-  const half = sceneBox.getSize(new THREE.Vector3())
-    .multiplyScalar(0.5);
-
-  const extent = (axis) =>
-    Math.abs(half.x * axis.x) +
-    Math.abs(half.y * axis.y) +
-    Math.abs(half.z * axis.z);
-
-  return (
-    Math.max(
-      extent(trueUp) / Math.tan(vFov / 2),
-      extent(right) / Math.tan(hFov / 2)
-    ) + extent(forward)
-  ) * 1.08;
-}
-
-function fitToView(direction = null) {
-  const dir = direction
-    ? direction.clone()
-    : camera.position.clone().sub(target);
-
-  if (dir.lengthSq() < 1e-12) dir.set(0, 0.6, 1);
-
-  dir.normalize();
-
-  camera.up.addScaledVector(dir, -camera.up.dot(dir));
-
-  if (camera.up.lengthSq() < 1e-12) {
-    camera.up.set(0, 0, 1);
-
-    if (Math.abs(camera.up.dot(dir)) > 0.999) {
-      camera.up.set(1, 0, 0);
-    }
-
-    camera.up.addScaledVector(dir, -camera.up.dot(dir));
-  }
-
-  camera.up.normalize();
-
-  target.copy(sceneCenter);
-
-  camera.position.copy(sceneCenter)
-    .addScaledVector(dir, distanceToFit(dir));
-
-  syncCamera();
-}
-
-function setView(kind) {
-  if (!canNavigate()) return;
-
-  clearNavigation();
-
-  const axes = {
-    front: new THREE.Vector3(0, 1, 0),
-    top: new THREE.Vector3(0, 0, 1),
-    side: new THREE.Vector3(1, 0, 0),
-  };
-
-  const up = axes[kind]?.clone();
-  if (!up) return;
-
-  const forward = target.clone()
-    .sub(camera.position).normalize();
-
-  up.addScaledVector(forward, -up.dot(forward));
-
-  if (up.lengthSq() < 1e-12) {
-    setStatus(
-      "Cet axe est parallèle à la visée : impossible " +
-      "de le rendre vertical sans changer la visée.",
-      true
-    );
-    return;
-  }
-
-  camera.up.copy(up.normalize());
-
-  syncCamera();
-  requestGifCapture();
-
-  const axis = kind === "front" ? "Y" : kind === "top" ? "Z" : "X";
-
-  setStatus(`${axis} vertical · vue conservée.`);
-}
-
-function recenterTarget() {
-  if (!canNavigate()) return;
-
-  clearNavigation();
-
-  const offset = camera.position.clone().sub(target);
-
-  target.copy(sceneCenter);
-  camera.position.copy(sceneCenter).add(offset);
-
-  syncCamera();
-  requestGifCapture();
-}
-
-// ---------------------------------------------------------------------------
-// Rotation et déplacements
-// ---------------------------------------------------------------------------
-
-function rotateAroundAxis(axis, angle) {
-  if (!angle) return;
-
-  const rotation = new THREE.Quaternion()
-    .setFromAxisAngle(axis.clone().normalize(), angle);
-
-  const offset = camera.position.clone()
-    .sub(target).applyQuaternion(rotation);
-
-  camera.position.copy(target).add(offset);
-  camera.up.applyQuaternion(rotation).normalize();
-
-  camera.lookAt(target);
-  camera.updateMatrixWorld(true);
-}
-
-function orbit(dx, dy) {
-  if (dx) {
-    rotateAroundAxis(
-      new THREE.Vector3(0, 1, 0)
-        .applyQuaternion(camera.quaternion),
-      dx
-    );
-  }
-
-  if (dy) {
-    rotateAroundAxis(
-      new THREE.Vector3(1, 0, 0)
-        .applyQuaternion(camera.quaternion),
-      dy
-    );
-  }
-}
-
-function panPixels(dx, dy, height) {
-  const PAN_GAIN = 3;
-  const speed = Number($("step").value) / 10;
-
-  const distance = Math.max(
-    camera.position.distanceTo(target),
-    sceneRadius * 0.1
-  );
-
-  const unitsPerPixel =
-    2 * distance *
-    Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) /
-    Math.max(height, 1);
-
-  const scale = unitsPerPixel * PAN_GAIN * speed;
-
-  const right = new THREE.Vector3(1, 0, 0)
-    .applyQuaternion(camera.quaternion);
-
-  const up = new THREE.Vector3(0, 1, 0)
-    .applyQuaternion(camera.quaternion);
-
-  const delta = right.multiplyScalar(-dx * scale)
-    .addScaledVector(up, dy * scale);
-
-  camera.position.add(delta);
-  target.add(delta);
-}
-
-function translate(x, y, z, distance) {
-  if (!x && !y && !z) return;
-
-  const delta = new THREE.Vector3(x, y, -z)
-    .normalize()
-    .applyQuaternion(camera.quaternion)
-    .multiplyScalar(distance);
-
-  camera.position.add(delta);
-  target.add(delta);
-}
-
-function zoomBy(factor) {
-  const offset = camera.position.clone().sub(target);
-
-  if (offset.lengthSq() < 1e-20) return;
-
-  const distance = THREE.MathUtils.clamp(
-    offset.length() * factor,
-    sceneRadius * 1e-4,
-    sceneRadius * 1e5
-  );
-
-  camera.position.copy(target)
-    .add(offset.setLength(distance));
-}
- 
-function getPointerRayDirection(clientX, clientY) {
-  const rect = canvas.getBoundingClientRect();
-
-  if (rect.width <= 0 || rect.height <= 0) {
-    return null;
-  }
-
-  const x = THREE.MathUtils.clamp(
-    (clientX - rect.left) / rect.width,
-    0,
-    1
-  );
-
-  const y = THREE.MathUtils.clamp(
-    (clientY - rect.top) / rect.height,
-    0,
-    1
-  );
-
-  const ndc = new THREE.Vector2(
-    x * 2 - 1,
-    1 - y * 2
-  );
-
-  camera.updateProjectionMatrix();
-  camera.updateMatrixWorld(true);
-
-  const raycaster = new THREE.Raycaster();
-
-  raycaster.setFromCamera(ndc, camera);
-
-  return raycaster.ray.direction.clone().normalize();
-}
-
-function moveCameraAlongRayWithCollision(direction, worldDistance) {
-  if (
-    !Number.isFinite(worldDistance) ||
-    worldDistance === 0 ||
-    direction.lengthSq() < 1e-12
-  ) {
-    return;
-  }
-
-  const normalizedDirection = direction.clone().normalize();
-
-  const collisionEnabled =
-    $("collisionEnabled").checked &&
-    !!collisionState.cells &&
-    collisionState.cellSize > 0;
-
-  if (!collisionEnabled) {
-    const delta = normalizedDirection.multiplyScalar(worldDistance);
-
-    camera.position.add(delta);
-    target.add(delta);
-
-    return;
-  }
-
-  // Fractionnement obligatoire pour pouvoir avancer
-  // jusqu’au contact, au lieu de bloquer tout le mouvement.
-  const baseStep = Math.max(
-    collisionState.cellSize * 0.35,
-    sceneRadius * 0.0005
-  );
-
-  const steps = Math.min(
-    COLLISION_MAX_STEPS,
-    Math.max(
-      1,
-      Math.ceil(Math.abs(worldDistance) / baseStep)
-    )
-  );
-
-  const delta = normalizedDirection.multiplyScalar(
-    worldDistance / steps
-  );
-
-  for (let i = 0; i < steps; i++) {
-    const moved = navigateWithCollision(() => {
-      camera.position.add(delta);
-      target.add(delta);
-    });
-
-    if (!moved) {
-      break;
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Picking central PlayCanvas
-// ---------------------------------------------------------------------------
-
 async function selectPointInView(key, button) {
   const serial = ++pickSerial;
   picking = true;
@@ -1056,12 +594,11 @@ async function selectPointInView(key, button) {
   try {
     setStatus("Sélection du point visé au centre…");
 
-    // Le rendu précédent doit avoir préparé les splats.
     await nextRenderedFrame();
 
     if (
       serial !== pickSerial ||
-      heldButtons.get(key) !== button ||
+      navigation.heldButtons.get(key) !== button ||
       !sceneReady
     ) {
       return false;
@@ -1085,11 +622,9 @@ async function selectPointInView(key, button) {
       Math.floor(picker.height / 2)
     );
 
-    // Un relâchement du bouton ou un nouveau chargement
-    // invalide la sélection en cours.
     if (
       serial !== pickSerial ||
-      heldButtons.get(key) !== button ||
+      navigation.heldButtons.get(key) !== button ||
       !sceneReady
     ) {
       return false;
@@ -1103,7 +638,10 @@ async function selectPointInView(key, button) {
     target.set(point.x, point.y, point.z);
 
     if (target.distanceToSquared(camera.position) < 1e-12) {
-      setStatus("Le point sélectionné est trop proche de la caméra.", true);
+      setStatus(
+        "Le point sélectionné est trop proche de la caméra.",
+        true
+      );
       return false;
     }
 
@@ -1131,144 +669,6 @@ async function selectPointInView(key, button) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Souris
-// ---------------------------------------------------------------------------
-
-function installMouseControls() {
-  canvas.style.touchAction = "none";
-
-  canvas.addEventListener("contextmenu", (event) => {
-    event.preventDefault();
-  });
-
-  canvas.addEventListener("pointerdown", (event) => {
-    if (!canNavigate() || mouseDrag || event.button > 2) {
-      return;
-    }
-
-    event.preventDefault();
-    clearNavigation();
-
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur();
-    }
-
-    canvas.setPointerCapture(event.pointerId);
-
-    mouseDrag = {
-      id: event.pointerId,
-      button: event.button,
-      x: event.clientX,
-      y: event.clientY,
-      moved: false,
-    };
-  });
-
-  canvas.addEventListener("pointermove", (event) => {
-    if (!mouseDrag || mouseDrag.id !== event.pointerId) {
-      return;
-    }
-
-    if (!event.buttons || !canNavigate()) {
-      const moved = mouseDrag.moved;
-      mouseDrag = null;
-
-      if (moved) requestGifCapture();
-
-      return;
-    }
-
-    const dx = event.clientX - mouseDrag.x;
-    const dy = event.clientY - mouseDrag.y;
-
-    mouseDrag.x = event.clientX;
-    mouseDrag.y = event.clientY;
-
-    if (dx || dy) mouseDrag.moved = true;
-
-    navigateWithCollision(() => {
-      if (mouseDrag.button === 0 && !event.shiftKey) {
-        orbit(-dx * 0.005, -dy * 0.005);
-      } else {
-        panPixels(dx, dy, canvas.clientHeight);
-      }
-    });
-
-    syncCamera();
-    requestGifCapture();
-  });
-
-  const release = (event) => {
-    if (mouseDrag?.id !== event.pointerId) return;
-
-    const moved = mouseDrag.moved;
-    mouseDrag = null;
-
-    if (moved) requestGifCapture();
-  };
-
-  [
-    "pointerup",
-    "pointercancel",
-    "lostpointercapture",
-  ].forEach((type) => {
-    canvas.addEventListener(type, release);
-  });
-
-  canvas.addEventListener("wheel", (event) => {
-    event.preventDefault();
-
-    if (!canNavigate()) return;
-
-    const pixels = event.deltaMode === 1
-      ? event.deltaY * 16
-      : event.deltaMode === 2
-        ? event.deltaY * canvas.clientHeight
-        : event.deltaY;
-
-    if (!Number.isFinite(pixels) || pixels === 0) {
-      return;
-    }
-
-    const direction = getPointerRayDirection(
-      event.clientX,
-      event.clientY
-    );
-
-    if (!direction) return;
-
-    const speed = Number($("step").value) / 10;
-    const wheelDelta = THREE.MathUtils.clamp(
-      pixels,
-      -400,
-      400
-    );
-
-    // Négatif = avancer, positif = reculer.
-    const worldDistance =
-      -wheelDelta * sceneRadius * 0.0003 * speed;
-
-    moveCameraAlongRayWithCollision(
-      direction,
-      worldDistance
-    );
-
-    syncCamera();
-    requestGifCapture();
-
-    clearTimeout(wheelTimer);
-    wheelTimer = setTimeout(() => {
-      wheelTimer = null;
-      requestGifCapture();
-    }, 250);
-  }, { passive: false });
-}
-
-// ---------------------------------------------------------------------------
-// Caméra : import / export
-// ---------------------------------------------------------------------------
-
 function parseNumbers(value, count) {
   const parts = value.split(",").map((part) => part.trim());
   const numbers = parts.map(Number);
@@ -1295,7 +695,8 @@ function serialize(values) {
 
 function getCameraString() {
   const up = new THREE.Vector3(0, 1, 0)
-    .applyQuaternion(camera.quaternion).normalize();
+    .applyQuaternion(camera.quaternion)
+    .normalize();
 
   return serialize([
     ...camera.position.toArray(),
@@ -1347,7 +748,9 @@ function applyCameraString(value, upValue = null) {
 
     up.set(0, 0, 1);
 
-    if (Math.abs(up.dot(direction)) > 0.999) up.set(1, 0, 0);
+    if (Math.abs(up.dot(direction)) > 0.999) {
+      up.set(1, 0, 0);
+    }
 
     up.addScaledVector(direction, -up.dot(direction));
   }
@@ -1357,7 +760,6 @@ function applyCameraString(value, upValue = null) {
   target.copy(newTarget);
 
   syncCamera();
-
   $("cameraValue").value = getCameraString();
 }
 
@@ -1389,17 +791,40 @@ function rememberCamera() {
   return url.href;
 }
 
+function getViewUrl() {
+  if (loadedFileIsLocal || !loadedFileSource) {
+    return null;
+  }
+
+  const url = new URL(location.href);
+
+  url.searchParams.delete("file");
+  url.searchParams.delete("flipUp");
+  url.searchParams.delete("camera_pos");
+  url.searchParams.delete("camera_up");
+
+  url.searchParams.set("file", loadedFileSource);
+  url.searchParams.set(
+    "flipUp",
+    $("flipUp").checked ? "1" : "0"
+  );
+  url.searchParams.set("camera_pos", getCameraString());
+
+  return url.href;
+}
+
 async function exportCamera() {
   if (!canNavigate()) return;
 
-  clearNavigation();
+  navigation.clearNavigation();
 
   const cameraString = getCameraString();
 
   $("cameraValue").value = cameraString;
   $("cameraSection").open = true;
 
-  const href = rememberCamera();
+  rememberCamera();
+
   const viewUrl = getViewUrl();
 
   if (viewUrl) {
@@ -1425,7 +850,6 @@ async function exportCamera() {
     return;
   }
 
-  // Cas fichier local : on ne peut pas fournir une URL rechargeable fiable.
   try {
     await navigator.clipboard.writeText(cameraString);
 
@@ -1446,7 +870,7 @@ async function exportCamera() {
 function importCamera() {
   if (!canNavigate()) return;
 
-  clearNavigation();
+  navigation.clearNavigation();
 
   try {
     applyCameraString($("cameraValue").value);
@@ -1459,1315 +883,274 @@ function importCamera() {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Capture GIF après stabilisation de la caméra
-// ---------------------------------------------------------------------------
-
 function navigationIsActive() {
   return (
     picking ||
-    mouseDrag !== null ||
-    wheelTimer !== null ||
-    heldButtons.size > 0 ||
-    [...pressedKeys].some((key) => !!actionForKey(key))
+    navigation.heldButtons.size > 0 ||
+    [...navigation.pressedKeys].some((key) =>
+      !!navigation.pressedKeys.has(key)
+    )
   );
 }
 
-function cameraCaptureSignature() {
-  return [
-    ...camera.position.toArray(),
-    ...camera.quaternion.toArray(),
-    ...target.toArray(),
-    canvas.width,
-    canvas.height,
-    Number($("flipUp").checked),
-  ].map((value) =>
-    Number(value).toPrecision(8)
-  ).join(",");
-}
+function isPrincipalOrbitActive() {
+  if (!navigation) return false;
 
-function requestGifCapture() {
-  if (!gifState.recording) return;
-
-  gifState.pendingCapture = true;
-  gifState.changedAt = performance.now();
-}
-
-function clearGifDownload() {
-  if (gifState.downloadUrl) {
-    URL.revokeObjectURL(gifState.downloadUrl);
-    gifState.downloadUrl = null;
-  }
-
-  $("gifDownload").hidden = true;
-  $("gifDownload").removeAttribute("href");
-}
-
-function startGifRecording() {
-  if (!canNavigate() || gifState.recording) return;
-
-  clearNavigation();
-
-  if (!canvas.width || !canvas.height) {
-    setGifStatus("La vue 3D n’est pas prête.", true);
-    return;
-  }
-
-  const scale = Math.min(
-    1,
-    GIF_MAX_WIDTH / canvas.width,
-    GIF_MAX_HEIGHT / canvas.height
+  return [...navigation.heldButtons.values()].some((button) =>
+    button.dataset.hold === "orbitPrincipalPositive" ||
+    button.dataset.hold === "orbitPrincipalNegative"
   );
-
-  clearGifDownload();
-
-  gifState.width = Math.max(1, Math.round(canvas.width * scale));
-  gifState.height = Math.max(1, Math.round(canvas.height * scale));
-  gifState.delay = Number($("gifDelay").value);
-  gifState.frames = [];
-  gifState.lastCapturedSignature = null;
-  gifState.observedSignature = null;
-  gifState.pendingCapture = false;
-  gifState.recording = true;
-
-  requestGifCapture();
-
-  setGifStatus("● Capture active — attente de stabilisation…");
-  refreshUI();
 }
 
-function captureGifFrame() {
-  const output = document.createElement("canvas");
+function installUI() {
+  $("fit").addEventListener("click", () => {
+    if (!canNavigate()) return;
 
-  output.width = gifState.width;
-  output.height = gifState.height;
-
-  const context = output.getContext("2d", {
-    willReadFrequently: true,
+    navigation.clearNavigation();
+    navigation.fitToView(sceneBox);
   });
 
-  if (!context) {
-    throw new Error("Impossible de créer le canvas de capture.");
-  }
-
-  context.fillStyle = "#10131b";
-  context.fillRect(0, 0, output.width, output.height);
-
-  const scale = Math.min(
-    output.width / canvas.width,
-    output.height / canvas.height
+  $("recenterTarget").addEventListener(
+    "click",
+    navigation.recenterTarget
   );
 
-  const width = canvas.width * scale;
-  const height = canvas.height * scale;
+  $("exportCam").addEventListener("click", exportCamera);
+  $("importCam").addEventListener("click", importCamera);
 
-  // Appel effectué dans postrender : le canvas contient
-  // l’image que PlayCanvas vient de produire.
-  context.drawImage(
-    canvas,
-    (output.width - width) / 2,
-    (output.height - height) / 2,
-    width,
-    height
-  );
+  $("principalAxis").addEventListener("change", () => {
+    navigation.clearNavigation();
+    updatePrincipalAxisHelp();
+  });
 
-  gifState.frames.push(
-    context.getImageData(0, 0, output.width, output.height).data
-  );
+  $("lockPrincipalRotation").addEventListener("change", () => {
+    navigation.clearNavigation();
 
-  if (gifState.frames.length >= GIF_MAX_FRAMES) {
-    gifState.recording = false;
+    const locked = $("lockPrincipalRotation").checked;
+    const axis = getPrincipalAxisName().toUpperCase();
 
-    setGifStatus(
-      `Limite de ${GIF_MAX_FRAMES} images atteinte. ` +
-      "Cliquer sur « Terminer et exporter »."
+    setStatus(
+      locked
+        ? `Rotations verrouillées sur l’axe ${axis} · orientation conservée.`
+        : "Rotations libres réactivées."
     );
-  } else {
-    setGifStatus(
-      `● Capture active — ${gifState.frames.length} position(s) · ` +
-      `${gifState.width} × ${gifState.height} px`
-    );
-  }
+  });
 
-  updateGifUI();
-}
-
-function processGifCapture() {
-  if (
-    !gifState.recording ||
-    !sceneReady ||
-    isLoading ||
-    document.hidden
-  ) {
-    return;
-  }
-
-  try {
-    const now = performance.now();
-    const signature = cameraCaptureSignature();
-
-    if (signature !== gifState.observedSignature) {
-      gifState.observedSignature = signature;
-      gifState.changedAt = now;
-      gifState.pendingCapture = true;
-    }
-
-    if (
-      !gifState.pendingCapture ||
-      navigationIsActive() ||
-      now - gifState.changedAt < GIF_SETTLE_MS
-    ) {
+  $("alignPrincipalUp").addEventListener("click", () => {
+    if (!canNavigate()) return;
+    +
+    navigation.clearNavigation();
+    
+    const forward = target.clone().sub(camera.position);
+    
+    if (forward.lengthSq() < 1e-12) {
+      setStatus(
+        "Impossible de redresser : caméra et cible confondues.",
+        true
+      );
       return;
     }
-
-    gifState.pendingCapture = false;
-
-    if (signature === gifState.lastCapturedSignature) return;
-
-    captureGifFrame();
-
-    gifState.lastCapturedSignature = signature;
-  } catch (error) {
-    console.error("Capture GIF :", error);
-
-    gifState.recording = false;
-
-    setGifStatus(
-      `Capture interrompue : ${error?.message || error}. ` +
-      "Les images déjà capturées restent exportables.",
-      true
-    );
-
-    updateGifUI();
-  }
-}
-
-function loadGifEncoder() {
-  if (!gifEncoderPromise) {
-    gifEncoderPromise = import(
-      "https://cdn.jsdelivr.net/npm/gifenc@1.0.3/+esm"
-    ).catch((error) => {
-      gifEncoderPromise = null;
-      throw error;
-    });
-  }
-
-  return gifEncoderPromise;
-}
-
-async function stopAndExportGif() {
-  if (
-    gifState.encoding ||
-    gifState.finalizing ||
-    isLoading
-  ) {
-    return;
-  }
-
-  // Bloquer les nouvelles interactions pendant la capture
-  // éventuelle de la dernière position.
-  clearNavigation();
-
-  gifState.finalizing = true;
-  refreshUI();
-
-  try {
-    if (gifState.recording && !document.hidden) {
-      requestGifCapture();
-
-      await sleep(GIF_SETTLE_MS + 50);
-      await nextRenderedFrame();
-    }
-  } finally {
-    gifState.recording = false;
-    gifState.pendingCapture = false;
-    gifState.finalizing = false;
-  }
-
-  if (!gifState.frames.length) {
-    setGifStatus(
-      "Aucune image capturée. Démarrer la capture puis " +
-      "laisser la caméra immobile pendant 600 ms."
-    );
-
-    refreshUI();
-    return;
-  }
-
-  gifState.encoding = true;
-  refreshUI();
-
-  const frames = gifState.frames;
-  const { width, height, delay } = gifState;
-
-  try {
-    setGifStatus("Chargement de l’encodeur GIF…");
-
-    const { GIFEncoder, quantize, applyPalette } =
-      await loadGifEncoder();
-
-    const gif = GIFEncoder();
-
-    for (let index = 0; index < frames.length; index++) {
-      setGifStatus(
-        `Encodage du GIF : ${index + 1} / ${frames.length}…`
+    
+    forward.normalize();
+    
+    // Projeter l’axe principal dans le plan de l’écran.
+    // Son sens positif devient le haut de l’image.
+    const up = getPrincipalAxis().clone().normalize();
+    up.addScaledVector(forward, -up.dot(forward));
+    
+    if (up.lengthSq() < 1e-8) {
+      setStatus(
+        "L’axe principal est aligné avec le regard. " +
+        "Oriente légèrement la vue avant de la redresser.",
+        true
       );
-
-      await sleep(0);
-
-      const palette = quantize(frames[index], 256);
-      const pixels = applyPalette(frames[index], palette);
-
-      gif.writeFrame(pixels, width, height, {
-        palette,
-        delay,
-        repeat: 0,
-      });
+      return;
     }
-
-    gif.finish();
-
-    const blob = new Blob([gif.bytes()], {
-      type: "image/gif",
-    });
-
-    clearGifDownload();
-
-    gifState.downloadUrl = URL.createObjectURL(blob);
-
-    const timestamp = new Date().toISOString()
-      .replace(/[:.]/g, "-");
-
-    const link = $("gifDownload");
-
-    link.href = gifState.downloadUrl;
-    link.download = `vue-3d-${timestamp}.gif`;
-    link.textContent = "Télécharger à nouveau le GIF";
-    link.hidden = false;
-    link.click();
-
-    gifState.frames = [];
-
-    setGifStatus(
-      `GIF prêt : ${frames.length} image(s) · ` +
-      `${width} × ${height} px · ` +
-      `${(blob.size / 1024 / 1024).toFixed(2)} Mo`
-    );
-  } catch (error) {
-    console.error("Export GIF :", error);
-
-    setGifStatus(
-      `Export impossible : ${error?.message || error}. ` +
-      "Les images sont conservées : tu peux réessayer.",
-      true
-    );
-  } finally {
-    gifState.encoding = false;
-    refreshUI();
-  }
-}
-
-function cancelGifRecording() {
-  if (gifState.encoding || gifState.finalizing) return;
-
-  const hadRecording =
-    gifState.recording || gifState.frames.length > 0;
-
-  gifState.recording = false;
-  gifState.frames = [];
-  gifState.pendingCapture = false;
-  gifState.lastCapturedSignature = null;
-  gifState.observedSignature = null;
-
-  if (hadRecording) setGifStatus("Enregistrement annulé.");
-
-  updateGifUI();
-}
-
-// ---------------------------------------------------------------------------
-// Boutons maintenus
-// ---------------------------------------------------------------------------
-
-document.querySelectorAll("[data-hold]").forEach((button) => {
-  function end(key) {
-    if (!heldButtons.delete(key)) return;
-
-    if (isPrincipalAction(button.dataset.hold) && picking) {
-      pickSerial++;
-      picking = false;
-    }
-
-    if (![...heldButtons.values()].includes(button)) {
-      button.classList.remove("held");
-    }
-
-    requestGifCapture();
-  }
-
-  async function begin(key) {
-    if (!canNavigate() || heldButtons.has(key)) return;
-
-    heldButtons.set(key, button);
-    button.classList.add("held");
-
-    if (isPrincipalAction(button.dataset.hold)) {
-      const selected = await selectPointInView(key, button);
-
-      if (!selected && heldButtons.get(key) === button) {
-        end(key);
-      }
-    }
-  }
-
-  button.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 || !canNavigate()) return;
-
-    event.preventDefault();
-
-    button.focus({ preventScroll: true });
-    button.setPointerCapture(event.pointerId);
-
-    void begin(event.pointerId);
-  });
-
-  ["pointerup", "pointercancel", "lostpointercapture"]
-    .forEach((type) => {
-      button.addEventListener(type, (event) => {
-        end(event.pointerId);
-      });
-    });
-
-  button.addEventListener("keydown", (event) => {
-    if (!["Enter", " "].includes(event.key)) return;
-
-    event.preventDefault();
-
-    if (!event.repeat) void begin(button);
-  });
-
-  button.addEventListener("keyup", (event) => {
-    if (!["Enter", " "].includes(event.key)) return;
-
-    event.preventDefault();
-    end(button);
-  });
-
-  button.addEventListener("blur", () => end(button));
-});
-
-// ---------------------------------------------------------------------------
-// Clavier et animation
-// ---------------------------------------------------------------------------
-
-const commonKeys = {
-  arrowleft: "orbitLeft",
-  arrowright: "orbitRight",
-  arrowup: "orbitUp",
-  arrowdown: "orbitDown",
-  "+": "zoomIn",
-  "=": "zoomIn",
-  "-": "zoomOut",
-};
-
-function actionForKey(key) {
-  const layout = $("keyboardLayout").value === "azerty"
-    ? {
-        z: "forward",
-        s: "backward",
-        q: "left",
-        d: "right",
-        a: "down",
-        e: "up",
-      }
-    : {
-        w: "forward",
-        s: "backward",
-        a: "left",
-        d: "right",
-        q: "down",
-        e: "up",
-      };
-
-  return commonKeys[key] || layout[key];
-}
-
-function isEditing(element) {
-  return element instanceof Element &&
-    !!element.closest(
-      "input, textarea, select, button, summary, [contenteditable]"
-    );
-}
-
-window.addEventListener("keydown", (event) => {
-  if (
-    !canNavigate() ||
-    isEditing(event.target) ||
-    event.ctrlKey ||
-    event.metaKey ||
-    event.altKey
-  ) {
-    return;
-  }
-
-  const key = event.key.toLowerCase();
-
-  if (key === "r") {
-    event.preventDefault();
-
-    if (!event.repeat) {
-      clearNavigation();
-      fitToView();
-      requestGifCapture();
-    }
-  } else if (actionForKey(key) || key === "shift") {
-    event.preventDefault();
-    pressedKeys.add(key);
-  }
-});
-
-window.addEventListener("keyup", (event) => {
-  const key = event.key.toLowerCase();
-  const moving = pressedKeys.has(key) && !!actionForKey(key);
-
-  pressedKeys.delete(key);
-
-  if (moving) requestGifCapture();
-});
-
-window.addEventListener("blur", clearNavigation);
-
-document.addEventListener("visibilitychange", () => {
-  if (document.hidden) clearNavigation();
-});
-
-$("panel").addEventListener("focusin", clearNavigation);
-
-function navigationFrame(deltaTime) {
-  if (!canNavigate() || document.hidden) return;
-
-  const dt = Math.min(deltaTime, 0.05);
-  const actions = new Set();
-
-  heldButtons.forEach((button) => {
-    actions.add(button.dataset.hold);
-  });
-
-  pressedKeys.forEach((key) => {
-    const action = actionForKey(key);
-    if (action) actions.add(action);
-  });
-
-  if (!actions.size) return;
-
-  const axis = (positive, negative) =>
-    Number(actions.has(positive)) -
-    Number(actions.has(negative));
-
-  const amount =
-    dt *
-    Number($("step").value) / 10 *
-    (pressedKeys.has("shift") ? 3 : 1);
-
-    navigateWithCollision(() => {
-      orbit(
-        axis("orbitLeft", "orbitRight") * amount,
-        axis("orbitDown", "orbitUp") * amount
-      );
-
-      const principalDirection = axis(
-        "orbitPrincipalPositive",
-        "orbitPrincipalNegative"
-      );
-
-      if (principalDirection) {
-        rotateAroundAxis(
-          getPrincipalAxis(),
-          principalDirection * amount
-        );
-      }
-
-      translate(
-        axis("right", "left"),
-        axis("up", "down"),
-        axis("forward", "backward"),
-        sceneRadius * amount * 0.6
-      );
-
-      const zoom = axis("zoomOut", "zoomIn");
-
-      if (zoom) {
-        zoomBy(Math.exp(zoom * amount));
-      }
-    });
-
+    
+    // Correction explicite du roulis, même avec le verrou actif.
+    // La position de la caméra et la cible restent inchangées.
+    camera.up.copy(up.normalize());
+    
     syncCamera();
     requestGifCapture();
-}
-
-// ---------------------------------------------------------------------------
-// Interface
-// ---------------------------------------------------------------------------
-
-$("fit").addEventListener("click", () => {
-  if (!canNavigate()) return;
-
-  clearNavigation();
-  fitToView();
-  requestGifCapture();
-});
-
-$("recenterTarget").addEventListener("click", recenterTarget);
-$("exportCam").addEventListener("click", exportCamera);
-$("importCam").addEventListener("click", importCamera);
-
-$("principalAxis").addEventListener("change", () => {
-  clearNavigation();
-  updatePrincipalAxisHelp();
-});
-
-document.querySelectorAll("[data-view]").forEach((button) => {
-  button.addEventListener("click", () => {
-    setView(button.dataset.view);
-  });
-});
-
-$("step").addEventListener("input", () => {
-  $("stepValue").value = $("step").value;
-});
-
-$("keyboardLayout").addEventListener("change", () => {
-  clearNavigation();
-  updateKeyboardHelp();
-});
-
-$("togglePanel").addEventListener("click", () => {
-  clearNavigation();
-
-  const collapsed = $("panel").classList.toggle("collapsed");
-
-  $("togglePanel").textContent = collapsed ? "+" : "−";
-  $("togglePanel").setAttribute("aria-expanded", String(!collapsed));
-  $("togglePanel").setAttribute(
-    "aria-label",
-    collapsed ? "Développer le panneau" : "Réduire le panneau"
-  );
-});
-
-$("flipUp").addEventListener("change", () => {
-  if (!canNavigate()) return;
-
-  clearNavigation();
-
-  // Aucun rechargement nécessaire avec PlayCanvas.
-  applyUpFlip();
-  computeSceneBounds();
-  syncCamera();
-  requestGifCapture();
-
-  setStatus(
-    `Axe Y ${$("flipUp").checked ? "vers le bas" : "vers le haut"} · ` +
-    "vue conservée."
-  );
-});
-
-$("collisionEnabled").addEventListener("change", async (event) => {
-  clearNavigation();
-
-  console.log("[collision-toggle]", {
-    checked: $("collisionEnabled").checked,
-    sceneReady,
-    isLoading,
-    eventType: event.type,
-    stack: new Error("collisionEnabled change").stack,
+    
+    setStatus(
+      `Vue redressée · axe ${getPrincipalAxisName().toUpperCase()} vers le haut.`
+    );
   });
 
-  if (!$("collisionEnabled").checked) {
-    setCollisionStatus("Anticollision désactivée.");
-    return;
-  }
+  $("step").addEventListener("input", () => {
+    $("stepValue").value = $("step").value;
+  });
 
-  if (!sceneReady) {
-    setCollisionStatus(
-      "L’anticollision sera préparée au prochain chargement."
+  $("keyboardLayout").addEventListener("change", () => {
+    navigation.clearNavigation();
+    updateKeyboardHelp();
+  });
+
+  $("togglePanel").addEventListener("click", () => {
+    navigation.clearNavigation();
+
+    const collapsed = $("panel").classList.toggle("collapsed");
+
+    $("togglePanel").textContent = collapsed ? "+" : "−";
+    $("togglePanel").setAttribute(
+      "aria-expanded",
+      String(!collapsed)
     );
-    return;
-  }
-
-  isLoading = true;
-  refreshUI();
-
-  try {
-    console.log("[collision-toggle] buildCollisionGrid:start", {
-      sceneCount,
-      centersCount: centers ? centers.length / 3 : 0,
-      sceneRadius,
-    });
-
-    await buildCollisionGrid();
-
-    console.log("[collision-toggle] buildCollisionGrid:success", {
-      occupiedCells: collisionState.cells?.size || 0,
-      cellSize: collisionState.cellSize,
-    });
-
-    checkCurrentCollisionPosition();
-  } catch (error) {
-    console.error("[collision-toggle] buildCollisionGrid:error", error);
-
-    $("collisionEnabled").checked = false;
-
-    console.warn("[collision-toggle] auto-uncheck", {
-      reason: error?.message || String(error),
-    });
-
-    setCollisionStatus(
-      `Anticollision indisponible : ${error?.message || error}`,
-      true
+    $("togglePanel").setAttribute(
+      "aria-label",
+      collapsed
+        ? "Développer le panneau"
+        : "Réduire le panneau"
     );
-  } finally {
-    isLoading = false;
-    refreshUI();
-  }
-});
+  });
 
-$("collisionDensity").addEventListener("input", () => {
-  $("collisionDensityValue").value =
-    $("collisionDensity").value;
+  $("flipUp").addEventListener("change", () => {
+    if (!canNavigate()) return;
 
-  checkCurrentCollisionPosition();
-});
+    navigation.clearNavigation();
 
-$("collisionMargin").addEventListener("input", () => {
-  $("collisionMarginValue").value =
-    $("collisionMargin").value;
+    applyUpFlip();
+    computeSceneBounds();
+    syncCamera();
+    requestGifCapture();
 
-  checkCurrentCollisionPosition();
-});
+    collision.checkCurrentCollisionPosition(
+      $("collisionEnabled").checked
+    );
 
-$("fileInput").addEventListener("change", (event) => {
-  void loadFile(event.target.files?.[0]);
-});
+    setStatus(
+      `Axe Y ${
+        $("flipUp").checked ? "vers le bas" : "vers le haut"
+      } · vue conservée.`
+    );
+  });
 
-$("gifStart").addEventListener("click", startGifRecording);
-$("gifStop").addEventListener("click", stopAndExportGif);
-$("gifCancel").addEventListener("click", cancelGifRecording);
+  $("collisionEnabled").addEventListener(
+    "change",
+    async () => {
+      navigation.clearNavigation();
 
-// ---------------------------------------------------------------------------
-// Glisser-déposer
-// ---------------------------------------------------------------------------
-
-let dragDepth = 0;
-
-window.addEventListener("dragenter", (event) => {
-  event.preventDefault();
-
-  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
-    return;
-  }
-
-  dragDepth++;
-  $("drop").style.display = "flex";
-});
-
-window.addEventListener("dragover", (event) => {
-  event.preventDefault();
-});
-
-window.addEventListener("dragleave", (event) => {
-  event.preventDefault();
-
-  dragDepth = Math.max(0, dragDepth - 1);
-
-  if (!dragDepth) $("drop").style.display = "none";
-});
-
-window.addEventListener("drop", (event) => {
-  event.preventDefault();
-
-  dragDepth = 0;
-  $("drop").style.display = "none";
-
-  void loadFile(event.dataTransfer?.files?.[0]);
-});
-
-// ---------------------------------------------------------------------------
-// Anticollision approximative par grille de densité
-// ---------------------------------------------------------------------------
-
-const collisionState = {
-  cells: null,
-  cellSize: 0,
-  building: false,
-  lastWarningAt: 0,
-};
-
-// Limite de mémoire : on abandonne proprement au-delà.
-const COLLISION_MAX_CELLS = 300000;
-
-
-// Limite de travail par mouvement.
-// Si un déplacement est trop grand, il est refusé plutôt que
-// de réduire la précision et risquer de traverser un obstacle.
-const COLLISION_MAX_STEPS = 512;
-
-function collisionKey(x, y, z) {
-  return `${x},${y},${z}`;
-}
-
-function setCollisionStatus(message, error = false) {
-  $("collisionStatus").textContent = message;
-  $("collisionStatus").classList.toggle("error", error);
-}
-
-function resetCollisionGrid() {
-  collisionState.cells = null;
-  collisionState.cellSize = 0;
-  collisionState.lastWarningAt = 0;
-}
-
-async function buildCollisionGrid() {
-  if (!centers?.length) {
-    throw new Error("Aucune scène disponible.");
-  }
-
-  if (collisionState.cells) {
-    console.log("[collision-grid] reuse-existing-grid", {
-      occupiedCells: collisionState.cells.size,
-      cellSize: collisionState.cellSize,
-    });
-
-    return;
-  }
-
-  collisionState.building = true;
-
-  const source = centers;
-  const count = source.length / 3;
-
-  // Commencer fin, puis agrandir seulement si nécessaire.
-  let cellSize = Math.max(sceneRadius / 160, 1e-6);
-
-  const maxAttempts = 8;
-
-  try {
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      const cells = new Map();
-
-      let overflow = false;
-      let validCenters = 0;
-      let invalidCenters = 0;
-
-      setCollisionStatus(
-        `Construction de la grille — tentative ${attempt}…`
-      );
-
-      console.log("[collision-grid] attempt", {
-        attempt,
-        count,
-        cellSize,
-        maxCells: COLLISION_MAX_CELLS,
-        sampling: false,
-        normalization: false,
-      });
-
-      for (let i = 0; i < count; i++) {
-        const x = source[i * 3];
-        const y = source[i * 3 + 1];
-        const z = source[i * 3 + 2];
-
-        if (
-          Number.isFinite(x) &&
-          Number.isFinite(y) &&
-          Number.isFinite(z)
-        ) {
-          validCenters++;
-
-          const key = collisionKey(
-            Math.floor(x / cellSize),
-            Math.floor(y / cellSize),
-            Math.floor(z / cellSize)
-          );
-
-          const previousCount = cells.get(key);
-
-          if (previousCount !== undefined) {
-            // Valeur réelle jusqu’à 50, puis saturation.
-            // Suffisant pour tous les seuils de l’interface.
-            cells.set(key, Math.min(50, previousCount + 1));
-          } else {
-            if (cells.size >= COLLISION_MAX_CELLS) {
-              overflow = true;
-              break;
-            }
-
-            cells.set(key, 1);
-          }
-        } else {
-          invalidCenters++;
-        }
-
-        if (i > 0 && i % 100000 === 0) {
-          setCollisionStatus(
-            `Grille — tentative ${attempt} : ` +
-            `${Math.round(i / count * 100)} %…`
-          );
-
-          await sleep(0);
-
-          if (centers !== source) {
-            throw new Error(
-              "La scène a changé pendant la construction."
-            );
-          }
-        }
-      }
-
-      if (overflow) {
-        console.warn("[collision-grid] retry-coarser", {
-          attempt,
-          occupiedCells: cells.size,
-          previousCellSize: cellSize,
-          nextCellSize: cellSize * 2,
-        });
-
-        // Libérer cette tentative avant de recommencer.
-        cells.clear();
-        cellSize *= 2;
-
-        await sleep(0);
-        continue;
-      }
-
-      if (!validCenters) {
-        throw new Error("Aucun centre de splat exploitable.");
-      }
-
-      if (centers !== source) {
-        throw new Error(
-          "La scène a changé pendant la construction."
+      if (!$("collisionEnabled").checked) {
+        collision.setCollisionStatus(
+          "Anticollision désactivée."
         );
+        return;
       }
 
-      const threshold = Number($("collisionDensity").value);
-
-      let denseCells = 0;
-      let maxDensity = 0;
-
-      for (const density of cells.values()) {
-        if (density >= threshold) denseCells++;
-        maxDensity = Math.max(maxDensity, density);
+      if (!sceneReady) {
+        collision.setCollisionStatus(
+          "L’anticollision sera préparée au prochain chargement."
+        );
+        return;
       }
 
-      collisionState.cells = cells;
-      collisionState.cellSize = cellSize;
+      isLoading = true;
+      refreshUI();
 
-      console.log("[collision-grid] done", {
-        count,
-        validCenters,
-        invalidCenters,
-        occupiedCells: cells.size,
-        denseCells,
-        cellSize,
-        threshold,
-        maxDensityCappedAt50: maxDensity,
-        sampling: false,
-        normalization: false,
-      });
+      try {
+        await collision.buildGrid();
+        collision.checkCurrentCollisionPosition(true);
+      } catch (error) {
+        $("collisionEnabled").checked = false;
 
-      setCollisionStatus(
-        `Grille prête : ${cells.size.toLocaleString()} cellules · ` +
-        `${denseCells.toLocaleString()} obstacles · ` +
-        "comptage des centres, sans normalisation."
-      );
+        collision.setCollisionStatus(
+          `Anticollision indisponible : ${error?.message || error}`,
+          true
+        );
+      } finally {
+        isLoading = false;
+        refreshUI();
+      }
+    }
+  );
 
+  $("collisionDensity").addEventListener("input", () => {
+    $("collisionDensityValue").value =
+      $("collisionDensity").value;
+
+    collision.checkCurrentCollisionPosition(
+      $("collisionEnabled").checked
+    );
+  });
+
+  $("collisionMargin").addEventListener("input", () => {
+    $("collisionMarginValue").value =
+      $("collisionMargin").value;
+
+    collision.checkCurrentCollisionPosition(
+      $("collisionEnabled").checked
+    );
+  });
+
+  $("fileInput").addEventListener("change", (event) => {
+    void loadFile(event.target.files?.[0]);
+  });
+
+  $("gifStart").addEventListener("click", () => {
+    gifRecorder.start(sceneReady);
+    refreshUI();
+  });
+
+  $("gifStop").addEventListener("click", async () => {
+    navigation.clearNavigation();
+    await gifRecorder.stopAndExport({
+      sceneReady,
+      nextFrame: nextRenderedFrame,
+    });
+    refreshUI();
+  });
+
+  $("gifCancel").addEventListener("click", () => {
+    gifRecorder.cancel(sceneReady);
+    refreshUI();
+  });
+}
+
+function installDnD() {
+  let dragDepth = 0;
+
+  window.addEventListener("dragenter", (event) => {
+    event.preventDefault();
+
+    if (!Array.from(
+      event.dataTransfer?.types ?? []
+    ).includes("Files")) {
       return;
     }
 
-    throw new Error(
-      "Impossible de construire la grille dans la limite mémoire."
-    );
-  } finally {
-    collisionState.building = false;
-  }
-}
-
-function cameraToCollisionSpace(position) {
-  const result = position.clone();
-
-  // Inverse de la rotation de 180° autour de X.
-  if ($("flipUp").checked) {
-    result.y = -result.y;
-    result.z = -result.z;
-  }
-
-  return result;
-}
-
-// Intersection sphère / cellule dense.
-/*function intersectsDenseCells(position, radius) {
-  const { cells, cellSize } = collisionState;
-
-  if (!cells || !cellSize) return false;
-
-  const threshold = Number($("collisionDensity").value);
-  const radiusSq = radius * radius;
-
-  const minX = Math.floor((position.x - radius) / cellSize);
-  const minY = Math.floor((position.y - radius) / cellSize);
-  const minZ = Math.floor((position.z - radius) / cellSize);
-
-  const maxX = Math.floor((position.x + radius) / cellSize);
-  const maxY = Math.floor((position.y + radius) / cellSize);
-  const maxZ = Math.floor((position.z + radius) / cellSize);
-
-  for (let x = minX; x <= maxX; x++) {
-    for (let y = minY; y <= maxY; y++) {
-      for (let z = minZ; z <= maxZ; z++) {
-        if (
-          (cells.get(collisionKey(x, y, z)) || 0) < threshold
-        ) {
-          continue;
-        }
-
-        const closestX = THREE.MathUtils.clamp(
-          position.x,
-          x * cellSize,
-          (x + 1) * cellSize
-        );
-
-        const closestY = THREE.MathUtils.clamp(
-          position.y,
-          y * cellSize,
-          (y + 1) * cellSize
-        );
-
-        const closestZ = THREE.MathUtils.clamp(
-          position.z,
-          z * cellSize,
-          (z + 1) * cellSize
-        );
-
-        const dx = position.x - closestX;
-        const dy = position.y - closestY;
-        const dz = position.z - closestZ;
-
-        if (dx * dx + dy * dy + dz * dz <= radiusSq) {
-          return true;
-        }
-      }
-    }
-  }
-
-  return false;
-}*/
-
-function intersectsDenseCells(position, radius = 0) {
-  const { cells, cellSize } = collisionState;
-
-  if (!cells || !cellSize) return false;
-
-  const threshold = Number($("collisionDensity").value);
-
-  // Mode simple et beaucoup moins agressif :
-  // on teste essentiellement la cellule contenant la caméra.
-  // Le radius est conservé dans la signature pour compatibilité,
-  // mais n’élargit plus le test à tout un voisinage.
-  const x = Math.floor(position.x / cellSize);
-  const y = Math.floor(position.y / cellSize);
-  const z = Math.floor(position.z / cellSize);
-
-  return (cells.get(collisionKey(x, y, z)) || 0) >= threshold;
-}
-
-function collisionPathIsClear(fromWorld, toWorld) {
-  const from = cameraToCollisionSpace(fromWorld);
-  const to = cameraToCollisionSpace(toWorld);
-
-  const distance = from.distanceTo(to);
-  const cellSize = collisionState.cellSize;
-
-  const diagnostic = {
-    fromWorld: fromWorld.toArray(),
-    toWorld: toWorld.toArray(),
-    fromCollisionSpace: from.toArray(),
-    toCollisionSpace: to.toArray(),
-    distance,
-    cellSize,
-    steps: 0,
-    cameraRadius: 0,
-    testRadius: 0,
-    blockedAt: null,
-    reason: null,
-  };
-
-  if (distance < 1e-12) {
-    diagnostic.reason = "no-displacement";
-    collisionDebug.lastCheck = diagnostic;
-    return true;
-  }
-
-  // Plus de sur-échantillonnage agressif : on veut surtout
-  // savoir si la caméra finit ou passe dans une cellule dense,
-  // pas élargir artificiellement l’obstacle.
-  const steps = Math.max(
-    1,
-    Math.ceil(distance / Math.max(cellSize * 0.5, 1e-6))
-  );
-
-  diagnostic.steps = steps;
-
-  if (steps > COLLISION_MAX_STEPS) {
-    diagnostic.reason = "step-limit";
-    collisionDebug.lastCheck = diagnostic;
-    return false;
-  }
-
-  const position = new THREE.Vector3();
-
-  for (let i = 0; i <= steps; i++) {
-    position.lerpVectors(from, to, i / steps);
-
-    if (intersectsDenseCells(position, 0)) {
-      diagnostic.reason = "dense-cell";
-      diagnostic.blockedAt = {
-        sample: i,
-        position: position.toArray(),
-      };
-
-      collisionDebug.lastCheck = diagnostic;
-      return false;
-    }
-  }
-
-  diagnostic.reason = "path-clear";
-  collisionDebug.lastCheck = diagnostic;
-
-  return true;
-}
-
-function reportCollisionBlock() {
-  const now = performance.now();
-
-  if (now - collisionState.lastWarningAt < 1000) return;
-
-  collisionState.lastWarningAt = now;
-
-  setCollisionStatus(
-    "Mouvement bloqué. Si la caméra est déjà dans une zone dense, " +
-    "désactive l’option pour en sortir ou utilise « Cadrer »."
-  );
-}
-
-// Transaction : appliquer un mouvement, vérifier le trajet,
-// restaurer entièrement l’état si le mouvement est interdit.
-function navigateWithCollision(move) {
-  collisionDebug.counters.calls++;
-
-  const optionChecked = $("collisionEnabled").checked;
-  const gridAvailable = !!collisionState.cells;
-  const enabled = optionChecked && gridAvailable;
-
-  if (!enabled) {
-    collisionDebug.counters.bypassed++;
-    collisionDebug.lastCheck = null;
-
-    move();
-
-    collisionDebugLog("bypassed", {
-      reason: !optionChecked
-        ? "option-disabled"
-        : "grid-missing",
-    });
-
-    return true;
-  }
-
-  const previousPosition = camera.position.clone();
-  const previousTarget = target.clone();
-  const previousUp = camera.up.clone();
-
-  move();
-
-  if (collisionPathIsClear(previousPosition, camera.position)) {
-    collisionDebug.counters.accepted++;
-
-    collisionDebugLog("accepted", {
-      check: collisionDebug.lastCheck,
-    });
-
-    return true;
-  }
-
-  collisionDebug.counters.blocked++;
-
-  camera.position.copy(previousPosition);
-  target.copy(previousTarget);
-  camera.up.copy(previousUp);
-
-  camera.lookAt(target);
-  camera.updateMatrixWorld(true);
-
-  collisionDebugLog("blocked", {
-    check: collisionDebug.lastCheck,
+    dragDepth++;
+    $("drop").style.display = "flex";
   });
 
-  reportCollisionBlock();
+  window.addEventListener("dragover", (event) => {
+    event.preventDefault();
+  });
 
-  return false;
-}
+  window.addEventListener("dragleave", (event) => {
+    event.preventDefault();
 
-function checkCurrentCollisionPosition() {
-  if (
-    !$("collisionEnabled").checked ||
-    !collisionState.cells
-  ) {
-    return;
-  }
+    dragDepth = Math.max(0, dragDepth - 1);
 
-  const position = cameraToCollisionSpace(camera.position);
-
-  if (intersectsDenseCells(position, 0)) {
-    setCollisionStatus(
-      "Attention : caméra dans une cellule dense.",
-      true
-    );
-  } else {
-    setCollisionStatus(
-      "Anticollision active (mode cellules denses)."
-    );
-  }
-}
-
-const collisionDebug = {
-  enabled: false,
-  lastLogAt: 0,
-  lastCheck: null,
-  counters: {
-    calls: 0,
-    bypassed: 0,
-    accepted: 0,
-    blocked: 0,
-  },
-};
-
-function collisionDebugLog(event, details = {}) {
-  if (!collisionDebug.enabled) return;
-
-  const now = performance.now();
-
-  if (now - collisionDebug.lastLogAt < 1000) return;
-
-  collisionDebug.lastLogAt = now;
-
-  // JSON plutôt qu’un objet inspecté ultérieurement :
-  // les valeurs restent celles du moment du log.
-  console.log(
-    "[collision-debug] " +
-    JSON.stringify({
-      event,
-      optionChecked: $("collisionEnabled").checked,
-      gridAvailable: !!collisionState.cells,
-      occupiedCells: collisionState.cells?.size || 0,
-      cellSize: collisionState.cellSize,
-      threshold: Number($("collisionDensity").value),
-      margin: Number($("collisionMargin").value),
-      flipUp: $("flipUp").checked,
-      counters: { ...collisionDebug.counters },
-      ...details,
-    })
-  );
-}
-
-function collisionDebugSnapshot() {
-  const cells = collisionState.cells;
-  const threshold = Number($("collisionDensity").value);
-
-  let denseCells = 0;
-  let maxDensity = 0;
-
-  const histogram = {
-    "1": 0,
-    "2-3": 0,
-    "4-7": 0,
-    "8-15": 0,
-    "16-31": 0,
-    "32-50": 0,
-  };
-
-  if (cells) {
-    for (const density of cells.values()) {
-      maxDensity = Math.max(maxDensity, density);
-
-      if (density >= threshold) denseCells++;
-
-      if (density === 1) histogram["1"]++;
-      else if (density <= 3) histogram["2-3"]++;
-      else if (density <= 7) histogram["4-7"]++;
-      else if (density <= 15) histogram["8-15"]++;
-      else if (density <= 31) histogram["16-31"]++;
-      else histogram["32-50"]++;
+    if (!dragDepth) {
+      $("drop").style.display = "none";
     }
-  }
+  });
 
-  const localCamera = cameraToCollisionSpace(camera.position);
-  const radius =
-    collisionState.cellSize * Number($("collisionMargin").value);
+  window.addEventListener("drop", (event) => {
+    event.preventDefault();
 
-  const report = {
-    optionChecked: $("collisionEnabled").checked,
-    sceneReady,
-    isLoading,
-    building: collisionState.building,
-    sceneCount,
-    centersCount: centers ? centers.length / 3 : 0,
-    sceneRadius,
-    gridAvailable: !!cells,
-    occupiedCells: cells?.size || 0,
-    denseCells,
-    maxDensity,
-    histogram,
-    cellSize: collisionState.cellSize,
-    threshold,
-    margin: Number($("collisionMargin").value),
-    cameraRadius: radius,
-    flipUp: $("flipUp").checked,
-    cameraWorld: camera.position.toArray(),
-    cameraCollisionSpace: localCamera.toArray(),
-    target: target.toArray(),
+    dragDepth = 0;
+    $("drop").style.display = "none";
 
-    cameraCurrentlyBlocked: cells
-      ? intersectsDenseCells(localCamera, radius)
-      : null,
-
-    // Vérification du repère : la grille utilise les centres
-    // locaux, et cameraToCollisionSpace() suppose seulement flipUp.
-    modelWorldMatrix: splatEntity
-      ? Array.from(splatEntity.getWorldTransform().data)
-      : null,
-
-    counters: { ...collisionDebug.counters },
-    lastCheck: collisionDebug.lastCheck,
-  };
-
-  const text = JSON.stringify(report, null, 2);
-
-  console.log("[collision-debug] SNAPSHOT\n" + text);
-
-  return text;
+    void loadFile(event.dataTransfer?.files?.[0]);
+  });
 }
 
-// Accessible depuis la console, malgré le script type="module".
-window.collisionDebugSnapshot = collisionDebugSnapshot;
-
-window.setCollisionDebug = (enabled) => {
-  collisionDebug.enabled = Boolean(enabled);
-};
-
-// ---------------------------------------------------------------------------
-// Initialisation
-// ---------------------------------------------------------------------------
-
-$("flipUp").checked = ["1", "true"].includes(params.get("flipUp"));
+$("flipUp").checked = ["1", "true"].includes(
+  params.get("flipUp")
+);
 
 if (pendingCamera !== null) {
   $("cameraValue").value = pendingCamera;
@@ -2775,11 +1158,6 @@ if (pendingCamera !== null) {
 
 updateKeyboardHelp();
 updatePrincipalAxisHelp();
-refreshUI();
-
-installMouseControls();
-
-let resizeObserver = null;
 
 async function initialize() {
   isLoading = true;
@@ -2790,9 +1168,6 @@ async function initialize() {
       deviceTypes: ["webgl2"],
       antialias: false,
       alpha: false,
-
-      // La capture se fait dans postrender, mais conserver le buffer
-      // simplifie aussi le comportement selon les navigateurs.
       preserveDrawingBuffer: true,
     });
 
@@ -2808,11 +1183,9 @@ async function initialize() {
       2
     );
 
-    // Les centres sont utilisés par le cadrage percentile.
     app.scene.gsplatCentersEnabled = true;
 
     cameraEntity = new pc.Entity("Camera");
-
     cameraEntity.addComponent("camera", {
       clearColor: new pc.Color(
         0x10 / 255,
@@ -2825,16 +1198,87 @@ async function initialize() {
     });
 
     app.root.addChild(cameraEntity);
-
     picker = new pc.Picker(app, 1, 1, true);
 
-    app.on("update", navigationFrame);
-    app.on("postrender", processGifCapture);
+    collision = createCollisionSystem({
+      getFlipUp: () => $("flipUp").checked,
+      getThreshold: () => Number($("collisionDensity").value),
+      getMargin: () => Number($("collisionMargin").value),
+      getSceneRadius: () => sceneRadius,
+      getCenters: () => centers,
+      getSceneCount: () => sceneCount,
+      getCamera: () => camera,
+      getTarget: () => target,
+      setStatus,
+      sleep,
+    });
+
+    gifRecorder = createGifRecorder({
+      getCanvas: () => canvas,
+      canNavigate,
+      isLoading: () => isLoading,
+      renderNow: () => {},
+    });
+
+    navigation = createNavigationSystem({
+      canvas,
+      camera,
+      target,
+      getSceneRadius: () => sceneRadius,
+      getSceneCenter: () => sceneCenter,
+      getCanNavigate: canNavigate,
+      getPrincipalAxis,
+      getPrincipalAxisName,
+      isRotationLocked: () =>
+        $("lockPrincipalRotation").checked,
+      getSpeedValue: () => Number($("step").value),
+      getKeyboardLayout: () => $("keyboardLayout").value,
+      navigateWithCollision: (move, enabled) =>
+        collision.navigateWithCollision(move, enabled),
+      syncCamera,
+      requestGifCapture,
+      selectPointInView,
+      setStatus,
+    });
+
+    navigation.installMouseControls();
+    navigation.installHeldButtons();
+    navigation.installKeyboard();
+
+    installUI();
+    installDnD();
+
+    app.on("update", navigation.frame);
+      app.on("postrender", () => {
+        gifRecorder.processCapture({
+          sceneReady,
+          documentHidden: document.hidden,
+          navigationIsActive,
+          signature: cameraCaptureSignature(),
+         continuous: isPrincipalOrbitActive(),
+         cameraQuaternion: camera.quaternion,
+        });
+      });
 
     app.start();
 
-    resizeObserver = new ResizeObserver(resizeViewer);
+    const resizeObserver = new ResizeObserver(resizeViewer);
     resizeObserver.observe(container);
+
+    window.addEventListener("pagehide", (event) => {
+      if (event.persisted) return;
+
+      navigation.clearNavigation();
+      gifRecorder.clearDownload();
+      resizeObserver.disconnect();
+      picker?.destroy();
+
+      if (app) {
+        releaseScene();
+        app.destroy();
+        app = null;
+      }
+    });
 
     resizeViewer();
 
@@ -2844,7 +1288,10 @@ async function initialize() {
     const fileParam = params.get("file");
 
     if (fileParam) {
-      await resetAndLoad(fileParam, filenameFromUrl(fileParam));
+      await resetAndLoad(
+        fileParam,
+        filenameFromUrl(fileParam)
+      );
     }
   } catch (error) {
     console.error("Initialisation PlayCanvas :", error);
@@ -2860,24 +1307,5 @@ async function initialize() {
     refreshUI();
   }
 }
-
-window.addEventListener("pagehide", (event) => {
-  if (event.persisted) return;
-
-  clearNavigation();
-
-  if (gifState.downloadUrl) {
-    URL.revokeObjectURL(gifState.downloadUrl);
-  }
-
-  resizeObserver?.disconnect();
-  picker?.destroy();
-
-  if (app) {
-    releaseScene();
-    app.destroy();
-    app = null;
-  }
-});
 
 void initialize();
