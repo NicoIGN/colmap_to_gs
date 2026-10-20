@@ -380,28 +380,49 @@ if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
 
   CLEAN_SCRIPT="$SCRIPT_DIR/clean_ply.sh"
+  COLMAP_POINTS="$COLMAP_SPARSE_DIR/points3D.bin"
+  CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
+  TRANSFORM_SEARCH_DIR="$TRAIN_DIR/$EXPERIMENT_NAME"
 
-  [ -f "$CLEAN_SCRIPT" ] || die "Missing cleaning script: $CLEAN_SCRIPT"
+  [ -f "$CLEAN_SCRIPT" ] || die \
+    "Missing cleaning script: $CLEAN_SCRIPT"
+  [ -f "$COLMAP_POINTS" ] || die \
+    "Missing COLMAP points: $COLMAP_POINTS"
+  [ -n "$PLY_FILE" ] && [ -f "$PLY_FILE" ] || die \
+    "Missing exported PLY: $PLY_FILE"
+  [ -d "$TRANSFORM_SEARCH_DIR" ] || die \
+    "Missing training directory: $TRANSFORM_SEARCH_DIR"
+
+  # Sélectionne le dataparser_transforms.json le plus récent.
+  # Pas de pipeline avec head : compatible avec set -euo pipefail
+  # et avec les chemins contenant des espaces.
+  TRANSFORM_FILE=""
+  while IFS= read -r -d '' candidate; do
+    if [[ -z "$TRANSFORM_FILE" || "$candidate" -nt "$TRANSFORM_FILE" ]]; then
+      TRANSFORM_FILE="$candidate"
+    fi
+  done < <(
+    find "$TRANSFORM_SEARCH_DIR" \
+      -type f \
+      -name "dataparser_transforms.json" \
+      -print0
+  )
+
+  [ -n "$TRANSFORM_FILE" ] && [ -s "$TRANSFORM_FILE" ] || die \
+    "Missing or empty dataparser_transforms.json under: $TRANSFORM_SEARCH_DIR"
 
   echo "🧹 Cleaning exported PLY..."
+  echo "🧭 Using transform: $TRANSFORM_FILE"
 
   bash "$CLEAN_SCRIPT" \
-    --dataset-dir "$DATASET_DIR" \
-    --output-dir "$OUTPUT_DIR"
+    --transform "$TRANSFORM_FILE" \
+    --points "$COLMAP_POINTS" \
+    --in-ply "$PLY_FILE" \
+    --out-ply "$CLEANED_PLY" \
+    || die "PLY cleaning failed"
 
-  GENERATED_CLEANED_PLY="$OUTPUT_DIR/cleaned/$(basename "${PLY_FILE%.ply}")_cleaned.ply"
-
-  [ -f "$GENERATED_CLEANED_PLY" ] || die \
-    "Cleaned PLY not found: $GENERATED_CLEANED_PLY"
-
-  CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
-
-  if [ "$GENERATED_CLEANED_PLY" != "$CLEANED_PLY" ]; then
-    mv -f "$GENERATED_CLEANED_PLY" "$CLEANED_PLY"
-  fi
-
-  [ -f "$CLEANED_PLY" ] || die \
-    "Final cleaned PLY not found: $CLEANED_PLY"
+  [ -s "$CLEANED_PLY" ] || die \
+    "Cleaned PLY missing or empty: $CLEANED_PLY"
 
   print_step_time "CLEANING" "$STEP_START"
 
@@ -409,7 +430,6 @@ if [ "$SKIP_EXPORT" = false ]; then
 else
   echo "⏩ Skipping PLY cleaning because export is disabled"
 fi
-
 
 # =========================================
 # Final status

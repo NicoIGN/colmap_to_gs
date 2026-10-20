@@ -31,6 +31,77 @@ def safe_read(f, size):
 # ======================
 # TRANSFORM
 # ======================
+def load_transform(path):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    if not isinstance(data, dict):
+        raise ValueError("Transform JSON must contain an object")
+
+    # Spirula format
+    if data.get("format") == "spirula-scene-transform":
+        if data.get("version") != 1:
+            raise ValueError(
+                f"Unsupported Spirula transform version: {data.get('version')}"
+            )
+
+        tf = data.get("train_from_world")
+        if not isinstance(tf, dict):
+            raise ValueError("Missing Spirula train_from_world object")
+
+        # Preferred path: full matrix
+        if "matrix_4x4" in tf:
+            m = np.asarray(tf["matrix_4x4"], dtype=np.float64)
+            if m.shape != (4, 4):
+                raise ValueError("Spirula matrix_4x4 must have shape (4, 4)")
+            transform = m
+        else:
+            # Fallback reconstruction
+            try:
+                R = np.asarray(tf["rotation"]["matrix_3x3"], dtype=np.float64)
+                t = np.asarray(tf["translation"], dtype=np.float64)
+                s = float(tf["scale"])
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError("Invalid Spirula train_from_world fields") from exc
+
+            if R.shape != (3, 3):
+                raise ValueError("Spirula rotation matrix must be shape (3, 3)")
+            if t.shape != (3,):
+                raise ValueError("Spirula translation must be shape (3,)")
+            if not np.isfinite(s) or s <= 0:
+                raise ValueError("Spirula scale must be finite and positive")
+
+            transform = np.eye(4, dtype=np.float64)
+            transform[:3, :3] = s * R
+            transform[:3, 3] = t
+
+        # In Spirula matrix path, scale is already baked in.
+        scale = 1.0
+        log("Transform format: Spirula (train_from_world)")
+
+    # Nerfstudio dataparser format
+    elif "transform" in data:
+        transform = np.asarray(data["transform"], dtype=np.float64)
+        scale = float(data.get("scale", 1.0))
+        log("Transform format: Nerfstudio dataparser")
+
+    else:
+        raise ValueError(
+            "Unsupported transform format: expected Nerfstudio keys "
+            "('transform', optional 'scale') or Spirula format "
+            "('format=spirula-scene-transform', 'train_from_world')."
+        )
+
+    if transform.shape != (4, 4):
+        raise ValueError(f"Transform matrix must be 4x4, got {transform.shape}")
+    if not np.isfinite(transform).all():
+        raise ValueError("Transform matrix contains non-finite values")
+    if not np.isfinite(scale) or scale <= 0:
+        raise ValueError(f"Scale must be finite and > 0, got {scale}")
+
+    return transform, scale
+
+
 def apply_transform(pts, transform, scale=1.0):
     R = np.array(transform[:3, :3], dtype=np.float64)
     t = np.array(transform[:3, 3], dtype=np.float64)
@@ -118,22 +189,6 @@ def load_ply(path):
 
 
 # ======================
-# FILTER GAUSSIANS
-# ======================
-def filter_gaussians(gaussians, colmap_pts, dist):
-    tree = cKDTree(colmap_pts)
-
-    valid = np.isfinite(gaussians).all(axis=1)
-    d, _ = tree.query(gaussians[valid], k=1)
-
-    mask = np.zeros(len(gaussians), dtype=bool)
-    idx = np.where(valid)[0]
-
-    mask[idx] = d < dist
-    return mask
-
-
-# ======================
 # WRITE
 # ======================
 def write_ply(template_ply, mask, out_path):
@@ -157,14 +212,16 @@ def main():
 
     args = parser.parse_args()
 
+    # Safety: avoid same input/output path
+    in_abs = os.path.abspath(args.in_ply)
+    out_abs = os.path.abspath(args.out_ply)
+    if in_abs == out_abs:
+        raise ValueError("Output PLY must be different from input PLY")
+
     # ======================
     # LOAD TRANSFORM
     # ======================
-    with open(args.transform, "r") as f:
-        data = json.load(f)
-
-    transform = np.array(data["transform"], dtype=np.float64)
-    scale = float(data.get("scale", 1.0))
+    transform, scale = load_transform(args.transform)
 
     # ======================
     # COLMAP
@@ -204,7 +261,7 @@ def main():
     mask_dist[idx] = d < dist
 
     # ======================
-    # BBOX FILTER (IMPORTANT ADDITION)
+    # BBOX FILTER
     # ======================
     inside_bbox = (
         (gaussians[:, 0] >= bbox_min[0]) & (gaussians[:, 0] <= bbox_max[0]) &
@@ -213,15 +270,17 @@ def main():
     )
 
     # ======================
-    # FINAL MASK (TOLERANT)
+    # FINAL MASK
     # ======================
-    mask = mask_dist | inside_bbox
+    # mask = mask_dist | inside_bbox
+    mask = mask_dist & inside_bbox
 
     log(f"Kept: {mask.sum()} / {len(mask)}")
 
     # ======================
     # SAVE
     # ======================
+    os.makedirs(os.path.dirname(out_abs) or ".", exist_ok=True)
     write_ply(ply, mask, args.out_ply)
 
     log(f"Saved: {args.out_ply}")
