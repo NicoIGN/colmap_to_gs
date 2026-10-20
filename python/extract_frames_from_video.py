@@ -8,8 +8,12 @@
     * --min-fps  : cadence minimale (écart max de 1/min-fps s entre deux images)
 - Positions/altitudes interpolées linéairement entre les points GPX.
 - Format de sortie paramétrable : --format {jpg,png,tiff}
+- Barre de progression sur extraction FFmpeg + interpolation + écriture.
+- Option --reset (false par défaut) :
+    * false : conserve les images existantes et ignore les collisions de noms
+    * true  : supprime les frame_* existantes avant extraction
 
-Dépendances : ffmpeg/ffprobe dans le PATH, pip install piexif.
+Dépendances : ffmpeg/ffprobe dans le PATH, pip install piexif tqdm.
 """
 
 import argparse
@@ -23,6 +27,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 import piexif
+from tqdm import tqdm
 
 EARTH_RADIUS = 6371008.8  # m
 
@@ -205,6 +210,46 @@ def ffmpeg_codec_for(fmt: str):
     raise ValueError(f"Format inconnu: {fmt}")
 
 
+def run_ffmpeg_with_progress(cmd, total=None):
+    command = [cmd[0], "-progress", "pipe:1", "-nostats", *cmd[1:]]
+
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=None,  # garde warnings/erreurs FFmpeg visibles
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        bufsize=1,
+    )
+
+    try:
+        with tqdm(total=total, desc="Extraction FFmpeg", unit="img", dynamic_ncols=True) as bar:
+            for line in process.stdout:
+                key, sep, value = line.strip().partition("=")
+                if sep and key == "frame":
+                    try:
+                        count = int(value.strip())
+                    except ValueError:
+                        continue
+                    if count > bar.n:
+                        bar.update(count - bar.n)
+
+            rc = process.wait()
+
+        if rc != 0:
+            raise subprocess.CalledProcessError(rc, command)
+
+    except BaseException:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        raise
+    finally:
+        if process.stdout:
+            process.stdout.close()
+
+
 # --------------------------------------------------------------- Main -----
 
 def main():
@@ -224,6 +269,12 @@ def main():
                     help="Distance max (m) entre 2 images conservées (nécessite GPX).")
     ap.add_argument("--min-fps", type=float, default=None,
                     help="Nombre minimal d'images conservées par seconde.")
+    ap.add_argument(
+        "--reset",
+        action="store_true",
+        help="Si activé: supprime les images frame_* existantes dans --out avant extraction. "
+             "Par défaut (false): conserve les existantes et n'écrase rien."
+    )
     args = ap.parse_args()
 
     if not args.video.is_file():
@@ -245,8 +296,18 @@ def main():
         ap.error("ffmpeg/ffprobe introuvables dans le PATH.")
 
     args.out.mkdir(parents=True, exist_ok=True)
-    if any(args.out.glob("frame_*.*")):
-        ap.error("Le dossier de sortie contient déjà des frame_*.* (pour éviter écrasement).")
+
+    existing = sorted(args.out.glob("frame_*.*"))
+    if existing and args.reset:
+        print(f"[reset] Suppression de {len(existing)} image(s) existante(s) dans {args.out}")
+        for p in tqdm(existing, desc="Reset sortie", unit="img", dynamic_ncols=True):
+            try:
+                p.unlink()
+            except Exception as e:
+                ap.error(f"Impossible de supprimer {p}: {e}")
+    elif existing:
+        print(f"[info] {len(existing)} image(s) déjà présentes dans {args.out} (mode --reset=false).")
+        print("[info] Elles sont conservées; les nouvelles images seront ajoutées sans écrasement.")
 
     points = read_gpx(args.gpx) if args.gpx else None
     times = [p["seconds"] for p in points] if points else None
@@ -266,7 +327,7 @@ def main():
             ffmpeg, "-hide_banner", "-loglevel", "warning", "-nostdin",
             "-i", str(args.video.resolve()),
             "-map", "0:v:0",
-            "-vf", f"setpts=PTS-STARTPTS,fps=fps={args.fps}:start_time=0",
+            "-vf", f"setpts=PTS-STARTPTS,fps=fps={args.fps}:start_time=0,format=yuvj420p",
             *codec_args,
             "-start_number", "0",
         ]
@@ -275,7 +336,7 @@ def main():
         cmd += [str(pattern)]
 
         print(f"[1/3] Extraction des candidates à {args.fps:g} img/s en {args.format}…")
-        subprocess.run(cmd, check=True)
+        run_ffmpeg_with_progress(cmd, total=max_frames)
 
         cands = sorted(tmp.glob(f"cand_*.{ext}"))
         n = len(cands)
@@ -284,16 +345,36 @@ def main():
 
         positions = None
         if points:
-            positions = [interpolate(points, times, i / args.fps) for i in range(n)]
+            positions = [
+                interpolate(points, times, i / args.fps)
+                for i in tqdm(range(n), desc="Interpolation GPS", unit="img", dynamic_ncols=True)
+            ]
 
         kept = select_frames(n, args.fps, positions, args.max_dist, args.min_fps)
         print(f"[2/3] {n} candidates -> {len(kept)} images conservées.")
 
         exif_fail = 0
-        for j, i in enumerate(kept):
+        written = 0
+        skipped_existing = 0
+
+        for j, i in enumerate(
+            tqdm(
+                kept,
+                desc="Écriture images + EXIF" if points else "Écriture images",
+                unit="img",
+                dynamic_ncols=True
+            )
+        ):
             tsec = i / args.fps
             dst = args.out / f"frame_{j:06d}_t{tsec:010.3f}.{ext}"
+
+            if dst.exists():
+                skipped_existing += 1
+                tqdm.write(f"[skip] {dst.name} existe déjà, ignoré.")
+                continue
+
             shutil.move(str(cands[i]), dst)
+            written += 1
 
             if points:
                 lat, lon, alt = positions[i]
@@ -302,16 +383,19 @@ def main():
                     write_exif(dst, lat, lon, alt, ts)
                 except Exception as e:
                     exif_fail += 1
-                    print(f"  [WARN] EXIF GPS non écrit pour {dst.name}: {e}")
+                    tqdm.write(f"[WARN] EXIF GPS non écrit pour {dst.name}: {e}")
 
-        print(f"[3/3] Terminé: {len(kept)} images dans {args.out}")
+        print(f"[3/3] Terminé: {written} image(s) écrite(s) dans {args.out}")
+        if skipped_existing:
+            print(f"      {skipped_existing} image(s) ignorée(s) car déjà présentes.")
         if points:
             if exif_fail == 0:
-                print("      EXIF GPS écrit sur toutes les images.")
+                print("      EXIF GPS écrit sur toutes les images écrites.")
             else:
                 print(f"      EXIF GPS échoué sur {exif_fail} image(s).")
                 if args.format != "jpg":
-                    print("      Note: JPEG est le format le plus fiable avec piexif.")
+                    print("      piexif.insert peut échouer sur PNG/TIFF selon les versions.")
+                    print("      Si besoin: exiftool pour fiabiliser PNG/TIFF.")
 
 
 if __name__ == "__main__":
