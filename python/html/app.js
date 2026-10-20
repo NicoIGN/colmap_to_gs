@@ -3,6 +3,7 @@ import * as THREE from "three";
 import { createCollisionSystem } from "./viewer/collision.js";
 import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
+import { createMeasurementSystem } from "./viewer/measurement.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -52,6 +53,7 @@ let picking = false;
 let navigation = null;
 let collision = null;
 let gifRecorder = null;
+let measurement = null;
 let legacyConverterPromise = null;
 
 const canvas = document.createElement("canvas");
@@ -65,7 +67,8 @@ const canNavigate = () =>
   !fatalError &&
   !picking &&
   !gifRecorder?.state.encoding &&
-  !gifRecorder?.state.finalizing;
+  !gifRecorder?.state.finalizing &&
+  !measurement?.isActive();
 
 function setStatus(message, error = false) {
   $("status").textContent = message;
@@ -208,7 +211,7 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
-
+  measurement?.reset();
   collision?.reset();
 
   splatEntity?.destroy();
@@ -1010,7 +1013,8 @@ function installUI() {
     if (!canNavigate()) return;
 
     navigation.clearNavigation();
-
+    measurement?.reset();
+      
     applyUpFlip();
     computeSceneBounds();
     syncCamera();
@@ -1241,6 +1245,48 @@ async function initialize() {
       setStatus,
     });
 
+      
+      measurement = createMeasurementSystem({
+        canvas,
+        container,
+        camera,
+
+        getCenters: () => centers,
+
+        // Inclut la transformation réelle de la scène,
+        // notamment le retournement COLMAP.
+        getModelMatrix: () => {
+          const matrix = new THREE.Matrix4();
+
+          if (splatEntity) {
+            matrix.fromArray(splatEntity.getWorldTransform().data);
+          }
+
+          return matrix;
+        },
+
+        getSceneRadius: () => sceneRadius,
+        getPrincipalAxis,
+
+        // Ne pas utiliser canNavigate ici :
+        // cette fonction est volontairement fausse pendant la mesure.
+        canMeasure: () =>
+          !!app &&
+          sceneReady &&
+          !isLoading &&
+          !fatalError &&
+          !picking &&
+          !gifRecorder?.state.encoding &&
+          !gifRecorder?.state.finalizing,
+
+        clearNavigation: () => navigation.clearNavigation(),
+        setStatus,
+
+        pickTolerancePx: 4,
+        neighborhoodRadiusRatio: 0.005,
+        snapAngleDeg: 5,
+      });
+      
     navigation.installMouseControls();
     navigation.installHeldButtons();
     navigation.installKeyboard();
@@ -1250,13 +1296,15 @@ async function initialize() {
 
     app.on("update", navigation.frame);
       app.on("postrender", () => {
+        measurement?.render();
+
         gifRecorder.processCapture({
           sceneReady,
           documentHidden: document.hidden,
           navigationIsActive,
           signature: cameraCaptureSignature(),
-         continuous: isPrincipalOrbitActive(),
-         cameraQuaternion: camera.quaternion,
+          continuous: isPrincipalOrbitActive(),
+          cameraQuaternion: camera.quaternion,
         });
       });
 
@@ -1269,6 +1317,8 @@ async function initialize() {
       if (event.persisted) return;
 
       navigation.clearNavigation();
+      measurement?.dispose();
+      measurement = null;
       gifRecorder.clearDownload();
       resizeObserver.disconnect();
       picker?.destroy();
