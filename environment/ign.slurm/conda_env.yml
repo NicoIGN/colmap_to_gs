@@ -45,8 +45,10 @@ dependencies:
   - matplotlib
   - ffmpeg
   - piexif
+  - pyproj
   - imageio
   - imageio-ffmpeg
+  - exiftool
   - rasterio
   - plyfile
   - openh264
