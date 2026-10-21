@@ -2,7 +2,9 @@
 """Extrait des images d'une vidéo et, si un GPX est fourni, les géolocalise.
 
 - Le premier point GPX horodaté correspond à t=0 de la vidéo.
-- Les images candidates sont extraites à --fps (25 par défaut).
+- Les images candidates sont extraites à --fps.
+  * Si --fps est omis, la cadence est estimée automatiquement via ffprobe
+    (avg_frame_rate, sinon r_frame_rate).
 - On ne conserve que le minimum d'images respectant :
     * --max-dist : distance max (m) entre deux images conservées (GPX requis)
     * --min-fps  : cadence minimale (écart max de 1/min-fps s entre deux images)
@@ -20,6 +22,7 @@ import argparse
 import bisect
 import datetime as dt
 import math
+from fractions import Fraction
 from pathlib import Path
 import shutil
 import subprocess
@@ -200,6 +203,40 @@ def video_duration(ffprobe: str, video: Path):
         return None
 
 
+def parse_fraction(text: str):
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        frac = Fraction(text)
+    except Exception:
+        return None
+    if frac <= 0:
+        return None
+    return float(frac)
+
+
+def detect_fps(ffprobe: str, video: Path) -> float:
+    """Détecte fps via ffprobe: avg_frame_rate puis r_frame_rate."""
+    out = subprocess.run(
+        [
+            ffprobe, "-v", "error", "-select_streams", "v:0",
+            "-show_entries", "stream=avg_frame_rate,r_frame_rate",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(video),
+        ],
+        check=True, capture_output=True, text=True
+    ).stdout.strip().splitlines()
+
+    avg = parse_fraction(out[0]) if len(out) >= 1 else None
+    nominal = parse_fraction(out[1]) if len(out) >= 2 else None
+
+    fps = avg or nominal
+    if fps is None or not math.isfinite(fps) or fps <= 0:
+        raise ValueError("Impossible d'estimer le fps depuis ffprobe.")
+    return fps
+
+
 def ffmpeg_codec_for(fmt: str):
     if fmt == "jpg":
         return ["-c:v", "mjpeg", "-q:v", "2"], "jpg"
@@ -263,8 +300,9 @@ def main():
     ap.add_argument("--out", type=Path, default=Path("frames_out"))
     ap.add_argument("--format", choices=["jpg", "png", "tiff"], default="jpg",
                     help="Format de sortie (défaut: jpg).")
-    ap.add_argument("--fps", type=float, default=25.0,
-                    help="Cadence d'extraction des images candidates (défaut 25).")
+    ap.add_argument("--fps", type=float, default=None,
+                    help="Cadence d'extraction des images candidates. "
+                         "Si omis: estimation auto via ffprobe.")
     ap.add_argument("--max-dist", type=float, default=None,
                     help="Distance max (m) entre 2 images conservées (nécessite GPX).")
     ap.add_argument("--min-fps", type=float, default=None,
@@ -279,6 +317,20 @@ def main():
 
     if not args.video.is_file():
         ap.error(f"Vidéo introuvable: {args.video}")
+
+    ffmpeg = shutil.which("ffmpeg")
+    ffprobe = shutil.which("ffprobe")
+    if not ffmpeg or not ffprobe:
+        ap.error("ffmpeg/ffprobe introuvables dans le PATH.")
+
+    # FPS auto si absent
+    if args.fps is None:
+        try:
+            args.fps = detect_fps(ffprobe, args.video)
+        except Exception as e:
+            ap.error(f"Impossible de détecter automatiquement le fps: {e}")
+        print(f"[fps] --fps non fourni, estimation automatique: {args.fps:.6f} img/s")
+
     if not (math.isfinite(args.fps) and args.fps > 0):
         ap.error("--fps doit être > 0.")
     if args.min_fps is not None and not (args.min_fps > 0 and args.min_fps <= args.fps):
@@ -289,11 +341,6 @@ def main():
         ap.error("--max-dist nécessite --gpx.")
     if args.gpx is not None and not args.gpx.is_file():
         ap.error(f"GPX introuvable: {args.gpx}")
-
-    ffmpeg = shutil.which("ffmpeg")
-    ffprobe = shutil.which("ffprobe")
-    if not ffmpeg or not ffprobe:
-        ap.error("ffmpeg/ffprobe introuvables dans le PATH.")
 
     args.out.mkdir(parents=True, exist_ok=True)
 
