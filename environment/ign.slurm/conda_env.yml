@@ -46,6 +46,7 @@ dependencies:
   - ffmpeg
   - piexif
   - pyproj
+  - fiona
   - imageio
   - imageio-ffmpeg
   - exiftool
