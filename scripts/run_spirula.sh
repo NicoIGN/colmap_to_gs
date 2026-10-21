@@ -12,6 +12,10 @@ pairs="${PAIRS:-}"
 matcher="${MATCHER:-}"
 sfm_max_res_option="${SFM_MAX_RES_OPTION:-}"
 
+# Nouveaux paramètres SFM GPS / 360
+metric_gps="${METRIC_GPS:-}"
+camera_model="${CAMERA_MODEL:-}"
+
 # Paramètres d'entraînement Gaussian Splats
 # Vides par défaut : Spirula applique les valeurs du preset.
 quality="${QUALITY:-}"
@@ -75,6 +79,7 @@ Options:
                           exhaustive
                           sequential
                           prefilter
+                          gps
 
   --matcher NAME        Méthode d'appariement SFM
                         Env: MATCHER
@@ -87,6 +92,17 @@ Options:
                           loma-r
                           loma-l
                           loma-g
+
+  --metric-gps MODE     Active le repère métrique via GPS EXIF
+                        Env: METRIC_GPS
+                        Valeurs:
+                          horizontal
+                          3d
+
+  --camera-model NAME   Force un modèle caméra SFM
+                        Env: CAMERA_MODEL
+                        Valeurs:
+                          equirect
 
   --sfm-arg ARG         Argument supplémentaire passé tel quel à 'sfm auto'
                         Répétable
@@ -238,6 +254,16 @@ while [[ $# -gt 0 ]]; do
       matcher="$2"
       shift 2
       ;;
+    --metric-gps)
+      need_arg "$@"
+      metric_gps="$2"
+      shift 2
+      ;;
+    --camera-model)
+      need_arg "$@"
+      camera_model="$2"
+      shift 2
+      ;;
     --sfm-arg)
       need_arg "$@"
       sfm_extra_args+=("$2")
@@ -320,6 +346,14 @@ while [[ $# -gt 0 ]]; do
       matcher="${1#*=}"
       shift
       ;;
+    --metric-gps=*)
+      metric_gps="${1#*=}"
+      shift
+      ;;
+    --camera-model=*)
+      camera_model="${1#*=}"
+      shift
+      ;;
 
     --quality=*)
       quality="${1#*=}"
@@ -384,7 +418,7 @@ fi
 
 if [[ -n "$pairs" ]]; then
   case "$pairs" in
-    auto|exhaustive|sequential|prefilter) ;;
+    auto|exhaustive|sequential|prefilter|gps) ;;
     *) die "--pairs invalide: $pairs" ;;
   esac
 fi
@@ -393,6 +427,20 @@ if [[ -n "$matcher" ]]; then
   case "$matcher" in
     bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g) ;;
     *) die "--matcher invalide: $matcher" ;;
+  esac
+fi
+
+if [[ -n "$metric_gps" ]]; then
+  case "$metric_gps" in
+    horizontal|3d) ;;
+    *) die "--metric-gps invalide: $metric_gps" ;;
+  esac
+fi
+
+if [[ -n "$camera_model" ]]; then
+  case "$camera_model" in
+    equirect) ;;
+    *) die "--camera-model invalide (supporté ici: equirect): $camera_model" ;;
   esac
 fi
 
@@ -474,11 +522,13 @@ mkdir -p "$output_parent_dir"
 echo "Spirula                  : $spirula_bin"
 echo "Dataset                  : $dataset"
 echo "Sortie SFM               : $output_dir"
-echo "Preset train              : $train_preset"
+echo "Preset train             : $train_preset"
 echo "Clean                    : $clean_requested"
 echo "Max resolution           : ${max_resolution:-défaut Spirula}"
 echo "Pairs                    : ${pairs:-défaut Spirula}"
 echo "Matcher                  : ${matcher:-défaut Spirula}"
+echo "Metric GPS               : ${metric_gps:-désactivé}"
+echo "Camera model             : ${camera_model:-défaut Spirula}"
 echo "Quality                  : ${quality:-défaut du preset}"
 echo "Cap max                  : ${cap_max:-défaut du preset}"
 echo "Densify loss map mode    : ${densify_loss_map_mode:-défaut du preset}"
@@ -512,6 +562,14 @@ run_sfm() {
 
   if [[ -n "$matcher" ]]; then
     cmd+=(--matcher "$matcher")
+  fi
+
+  if [[ -n "$metric_gps" ]]; then
+    cmd+=(--metric-gps "$metric_gps")
+  fi
+
+  if [[ -n "$camera_model" ]]; then
+    cmd+=(--camera-model "$camera_model")
   fi
 
   if [[ ${#sfm_extra_args[@]} -gt 0 ]]; then
@@ -596,4 +654,3 @@ run_sfm
 run_train
 
 log "Pipeline terminé."
-
