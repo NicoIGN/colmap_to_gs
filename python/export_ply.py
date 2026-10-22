@@ -224,14 +224,46 @@ def load_gaussians(path):
     return splats
 
 
-def clean_gaussians(splats, colmap, distance, batch_size):
-    """Garde les centres des Gaussians dans la BBOX COLMAP + marge.
+def clean_gaussians(
+    splats,
+    colmap,
+    distance,
+    batch_size,
+    *,
+    world_scale,
+    max_world_scale=None,
+    min_opacity=0.0,
+):
+    """Filtre les Gaussians avant leur export.
 
-    distance : marge absolue dans le repère d'entraînement,
-               calculée par estimate_radius() ou fournie avec --dist.
+    distance :
+        Marge BBOX dans le repère d'entraînement.
+
+    world_scale :
+        Échelle uniforme de la transformation monde -> entraînement.
+
+    max_world_scale :
+        Taille maximale autorisée pour chacun des demi-axes
+        du Gaussian dans le repère monde.
+        None désactive le filtre.
+
+    min_opacity :
+        Opacité minimale après sigmoid, comprise dans [0, 1[.
+        0 désactive le filtre.
     """
     if not np.isfinite(distance) or distance <= 0:
         raise ValueError("La marge BBOX doit être finie et positive")
+
+    if not np.isfinite(world_scale) or world_scale <= 0:
+        raise ValueError("L'échelle monde -> entraînement est invalide")
+
+    if max_world_scale is not None and (
+        not np.isfinite(max_world_scale) or max_world_scale <= 0
+    ):
+        raise ValueError("La taille maximale doit être finie et positive")
+
+    if not np.isfinite(min_opacity) or not 0 <= min_opacity < 1:
+        raise ValueError("L'opacité minimale doit être dans [0, 1[")
 
     bbox_min = colmap.min(axis=0)
     bbox_max = colmap.max(axis=0)
@@ -242,38 +274,108 @@ def clean_gaussians(splats, colmap, distance, batch_size):
     log(f"BBOX COLMAP : {bbox_min} -> {bbox_max}")
     log(f"Marge BBOX : {distance:.9g}")
     log(f"BBOX élargie : {expanded_min} -> {expanded_max}")
-    log("Filtrage par BBOX uniquement, sans proximité aux points sparse")
+
+    # scale_world = exp(scale_train_log) / world_scale
+    #
+    # scale_world <= max_world_scale
+    # équivaut à :
+    # scale_train_log <= log(max_world_scale) + log(world_scale)
+    max_train_log_scale = None
+
+    if max_world_scale is not None:
+        max_train_log_scale = (
+            np.log(max_world_scale) + np.log(world_scale)
+        )
+        log(
+            "Filtre de taille : chaque demi-axe monde doit être "
+            f"<= {max_world_scale:.9g}"
+        )
+
+    min_opacity_logit = None
+
+    if min_opacity > 0:
+        min_opacity_logit = (
+            np.log(min_opacity) - np.log1p(-min_opacity)
+        )
+        log(f"Opacité minimale : {min_opacity:.3f}")
 
     count = len(splats["means"])
     mask = np.zeros(count, dtype=bool)
 
+    removed = {
+        "invalid": 0,
+        "outside_bbox": 0,
+        "too_large": 0,
+        "low_opacity": 0,
+    }
+
     for start in range(0, count, batch_size):
         stop = min(start + batch_size, count)
-        xyz = splats["means"][start:stop]
+        length = stop - start
 
-        # Exclure les attributs invalides avant l'export.
-        valid = np.ones(stop - start, dtype=bool)
+        xyz = splats["means"][start:stop]
+        scales = splats["scales"][start:stop]
+        quats = splats["quats"][start:stop]
+
+        valid = np.ones(length, dtype=bool)
+
         for array in splats.values():
-            block = array[start:stop].reshape(stop - start, -1)
+            block = array[start:stop].reshape(length, -1)
             valid &= np.isfinite(block).all(axis=1)
 
-        valid &= (
-            np.linalg.norm(splats["quats"][start:stop], axis=1) > 1e-12
-        )
+        # Test robuste sans calculer une norme susceptible de déborder.
+        valid &= np.max(np.abs(quats), axis=1) > 1e-12
+
+        removed["invalid"] += int(np.count_nonzero(~valid))
 
         inside_bbox = (
             (xyz >= expanded_min) & (xyz <= expanded_max)
         ).all(axis=1)
 
-        mask[start:stop] = valid & inside_bbox
+        removed["outside_bbox"] += int(
+            np.count_nonzero(valid & ~inside_bbox)
+        )
+        valid &= inside_bbox
 
-    kept = int(mask.sum())
-    log(f"Gaussians conservés : {kept}/{count}")
+        if max_train_log_scale is not None:
+            size_ok = scales.max(axis=1) <= max_train_log_scale
+
+            removed["too_large"] += int(
+                np.count_nonzero(valid & ~size_ok)
+            )
+            valid &= size_ok
+
+        if min_opacity_logit is not None:
+            opacity_ok = (
+                splats["opacity"][start:stop] >= min_opacity_logit
+            )
+
+            removed["low_opacity"] += int(
+                np.count_nonzero(valid & ~opacity_ok)
+            )
+            valid &= opacity_ok
+
+        mask[start:stop] = valid
+
+    kept = int(np.count_nonzero(mask))
+
+    # Compteurs exclusifs : chaque suppression est comptée
+    # dans le premier filtre qui l'a rejetée.
+    log(f"Supprimés — attributs invalides : {removed['invalid']}")
+    log(f"Supprimés — hors BBOX : {removed['outside_bbox']}")
+    log(f"Supprimés — trop grands : {removed['too_large']}")
+    log(f"Supprimés — faible opacité : {removed['low_opacity']}")
+    log(
+        f"Gaussians conservés : {kept}/{count} "
+        f"({kept / count * 100:.1f} %)"
+    )
+    log(f"Taille SPLAT prévue : {kept * 32 / 1024**2:.2f} MiB")
 
     if kept == 0:
         raise ValueError(
-            "Aucun Gaussian conservé : vérifier les repères "
-            "ou augmenter --radius-factor / --dist"
+            "Aucun Gaussian conservé : vérifier les repères, "
+            "augmenter --max-world-scale, réduire --min-opacity "
+            "ou augmenter la marge BBOX."
         )
 
     return {name: array[mask] for name, array in splats.items()}
@@ -391,6 +493,20 @@ def main():
     parser.add_argument("--max-points", type=int, default=4_000_000)
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument( "--max-world-scale",type=float,default=None,
+        help=(
+            "Demi-axe maximal d'un Gaussian dans les unités monde COLMAP. "
+            "Un Gaussian est supprimé si un seul axe dépasse ce seuil. "
+            "Désactivé par défaut."
+        ),
+    )
+
+    parser.add_argument( "--min-opacity", type=float,  default=0.0,
+        help=(
+            "Opacité minimale après sigmoid, dans [0, 1[. "
+            "0 désactive ce filtre."
+        ),
+    )
     args = parser.parse_args()
 
     source = Path(args.in_ply).expanduser().resolve()
@@ -416,11 +532,13 @@ def main():
         parser.error("--max-points >= 2 et --batch-size >= 1 requis")
     if not np.isfinite(args.radius_factor) or args.radius_factor <= 0:
         parser.error("--radius-factor doit être fini et positif")
-    if args.dist is not None and (
-        not np.isfinite(args.dist) or args.dist <= 0
-    ):
+    if args.dist is not None and ( not np.isfinite(args.dist) or args.dist <= 0 ):
         parser.error("--dist doit être fini et positif")
-
+    if args.max_world_scale is not None and ( not np.isfinite(args.max_world_scale) or args.max_world_scale <= 0 ):
+        parser.error("--max-world-scale doit être fini et positif")
+    if not np.isfinite(args.min_opacity) or not 0 <= args.min_opacity < 1:
+        parser.error("--min-opacity doit être dans [0, 1[")
+        
     matrix, rotation, scale = load_transform(transform_path)
 
     colmap = load_colmap_points(points_path, matrix, args.max_points)
@@ -434,7 +552,15 @@ def main():
     log(f"Rayon dans le repère d'entraînement : {distance:.9g}")
 
     splats = load_gaussians(source)
-    splats = clean_gaussians(splats, colmap, distance, args.batch_size)
+    splats = clean_gaussians(
+        splats,
+        colmap,
+        distance,
+        args.batch_size,
+        world_scale=scale,
+        max_world_scale=args.max_world_scale,
+        min_opacity=args.min_opacity,
+    )
 
     log("Transformation vers le monde et écriture SPLAT...")
     write_world_splat(

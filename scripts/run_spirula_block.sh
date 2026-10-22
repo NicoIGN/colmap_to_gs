@@ -234,15 +234,21 @@ export_world_splat() {
   [[ -s "$export_transform" ]] || die "Transformation entraînement absente : $export_transform"
   [[ -s "$export_points" ]] || die "Points COLMAP binaires absents : $export_points"
 
+  local max_world_scale="${MAX_WORLD_SCALE:-0.35}"
+  local min_opacity="${MIN_OPACITY:-0.02}"
+
   local export_cmd=(
-    "$python_bin" "$export_script"
-    --in-ply "$final_ckpt"
-    --points "$export_points"
-    --transform "$export_transform"
-    --out-ply "$world_splat"
-    --format splat
-    --radius-factor 5
-    --overwrite
+      "$python_bin" "$export_script"
+      --in-ply "$final_ckpt"
+      --points "$export_points"
+      --transform "$export_transform"
+      --out-ply "$world_splat"
+      --format splat
+      --radius-factor 5
+      --max-world-scale "$max_world_scale"
+      --min-opacity "$min_opacity"
+      --batch-size 200000
+      --overwrite
   )
 
   log "Nettoyage + conversion monde -> .splat"
