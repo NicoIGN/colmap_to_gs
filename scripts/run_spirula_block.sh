@@ -59,6 +59,7 @@ Options:
   --train-resolution-divisor N
   --python-bin PATH
   --export-script PATH
+  --name FILENAME           Nom de sortie (défaut: block.splat)
   --clean
 EOF
 }
@@ -128,6 +129,11 @@ done
 [[ -n "$output_dir" ]] || die "--output-dir requis"
 [[ -d "$sparse_dir" ]] || die "Bloc introuvable : $sparse_dir"
 [[ -d "$images_dir" ]] || die "Images introuvables : $images_dir"
+
+# Le fichier doit rester directement dans le dossier splats.
+[[ -n "$export_name" && "$export_name" != */* ]] ||  die "--name doit être un nom de fichier, sans chemin"
+[[ "$export_name" == *.splat ]] ||  die "--name doit se terminer par .splat"
+
 
 case "$clean" in
   true|1|yes|on) clean=true ;;
@@ -199,7 +205,7 @@ export_done_file="$output_dir/.export_done"
 
 export_transform="$splats_dir/scene_transform.json"
 export_points="$output_dir/sparse/0/points3D.bin"
-world_splat="$splats_dir/block_000.splat"
+world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
 printf -v checkpoint_name 'step-%09d.ckpt' "$iteration_count"
