@@ -11,7 +11,7 @@ train_preset="${TRAIN_PRESET:-3dgs}"
 clean="${CLEAN:-false}"
 
 python_bin="${PYTHON_BIN:-python}"
-export_script="${EXPORT_SCRIPT:-$script_dir/python/export_ply.py}"
+export_script="${EXPORT_SCRIPT:-$script_dir/../python/export_ply.py}"
 
 quality="${QUALITY:-}"
 cap_max="${CAP_MAX:-}"
