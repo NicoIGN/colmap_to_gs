@@ -241,7 +241,7 @@ export_world_splat() {
     --transform "$export_transform"
     --out-ply "$world_splat"
     --format splat
-    --radius-factor 10
+    --radius-factor 5
     --overwrite
   )
 
