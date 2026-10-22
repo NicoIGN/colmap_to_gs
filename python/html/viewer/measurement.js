@@ -8,6 +8,7 @@ export function createMeasurementSystem({
   getModelMatrix,
   getSceneRadius,
   getPrincipalAxis,
+  getAbsoluteCoordinates = () => null,
   canMeasure,
   clearNavigation,
   setStatus,
@@ -96,6 +97,28 @@ export function createMeasurementSystem({
     "font-weight": 700,
   });
 
+  // Encart infos (haut-droite)
+  const infoGroup = element("g", {});
+
+  const infoBox = document.createElementNS(SVG_NS, "rect");
+  infoBox.setAttribute("rx", "8");
+  infoBox.setAttribute("ry", "8");
+  infoBox.setAttribute("fill", "rgba(0,0,0,0.55)");
+  infoBox.setAttribute("stroke", yellow);
+  infoBox.setAttribute("stroke-width", "1");
+  infoGroup.appendChild(infoBox);
+
+  const infoText = document.createElementNS(SVG_NS, "text");
+  infoText.setAttribute("fill", yellow);
+  infoText.setAttribute("font-size", "12");
+  infoText.setAttribute("font-family", "system-ui, sans-serif");
+  infoText.setAttribute("font-weight", "600");
+  infoText.setAttribute("paint-order", "stroke");
+  infoText.setAttribute("stroke", "#111");
+  infoText.setAttribute("stroke-width", "3");
+  infoGroup.appendChild(infoText);
+  overlay.appendChild(infoGroup);
+
   container.appendChild(overlay);
 
   function listen(target, type, handler, options) {
@@ -148,6 +171,29 @@ export function createMeasurementSystem({
     event.preventDefault();
     event.stopImmediatePropagation();
   }
+
+    function projectedOf(world) {
+      try {
+        const p = getAbsoluteCoordinates(world);
+
+        if (
+          !p ||
+          !Number.isFinite(p.x) ||
+          !Number.isFinite(p.y) ||
+          !Number.isFinite(p.h)
+        ) {
+          return null;
+        }
+
+        return p;
+      } catch {
+        return null;
+      }
+    }
+
+    function formatProjected(p) {
+      return `X ${p.x.toFixed(3)}, Y ${p.y.toFixed(3)}, H ${p.h.toFixed(3)} m`;
+    }
 
   // Chercher le centre de splat le plus proche en profondeur,
   // dans un petit cône correspondant à la tolérance en pixels.
@@ -249,45 +295,45 @@ export function createMeasurementSystem({
     return count ? sum.divideScalar(count) : seed.clone();
   }
 
-    function snapEndpoint(a, b) {
-      const axis = getPrincipalAxis().clone().normalize();
-      const delta = b.clone().sub(a);
-      const length = delta.length();
+  function snapEndpoint(a, b) {
+    const axis = getPrincipalAxis().clone().normalize();
+    const delta = b.clone().sub(a);
+    const length = delta.length();
 
-      if (length < 1e-12) {
-        return { point: b.clone(), kind: "" };
-      }
-
-      const verticalAmount = delta.dot(axis);
-      const vertical = axis.clone().multiplyScalar(verticalAmount);
-      const horizontal = delta.clone().sub(vertical);
-
-      // Écart angulaire à l’axe principal, dans les deux sens.
-      const verticalAngle = THREE.MathUtils.radToDeg(
-        Math.atan2(horizontal.length(), Math.abs(verticalAmount))
-      );
-
-      // Écart angulaire au plan perpendiculaire à l’axe principal.
-      const horizontalAngle = THREE.MathUtils.radToDeg(
-        Math.atan2(Math.abs(verticalAmount), horizontal.length())
-      );
-
-      if (verticalAngle <= verticalSnapAngleDeg) {
-        return {
-          point: a.clone().add(vertical),
-          kind: "vertical",
-        };
-      }
-
-      if (horizontalAngle <= horizontalSnapAngleDeg) {
-        return {
-          point: a.clone().add(horizontal),
-          kind: "horizontal",
-        };
-      }
-
+    if (length < 1e-12) {
       return { point: b.clone(), kind: "" };
     }
+
+    const verticalAmount = delta.dot(axis);
+    const vertical = axis.clone().multiplyScalar(verticalAmount);
+    const horizontal = delta.clone().sub(vertical);
+
+    // Écart angulaire à l’axe principal, dans les deux sens.
+    const verticalAngle = THREE.MathUtils.radToDeg(
+      Math.atan2(horizontal.length(), Math.abs(verticalAmount))
+    );
+
+    // Écart angulaire au plan perpendiculaire à l’axe principal.
+    const horizontalAngle = THREE.MathUtils.radToDeg(
+      Math.atan2(Math.abs(verticalAmount), horizontal.length())
+    );
+
+    if (verticalAngle <= verticalSnapAngleDeg) {
+      return {
+        point: a.clone().add(vertical),
+        kind: "vertical",
+      };
+    }
+
+    if (horizontalAngle <= horizontalSnapAngleDeg) {
+      return {
+        point: a.clone().add(horizontal),
+        kind: "horizontal",
+      };
+    }
+
+    return { point: b.clone(), kind: "" };
+  }
 
   function project(world) {
     const projected = world.clone().project(camera);
@@ -371,13 +417,83 @@ export function createMeasurementSystem({
 
     const distance = start.distanceTo(snapped.point);
 
+    // Label principal inchangé : distance au-dessus du segment
     label.textContent =
-      `${distance.toPrecision(3)} u` +
+      `${distance.toPrecision(3)} m` +
       (snapped.kind ? ` · ${snapped.kind}` : "");
 
     label.setAttribute("x", labelPosition.x);
     label.setAttribute("y", labelPosition.y - 14);
     label.style.display = "";
+
+    // Encart infos complémentaires
+    const axis = getPrincipalAxis().clone().normalize();
+    const delta = snapped.point.clone().sub(start);
+    const dVertical = Math.abs(delta.dot(axis));
+    const dHorizontal = Math.sqrt(
+      Math.max(0, delta.lengthSq() - dVertical * dVertical)
+    );
+
+    // Recréer les lignes de texte
+    while (infoText.firstChild) {
+      infoText.removeChild(infoText.firstChild);
+    }
+
+    const lines = [
+      `A: (${start.x.toFixed(3)}, ${start.y.toFixed(3)}, ${start.z.toFixed(3)})`,
+      `B: (${snapped.point.x.toFixed(3)}, ${snapped.point.y.toFixed(3)}, ${snapped.point.z.toFixed(3)})`,
+      `D : ${distance.toPrecision(4)} m`,
+      `Dh: ${dHorizontal.toPrecision(4)} m`,
+      `Dv: ${dVertical.toPrecision(4)} m`,
+    ];
+
+      const projA = projectedOf(start);
+      const projB = projectedOf(snapped.point);
+
+      if (projA && projB) {
+        lines.push(
+          `EPSG:${projA.epsg}`,
+          `A: ${formatProjected(projA)}`,
+          `B: ${formatProjected(projB)}`
+        );
+      }
+
+    lines.forEach((line, index) => {
+      const tspan = document.createElementNS(SVG_NS, "tspan");
+      tspan.setAttribute("x", "0");
+      tspan.setAttribute("dy", index === 0 ? "0" : "1.25em");
+      tspan.textContent = line;
+      infoText.appendChild(tspan);
+    });
+
+    const rect = canvas.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    const canvasLeft = rect.left - containerRect.left;
+    const canvasTop = rect.top - containerRect.top;
+    const canvasRight = canvasLeft + rect.width;
+
+    const margin = 12;
+    const pad = 10;
+    const lineHeight = 15;
+    const textWidth =
+      Math.max(...lines.map((line) => line.length)) * 6.9;
+    const boxWidth = textWidth + pad * 2;
+    const boxHeight = lines.length * lineHeight + pad * 2;
+
+    const boxX = canvasRight - boxWidth - margin;
+    const boxY = canvasTop + margin;
+
+    infoGroup.setAttribute("transform", `translate(${boxX}, ${boxY})`);
+    infoBox.setAttribute("x", "0");
+    infoBox.setAttribute("y", "0");
+    infoBox.setAttribute("width", String(boxWidth));
+    infoBox.setAttribute("height", String(boxHeight));
+
+    infoText.setAttribute("x", String(pad));
+    infoText.setAttribute("y", String(pad + 11));
+
+    infoGroup.style.display = "";
   }
 
   function onPointerDown(event) {

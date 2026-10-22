@@ -13,6 +13,7 @@ import { createCollisionSystem } from "./viewer/collision.js";
 import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
+import { readGeorefFile } from "./viewer/georef.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -81,6 +82,8 @@ let collision = null;
 let gifRecorder = null;
 let measurement = null;
 let memoryWatchdog = null;
+let sceneGeoref = null;
+let georefSerial = 0;
 
 const canvas = document.createElement("canvas");
 canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
@@ -381,10 +384,13 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
-
+    
+  georefSerial++;
+  sceneGeoref = null;
+    
   pickSerial++;
   picking = false;
-
+    
   measurement?.reset();
   collision?.reset();
 
@@ -481,6 +487,7 @@ function computeSceneBounds() {
     1e-3
   );
 }
+
 
 async function loadSceneInternal(source, name) {
   if (!canStartLoad()) return false;
@@ -1175,6 +1182,120 @@ function installUI() {
   });
 }
 
+async function applySceneGeoref(file) {
+  if (!canStartLoad()) return;
+
+  if (!sceneReady || !splatEntity) {
+    setStatus(
+      "Charge d’abord une scène, puis dépose son georef_stats.json.",
+      true
+    );
+    return;
+  }
+
+  const serial = ++georefSerial;
+  const entityAtStart = splatEntity;
+
+  const stillValid = () =>
+    !disposed &&
+    serial === georefSerial &&
+    sceneReady &&
+    splatEntity === entityAtStart;
+
+  try {
+    setStatus(`Lecture de ${file.name}…`);
+
+    const georef = await readGeorefFile(file);
+
+    if (!stillValid()) return;
+
+    // Remplacement seulement après validation :
+    // un JSON invalide conserve le géoréférencement précédent.
+    sceneGeoref = georef;
+
+    const { lat, lon, height } = georef.origin;
+
+      setStatus(
+        `Référence géographique associée — EPSG:${georef.epsg} · ` +
+        `origine X=${georef.origin.x.toFixed(3)}, ` +
+        `Y=${georef.origin.y.toFixed(3)}, H=${georef.origin.h.toFixed(3)}`
+      );
+  } catch (error) {
+    if (!stillValid()) return;
+
+    console.error("Géoréférencement :", error);
+
+    setStatus(
+      `Géoréférencement non appliqué : ${error?.message || error}`,
+      true
+    );
+  }
+}
+
+/**
+ * Point dans le monde affiché -> coordonnées géographiques.
+ *
+ * À utiliser ensuite pour un point mesuré, une cible ou la caméra.
+ * Retourne null sans référence géographique.
+ */
+function getAbsoluteCoordinates(worldPoint) {
+  if (!sceneGeoref || !sceneReady || !splatEntity) {
+    return null;
+  }
+
+  const worldFromEnu = new THREE.Matrix4().fromArray(
+    splatEntity.getWorldTransform().data
+  );
+
+  // Monde affiché -> ENU local (annule flipUp notamment)
+  const enu = new THREE.Vector3(
+    worldPoint.x,
+    worldPoint.y,
+    worldPoint.z
+  ).applyMatrix4(worldFromEnu.invert());
+
+  const projected = sceneGeoref.enuToProjected(
+    enu.x,
+    enu.y,
+    enu.z
+  );
+
+  return {
+    epsg: sceneGeoref.epsg,
+    x: projected.x,
+    y: projected.y,
+    h: projected.h,
+  };
+}
+
+/**
+ * Un seul fichier par dépôt :
+ * - scène : comportement existant ;
+ * - JSON : métadonnées de la scène déjà chargée.
+ */
+async function handleDroppedFiles(fileList) {
+  if (!fileList?.length || !canStartLoad()) return;
+
+  const files = Array.from(fileList);
+
+  if (files.length !== 1) {
+    setStatus(
+      "Dépose un seul fichier à la fois : la scène, puis son JSON.",
+      true
+    );
+    return;
+  }
+
+  const file = files[0];
+
+  if (/\.json$/i.test(file.name)) {
+    await applySceneGeoref(file);
+    return;
+  }
+
+  await loadFile(file);
+}
+
 function installDnD() {
   let dragDepth = 0;
 
@@ -1209,7 +1330,15 @@ function installDnD() {
     dragDepth = 0;
     $("drop").style.display = "none";
 
-    void loadFile(event.dataTransfer?.files?.[0]);
+        void handleDroppedFiles(event.dataTransfer?.files).catch((error) => {
+        if (disposed) return;
+    
+        console.error("Dépôt :", error);
+        setStatus(
+            `Dépôt impossible : ${error?.message || error}`,
+            true
+        );
+        });
   });
 }
 
@@ -1343,7 +1472,8 @@ async function initialize() {
       camera,
 
       getCenters: () => centers,
-
+      getAbsoluteCoordinates,
+        
       getModelMatrix: () => {
         const matrix = new THREE.Matrix4();
 
@@ -1372,7 +1502,8 @@ async function initialize() {
 
       pickTolerancePx: 4,
       neighborhoodRadiusRatio: 0.005,
-      snapAngleDeg: 5,
+      horizontalSnapAngleDeg: 5,
+      verticalSnapAngleDeg: 5,
     });
 
     navigation.installMouseControls();

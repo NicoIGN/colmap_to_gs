@@ -370,6 +370,54 @@ def enu_to_wgs84(points, origin):
     return np.column_stack((lon, lat, height))
 
 
+def projection_reference(origin, epsg):
+    """
+    Décrit le repère ENU local dans un SCR projeté.
+    - origin: [lat, lon, h] WGS84 (issu du GPX)
+    - epsg: code EPSG projeté (ex: 2154)
+    """
+    from pyproj import CRS, Transformer
+
+    crs = CRS.from_epsg(epsg)
+    if not crs.is_projected:
+        raise ValueError(
+            f"EPSG:{epsg} n'est pas projeté (il faut des unités en mètres)."
+        )
+
+    to_target = Transformer.from_crs(4979, crs, always_xy=True)
+
+    lat, lon, height = origin
+    x0, y0, z0 = to_target.transform(lon, lat, height, errcheck=True)
+
+    # Linéarisation locale ENU -> XY projeté (pas de 100 m)
+    step = 100.0
+    probes = enu_to_wgs84(
+        np.array([[step, 0.0, 0.0], [0.0, step, 0.0]]),
+        origin
+    )
+    xs, ys, _ = to_target.transform(
+        probes[:, 0], probes[:, 1], probes[:, 2], errcheck=True
+    )
+
+    east_axis = np.array([xs[0] - x0, ys[0] - y0]) / step
+    north_axis = np.array([xs[1] - x0, ys[1] - y0]) / step
+    M = np.column_stack((east_axis, north_axis))
+
+    return {
+        "epsg": int(epsg),
+        "name": crs.name,
+        "origin_x": float(x0),
+        "origin_y": float(y0),
+        "origin_height": float(z0),
+        "local_en_to_xy": {
+            "equation": "[X, Y] = [origin_x, origin_y] + M @ [E, N]",
+            "M": M.tolist(),
+            "note": "Linéarisation locale autour de l'origine.",
+        },
+        "height_note": (
+            "Hauteur GPX brute (pas de correction géoïde)."
+        ),
+    }
 # ---------------------------------------------------------------------------
 # Lecture COLMAP
 # ---------------------------------------------------------------------------
@@ -1279,6 +1327,8 @@ def process_model(folder, destination, relative, gpx, args):
             "units": "meters",
             "axes": ["East", "North", "Up"],
             "origin_lat_lon_height": gpx["origin"],
+            "origin_geographic_crs": "EPSG:4979 (WGS84 supposé pour le GPX)",
+            "origin_projected": gpx["projected"],
             "height_note": "Altitudes GPX brutes, sans correction géoïde.",
         },
         "geopackage": str(
@@ -1316,6 +1366,16 @@ def main():
         "--smooth-window", type=int, default=3,
         help="Filtre médian spatial : entier impair ; 1 = désactivé.",
     )
+    parser.add_argument(
+        "--epsg",
+        type=int,
+        default=2154,
+        help=(
+            "EPSG projeté utilisé pour exprimer l'origine du repère local "
+            "(défaut: 2154, Lambert-93)."
+        ),
+    )
+
     args = parser.parse_args()
 
     if not args.gpx.is_file() or not args.sparse_dir.is_dir():
@@ -1339,6 +1399,12 @@ def main():
     except ImportError:
         parser.error("Installer les dépendances : pip install fiona pyproj")
 
+
+    try:
+        pyproj.CRS.from_epsg(args.epsg)
+    except Exception as exc:
+        parser.error(f"Code EPSG invalide ({args.epsg}) : {exc}")
+        
     source = args.sparse_dir.resolve()
     output = args.output_dir.resolve()
 
@@ -1356,6 +1422,12 @@ def main():
                 parser.error(f"Rigs/frames non pris en charge : {model / name}")
 
     gpx = read_gpx(args.gpx)
+    
+    try:
+        gpx["projected"] = projection_reference(gpx["origin"], args.epsg)
+    except Exception as exc:
+        parser.error(f"Impossible de projeter l'origine en EPSG:{args.epsg} : {exc}")
+        
     output.mkdir(parents=True, exist_ok=True)
 
     summary = {
