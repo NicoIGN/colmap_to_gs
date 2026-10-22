@@ -225,11 +225,25 @@ def load_gaussians(path):
 
 
 def clean_gaussians(splats, colmap, distance, batch_size):
+    """Garde les centres des Gaussians dans la BBOX COLMAP + marge.
+
+    distance : marge absolue dans le repère d'entraînement,
+               calculée par estimate_radius() ou fournie avec --dist.
+    """
+    if not np.isfinite(distance) or distance <= 0:
+        raise ValueError("La marge BBOX doit être finie et positive")
+
     bbox_min = colmap.min(axis=0)
     bbox_max = colmap.max(axis=0)
-    log(f"BBOX entraînement : {bbox_min} -> {bbox_max}")
 
-    tree = cKDTree(colmap)
+    expanded_min = bbox_min - distance
+    expanded_max = bbox_max + distance
+
+    log(f"BBOX COLMAP : {bbox_min} -> {bbox_max}")
+    log(f"Marge BBOX : {distance:.9g}")
+    log(f"BBOX élargie : {expanded_min} -> {expanded_max}")
+    log("Filtrage par BBOX uniquement, sans proximité aux points sparse")
+
     count = len(splats["means"])
     mask = np.zeros(count, dtype=bool)
 
@@ -237,26 +251,29 @@ def clean_gaussians(splats, colmap, distance, batch_size):
         stop = min(start + batch_size, count)
         xyz = splats["means"][start:stop]
 
+        # Exclure les attributs invalides avant l'export.
         valid = np.ones(stop - start, dtype=bool)
         for array in splats.values():
             block = array[start:stop].reshape(stop - start, -1)
             valid &= np.isfinite(block).all(axis=1)
 
-        valid &= np.linalg.norm(splats["quats"][start:stop], axis=1) > 1e-12
-        valid &= ((xyz >= bbox_min) & (xyz <= bbox_max)).all(axis=1)
+        valid &= (
+            np.linalg.norm(splats["quats"][start:stop], axis=1) > 1e-12
+        )
 
-        indices = np.flatnonzero(valid)
-        if len(indices):
-            distances, _ = tree.query(xyz[indices], k=1)
-            mask[start + indices] = distances < distance
+        inside_bbox = (
+            (xyz >= expanded_min) & (xyz <= expanded_max)
+        ).all(axis=1)
+
+        mask[start:stop] = valid & inside_bbox
 
     kept = int(mask.sum())
     log(f"Gaussians conservés : {kept}/{count}")
 
     if kept == 0:
         raise ValueError(
-            "Aucun Gaussian conservé : vérifier les repères, "
-            "--dist et --outlier-percent"
+            "Aucun Gaussian conservé : vérifier les repères "
+            "ou augmenter --radius-factor / --dist"
         )
 
     return {name: array[mask] for name, array in splats.items()}

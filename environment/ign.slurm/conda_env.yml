@@ -73,6 +73,7 @@ dependencies:
   - pip:
       - nerfstudio==1.1.5
       - fpsample
+      - gsplat
       - ultralytics
       - laspy[lazrs]
       - git+https://github.com/cvg/Hierarchical-Localization.git
