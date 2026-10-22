@@ -1,5 +1,14 @@
 import * as pc from "playcanvas";
 import * as THREE from "three";
+
+import {
+  createSceneImporter,
+  filenameFromUrl,
+  isSupportedSceneName,
+} from "./viewer/import.js";
+
+import { createLoadProgress } from "./viewer/progress.js";
+import { createMemoryWatchdog } from "./viewer/memory.js";
 import { createCollisionSystem } from "./viewer/collision.js";
 import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
@@ -11,6 +20,20 @@ const params = new URLSearchParams(location.search);
 
 const sleep = (ms) =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+const reportedMemory = Number(navigator.deviceMemory) || null;
+
+// Garder les mêmes seuils dans collision.js.
+const MAX_COLLISION_SPLATS =
+  reportedMemory !== null && reportedMemory <= 4
+    ? 500_000
+    : 1_000_000;
+
+const COLLISION_CONTROL_IDS = [
+  "collisionEnabled",
+  "collisionDensity",
+  "collisionMargin",
+];
 
 const sceneBox = new THREE.Box3();
 const sceneCenter = new THREE.Vector3();
@@ -30,8 +53,8 @@ const target = new THREE.Vector3();
 let app = null;
 let cameraEntity = null;
 let splatEntity = null;
-let sceneAsset = null;
 let picker = null;
+let importer = null;
 let centers = null;
 
 let loadedFileSource = null;
@@ -41,8 +64,11 @@ let loadedFileIsLocal = false;
 let sceneReady = false;
 let isLoading = false;
 let fatalError = false;
+let disposed = false;
+
 let sceneRadius = 1;
 let sceneCount = 0;
+let collisionBlockedReason = "";
 
 let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
@@ -54,14 +80,17 @@ let navigation = null;
 let collision = null;
 let gifRecorder = null;
 let measurement = null;
-let legacyConverterPromise = null;
+let memoryWatchdog = null;
 
 const canvas = document.createElement("canvas");
 canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
 container.appendChild(canvas);
 
+const progress = createLoadProgress(container);
+
 const canNavigate = () =>
   !!app &&
+  !disposed &&
   sceneReady &&
   !isLoading &&
   !fatalError &&
@@ -71,8 +100,17 @@ const canNavigate = () =>
   !measurement?.isActive();
 
 function setStatus(message, error = false) {
+  if (disposed) return;
+
   $("status").textContent = message;
   $("status").classList.toggle("error", error);
+}
+
+function loadingStep(message, fraction = null, detail = "") {
+  if (disposed) return;
+
+  setStatus(message);
+  progress.update(message, fraction, detail);
 }
 
 function getPrincipalAxisName() {
@@ -105,11 +143,14 @@ function updateKeyboardHelp() {
 }
 
 function refreshUI() {
-  const blocked =
+  if (disposed) return;
+
+  const blocked = Boolean(
     isLoading ||
     fatalError ||
     gifRecorder?.state.encoding ||
-    gifRecorder?.state.finalizing;
+    gifRecorder?.state.finalizing
+  );
 
   document.querySelectorAll(
     "#panel button, #panel input, #panel select, #panel textarea"
@@ -119,22 +160,112 @@ function refreshUI() {
     }
   });
 
+  for (const id of COLLISION_CONTROL_IDS) {
+    const element = $(id);
+
+    element.disabled = blocked || !!collisionBlockedReason;
+
+    if (collisionBlockedReason) {
+      element.title = collisionBlockedReason;
+    } else {
+      element.removeAttribute("title");
+    }
+  }
+
   gifRecorder?.updateUI(sceneReady);
 }
 
-function resizeViewer() {
-  if (!app) return;
+function disableCollisionForMemory(reason) {
+  collisionBlockedReason = reason;
 
-  const width = Math.max(1, container.clientWidth);
-  const height = Math.max(1, container.clientHeight);
+  $("collisionEnabled").checked = false;
 
-  app.resizeCanvas(width, height);
+  // Avec le dernier collision.js fourni :
+  // - annule la construction en cours ;
+  // - vide les Map publiées et en construction ;
+  // - retire les références à la grille.
+  //
+  // Cela rend les données récupérables par le GC,
+  // sans garantir une baisse immédiate de la mémoire du processus.
+  collision?.reset();
+  collision?.setCollisionStatus(reason);
 
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
+  navigation?.clearNavigation();
 
-  syncCamera();
-  requestGifCapture();
+  refreshUI();
+
+  // Ne pas écraser les messages d'étape pendant un import.
+  if (!isLoading) {
+    setStatus(reason);
+  }
+
+  console.warn("[Memory watchdog]", reason);
+}
+
+function collisionIsEnabled() {
+  return !collisionBlockedReason && $("collisionEnabled").checked;
+}
+
+function enforceCollisionBudget() {
+  collisionBlockedReason = "";
+
+  if (sceneCount > MAX_COLLISION_SPLATS) {
+    collisionBlockedReason =
+      "Anticollision désactivée pour limiter la mémoire : " +
+      `${sceneCount.toLocaleString()} splats, seuil de ` +
+      `${MAX_COLLISION_SPLATS.toLocaleString()}.`;
+
+    $("collisionEnabled").checked = false;
+
+    collision.reset();
+    collision.setCollisionStatus(collisionBlockedReason);
+  }
+}
+
+async function prepareCollision() {
+  memoryWatchdog?.check("avant construction anticollision");
+
+  if (!collisionIsEnabled()) return;
+
+  loadingStep("Préparation de l’anticollision…");
+  await sleep(0);
+
+  if (disposed || !collisionIsEnabled()) return;
+
+  try {
+    await collision.buildGrid({
+      onProgress(fraction, message) {
+        memoryWatchdog?.check("construction anticollision");
+
+        if (!disposed && !memoryWatchdog?.collisionBlocked) {
+          progress.update(message, fraction);
+        }
+      },
+    });
+
+    if (!disposed && collisionIsEnabled()) {
+      collision.checkCurrentCollisionPosition(true);
+    }
+  } catch (error) {
+    if (disposed) return;
+
+    $("collisionEnabled").checked = false;
+    collision.reset();
+
+    // Préserver l'explication du watchdog plutôt que d'afficher
+    // une erreur générique d'annulation.
+    if (memoryWatchdog?.collisionBlocked) {
+      collisionBlockedReason = memoryWatchdog.reason;
+      collision.setCollisionStatus(collisionBlockedReason);
+    } else {
+      collision.setCollisionStatus(
+        `Anticollision indisponible : ${error?.message || error}`,
+        true
+      );
+    }
+  } finally {
+    refreshUI();
+  }
 }
 
 function updateClipping() {
@@ -168,22 +299,59 @@ function syncCamera() {
   );
 
   const q = camera.quaternion;
-
   cameraEntity.setRotation(q.x, q.y, q.z, q.w);
+
   cameraEntity.camera.fov = camera.fov;
   cameraEntity.camera.horizontalFov = false;
   cameraEntity.camera.nearClip = camera.near;
   cameraEntity.camera.farClip = camera.far;
 }
 
-function nextRenderedFrame() {
-  return new Promise((resolve) => {
-    app.once("postrender", resolve);
-  });
+function resizeViewer() {
+  if (!app || disposed) return;
+
+  const width = Math.max(1, container.clientWidth);
+  const height = Math.max(1, container.clientHeight);
+
+  app.resizeCanvas(width, height);
+
+  camera.aspect = width / height;
+  camera.updateProjectionMatrix();
+
+  syncCamera();
+  requestGifCapture();
 }
 
-function requestGifCapture() {
-  gifRecorder?.requestCapture(cameraCaptureSignature());
+function nextRenderedFrame() {
+  if (!app || disposed) {
+    return Promise.reject(
+      new DOMException("Viewer fermé.", "AbortError")
+    );
+  }
+
+  const currentApp = app;
+
+  return new Promise((resolve, reject) => {
+    function cleanup() {
+      currentApp.off("postrender", onFrame);
+      window.removeEventListener("pagehide", onHide);
+    }
+
+    function onFrame() {
+      cleanup();
+      resolve();
+    }
+
+    function onHide(event) {
+      if (event.persisted) return;
+
+      cleanup();
+      reject(new DOMException("Viewer fermé.", "AbortError"));
+    }
+
+    currentApp.once("postrender", onFrame);
+    window.addEventListener("pagehide", onHide);
+  });
 }
 
 function cameraCaptureSignature() {
@@ -194,15 +362,17 @@ function cameraCaptureSignature() {
     canvas.width,
     canvas.height,
     Number($("flipUp").checked),
-  ].map((value) =>
-    Number(value).toPrecision(8)
-  ).join(",");
+  ].map((value) => Number(value).toPrecision(8)).join(",");
+}
+
+function requestGifCapture() {
+  if (!disposed) {
+    gifRecorder?.requestCapture(cameraCaptureSignature());
+  }
 }
 
 function applyUpFlip() {
-  if (!splatEntity) return;
-
-  splatEntity.setLocalEulerAngles(
+  splatEntity?.setLocalEulerAngles(
     $("flipUp").checked ? 180 : 0,
     0,
     0
@@ -211,328 +381,52 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
+
+  pickSerial++;
+  picking = false;
+
   measurement?.reset();
   collision?.reset();
 
   splatEntity?.destroy();
   splatEntity = null;
 
-  if (sceneAsset) {
-    sceneAsset.unload();
-    app.assets.remove(sceneAsset);
-    sceneAsset = null;
-  }
-
   centers = null;
   sceneCount = 0;
+  sceneRadius = 1;
+
+  sceneBox.makeEmpty();
+  sceneCenter.set(0, 0, 0);
+
+  collisionBlockedReason = "";
+
+  importer?.release();
 }
 
-function loadNativeAsset(url, name) {
-  const asset = new pc.Asset(name, "gsplat", {
-    url: new URL(url, location.href).href,
-    filename: name,
-  });
-
-  sceneAsset = asset;
-  app.assets.add(asset);
-
-  return new Promise((resolve, reject) => {
-    const onLoad = () => {
-      asset.off("error", onError);
-      resolve(asset);
-    };
-
-    const onError = (error) => {
-      asset.off("load", onLoad);
-      reject(new Error(String(error)));
-    };
-
-    asset.once("load", onLoad);
-    asset.once("error", onError);
-
-    app.assets.load(asset);
-  });
-}
-
-function loadLegacyConverter() {
-  if (!legacyConverterPromise) {
-    legacyConverterPromise = import(
-      "https://esm.sh/@playcanvas/splat-transform@3.10.1?external=playcanvas"
-    ).catch((error) => {
-      legacyConverterPromise = null;
-      throw error;
-    });
-  }
-
-  return legacyConverterPromise;
-}
-
-async function convertLegacyToPly(url, extension) {
-  const {
-    readFile,
-    writeSource,
-    createChunkDataPool,
-    UrlReadFileSystem,
-    MemoryFileSystem,
-  } = await loadLegacyConverter();
-
-  const absoluteUrl = new URL(url, location.href).href;
-  const urlFs = new UrlReadFileSystem();
-
-  const [source] = await readFile({
-    filename: `input.${extension}`,
-    inputFormat: extension,
-    fileSystem: {
-      createSource() {
-        return urlFs.createSource(absoluteUrl);
-      },
-    },
-  });
-
-  if (!source) {
-    throw new Error("Aucune scène trouvée dans le fichier.");
-  }
-
-  try {
-    const output = new MemoryFileSystem();
-
-    await writeSource({
-      filename: "converted.ply",
-      outputFormat: "ply",
-      source,
-      pool: createChunkDataPool(),
-      options: {},
-    }, output);
-
-    const bytes = output.results.get("converted.ply");
-
-    if (!bytes?.byteLength) {
-      throw new Error("La conversion en PLY n’a produit aucune donnée.");
-    }
-
-    return URL.createObjectURL(
-      new Blob([bytes], {
-        type: "application/octet-stream",
-      })
-    );
-  } finally {
-    await source.close();
-  }
-}
-
-function filenameFromUrl(url) {
-  try {
-    const leaf = new URL(url, location.href)
-      .pathname.split("/").pop();
-
-    return decodeURIComponent(leaf || "scene.ply");
-  } catch {
-    return url.split("/").pop().split(/[?#]/)[0] || "scene.ply";
-  }
-}
-
-async function loadSceneInternal(url, name) {
-  if (
-    !app ||
-    isLoading ||
-    fatalError ||
-    gifRecorder?.state.encoding ||
-    gifRecorder?.state.finalizing
-  ) {
-    return;
-  }
-
-  if (!/\.(sog|ply|splat|ksplat)$/i.test(name)) {
-    setStatus(
-      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
-      true
-    );
-    return;
-  }
-
-  isLoading = true;
-  navigation.clearNavigation();
-  gifRecorder.cancel(sceneReady);
-  refreshUI();
-
-  let convertedUrl = null;
-
-  try {
-    releaseScene();
-
-    setStatus(`Chargement de ${name}…`);
-
-    let loadUrl = url;
-    let loadName = name;
-
-    const extension = name.split(".").pop().toLowerCase();
-
-    if (extension === "splat" || extension === "ksplat") {
-      setStatus(`Conversion locale de ${name} en PLY…`);
-
-      convertedUrl = await convertLegacyToPly(url, extension);
-      loadUrl = convertedUrl;
-      loadName = name.replace(/\.(splat|ksplat)$/i, ".ply");
-    }
-
-    const asset = await loadNativeAsset(loadUrl, loadName);
-    const resource = asset.resource;
-
-    if (!resource) {
-      throw new Error("PlayCanvas n’a pas créé la ressource GSplat.");
-    }
-
-    centers = resource.centers;
-
-    if (!centers?.length) {
-      throw new Error(
-        "Les centres des splats ne sont pas disponibles pour le cadrage."
-      );
-    }
-
-    sceneCount = resource.numSplats || centers.length / 3;
-
-    splatEntity = new pc.Entity("Gaussian scene");
-    splatEntity.addComponent("gsplat", {
-      asset,
-      unified: true,
-    });
-
-    app.root.addChild(splatEntity);
-
-    camera.position.set(0, 0, 5);
-    camera.up.set(0, 1, 0);
-    target.set(0, 0, 0);
-
-    applyUpFlip();
-    computeSceneBounds();
-    navigation.fitToView(sceneBox);
-
-    let cameraError = null;
-
-    if (pendingCamera !== null) {
-      try {
-        applyCameraString(pendingCamera, pendingUp);
-      } catch (error) {
-        cameraError = error.message;
-      }
-
-      pendingCamera = null;
-      pendingUp = null;
-    }
-
-    await nextRenderedFrame();
-
-    if ($("collisionEnabled").checked) {
-      try {
-        await collision.buildGrid();
-        collision.checkCurrentCollisionPosition(true);
-      } catch (error) {
-        $("collisionEnabled").checked = false;
-        collision.setCollisionStatus(
-          `Anticollision indisponible : ${error?.message || error}`,
-          true
-        );
-      }
-    }
-
-    sceneReady = true;
-
-    const size = sceneBox.getSize(new THREE.Vector3());
-    const info =
-      `${name} — ${sceneCount.toLocaleString()} splats · ` +
-      `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ` +
-      `${size.z.toFixed(1)} · PlayCanvas`;
-
-    setStatus(
-      cameraError ? `${info} · ${cameraError}` : info,
-      !!cameraError
-    );
-  } catch (error) {
-    console.error("Chargement :", error);
-
-    releaseScene();
-    setStatus(`Erreur : ${error?.message || error}`, true);
-  } finally {
-    if (convertedUrl) URL.revokeObjectURL(convertedUrl);
-
-    isLoading = false;
-    $("fileInput").value = "";
-    refreshUI();
-  }
-}
-
-async function resetAndLoad(url, name) {
-  if (
-    !app ||
-    isLoading ||
-    fatalError ||
-    gifRecorder?.state.encoding ||
-    gifRecorder?.state.finalizing
-  ) {
-    return;
-  }
-
-  loadedFileSource = null;
-  loadedFileName = null;
-  loadedFileIsLocal = false;
-
-  await loadSceneInternal(url, name);
-
-  if (!sceneReady) return;
-
-  loadedFileName = name;
-
-  const resolvedUrl = new URL(url, location.href);
-
-  if (
-    resolvedUrl.protocol === "http:" ||
-    resolvedUrl.protocol === "https:"
-  ) {
-    loadedFileSource = url;
-    loadedFileIsLocal = false;
-  } else {
-    loadedFileSource = null;
-    loadedFileIsLocal = true;
-  }
-
-  rememberCamera();
-}
-
-async function loadFile(file) {
-  if (
-    !file ||
-    !app ||
-    isLoading ||
-    gifRecorder?.state.encoding ||
-    gifRecorder?.state.finalizing
-  ) {
-    return;
-  }
-
-  if (!/\.(sog|ply|splat|ksplat)$/i.test(file.name)) {
-    setStatus(
-      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
-      true
-    );
-    $("fileInput").value = "";
-    return;
-  }
-
-  const url = URL.createObjectURL(file);
-
-  try {
-    await resetAndLoad(url, file.name);
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+function canStartLoad() {
+  return (
+    !!app &&
+    !disposed &&
+    !isLoading &&
+    !fatalError &&
+    !gifRecorder?.state.encoding &&
+    !gifRecorder?.state.finalizing
+  );
 }
 
 function computeSceneBounds() {
   const count = centers.length / 3;
-  const coordinates = [[], [], []];
-  const stride = Math.max(1, Math.ceil(count / 100000));
+  const stride = Math.max(1, Math.ceil(count / 100_000));
+  const capacity = Math.ceil(count / stride);
+
+  const coordinates = [
+    new Float32Array(capacity),
+    new Float32Array(capacity),
+    new Float32Array(capacity),
+  ];
+
   const flip = $("flipUp").checked ? -1 : 1;
+  let valid = 0;
 
   for (let i = 0; i < count; i += stride) {
     const x = centers[i * 3];
@@ -544,27 +438,25 @@ function computeSceneBounds() {
       Number.isFinite(y) &&
       Number.isFinite(z)
     ) {
-      coordinates[0].push(x);
-      coordinates[1].push(y);
-      coordinates[2].push(z);
+      coordinates[0][valid] = x;
+      coordinates[1][valid] = y;
+      coordinates[2][valid] = z;
+      valid++;
     }
   }
 
-  if (!coordinates[0].length) {
+  if (!valid) {
     sceneBox.set(
       new THREE.Vector3(-1, -1, -1),
       new THREE.Vector3(1, 1, 1)
     );
   } else {
     const sorted = coordinates.map((values) =>
-      Float64Array.from(values).sort()
+      values.subarray(0, valid).sort()
     );
 
     const percentile = (values, q) =>
-      values[Math.min(
-        values.length - 1,
-        Math.floor(values.length * q)
-      )];
+      values[Math.min(valid - 1, Math.floor(valid * q))];
 
     sceneBox.set(
       new THREE.Vector3(
@@ -590,22 +482,208 @@ function computeSceneBounds() {
   );
 }
 
+async function loadSceneInternal(source, name) {
+  if (!canStartLoad()) return false;
+
+  if (!isSupportedSceneName(name)) {
+    setStatus(
+      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
+      true
+    );
+    return false;
+  }
+
+  isLoading = true;
+  navigation.clearNavigation();
+  gifRecorder.cancel(sceneReady);
+
+  const startedAt = performance.now();
+
+  try {
+    releaseScene();
+    refreshUI();
+
+    loadingStep(`Préparation de ${name}…`);
+
+    // Laisser le navigateur afficher la barre avant les allocations.
+    await sleep(0);
+
+    const asset = await importer.load(source, name);
+
+    if (disposed) return false;
+
+    const resource = asset.resource;
+
+    if (!resource) {
+      throw new Error("PlayCanvas n’a pas créé la ressource GSplat.");
+    }
+
+    centers = resource.centers;
+
+    if (!centers?.length || centers.length % 3 !== 0) {
+      throw new Error(
+        "Les centres des splats ne sont pas disponibles pour le cadrage."
+      );
+    }
+
+    sceneCount = Math.max(
+      centers.length / 3,
+      Number(resource.numSplats) || 0
+    );
+
+    enforceCollisionBudget();
+    refreshUI();
+
+    splatEntity = new pc.Entity("Gaussian scene");
+    splatEntity.addComponent("gsplat", {
+      asset,
+      unified: true,
+    });
+
+    app.root.addChild(splatEntity);
+
+    camera.position.set(0, 0, 5);
+    camera.up.set(0, 1, 0);
+    target.set(0, 0, 0);
+
+    applyUpFlip();
+
+    loadingStep("Calcul du cadrage…");
+    await sleep(0);
+
+    if (disposed) return false;
+
+    computeSceneBounds();
+    navigation.fitToView(sceneBox);
+
+    let cameraError = null;
+
+    if (pendingCamera !== null) {
+      try {
+        applyCameraString(pendingCamera, pendingUp);
+      } catch (error) {
+        cameraError = error.message;
+      }
+
+      pendingCamera = null;
+      pendingUp = null;
+    }
+
+    syncCamera();
+
+    loadingStep("Premier rendu…");
+    await nextRenderedFrame();
+
+    if (disposed) return false;
+  
+    memoryWatchdog?.check("après premier rendu");
+    await prepareCollision();
+
+    if (disposed) return false;
+
+    sceneReady = true;
+
+    const size = sceneBox.getSize(new THREE.Vector3());
+    const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
+
+    let info =
+      `${name} — ${sceneCount.toLocaleString()} splats · ` +
+      `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ` +
+      `${size.z.toFixed(1)} · ${elapsed} s · PlayCanvas`;
+
+    if (collisionBlockedReason) {
+      info += " · anticollision désactivée (protection mémoire)";
+    }
+
+    if (cameraError) {
+      info += ` · ${cameraError}`;
+    }
+
+    setStatus(info, !!cameraError);
+    return true;
+  } catch (error) {
+    if (disposed) return false;
+
+    console.error("Chargement :", error);
+
+    releaseScene();
+    setStatus(`Erreur : ${error?.message || error}`, true);
+
+    return false;
+  } finally {
+    isLoading = false;
+
+    if (!disposed) {
+      progress.hide();
+      $("fileInput").value = "";
+      refreshUI();
+    }
+  }
+}
+
+async function resetAndLoad(source, name) {
+  if (!canStartLoad()) return;
+
+  loadedFileSource = null;
+  loadedFileName = null;
+  loadedFileIsLocal = false;
+
+  const loaded = await loadSceneInternal(source, name);
+
+  if (!loaded || disposed) return;
+
+  loadedFileName = name;
+
+  if (source instanceof Blob) {
+    loadedFileIsLocal = true;
+  } else {
+    const resolvedUrl = new URL(source, location.href);
+
+    if (
+      resolvedUrl.protocol === "http:" ||
+      resolvedUrl.protocol === "https:"
+    ) {
+      loadedFileSource = source;
+    } else {
+      loadedFileIsLocal = true;
+    }
+  }
+
+  rememberCamera();
+}
+
+async function loadFile(file) {
+  if (!file || !canStartLoad()) return;
+
+  if (!isSupportedSceneName(file.name)) {
+    setStatus(
+      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
+      true
+    );
+
+    $("fileInput").value = "";
+    return;
+  }
+
+  await resetAndLoad(file, file.name);
+}
+
 async function selectPointInView(key, button) {
   const serial = ++pickSerial;
   picking = true;
+
+  const stillValid = () =>
+    !disposed &&
+    serial === pickSerial &&
+    navigation.heldButtons.get(key) === button &&
+    sceneReady;
 
   try {
     setStatus("Sélection du point visé au centre…");
 
     await nextRenderedFrame();
 
-    if (
-      serial !== pickSerial ||
-      navigation.heldButtons.get(key) !== button ||
-      !sceneReady
-    ) {
-      return false;
-    }
+    if (!stillValid()) return false;
 
     picker.resize(
       Math.max(1, canvas.width),
@@ -614,39 +692,35 @@ async function selectPointInView(key, button) {
 
     const worldLayer = app.scene.layers.getLayerByName("World");
 
-    picker.prepare(
-      cameraEntity.camera,
-      app.scene,
-      [worldLayer]
-    );
+    picker.prepare(cameraEntity.camera, app.scene, [worldLayer]);
 
     const point = await picker.getWorldPointAsync(
       Math.floor(picker.width / 2),
       Math.floor(picker.height / 2)
     );
 
-    if (
-      serial !== pickSerial ||
-      navigation.heldButtons.get(key) !== button ||
-      !sceneReady
-    ) {
-      return false;
-    }
+    if (!stillValid()) return false;
 
     if (!point) {
       setStatus("Aucun splat visé au centre de l’image.", true);
       return false;
     }
 
-    target.set(point.x, point.y, point.z);
+    const selectedTarget = new THREE.Vector3(
+      point.x,
+      point.y,
+      point.z
+    );
 
-    if (target.distanceToSquared(camera.position) < 1e-12) {
+    if (selectedTarget.distanceToSquared(camera.position) < 1e-12) {
       setStatus(
         "Le point sélectionné est trop proche de la caméra.",
         true
       );
       return false;
     }
+
+    target.copy(selectedTarget);
 
     syncCamera();
     requestGifCapture();
@@ -658,8 +732,9 @@ async function selectPointInView(key, button) {
 
     return true;
   } catch (error) {
-    if (serial === pickSerial) {
+    if (!disposed && serial === pickSerial) {
       console.error("Picking :", error);
+
       setStatus(
         `Sélection impossible : ${error?.message || error}`,
         true
@@ -668,7 +743,9 @@ async function selectPointInView(key, button) {
 
     return false;
   } finally {
-    if (serial === pickSerial) picking = false;
+    if (serial === pickSerial) {
+      picking = false;
+    }
   }
 }
 
@@ -766,13 +843,12 @@ function applyCameraString(value, upValue = null) {
   $("cameraValue").value = getCameraString();
 }
 
-function rememberCamera() {
+function buildViewUrl() {
   const url = new URL(location.href);
 
-  url.searchParams.delete("file");
-  url.searchParams.delete("camera_up");
-  url.searchParams.delete("camera_pos");
-  url.searchParams.delete("flipUp");
+  for (const key of ["file", "camera_up", "camera_pos", "flipUp"]) {
+    url.searchParams.delete(key);
+  }
 
   if (!loadedFileIsLocal && loadedFileSource) {
     url.searchParams.set("file", loadedFileSource);
@@ -785,6 +861,12 @@ function rememberCamera() {
 
   url.searchParams.set("camera_pos", getCameraString());
 
+  return url;
+}
+
+function rememberCamera() {
+  const url = buildViewUrl();
+
   try {
     history.replaceState(null, "", url.href);
   } catch (error) {
@@ -795,25 +877,8 @@ function rememberCamera() {
 }
 
 function getViewUrl() {
-  if (loadedFileIsLocal || !loadedFileSource) {
-    return null;
-  }
-
-  const url = new URL(location.href);
-
-  url.searchParams.delete("file");
-  url.searchParams.delete("flipUp");
-  url.searchParams.delete("camera_pos");
-  url.searchParams.delete("camera_up");
-
-  url.searchParams.set("file", loadedFileSource);
-  url.searchParams.set(
-    "flipUp",
-    $("flipUp").checked ? "1" : "0"
-  );
-  url.searchParams.set("camera_pos", getCameraString());
-
-  return url.href;
+  if (loadedFileIsLocal || !loadedFileSource) return null;
+  return buildViewUrl().href;
 }
 
 async function exportCamera() {
@@ -890,19 +955,23 @@ function navigationIsActive() {
   return (
     picking ||
     navigation.heldButtons.size > 0 ||
-    [...navigation.pressedKeys].some((key) =>
-      !!navigation.pressedKeys.has(key)
-    )
+    navigation.pressedKeys.size > 0
   );
 }
 
 function isPrincipalOrbitActive() {
   if (!navigation) return false;
 
-  return [...navigation.heldButtons.values()].some((button) =>
-    button.dataset.hold === "orbitPrincipalPositive" ||
-    button.dataset.hold === "orbitPrincipalNegative"
-  );
+  for (const button of navigation.heldButtons.values()) {
+    if (
+      button.dataset.hold === "orbitPrincipalPositive" ||
+      button.dataset.hold === "orbitPrincipalNegative"
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function installUI() {
@@ -929,11 +998,10 @@ function installUI() {
   $("lockPrincipalRotation").addEventListener("change", () => {
     navigation.clearNavigation();
 
-    const locked = $("lockPrincipalRotation").checked;
     const axis = getPrincipalAxisName().toUpperCase();
 
     setStatus(
-      locked
+      $("lockPrincipalRotation").checked
         ? `Rotations verrouillées sur l’axe ${axis} · orientation conservée.`
         : "Rotations libres réactivées."
     );
@@ -941,11 +1009,11 @@ function installUI() {
 
   $("alignPrincipalUp").addEventListener("click", () => {
     if (!canNavigate()) return;
-    +
+
     navigation.clearNavigation();
-    
+
     const forward = target.clone().sub(camera.position);
-    
+
     if (forward.lengthSq() < 1e-12) {
       setStatus(
         "Impossible de redresser : caméra et cible confondues.",
@@ -953,14 +1021,12 @@ function installUI() {
       );
       return;
     }
-    
+
     forward.normalize();
-    
-    // Projeter l’axe principal dans le plan de l’écran.
-    // Son sens positif devient le haut de l’image.
+
     const up = getPrincipalAxis().clone().normalize();
     up.addScaledVector(forward, -up.dot(forward));
-    
+
     if (up.lengthSq() < 1e-8) {
       setStatus(
         "L’axe principal est aligné avec le regard. " +
@@ -969,14 +1035,12 @@ function installUI() {
       );
       return;
     }
-    
-    // Correction explicite du roulis, même avec le verrou actif.
-    // La position de la caméra et la cible restent inchangées.
+
     camera.up.copy(up.normalize());
-    
+
     syncCamera();
     requestGifCapture();
-    
+
     setStatus(
       `Vue redressée · axe ${getPrincipalAxisName().toUpperCase()} vers le haut.`
     );
@@ -997,15 +1061,15 @@ function installUI() {
     const collapsed = $("panel").classList.toggle("collapsed");
 
     $("togglePanel").textContent = collapsed ? "+" : "−";
+
     $("togglePanel").setAttribute(
       "aria-expanded",
       String(!collapsed)
     );
+
     $("togglePanel").setAttribute(
       "aria-label",
-      collapsed
-        ? "Développer le panneau"
-        : "Réduire le panneau"
+      collapsed ? "Développer le panneau" : "Réduire le panneau"
     );
   });
 
@@ -1014,15 +1078,15 @@ function installUI() {
 
     navigation.clearNavigation();
     measurement?.reset();
-      
+
     applyUpFlip();
     computeSceneBounds();
     syncCamera();
     requestGifCapture();
 
-    collision.checkCurrentCollisionPosition(
-      $("collisionEnabled").checked
-    );
+    if (!collisionBlockedReason) {
+      collision.checkCurrentCollisionPosition(collisionIsEnabled());
+    }
 
     setStatus(
       `Axe Y ${
@@ -1031,61 +1095,58 @@ function installUI() {
     );
   });
 
-  $("collisionEnabled").addEventListener(
-    "change",
-    async () => {
-      navigation.clearNavigation();
+  $("collisionEnabled").addEventListener("change", async () => {
+    navigation.clearNavigation();
 
-      if (!$("collisionEnabled").checked) {
-        collision.setCollisionStatus(
-          "Anticollision désactivée."
-        );
-        return;
-      }
-
-      if (!sceneReady) {
-        collision.setCollisionStatus(
-          "L’anticollision sera préparée au prochain chargement."
-        );
-        return;
-      }
-
-      isLoading = true;
+    if (collisionBlockedReason) {
+      $("collisionEnabled").checked = false;
+      collision.setCollisionStatus(collisionBlockedReason);
       refreshUI();
+      return;
+    }
 
-      try {
-        await collision.buildGrid();
-        collision.checkCurrentCollisionPosition(true);
-      } catch (error) {
-        $("collisionEnabled").checked = false;
+    if (!$("collisionEnabled").checked) {
+      collision.reset();
+      collision.setCollisionStatus("Anticollision désactivée.");
+      return;
+    }
 
-        collision.setCollisionStatus(
-          `Anticollision indisponible : ${error?.message || error}`,
-          true
-        );
-      } finally {
-        isLoading = false;
+    if (!sceneReady) {
+      collision.setCollisionStatus(
+        "L’anticollision sera préparée au prochain chargement."
+      );
+      return;
+    }
+
+    isLoading = true;
+    refreshUI();
+
+    try {
+      await prepareCollision();
+    } finally {
+      isLoading = false;
+
+      if (!disposed) {
+        progress.hide();
         refreshUI();
       }
     }
-  );
+  });
 
   $("collisionDensity").addEventListener("input", () => {
-    $("collisionDensityValue").value =
-      $("collisionDensity").value;
+    $("collisionDensityValue").value = $("collisionDensity").value;
 
-    collision.checkCurrentCollisionPosition(
-      $("collisionEnabled").checked
-    );
+    if (!collisionBlockedReason) {
+      collision.checkCurrentCollisionPosition(collisionIsEnabled());
+    }
   });
 
   $("collisionMargin").addEventListener("input", () => {
-    $("collisionMarginValue").value =
-      $("collisionMargin").value;
+    $("collisionMarginValue").value = $("collisionMargin").value;
 
-    collision.checkCurrentCollisionPosition(
-      $("collisionEnabled").checked
-    );
+    if (!collisionBlockedReason) {
+      collision.checkCurrentCollisionPosition(collisionIsEnabled());
+    }
   });
 
   $("fileInput").addEventListener("change", (event) => {
@@ -1099,10 +1160,12 @@ function installUI() {
 
   $("gifStop").addEventListener("click", async () => {
     navigation.clearNavigation();
+
     await gifRecorder.stopAndExport({
       sceneReady,
       nextFrame: nextRenderedFrame,
     });
+
     refreshUI();
   });
 
@@ -1118,9 +1181,7 @@ function installDnD() {
   window.addEventListener("dragenter", (event) => {
     event.preventDefault();
 
-    if (!Array.from(
-      event.dataTransfer?.types ?? []
-    ).includes("Files")) {
+    if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) {
       return;
     }
 
@@ -1152,9 +1213,7 @@ function installDnD() {
   });
 }
 
-$("flipUp").checked = ["1", "true"].includes(
-  params.get("flipUp")
-);
+$("flipUp").checked = ["1", "true"].includes(params.get("flipUp"));
 
 if (pendingCamera !== null) {
   $("cameraValue").value = pendingCamera;
@@ -1166,18 +1225,19 @@ updatePrincipalAxisHelp();
 async function initialize() {
   isLoading = true;
   refreshUI();
+  loadingStep("Initialisation du moteur graphique…");
 
   try {
     const graphicsDevice = await pc.createGraphicsDevice(canvas, {
       deviceTypes: ["webgl2"],
       antialias: false,
       alpha: false,
+
+      // Conservé pour la compatibilité du module GIF existant.
       preserveDrawingBuffer: true,
     });
 
-    app = new pc.Application(canvas, {
-      graphicsDevice,
-    });
+    app = new pc.Application(canvas, { graphicsDevice });
 
     app.setCanvasFillMode(pc.FILLMODE_NONE);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
@@ -1187,9 +1247,23 @@ async function initialize() {
       2
     );
 
+    // Les centres restent nécessaires au cadrage et aux mesures,
+    // même lorsque l'anticollision est désactivée.
     app.scene.gsplatCentersEnabled = true;
 
+    importer = createSceneImporter({
+      app,
+      setStatus,
+
+      onProgress(message, fraction, detail) {
+        if (!disposed) {
+          progress.update(message, fraction, detail);
+        }
+      },
+    });
+
     cameraEntity = new pc.Entity("Camera");
+
     cameraEntity.addComponent("camera", {
       clearColor: new pc.Color(
         0x10 / 255,
@@ -1202,12 +1276,16 @@ async function initialize() {
     });
 
     app.root.addChild(cameraEntity);
+
     picker = new pc.Picker(app, 1, 1, true);
 
     collision = createCollisionSystem({
       getFlipUp: () => $("flipUp").checked,
       getThreshold: () => Number($("collisionDensity").value),
+
+      // Marge en unités de scène.
       getMargin: () => Number($("collisionMargin").value),
+
       getSceneRadius: () => sceneRadius,
       getCenters: () => centers,
       getSceneCount: () => sceneCount,
@@ -1216,6 +1294,14 @@ async function initialize() {
       setStatus,
       sleep,
     });
+      
+    memoryWatchdog = createMemoryWatchdog({
+        getSceneCount: () => sceneCount,
+        maxCollisionSplats: MAX_COLLISION_SPLATS,
+        onDisableCollision: disableCollisionForMemory,
+      });
+
+    memoryWatchdog.start();
 
     gifRecorder = createGifRecorder({
       getCanvas: () => canvas,
@@ -1228,65 +1314,67 @@ async function initialize() {
       canvas,
       camera,
       target,
+
       getSceneRadius: () => sceneRadius,
       getSceneCenter: () => sceneCenter,
       getCanNavigate: canNavigate,
       getPrincipalAxis,
       getPrincipalAxisName,
-      isRotationLocked: () =>
-        $("lockPrincipalRotation").checked,
+
+      isRotationLocked: () => $("lockPrincipalRotation").checked,
       getSpeedValue: () => Number($("step").value),
       getKeyboardLayout: () => $("keyboardLayout").value,
+
       navigateWithCollision: (move, enabled) =>
-        collision.navigateWithCollision(move, enabled),
+        collision.navigateWithCollision(
+          move,
+          enabled && collisionIsEnabled()
+        ),
+
       syncCamera,
       requestGifCapture,
       selectPointInView,
       setStatus,
     });
 
-      
-      measurement = createMeasurementSystem({
-        canvas,
-        container,
-        camera,
+    measurement = createMeasurementSystem({
+      canvas,
+      container,
+      camera,
 
-        getCenters: () => centers,
+      getCenters: () => centers,
 
-        // Inclut la transformation réelle de la scène,
-        // notamment le retournement COLMAP.
-        getModelMatrix: () => {
-          const matrix = new THREE.Matrix4();
+      getModelMatrix: () => {
+        const matrix = new THREE.Matrix4();
 
-          if (splatEntity) {
-            matrix.fromArray(splatEntity.getWorldTransform().data);
-          }
+        if (splatEntity) {
+          matrix.fromArray(splatEntity.getWorldTransform().data);
+        }
 
-          return matrix;
-        },
+        return matrix;
+      },
 
-        getSceneRadius: () => sceneRadius,
-        getPrincipalAxis,
+      getSceneRadius: () => sceneRadius,
+      getPrincipalAxis,
 
-        // Ne pas utiliser canNavigate ici :
-        // cette fonction est volontairement fausse pendant la mesure.
-        canMeasure: () =>
-          !!app &&
-          sceneReady &&
-          !isLoading &&
-          !fatalError &&
-          !picking &&
-          !gifRecorder?.state.encoding &&
-          !gifRecorder?.state.finalizing,
+      canMeasure: () =>
+        !!app &&
+        !disposed &&
+        sceneReady &&
+        !isLoading &&
+        !fatalError &&
+        !picking &&
+        !gifRecorder?.state.encoding &&
+        !gifRecorder?.state.finalizing,
 
-        clearNavigation: () => navigation.clearNavigation(),
-        setStatus,
+      clearNavigation: () => navigation.clearNavigation(),
+      setStatus,
 
-        pickTolerancePx: 4,
-        neighborhoodRadiusRatio: 0.005,
-        snapAngleDeg: 5,
-      });
-      
+      pickTolerancePx: 4,
+      neighborhoodRadiusRatio: 0.005,
+      snapAngleDeg: 5,
+    });
+
     navigation.installMouseControls();
     navigation.installHeldButtons();
     navigation.installKeyboard();
@@ -1295,18 +1383,19 @@ async function initialize() {
     installDnD();
 
     app.on("update", navigation.frame);
-      app.on("postrender", () => {
-        measurement?.render();
 
-        gifRecorder.processCapture({
-          sceneReady,
-          documentHidden: document.hidden,
-          navigationIsActive,
-          signature: cameraCaptureSignature(),
-          continuous: isPrincipalOrbitActive(),
-          cameraQuaternion: camera.quaternion,
-        });
+    app.on("postrender", () => {
+      measurement?.render();
+
+      gifRecorder.processCapture({
+        sceneReady,
+        documentHidden: document.hidden,
+        navigationIsActive,
+        signature: cameraCaptureSignature(),
+        continuous: isPrincipalOrbitActive(),
+        cameraQuaternion: camera.quaternion,
       });
+    });
 
     app.start();
 
@@ -1316,38 +1405,57 @@ async function initialize() {
     window.addEventListener("pagehide", (event) => {
       if (event.persisted) return;
 
+      disposed = true;
+      memoryWatchdog?.dispose();
+      memoryWatchdog = null;
+        
       navigation.clearNavigation();
+
       measurement?.dispose();
       measurement = null;
-      gifRecorder.clearDownload();
-      resizeObserver.disconnect();
-      picker?.destroy();
 
-      if (app) {
-        releaseScene();
-        app.destroy();
-        app = null;
-      }
+      gifRecorder.cancel(false);
+      gifRecorder.clearDownload();
+
+      resizeObserver.disconnect();
+
+      picker?.destroy();
+      picker = null;
+
+      releaseScene();
+
+      importer?.dispose();
+      importer = null;
+
+      progress.dispose();
+
+      app?.destroy();
+      app = null;
+      cameraEntity = null;
     });
 
     resizeViewer();
 
     isLoading = false;
+    progress.hide();
     refreshUI();
 
     const fileParam = params.get("file");
 
     if (fileParam) {
-      await resetAndLoad(
-        fileParam,
-        filenameFromUrl(fileParam)
-      );
+      await resetAndLoad(fileParam, filenameFromUrl(fileParam));
+    } else {
+      setStatus("Ouvre un fichier .sog, .ply, .splat ou .ksplat.");
     }
   } catch (error) {
+    if (disposed) return;
+
     console.error("Initialisation PlayCanvas :", error);
 
     isLoading = false;
     fatalError = true;
+
+    progress.hide();
 
     setStatus(
       `Initialisation impossible : ${error?.message || error}`,
