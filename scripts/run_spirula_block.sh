@@ -9,6 +9,7 @@ images_dir="${IMAGES_DIR:-}"
 output_dir="${OUTPUT_DIR:-}"
 train_preset="${TRAIN_PRESET:-3dgs}"
 clean="${CLEAN:-false}"
+export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../python/export_ply.py}"
@@ -112,6 +113,7 @@ while [[ $# -gt 0 ]]; do
     --train-resolution-divisor) need_arg "$@"; train_resolution_divisor="$2"; shift 2 ;;
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
     --export-script) need_arg "$@"; export_script="$2"; shift 2 ;;
+    --name) need_arg "$@"; export_name="$2"; shift 2 ;;
     --clean)
       if [[ "${2:-}" == "true" || "${2:-}" == "false" ]]; then
         clean="$2"; shift 2
