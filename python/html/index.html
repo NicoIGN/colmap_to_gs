@@ -33,13 +33,183 @@
     #help {
       pointer-events: none;
     }
+
+    /* Encart infos scène repliable */
+    #sceneInfo {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 20;
+      box-sizing: border-box;
+      width: 340px;
+      max-width: calc(100vw - 24px);
+      max-height: calc(100dvh - 24px);
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      background: rgba(18, 22, 30, 0.9);
+      color: #edf2f7;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+      user-select: text;
+    }
+
+    #sceneInfoHeader {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    #sceneInfoTitle {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    #toggleSceneInfo {
+      appearance: none;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(255, 255, 255, 0.06);
+      color: #edf2f7;
+      border-radius: 8px;
+      width: 28px;
+      height: 28px;
+      line-height: 1;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+    }
+
+    #toggleSceneInfo:hover {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    #sceneInfoBody {
+      padding: 12px;
+      max-height: calc(100dvh - 90px);
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+    }
+
+    #sceneInfo[aria-expanded="false"] #sceneInfoBody {
+      display: none;
+    }
+
+    #sceneInfo[aria-expanded="false"] #sceneInfoHeader {
+      border-bottom: 0;
+    }
+
+    #sceneInfo .scene-metadata {
+      display: grid;
+      grid-template-columns: 100px minmax(0, 1fr);
+      gap: 7px 10px;
+      margin: 0;
+    }
+
+    #sceneInfo .scene-metadata dt {
+      color: #aebccc;
+    }
+
+    #sceneInfo .scene-metadata dd {
+      min-width: 0;
+      margin: 0;
+      white-space: pre-wrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #sceneInfo .scene-messages {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    #sceneInfo .message-heading {
+      margin: 0 0 3px;
+      color: #aebccc;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    #sceneInfo #status,
+    #sceneInfo #collisionStatus,
+    #sceneInfo #gifStatus {
+      position: static;
+      inset: auto;
+      display: block;
+      width: auto;
+      min-width: 0;
+      max-width: none;
+      margin: 0;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.04);
+      color: #edf2f7;
+      font-size: 12px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    #sceneInfo [data-level="warning"],
+    #sceneInfo .warning {
+      border-color: rgba(255, 193, 7, 0.5);
+      background: rgba(255, 193, 7, 0.09);
+      color: #ffe29a;
+    }
+
+    #sceneInfo [data-level="error"],
+    #sceneInfo .error {
+      border-color: rgba(255, 107, 107, 0.5);
+      background: rgba(255, 107, 107, 0.09);
+      color: #ffb4b4;
+    }
+
+    #sceneInfo [data-level="success"],
+    #sceneInfo .success {
+      border-color: rgba(107, 213, 151, 0.45);
+      background: rgba(107, 213, 151, 0.08);
+      color: #b4f0cb;
+    }
+
+    @media (max-width: 700px) {
+      #sceneInfo {
+        top: auto;
+        bottom: 12px;
+        right: 12px;
+        width: 300px;
+      }
+
+      #sceneInfoBody {
+        max-height: 34dvh;
+      }
+
+      #sceneInfo .scene-metadata {
+        grid-template-columns: 90px minmax(0, 1fr);
+      }
+    }
   </style>
 
   <script type="importmap">
   {
     "imports": {
       "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-      "playcanvas": "https://cdn.jsdelivr.net/npm/playcanvas@2.23.1/build/playcanvas.mjs"
+      "playcanvas": "https://cdn.jsdelivr.net/npm/playcanvas@2.23.1/build/playcanvas.mjs",
+      "proj4": "https://cdn.jsdelivr.net/npm/proj4@2.12.1/+esm"
     }
   }
   </script>
@@ -53,6 +223,76 @@
   <div id="drop">
     Déposer un fichier .sog, .ply, .splat ou .ksplat
   </div>
+
+  <!-- Encart infos repliable -->
+  <aside
+    id="sceneInfo"
+    aria-labelledby="sceneInfoTitle"
+    aria-expanded="true"
+  >
+    <div id="sceneInfoHeader">
+      <h2 id="sceneInfoTitle">Informations sur la scène</h2>
+      <button
+        type="button"
+        id="toggleSceneInfo"
+        aria-label="Replier l’encart d’informations"
+        aria-controls="sceneInfoBody"
+        aria-expanded="true"
+      >−</button>
+    </div>
+
+    <div id="sceneInfoBody">
+      <dl class="scene-metadata">
+        <dt>Fichier</dt>
+        <dd id="sceneFileName">Aucun fichier chargé</dd>
+
+        <dt>Splats</dt>
+        <dd id="sceneSplatCount">—</dd>
+
+        <dt>Géoréférence</dt>
+        <dd id="sceneGeorefInfo">Aucune référence chargée</dd>
+      </dl>
+
+      <div class="scene-messages">
+        <div>
+          <h3 id="statusHeading" class="message-heading">État</h3>
+          <div
+            id="status"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-labelledby="statusHeading"
+          >Aucun fichier chargé</div>
+        </div>
+
+        <div>
+          <h3 id="collisionStatusHeading" class="message-heading">
+            Anticollision
+          </h3>
+          <p
+            id="collisionStatus"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-labelledby="collisionStatusHeading"
+          >Anticollision désactivée.</p>
+        </div>
+
+        <div>
+          <h3 id="gifStatusHeading" class="message-heading">
+            Capture GIF
+          </h3>
+          <p
+            id="gifStatus"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-labelledby="gifStatusHeading"
+          >Aucun enregistrement.</p>
+        </div>
+      </div>
+    </div>
+  </aside>
 
   <aside id="panel" aria-label="Commandes du viewer">
     <div class="header">
@@ -101,126 +341,8 @@
         </button>
       </div>
 
-      <!-- Navigation immersive -->
       <details open>
-        <summary>Navigation immersive</summary>
-
-        <p class="hint">
-          Clic gauche maintenu et glisser : orienter la visée.
-          La caméra regarde autour d’elle sans tourner autour de la scène.
-        </p>
-
-        <p class="hint">
-          Molette : avancer ou reculer dans la direction de la cible.
-          Clic droit maintenu et glisser : déplacement latéral.
-        </p>
-
-        <div class="section">
-          <div class="section-title">ORIENTER LE REGARD</div>
-
-          <p class="hint">
-            Maintenir un bouton ou utiliser les flèches du clavier.
-          </p>
-
-          <!-- Identifiants data-hold conservés pour le JavaScript. -->
-          <div class="nav-grid">
-            <span></span>
-
-            <button
-              type="button"
-              data-hold="orbitUp"
-              aria-label="Regarder vers le haut"
-              title="Maintenir : regarder vers le haut"
-            >↑</button>
-
-            <span></span>
-
-            <button
-              type="button"
-              data-hold="orbitLeft"
-              aria-label="Regarder vers la gauche"
-              title="Maintenir : regarder vers la gauche"
-            >←</button>
-
-            <span aria-hidden="true">◉</span>
-
-            <button
-              type="button"
-              data-hold="orbitRight"
-              aria-label="Regarder vers la droite"
-              title="Maintenir : regarder vers la droite"
-            >→</button>
-
-            <span></span>
-
-            <button
-              type="button"
-              data-hold="orbitDown"
-              aria-label="Regarder vers le bas"
-              title="Maintenir : regarder vers le bas"
-            >↓</button>
-
-            <span></span>
-          </div>
-        </div>
-
-        <div class="section">
-          <div class="section-title">SE DÉPLACER</div>
-
-          <p class="hint">
-            Maintenir un bouton pour un déplacement continu.
-          </p>
-
-          <div class="nav-grid">
-            <button
-              type="button"
-              data-hold="forward"
-              aria-label="Avancer"
-              title="Avancer dans la direction du regard"
-            >↗</button>
-
-            <button
-              type="button"
-              data-hold="up"
-              aria-label="Monter"
-              title="Monter"
-            >↑</button>
-
-            <button
-              type="button"
-              data-hold="backward"
-              aria-label="Reculer"
-              title="Reculer dans la direction opposée au regard"
-            >↙</button>
-
-            <button
-              type="button"
-              data-hold="left"
-              aria-label="Se déplacer vers la gauche"
-              title="Déplacement latéral vers la gauche"
-            >←</button>
-
-            <span></span>
-
-            <button
-              type="button"
-              data-hold="right"
-              aria-label="Se déplacer vers la droite"
-              title="Déplacement latéral vers la droite"
-            >→</button>
-
-            <span></span>
-
-            <button
-              type="button"
-              data-hold="down"
-              aria-label="Descendre"
-              title="Descendre"
-            >↓</button>
-
-            <span></span>
-          </div>
-        </div>
+        <summary>Déplacement</summary>
 
         <label class="slider" for="step">
           Vitesse de déplacement
@@ -267,7 +389,6 @@
             <option value="z" selected>Z</option>
           </select>
         </div>
-        
 
         <label class="check">
           <input type="checkbox" id="lockPrincipalRotation" />
@@ -377,8 +498,6 @@
           laisse passer plus facilement.
         </p>
 
-        <!-- Conservé pour compatibilité avec le JavaScript existant.
-             Le dernier test ponctuel n’utilise plus cette marge. -->
         <label class="slider" for="collisionMargin">
           Marge de sécurité — réservée
           <input
@@ -406,18 +525,33 @@
           elle ne remplace pas un maillage physique et peut ignorer
           certaines surfaces ou bloquer des espaces visuellement libres.
         </p>
-
-        <p
-          id="collisionStatus"
-          class="hint"
-          role="status"
-          aria-live="polite"
-        >
-          Anticollision désactivée.
-        </p>
       </details>
 
-      <!-- Caméra et liens -->
+      <details id="gpsSection">
+        <summary>Trajectoire GPS</summary>
+
+        <label class="file-button">
+          Importer un GPX…
+          <input class="visually-hidden" type="file" id="gpxInput" accept=".gpx" />
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="gpsFollowEnabled" disabled />
+          Suivre la trajectoire GPS
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="gpsAutoEnabled" disabled />
+          Auto: début → fin
+        </label>
+
+        <label class="slider" for="gpsAutoSpeed">
+          Vitesse auto
+          <input type="range" id="gpsAutoSpeed" min="0.5" max="10" step="0.5" value="1.0" />
+          <output id="gpsAutoSpeedValue" for="gpsAutoSpeed">1.0</output>
+        </label>
+      </details>
+
       <details id="cameraSection">
         <summary>Caméra · copier / restaurer</summary>
 
@@ -454,7 +588,6 @@
         </p>
       </details>
 
-      <!-- Capture GIF -->
       <details id="gifSection" open>
         <summary>Capture GIF animée</summary>
 
@@ -497,15 +630,6 @@
           </button>
         </div>
 
-        <p
-          id="gifStatus"
-          class="hint"
-          role="status"
-          aria-live="polite"
-        >
-          Aucun enregistrement.
-        </p>
-
         <a id="gifDownload" class="download-link" hidden>
           Télécharger le GIF
         </a>
@@ -515,10 +639,6 @@
           Les proportions de la vue sont conservées.
         </p>
       </details>
-
-      <div id="status" role="status" aria-live="polite">
-        Aucun fichier chargé
-      </div>
     </div>
   </aside>
 

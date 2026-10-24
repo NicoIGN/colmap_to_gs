@@ -13,18 +13,15 @@ import { createCollisionSystem } from "./viewer/collision.js";
 import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
-import { readGeorefFile } from "./viewer/georef.js";
+import { createSceneTools } from "./viewer/scene-tools.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
 const params = new URLSearchParams(location.search);
-
-const sleep = (ms) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const reportedMemory = Number(navigator.deviceMemory) || null;
 
-// Garder les mêmes seuils dans collision.js.
 const MAX_COLLISION_SPLATS =
   reportedMemory !== null && reportedMemory <= 4
     ? 500_000
@@ -35,6 +32,16 @@ const COLLISION_CONTROL_IDS = [
   "collisionDensity",
   "collisionMargin",
 ];
+
+const NAVIGATION_INPUT_BINDINGS = {
+  look: { button: 0, modifier: "ctrlKey" },
+  arrows: {
+    ArrowUp: "forward",
+    ArrowDown: "backward",
+    ArrowLeft: "left",
+    ArrowRight: "right",
+  },
+};
 
 const sceneBox = new THREE.Box3();
 const sceneCenter = new THREE.Vector3();
@@ -82,8 +89,7 @@ let collision = null;
 let gifRecorder = null;
 let measurement = null;
 let memoryWatchdog = null;
-let sceneGeoref = null;
-let georefSerial = 0;
+let sceneTools = null;
 
 const canvas = document.createElement("canvas");
 canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
@@ -91,27 +97,51 @@ container.appendChild(canvas);
 
 const progress = createLoadProgress(container);
 
+function uiIsBlocked() {
+  return Boolean(
+    isLoading ||
+    fatalError ||
+    gifRecorder?.state.encoding ||
+    gifRecorder?.state.finalizing
+  );
+}
+
 const canNavigate = () =>
   !!app &&
   !disposed &&
   sceneReady &&
-  !isLoading &&
-  !fatalError &&
+  !uiIsBlocked() &&
   !picking &&
-  !gifRecorder?.state.encoding &&
-  !gifRecorder?.state.finalizing &&
   !measurement?.isActive();
 
-function setStatus(message, error = false) {
+/**
+ * Compatibilité avec les modules existants :
+ * setStatus(message, true) reste une erreur.
+ * Accepte aussi "warning", "success" et "info".
+ */
+function setStatus(message, level = false) {
   if (disposed) return;
 
-  $("status").textContent = message;
-  $("status").classList.toggle("error", error);
+  const element = $("status");
+  if (!element) return;
+
+  const severity =
+    level === true
+      ? "error"
+      : ["error", "warning", "success"].includes(level)
+        ? level
+        : "info";
+
+  element.textContent = message;
+  element.dataset.level = severity;
+
+  for (const name of ["error", "warning", "success"]) {
+    element.classList.toggle(name, severity === name);
+  }
 }
 
 function loadingStep(message, fraction = null, detail = "") {
   if (disposed) return;
-
   setStatus(message);
   progress.update(message, fraction, detail);
 }
@@ -139,34 +169,39 @@ function updatePrincipalAxisHelp() {
 }
 
 function updateKeyboardHelp() {
-  $("keyboardHelp").textContent =
+  const layout =
     $("keyboardLayout").value === "azerty"
       ? "ZQSD : déplacer · A/E : descendre / monter"
       : "WASD : déplacer · Q/E : descendre / monter";
+
+  $("keyboardHelp").textContent =
+    `${layout} · Flèches : avancer / reculer / déplacement latéral`;
+
+  if ($("help")) {
+    $("help").textContent =
+      "Ctrl + clic gauche-glisser : tourner le regard sur place · " +
+      "Flèches ou ZQSD/WASD : se déplacer · " +
+      "Clic droit-glisser : déplacement latéral · " +
+      "Molette : avancer/reculer · Maj + clic : mesurer · R : cadrer";
+  }
 }
 
 function refreshUI() {
   if (disposed) return;
 
-  const blocked = Boolean(
-    isLoading ||
-    fatalError ||
-    gifRecorder?.state.encoding ||
-    gifRecorder?.state.finalizing
-  );
+  const blocked = uiIsBlocked();
 
   document.querySelectorAll(
     "#panel button, #panel input, #panel select, #panel textarea"
   ).forEach((element) => {
-    if (element.id !== "togglePanel") {
-      element.disabled = blocked;
-    }
+    if (element.id !== "togglePanel") element.disabled = blocked;
   });
 
   for (const id of COLLISION_CONTROL_IDS) {
     const element = $(id);
+    if (!element) continue;
 
-    element.disabled = blocked || !!collisionBlockedReason;
+    element.disabled = blocked || Boolean(collisionBlockedReason);
 
     if (collisionBlockedReason) {
       element.title = collisionBlockedReason;
@@ -175,54 +210,41 @@ function refreshUI() {
     }
   }
 
+  sceneTools?.refreshUI();
   gifRecorder?.updateUI(sceneReady);
-}
-
-function disableCollisionForMemory(reason) {
-  collisionBlockedReason = reason;
-
-  $("collisionEnabled").checked = false;
-
-  // Avec le dernier collision.js fourni :
-  // - annule la construction en cours ;
-  // - vide les Map publiées et en construction ;
-  // - retire les références à la grille.
-  //
-  // Cela rend les données récupérables par le GC,
-  // sans garantir une baisse immédiate de la mémoire du processus.
-  collision?.reset();
-  collision?.setCollisionStatus(reason);
-
-  navigation?.clearNavigation();
-
-  refreshUI();
-
-  // Ne pas écraser les messages d'étape pendant un import.
-  if (!isLoading) {
-    setStatus(reason);
-  }
-
-  console.warn("[Memory watchdog]", reason);
 }
 
 function collisionIsEnabled() {
   return !collisionBlockedReason && $("collisionEnabled").checked;
 }
 
+function disableCollisionForMemory(reason) {
+  collisionBlockedReason = reason;
+  $("collisionEnabled").checked = false;
+
+  collision?.reset();
+  collision?.setCollisionStatus(reason);
+  navigation?.clearNavigation();
+  refreshUI();
+
+  if (!isLoading) setStatus(reason, "warning");
+
+  console.warn("[Memory watchdog]", reason);
+}
+
 function enforceCollisionBudget() {
   collisionBlockedReason = "";
 
-  if (sceneCount > MAX_COLLISION_SPLATS) {
-    collisionBlockedReason =
-      "Anticollision désactivée pour limiter la mémoire : " +
-      `${sceneCount.toLocaleString()} splats, seuil de ` +
-      `${MAX_COLLISION_SPLATS.toLocaleString()}.`;
+  if (sceneCount <= MAX_COLLISION_SPLATS) return;
 
-    $("collisionEnabled").checked = false;
+  collisionBlockedReason =
+    "Anticollision désactivée pour limiter la mémoire : " +
+    `${sceneCount.toLocaleString("fr-FR")} splats, seuil de ` +
+    `${MAX_COLLISION_SPLATS.toLocaleString("fr-FR")}.`;
 
-    collision.reset();
-    collision.setCollisionStatus(collisionBlockedReason);
-  }
+  $("collisionEnabled").checked = false;
+  collision.reset();
+  collision.setCollisionStatus(collisionBlockedReason);
 }
 
 async function prepareCollision() {
@@ -255,8 +277,6 @@ async function prepareCollision() {
     $("collisionEnabled").checked = false;
     collision.reset();
 
-    // Préserver l'explication du watchdog plutôt que d'afficher
-    // une erreur générique d'annulation.
     if (memoryWatchdog?.collisionBlocked) {
       collisionBlockedReason = memoryWatchdog.reason;
       collision.setCollisionStatus(collisionBlockedReason);
@@ -347,7 +367,6 @@ function nextRenderedFrame() {
 
     function onHide(event) {
       if (event.persisted) return;
-
       cleanup();
       reject(new DOMException("Viewer fermé.", "AbortError"));
     }
@@ -384,13 +403,12 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
-    
-  georefSerial++;
-  sceneGeoref = null;
-    
+  sceneTools?.reset();
+
   pickSerial++;
   picking = false;
-    
+
+  navigation?.clearNavigation();
   measurement?.reset();
   collision?.reset();
 
@@ -400,24 +418,15 @@ function releaseScene() {
   centers = null;
   sceneCount = 0;
   sceneRadius = 1;
-
   sceneBox.makeEmpty();
   sceneCenter.set(0, 0, 0);
-
   collisionBlockedReason = "";
 
   importer?.release();
 }
 
 function canStartLoad() {
-  return (
-    !!app &&
-    !disposed &&
-    !isLoading &&
-    !fatalError &&
-    !gifRecorder?.state.encoding &&
-    !gifRecorder?.state.finalizing
-  );
+  return !!app && !disposed && !uiIsBlocked();
 }
 
 function computeSceneBounds() {
@@ -431,24 +440,28 @@ function computeSceneBounds() {
     new Float32Array(capacity),
   ];
 
-  const flip = $("flipUp").checked ? -1 : 1;
+  const matrix = new THREE.Matrix4().fromArray(
+    splatEntity.getWorldTransform().data
+  );
+
+  const point = new THREE.Vector3();
   let valid = 0;
 
   for (let i = 0; i < count; i += stride) {
-    const x = centers[i * 3];
-    const y = centers[i * 3 + 1] * flip;
-    const z = centers[i * 3 + 2] * flip;
+    point.set(
+      centers[i * 3],
+      centers[i * 3 + 1],
+      centers[i * 3 + 2]
+    ).applyMatrix4(matrix);
 
-    if (
-      Number.isFinite(x) &&
-      Number.isFinite(y) &&
-      Number.isFinite(z)
-    ) {
-      coordinates[0][valid] = x;
-      coordinates[1][valid] = y;
-      coordinates[2][valid] = z;
-      valid++;
+    if (![point.x, point.y, point.z].every(Number.isFinite)) {
+      continue;
     }
+
+    coordinates[0][valid] = point.x;
+    coordinates[1][valid] = point.y;
+    coordinates[2][valid] = point.z;
+    valid++;
   }
 
   if (!valid) {
@@ -488,15 +501,11 @@ function computeSceneBounds() {
   );
 }
 
-
 async function loadSceneInternal(source, name) {
   if (!canStartLoad()) return false;
 
   if (!isSupportedSceneName(name)) {
-    setStatus(
-      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
-      true
-    );
+    setStatus("Formats acceptés : .sog, .ply, .splat ou .ksplat.", true);
     return false;
   }
 
@@ -508,11 +517,10 @@ async function loadSceneInternal(source, name) {
 
   try {
     releaseScene();
+    sceneTools?.setSceneInfo({ name });
     refreshUI();
 
     loadingStep(`Préparation de ${name}…`);
-
-    // Laisser le navigateur afficher la barre avant les allocations.
     await sleep(0);
 
     const asset = await importer.load(source, name);
@@ -528,9 +536,7 @@ async function loadSceneInternal(source, name) {
     centers = resource.centers;
 
     if (!centers?.length || centers.length % 3 !== 0) {
-      throw new Error(
-        "Les centres des splats ne sont pas disponibles pour le cadrage."
-      );
+      throw new Error("Centres des splats indisponibles pour le cadrage.");
     }
 
     sceneCount = Math.max(
@@ -538,15 +544,12 @@ async function loadSceneInternal(source, name) {
       Number(resource.numSplats) || 0
     );
 
+    sceneTools?.setSceneInfo({ name, count: sceneCount });
     enforceCollisionBudget();
     refreshUI();
 
     splatEntity = new pc.Entity("Gaussian scene");
-    splatEntity.addComponent("gsplat", {
-      asset,
-      unified: true,
-    });
-
+    splatEntity.addComponent("gsplat", { asset, unified: true });
     app.root.addChild(splatEntity);
 
     camera.position.set(0, 0, 5);
@@ -577,12 +580,11 @@ async function loadSceneInternal(source, name) {
     }
 
     syncCamera();
-
     loadingStep("Premier rendu…");
     await nextRenderedFrame();
 
     if (disposed) return false;
-  
+
     memoryWatchdog?.check("après premier rendu");
     await prepareCollision();
 
@@ -594,28 +596,28 @@ async function loadSceneInternal(source, name) {
     const elapsed = ((performance.now() - startedAt) / 1000).toFixed(1);
 
     let info =
-      `${name} — ${sceneCount.toLocaleString()} splats · ` +
-      `${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ` +
-      `${size.z.toFixed(1)} · ${elapsed} s · PlayCanvas`;
+      `Scène chargée · ${elapsed} s · PlayCanvas\n` +
+      `Dimensions : ${size.x.toFixed(1)} × ` +
+      `${size.y.toFixed(1)} × ${size.z.toFixed(1)}`;
 
     if (collisionBlockedReason) {
-      info += " · anticollision désactivée (protection mémoire)";
+      info += "\nAnticollision désactivée : protection mémoire.";
     }
 
-    if (cameraError) {
-      info += ` · ${cameraError}`;
-    }
+    if (cameraError) info += `\n${cameraError}`;
 
-    setStatus(info, !!cameraError);
+    setStatus(
+      info,
+      cameraError ? "error" : collisionBlockedReason ? "warning" : "success"
+    );
+
     return true;
   } catch (error) {
     if (disposed) return false;
 
     console.error("Chargement :", error);
-
     releaseScene();
     setStatus(`Erreur : ${error?.message || error}`, true);
-
     return false;
   } finally {
     isLoading = false;
@@ -644,12 +646,9 @@ async function resetAndLoad(source, name) {
   if (source instanceof Blob) {
     loadedFileIsLocal = true;
   } else {
-    const resolvedUrl = new URL(source, location.href);
+    const url = new URL(source, location.href);
 
-    if (
-      resolvedUrl.protocol === "http:" ||
-      resolvedUrl.protocol === "https:"
-    ) {
+    if (["http:", "https:"].includes(url.protocol)) {
       loadedFileSource = source;
     } else {
       loadedFileIsLocal = true;
@@ -663,16 +662,39 @@ async function loadFile(file) {
   if (!file || !canStartLoad()) return;
 
   if (!isSupportedSceneName(file.name)) {
-    setStatus(
-      "Formats acceptés : .sog, .ply, .splat ou .ksplat.",
-      true
-    );
-
+    setStatus("Formats acceptés : .sog, .ply, .splat ou .ksplat.", true);
     $("fileInput").value = "";
     return;
   }
 
   await resetAndLoad(file, file.name);
+}
+
+async function handleDroppedFiles(fileList) {
+  if (!fileList?.length || !canStartLoad()) return;
+
+  try {
+    const files = Array.from(fileList);
+
+    if (files.length !== 1) {
+      throw new Error(
+        "Dépose un fichier à la fois : scène, JSON, puis GPX."
+      );
+    }
+
+    const file = files[0];
+
+    if (/\.(json|gpx)$/i.test(file.name)) {
+      await sceneTools.importFile(file);
+    } else {
+      await loadFile(file);
+    }
+  } catch (error) {
+    if (disposed) return;
+
+    console.error("Import :", error);
+    setStatus(`Import impossible : ${error?.message || error}`, true);
+  }
 }
 
 async function selectPointInView(key, button) {
@@ -687,7 +709,6 @@ async function selectPointInView(key, button) {
 
   try {
     setStatus("Sélection du point visé au centre…");
-
     await nextRenderedFrame();
 
     if (!stillValid()) return false;
@@ -697,9 +718,8 @@ async function selectPointInView(key, button) {
       Math.max(1, canvas.height)
     );
 
-    const worldLayer = app.scene.layers.getLayerByName("World");
-
-    picker.prepare(cameraEntity.camera, app.scene, [worldLayer]);
+    const layer = app.scene.layers.getLayerByName("World");
+    picker.prepare(cameraEntity.camera, app.scene, [layer]);
 
     const point = await picker.getWorldPointAsync(
       Math.floor(picker.width / 2),
@@ -708,51 +728,48 @@ async function selectPointInView(key, button) {
 
     if (!stillValid()) return false;
 
-    if (!point) {
-      setStatus("Aucun splat visé au centre de l’image.", true);
-      return false;
-    }
+    const selected = point
+      ? new THREE.Vector3(point.x, point.y, point.z)
+      : null;
 
-    const selectedTarget = new THREE.Vector3(
-      point.x,
-      point.y,
-      point.z
-    );
+    const valid =
+      selected !== null &&
+      selected.toArray().every(Number.isFinite) &&
+      selected.distanceToSquared(camera.position) >= 1e-12;
 
-    if (selectedTarget.distanceToSquared(camera.position) < 1e-12) {
-      setStatus(
-        "Le point sélectionné est trop proche de la caméra.",
-        true
+    if (valid) {
+      target.copy(selected);
+    } else if (
+      !target.toArray().every(Number.isFinite) ||
+      target.distanceToSquared(camera.position) < 1e-12
+    ) {
+      target.copy(camera.position).addScaledVector(
+        camera.getWorldDirection(new THREE.Vector3()),
+        Math.max(sceneRadius, 1e-3)
       );
-      return false;
     }
-
-    target.copy(selectedTarget);
 
     syncCamera();
     requestGifCapture();
 
+    const axis = getPrincipalAxisName().toUpperCase();
+
     setStatus(
-      "Rotation autour du point visé · axe " +
-      `${getPrincipalAxisName().toUpperCase()}.`
+      valid
+        ? `Rotation autour du splat visé · axe ${axis}.`
+        : `Aucun splat visé : pivot de visée conservé · axe ${axis}.`
     );
 
     return true;
   } catch (error) {
     if (!disposed && serial === pickSerial) {
       console.error("Picking :", error);
-
-      setStatus(
-        `Sélection impossible : ${error?.message || error}`,
-        true
-      );
+      setStatus(`Sélection impossible : ${error?.message || error}`, true);
     }
 
     return false;
   } finally {
-    if (serial === pickSerial) {
-      picking = false;
-    }
+    if (serial === pickSerial) picking = false;
   }
 }
 
@@ -766,8 +783,7 @@ function parseNumbers(value, count) {
     !numbers.every(Number.isFinite)
   ) {
     throw new Error(
-      `Valeur invalide : fournir ${count} nombres ` +
-      "séparés par des virgules."
+      `Fournir ${count} nombres séparés par des virgules.`
     );
   }
 
@@ -800,7 +816,6 @@ function applyCameraString(value, upValue = null) {
   }
 
   const values = parseNumbers(value, count);
-
   const position = new THREE.Vector3(...values.slice(0, 3));
   const newTarget = new THREE.Vector3(...values.slice(3, 6));
 
@@ -813,9 +828,7 @@ function applyCameraString(value, upValue = null) {
   const direction = newTarget.clone().sub(position);
 
   if (direction.lengthSq() < 1e-12) {
-    throw new Error(
-      "La position et la cible doivent être différentes."
-    );
+    throw new Error("La position et la cible doivent être différentes.");
   }
 
   if (up.lengthSq() < 1e-12) {
@@ -823,22 +836,15 @@ function applyCameraString(value, upValue = null) {
   }
 
   direction.normalize();
-  up.normalize();
-  up.addScaledVector(direction, -up.dot(direction));
+  up.normalize().addScaledVector(direction, -up.dot(direction));
 
   if (up.lengthSq() < 1e-12) {
     if (count === 9 || upValue) {
-      throw new Error(
-        "Le vecteur vertical est parallèle à la visée."
-      );
+      throw new Error("Le vecteur vertical est parallèle à la visée.");
     }
 
     up.set(0, 0, 1);
-
-    if (Math.abs(up.dot(direction)) > 0.999) {
-      up.set(1, 0, 0);
-    }
-
+    if (Math.abs(up.dot(direction)) > 0.999) up.set(1, 0, 0);
     up.addScaledVector(direction, -up.dot(direction));
   }
 
@@ -861,11 +867,7 @@ function buildViewUrl() {
     url.searchParams.set("file", loadedFileSource);
   }
 
-  url.searchParams.set(
-    "flipUp",
-    $("flipUp").checked ? "1" : "0"
-  );
-
+  url.searchParams.set("flipUp", $("flipUp").checked ? "1" : "0");
   url.searchParams.set("camera_pos", getCameraString());
 
   return url;
@@ -883,62 +885,39 @@ function rememberCamera() {
   return url.href;
 }
 
-function getViewUrl() {
-  if (loadedFileIsLocal || !loadedFileSource) return null;
-  return buildViewUrl().href;
-}
-
 async function exportCamera() {
   if (!canNavigate()) return;
 
   navigation.clearNavigation();
 
   const cameraString = getCameraString();
-
   $("cameraValue").value = cameraString;
   $("cameraSection").open = true;
 
   rememberCamera();
 
-  const viewUrl = getViewUrl();
-
-  if (viewUrl) {
-    try {
-      await navigator.clipboard.writeText(viewUrl);
-
-      setStatus(
-        `URL complète copiée · ${loadedFileName} · ` +
-        "caméra et flipUp inclus."
-      );
-    } catch {
-      window.prompt(
-        "Copie cette URL complète avec Ctrl/Cmd+C :",
-        viewUrl
-      );
-
-      setStatus(
-        "Copie automatique indisponible : URL présentée " +
-        "pour copie manuelle."
-      );
-    }
-
-    return;
-  }
+  const viewUrl =
+    !loadedFileIsLocal && loadedFileSource
+      ? buildViewUrl().href
+      : null;
 
   try {
-    await navigator.clipboard.writeText(cameraString);
+    await navigator.clipboard.writeText(viewUrl || cameraString);
 
     setStatus(
-      "Fichier local : position caméra copiée " +
-      "(sans paramètre file)."
+      viewUrl
+        ? `URL complète copiée · ${loadedFileName}.`
+        : "Fichier local : coordonnées caméra copiées."
     );
   } catch {
-    $("cameraValue").focus();
-    $("cameraValue").select();
-
-    setStatus(
-      "Fichier local : copie la position caméra avec Ctrl/Cmd+C."
-    );
+    if (viewUrl) {
+      window.prompt("Copie cette URL :", viewUrl);
+      setStatus("URL présentée pour copie manuelle.");
+    } else {
+      $("cameraValue").focus();
+      $("cameraValue").select();
+      setStatus("Copie les coordonnées avec Ctrl/Cmd+C.");
+    }
   }
 }
 
@@ -951,7 +930,6 @@ function importCamera() {
     applyCameraString($("cameraValue").value);
     rememberCamera();
     requestGifCapture();
-
     setStatus("Caméra restaurée.");
   } catch (error) {
     setStatus(error.message, true);
@@ -969,47 +947,36 @@ function navigationIsActive() {
 function isPrincipalOrbitActive() {
   if (!navigation) return false;
 
-  for (const button of navigation.heldButtons.values()) {
-    if (
+  return Array.from(navigation.heldButtons.values()).some(
+    (button) =>
       button.dataset.hold === "orbitPrincipalPositive" ||
       button.dataset.hold === "orbitPrincipalNegative"
-    ) {
-      return true;
-    }
-  }
-
-  return false;
+  );
 }
 
 function installUI() {
   $("fit").addEventListener("click", () => {
     if (!canNavigate()) return;
-
     navigation.clearNavigation();
     navigation.fitToView(sceneBox);
   });
 
-  $("recenterTarget").addEventListener(
-    "click",
-    navigation.recenterTarget
-  );
-
+  $("recenterTarget").addEventListener("click", navigation.recenterTarget);
   $("exportCam").addEventListener("click", exportCamera);
   $("importCam").addEventListener("click", importCamera);
 
   $("principalAxis").addEventListener("change", () => {
     navigation.clearNavigation();
+    measurement?.reset();
     updatePrincipalAxisHelp();
   });
 
   $("lockPrincipalRotation").addEventListener("change", () => {
     navigation.clearNavigation();
 
-    const axis = getPrincipalAxisName().toUpperCase();
-
     setStatus(
       $("lockPrincipalRotation").checked
-        ? `Rotations verrouillées sur l’axe ${axis} · orientation conservée.`
+        ? `Rotations verrouillées sur l’axe ${getPrincipalAxisName().toUpperCase()}.`
         : "Rotations libres réactivées."
     );
   });
@@ -1022,10 +989,7 @@ function installUI() {
     const forward = target.clone().sub(camera.position);
 
     if (forward.lengthSq() < 1e-12) {
-      setStatus(
-        "Impossible de redresser : caméra et cible confondues.",
-        true
-      );
+      setStatus("Caméra et cible confondues.", true);
       return;
     }
 
@@ -1036,20 +1000,18 @@ function installUI() {
 
     if (up.lengthSq() < 1e-8) {
       setStatus(
-        "L’axe principal est aligné avec le regard. " +
-        "Oriente légèrement la vue avant de la redresser.",
-        true
+        "Axe principal aligné avec le regard : oriente légèrement la vue.",
+        "warning"
       );
       return;
     }
 
     camera.up.copy(up.normalize());
-
     syncCamera();
     requestGifCapture();
 
     setStatus(
-      `Vue redressée · axe ${getPrincipalAxisName().toUpperCase()} vers le haut.`
+      `Vue redressée · axe ${getPrincipalAxisName().toUpperCase()}.`
     );
   });
 
@@ -1066,19 +1028,17 @@ function installUI() {
     navigation.clearNavigation();
 
     const collapsed = $("panel").classList.toggle("collapsed");
+    const button = $("togglePanel");
 
-    $("togglePanel").textContent = collapsed ? "+" : "−";
-
-    $("togglePanel").setAttribute(
-      "aria-expanded",
-      String(!collapsed)
-    );
-
-    $("togglePanel").setAttribute(
+    button.textContent = collapsed ? "+" : "−";
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute(
       "aria-label",
       collapsed ? "Développer le panneau" : "Réduire le panneau"
     );
   });
+
+  // toggleSceneInfo est installé par scene-tools.js.
 
   $("flipUp").addEventListener("change", () => {
     if (!canNavigate()) return;
@@ -1096,10 +1056,11 @@ function installUI() {
     }
 
     setStatus(
-      `Axe Y ${
-        $("flipUp").checked ? "vers le bas" : "vers le haut"
-      } · vue conservée.`
+      `Axe Y ${$("flipUp").checked ? "vers le bas" : "vers le haut"} · vue conservée.`
     );
+
+    // Après le statut général, pour préserver un éventuel avertissement GPX.
+    sceneTools.rebuildTrack();
   });
 
   $("collisionEnabled").addEventListener("change", async () => {
@@ -1140,24 +1101,18 @@ function installUI() {
     }
   });
 
-  $("collisionDensity").addEventListener("input", () => {
-    $("collisionDensityValue").value = $("collisionDensity").value;
+  for (const id of ["collisionDensity", "collisionMargin"]) {
+    $(id).addEventListener("input", () => {
+      $(`${id}Value`).value = $(id).value;
 
-    if (!collisionBlockedReason) {
-      collision.checkCurrentCollisionPosition(collisionIsEnabled());
-    }
-  });
-
-  $("collisionMargin").addEventListener("input", () => {
-    $("collisionMarginValue").value = $("collisionMargin").value;
-
-    if (!collisionBlockedReason) {
-      collision.checkCurrentCollisionPosition(collisionIsEnabled());
-    }
-  });
+      if (!collisionBlockedReason) {
+        collision.checkCurrentCollisionPosition(collisionIsEnabled());
+      }
+    });
+  }
 
   $("fileInput").addEventListener("change", (event) => {
-    void loadFile(event.target.files?.[0]);
+    void handleDroppedFiles(event.target.files);
   });
 
   $("gifStart").addEventListener("click", () => {
@@ -1168,12 +1123,16 @@ function installUI() {
   $("gifStop").addEventListener("click", async () => {
     navigation.clearNavigation();
 
-    await gifRecorder.stopAndExport({
-      sceneReady,
-      nextFrame: nextRenderedFrame,
-    });
-
-    refreshUI();
+    try {
+      await gifRecorder.stopAndExport({
+        sceneReady,
+        nextFrame: nextRenderedFrame,
+      });
+    } catch (error) {
+      setStatus(`Export GIF impossible : ${error?.message || error}`, true);
+    } finally {
+      refreshUI();
+    }
   });
 
   $("gifCancel").addEventListener("click", () => {
@@ -1182,122 +1141,8 @@ function installUI() {
   });
 }
 
-async function applySceneGeoref(file) {
-  if (!canStartLoad()) return;
-
-  if (!sceneReady || !splatEntity) {
-    setStatus(
-      "Charge d’abord une scène, puis dépose son georef_stats.json.",
-      true
-    );
-    return;
-  }
-
-  const serial = ++georefSerial;
-  const entityAtStart = splatEntity;
-
-  const stillValid = () =>
-    !disposed &&
-    serial === georefSerial &&
-    sceneReady &&
-    splatEntity === entityAtStart;
-
-  try {
-    setStatus(`Lecture de ${file.name}…`);
-
-    const georef = await readGeorefFile(file);
-
-    if (!stillValid()) return;
-
-    // Remplacement seulement après validation :
-    // un JSON invalide conserve le géoréférencement précédent.
-    sceneGeoref = georef;
-
-    const { lat, lon, height } = georef.origin;
-
-      setStatus(
-        `Référence géographique associée — EPSG:${georef.epsg} · ` +
-        `origine X=${georef.origin.x.toFixed(3)}, ` +
-        `Y=${georef.origin.y.toFixed(3)}, H=${georef.origin.h.toFixed(3)}`
-      );
-  } catch (error) {
-    if (!stillValid()) return;
-
-    console.error("Géoréférencement :", error);
-
-    setStatus(
-      `Géoréférencement non appliqué : ${error?.message || error}`,
-      true
-    );
-  }
-}
-
-/**
- * Point dans le monde affiché -> coordonnées géographiques.
- *
- * À utiliser ensuite pour un point mesuré, une cible ou la caméra.
- * Retourne null sans référence géographique.
- */
-function getAbsoluteCoordinates(worldPoint) {
-  if (!sceneGeoref || !sceneReady || !splatEntity) {
-    return null;
-  }
-
-  const worldFromEnu = new THREE.Matrix4().fromArray(
-    splatEntity.getWorldTransform().data
-  );
-
-  // Monde affiché -> ENU local (annule flipUp notamment)
-  const enu = new THREE.Vector3(
-    worldPoint.x,
-    worldPoint.y,
-    worldPoint.z
-  ).applyMatrix4(worldFromEnu.invert());
-
-  const projected = sceneGeoref.enuToProjected(
-    enu.x,
-    enu.y,
-    enu.z
-  );
-
-  return {
-    epsg: sceneGeoref.epsg,
-    x: projected.x,
-    y: projected.y,
-    h: projected.h,
-  };
-}
-
-/**
- * Un seul fichier par dépôt :
- * - scène : comportement existant ;
- * - JSON : métadonnées de la scène déjà chargée.
- */
-async function handleDroppedFiles(fileList) {
-  if (!fileList?.length || !canStartLoad()) return;
-
-  const files = Array.from(fileList);
-
-  if (files.length !== 1) {
-    setStatus(
-      "Dépose un seul fichier à la fois : la scène, puis son JSON.",
-      true
-    );
-    return;
-  }
-
-  const file = files[0];
-
-  if (/\.json$/i.test(file.name)) {
-    await applySceneGeoref(file);
-    return;
-  }
-
-  await loadFile(file);
-}
-
 function installDnD() {
-  let dragDepth = 0;
+  let depth = 0;
 
   window.addEventListener("dragenter", (event) => {
     event.preventDefault();
@@ -1306,39 +1151,23 @@ function installDnD() {
       return;
     }
 
-    dragDepth++;
+    depth++;
     $("drop").style.display = "flex";
   });
 
-  window.addEventListener("dragover", (event) => {
-    event.preventDefault();
-  });
+  window.addEventListener("dragover", (event) => event.preventDefault());
 
   window.addEventListener("dragleave", (event) => {
     event.preventDefault();
-
-    dragDepth = Math.max(0, dragDepth - 1);
-
-    if (!dragDepth) {
-      $("drop").style.display = "none";
-    }
+    depth = Math.max(0, depth - 1);
+    if (!depth) $("drop").style.display = "none";
   });
 
   window.addEventListener("drop", (event) => {
     event.preventDefault();
-
-    dragDepth = 0;
+    depth = 0;
     $("drop").style.display = "none";
-
-        void handleDroppedFiles(event.dataTransfer?.files).catch((error) => {
-        if (disposed) return;
-    
-        console.error("Dépôt :", error);
-        setStatus(
-            `Dépôt impossible : ${error?.message || error}`,
-            true
-        );
-        });
+    void handleDroppedFiles(event.dataTransfer?.files);
   });
 }
 
@@ -1361,13 +1190,10 @@ async function initialize() {
       deviceTypes: ["webgl2"],
       antialias: false,
       alpha: false,
-
-      // Conservé pour la compatibilité du module GIF existant.
       preserveDrawingBuffer: true,
     });
 
     app = new pc.Application(canvas, { graphicsDevice });
-
     app.setCanvasFillMode(pc.FILLMODE_NONE);
     app.setCanvasResolution(pc.RESOLUTION_AUTO);
 
@@ -1376,45 +1202,31 @@ async function initialize() {
       2
     );
 
-    // Les centres restent nécessaires au cadrage et aux mesures,
-    // même lorsque l'anticollision est désactivée.
     app.scene.gsplatCentersEnabled = true;
 
     importer = createSceneImporter({
       app,
       setStatus,
-
       onProgress(message, fraction, detail) {
-        if (!disposed) {
-          progress.update(message, fraction, detail);
-        }
+        if (!disposed) progress.update(message, fraction, detail);
       },
     });
 
     cameraEntity = new pc.Entity("Camera");
-
     cameraEntity.addComponent("camera", {
-      clearColor: new pc.Color(
-        0x10 / 255,
-        0x13 / 255,
-        0x1b / 255
-      ),
+      clearColor: new pc.Color(0x10 / 255, 0x13 / 255, 0x1b / 255),
       fov: camera.fov,
       nearClip: camera.near,
       farClip: camera.far,
     });
 
     app.root.addChild(cameraEntity);
-
     picker = new pc.Picker(app, 1, 1, true);
 
     collision = createCollisionSystem({
       getFlipUp: () => $("flipUp").checked,
       getThreshold: () => Number($("collisionDensity").value),
-
-      // Marge en unités de scène.
       getMargin: () => Number($("collisionMargin").value),
-
       getSceneRadius: () => sceneRadius,
       getCenters: () => centers,
       getSceneCount: () => sceneCount,
@@ -1423,12 +1235,12 @@ async function initialize() {
       setStatus,
       sleep,
     });
-      
+
     memoryWatchdog = createMemoryWatchdog({
-        getSceneCount: () => sceneCount,
-        maxCollisionSplats: MAX_COLLISION_SPLATS,
-        onDisableCollision: disableCollisionForMemory,
-      });
+      getSceneCount: () => sceneCount,
+      maxCollisionSplats: MAX_COLLISION_SPLATS,
+      onDisableCollision: disableCollisionForMemory,
+    });
 
     memoryWatchdog.start();
 
@@ -1443,13 +1255,12 @@ async function initialize() {
       canvas,
       camera,
       target,
-
+      inputBindings: NAVIGATION_INPUT_BINDINGS,
       getSceneRadius: () => sceneRadius,
       getSceneCenter: () => sceneCenter,
       getCanNavigate: canNavigate,
       getPrincipalAxis,
       getPrincipalAxisName,
-
       isRotationLocked: () => $("lockPrincipalRotation").checked,
       getSpeedValue: () => Number($("step").value),
       getKeyboardLayout: () => $("keyboardLayout").value,
@@ -1466,14 +1277,40 @@ async function initialize() {
       setStatus,
     });
 
+    sceneTools = createSceneTools({
+      getState: () => ({
+        ready: sceneReady,
+        blocked:
+          disposed ||
+          uiIsBlocked() ||
+          picking ||
+          Boolean(measurement?.isActive()),
+        entity: splatEntity,
+        box: sceneBox,
+        radius: sceneRadius,
+        flipUp: $("flipUp").checked,
+      }),
+
+      camera,
+      target,
+      getPrincipalAxis,
+      clearNavigation: () => navigation?.clearNavigation(),
+      resetMeasurement: () => measurement?.reset(),
+      syncCamera,
+      requestCapture: requestGifCapture,
+      refreshAppUI: refreshUI,
+      setStatus,
+    });
+
     measurement = createMeasurementSystem({
       canvas,
       container,
       camera,
-
       getCenters: () => centers,
-      getAbsoluteCoordinates,
-        
+
+      getAbsoluteCoordinates: (point) =>
+        sceneTools.getAbsoluteCoordinates(point),
+
       getModelMatrix: () => {
         const matrix = new THREE.Matrix4();
 
@@ -1491,15 +1328,11 @@ async function initialize() {
         !!app &&
         !disposed &&
         sceneReady &&
-        !isLoading &&
-        !fatalError &&
-        !picking &&
-        !gifRecorder?.state.encoding &&
-        !gifRecorder?.state.finalizing,
+        !uiIsBlocked() &&
+        !picking,
 
       clearNavigation: () => navigation.clearNavigation(),
       setStatus,
-
       pickTolerancePx: 4,
       neighborhoodRadiusRatio: 0.005,
       horizontalSnapAngleDeg: 5,
@@ -1513,7 +1346,10 @@ async function initialize() {
     installUI();
     installDnD();
 
-    app.on("update", navigation.frame);
+    app.on("update", (dt) => {
+      navigation.frame(dt);
+      sceneTools.frame(dt);
+    });
 
     app.on("postrender", () => {
       measurement?.render();
@@ -1537,11 +1373,11 @@ async function initialize() {
       if (event.persisted) return;
 
       disposed = true;
+
       memoryWatchdog?.dispose();
       memoryWatchdog = null;
-        
-      navigation.clearNavigation();
 
+      navigation.clearNavigation();
       measurement?.dispose();
       measurement = null;
 
@@ -1549,17 +1385,17 @@ async function initialize() {
       gifRecorder.clearDownload();
 
       resizeObserver.disconnect();
-
       picker?.destroy();
       picker = null;
 
       releaseScene();
+      sceneTools?.dispose();
+      sceneTools = null;
 
       importer?.dispose();
       importer = null;
 
       progress.dispose();
-
       app?.destroy();
       app = null;
       cameraEntity = null;
@@ -1571,10 +1407,10 @@ async function initialize() {
     progress.hide();
     refreshUI();
 
-    const fileParam = params.get("file");
+    const file = params.get("file");
 
-    if (fileParam) {
-      await resetAndLoad(fileParam, filenameFromUrl(fileParam));
+    if (file) {
+      await resetAndLoad(file, filenameFromUrl(file));
     } else {
       setStatus("Ouvre un fichier .sog, .ply, .splat ou .ksplat.");
     }
@@ -1582,10 +1418,8 @@ async function initialize() {
     if (disposed) return;
 
     console.error("Initialisation PlayCanvas :", error);
-
     isLoading = false;
     fatalError = true;
-
     progress.hide();
 
     setStatus(

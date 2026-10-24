@@ -4,6 +4,7 @@ export function createNavigationSystem({
   canvas,
   camera,
   target,
+  inputBindings = {},
   getSceneRadius,
   getSceneCenter,
   getCanNavigate,
@@ -21,36 +22,37 @@ export function createNavigationSystem({
   const pressedKeys = new Set();
   const heldButtons = new Map();
 
+  const lookBinding = {
+    button: 0,
+    modifier: "ctrlKey",
+    ...inputBindings.look,
+  };
+
+  // event.key est normalisé en minuscules dans actionForKey().
+  const commonKeys = Object.fromEntries(
+    Object.entries({
+      ArrowUp: "forward",
+      ArrowDown: "backward",
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      ...inputBindings.arrows,
+    }).map(([key, action]) => [key.toLowerCase(), action])
+  );
+
   let mouseDrag = null;
   let wheelTimer = null;
+  let lastSceneBox = null;
 
-  function clearNavigation() {
-    const wasMoving =
-      heldButtons.size > 0 ||
-      !!mouseDrag?.moved ||
-      [...pressedKeys].some((key) => !!actionForKey(key));
-
-    pressedKeys.clear();
-
-    heldButtons.forEach((button) => {
-      button.classList.remove("held");
-    });
-
-    heldButtons.clear();
-    mouseDrag = null;
-
-    clearTimeout(wheelTimer);
-    wheelTimer = null;
-
-    if (wasMoving) requestGifCapture();
-  }
-
-  const commonKeys = {
-    arrowleft: "orbitLeft",
-    arrowright: "orbitRight",
-    arrowup: "orbitUp",
-    arrowdown: "orbitDown",
+  // Dernière position connue de la souris sur le canvas (px CSS).
+  // Sert à orienter la molette selon l’axe pointé.
+  let lastPointer = {
+    x: canvas.clientWidth * 0.5,
+    y: canvas.clientHeight * 0.5,
   };
+
+  let mouseControlsInstalled = false;
+  let heldButtonsInstalled = false;
+  let keyboardInstalled = false;
 
   function actionForKey(key) {
     const layout = getKeyboardLayout() === "azerty"
@@ -81,13 +83,57 @@ export function createNavigationSystem({
       );
   }
 
+  function finishMouseDrag() {
+    const drag = mouseDrag;
+
+    if (!drag) return;
+
+    // Effacer avant releasePointerCapture(), qui peut déclencher
+    // lostpointercapture.
+    mouseDrag = null;
+
+    if (canvas.hasPointerCapture(drag.id)) {
+      canvas.releasePointerCapture(drag.id);
+    }
+
+    if (drag.moved) {
+      requestGifCapture();
+    }
+  }
+
+  function clearNavigation() {
+    const wasMoving =
+      heldButtons.size > 0 ||
+      [...pressedKeys].some((key) => !!actionForKey(key));
+
+    pressedKeys.clear();
+
+    heldButtons.forEach((button) => {
+      button.classList.remove("held");
+    });
+
+    heldButtons.clear();
+    finishMouseDrag();
+
+    clearTimeout(wheelTimer);
+    wheelTimer = null;
+
+    if (wasMoving) {
+      requestGifCapture();
+    }
+  }
+
+  /**
+   * Orbite explicite : déplace la caméra autour de target.
+   * Utilisée par les boutons d’orbite encore présents.
+   */
   function rotateAroundAxis(axis, angle) {
     if (!angle || axis.lengthSq() < 1e-12) return;
 
     const normalizedAxis = axis.clone().normalize();
 
     if (isRotationLocked()) {
-      const principalAxis = getPrincipalAxis();
+      const principalAxis = getPrincipalAxis().clone().normalize();
       const alignment = Math.abs(
         normalizedAxis.dot(principalAxis)
       );
@@ -104,22 +150,33 @@ export function createNavigationSystem({
 
     camera.position.copy(target).add(offset);
     camera.up.applyQuaternion(rotation).normalize();
+
     camera.lookAt(target);
     camera.updateMatrixWorld(true);
   }
 
+  /**
+   * Rotation du regard sur place.
+   *
+   * dx et dy sont des angles en radians.
+   * camera.position reste inchangée.
+   * Aucun point de scène n’est sélectionné.
+   */
   function orbitLook(dx, dy) {
     if (!dx && !dy) return;
 
     const direction = target.clone().sub(camera.position);
+    const distance = direction.length();
 
-    if (direction.lengthSq() < 1e-12) return;
+    if (distance < 1e-12) return;
 
+    const locked = isRotationLocked();
     const up = camera.up.clone().normalize();
+
     direction.normalize();
 
     if (dx) {
-      const yawAxis = isRotationLocked()
+      const yawAxis = locked
         ? getPrincipalAxis().clone().normalize()
         : new THREE.Vector3(0, 1, 0)
             .applyQuaternion(camera.quaternion)
@@ -127,7 +184,7 @@ export function createNavigationSystem({
 
       let yawAngle = dx;
 
-      if (isRotationLocked() && yawAxis.dot(up) < 0) {
+      if (locked && yawAxis.dot(up) < 0) {
         yawAngle = -yawAngle;
       }
 
@@ -138,12 +195,13 @@ export function createNavigationSystem({
       up.applyQuaternion(yaw);
     }
 
-    if (dy && !isRotationLocked()) {
+    if (dy && !locked) {
       const right = new THREE.Vector3()
-        .crossVectors(direction, up)
-        .normalize();
+        .crossVectors(direction, up);
 
       if (right.lengthSq() > 1e-12) {
+        right.normalize();
+
         const pitch = new THREE.Quaternion()
           .setFromAxisAngle(right, dy);
 
@@ -152,16 +210,13 @@ export function createNavigationSystem({
       }
     }
 
-    const distance = Math.max(
-      camera.position.distanceTo(target),
-      getSceneRadius() * 1e-4
-    );
-
-    target.copy(camera.position).add(
-      direction.normalize().multiplyScalar(distance)
+    target.copy(camera.position).addScaledVector(
+      direction.normalize(),
+      distance
     );
 
     camera.up.copy(up.normalize());
+
     camera.lookAt(target);
     camera.updateMatrixWorld(true);
   }
@@ -208,20 +263,30 @@ export function createNavigationSystem({
     target.add(delta);
   }
 
-  function dollyToTarget(pixels) {
-    const offset = target.clone().sub(camera.position);
-    const distance = offset.length();
+  function dollyToCursor(pixels) {
+    // Zoom/déplacement selon le rayon passant par la souris.
+    const width = Math.max(canvas.clientWidth, 1);
+    const height = Math.max(canvas.clientHeight, 1);
 
-    if (distance < 1e-12) return;
+    const ndcX = (lastPointer.x / width) * 2 - 1;
+    const ndcY = -(lastPointer.y / height) * 2 + 1;
+
+    const worldPointOnRay = new THREE.Vector3(ndcX, ndcY, 0.5)
+      .unproject(camera);
+
+    const direction = worldPointOnRay
+      .sub(camera.position)
+      .normalize();
+
+    if (direction.lengthSq() < 1e-12) return;
 
     const speed = getSpeedValue() / 10;
-    const worldStep =
-      getSceneRadius() * 0.03 * speed;
+    const worldStep = getSceneRadius() * 0.03 * speed;
 
     const delta =
       THREE.MathUtils.clamp(pixels / 100, -4, 4) * worldStep;
 
-    const direction = offset.normalize();
+    // delta > 0 (wheel down) => reculer ; delta < 0 => avancer.
     const move = direction.multiplyScalar(-delta);
 
     camera.position.add(move);
@@ -229,9 +294,16 @@ export function createNavigationSystem({
   }
 
   function fitToView(sceneBox) {
-    if (!sceneBox) return;
+    if (!sceneBox || sceneBox.isEmpty()) return;
 
-    const sceneCenter = getSceneCenter();
+    // Mémoriser le cadrage pour le raccourci R.
+    // Pas de test getCanNavigate() ici : app.js appelle aussi
+    // cette fonction pendant le chargement initial.
+    lastSceneBox = sceneBox.clone();
+
+    const sceneCenter = lastSceneBox.getCenter(
+      new THREE.Vector3()
+    );
 
     const direction = camera.position.clone().sub(target);
 
@@ -266,8 +338,8 @@ export function createNavigationSystem({
       Math.tan(vFov / 2) * camera.aspect
     );
 
-    const forward = direction.clone().normalize().negate();
-    const up = camera.up.clone().normalize();
+    const forward = direction.clone().negate();
+    const up = camera.up.clone();
 
     const right = new THREE.Vector3()
       .crossVectors(forward, up)
@@ -277,7 +349,7 @@ export function createNavigationSystem({
       .crossVectors(right, forward)
       .normalize();
 
-    const half = sceneBox.getSize(new THREE.Vector3())
+    const half = lastSceneBox.getSize(new THREE.Vector3())
       .multiplyScalar(0.5);
 
     const extent = (axis) =>
@@ -293,6 +365,7 @@ export function createNavigationSystem({
     ) * 1.08;
 
     target.copy(sceneCenter);
+
     camera.position.copy(sceneCenter)
       .addScaledVector(direction, fitDistance);
 
@@ -322,10 +395,11 @@ export function createNavigationSystem({
     const up = axes[kind]?.clone();
     if (!up) return;
 
-    const forward = target.clone()
-      .sub(camera.position)
-      .normalize();
+    const forward = target.clone().sub(camera.position);
 
+    if (forward.lengthSq() < 1e-12) return;
+
+    forward.normalize();
     up.addScaledVector(forward, -up.dot(forward));
 
     if (up.lengthSq() < 1e-12) {
@@ -359,13 +433,16 @@ export function createNavigationSystem({
     const offset = camera.position.clone().sub(target);
 
     target.copy(getSceneCenter());
-    camera.position.copy(getSceneCenter()).add(offset);
+    camera.position.copy(target).add(offset);
 
     syncCamera();
     requestGifCapture();
   }
 
   function installMouseControls() {
+    if (mouseControlsInstalled) return;
+    mouseControlsInstalled = true;
+
     canvas.style.touchAction = "none";
 
     canvas.addEventListener("contextmenu", (event) => {
@@ -373,9 +450,30 @@ export function createNavigationSystem({
     });
 
     canvas.addEventListener("pointerdown", (event) => {
-      if (!getCanNavigate() || mouseDrag || event.button > 2) {
-        return;
+      lastPointer.x = event.clientX;
+      lastPointer.y = event.clientY;
+
+      if (!getCanNavigate() || mouseDrag) return;
+
+      // Priorité aux mesures : ne pas prévenir l’événement,
+      // flouter un champ ou capturer le pointeur.
+      if (event.shiftKey) return;
+
+      if (event.altKey || event.metaKey) return;
+
+      let mode = null;
+
+      if (
+        event.button === lookBinding.button &&
+        event[lookBinding.modifier]
+      ) {
+        mode = "look";
+      } else if (event.button === 1 || event.button === 2) {
+        mode = "pan";
       }
+
+      // Le clic gauche simple ne déclenche plus la navigation.
+      if (!mode) return;
 
       event.preventDefault();
       clearNavigation();
@@ -384,46 +482,73 @@ export function createNavigationSystem({
         document.activeElement.blur();
       }
 
-      canvas.setPointerCapture(event.pointerId);
-
       mouseDrag = {
         id: event.pointerId,
         button: event.button,
+        mode,
         x: event.clientX,
         y: event.clientY,
         moved: false,
       };
+
+      canvas.setPointerCapture(event.pointerId);
     });
 
     canvas.addEventListener("pointermove", (event) => {
-      if (!mouseDrag || mouseDrag.id !== event.pointerId) {
+      lastPointer.x = event.clientX;
+      lastPointer.y = event.clientY;
+
+      const drag = mouseDrag;
+
+      if (!drag || drag.id !== event.pointerId) return;
+
+      const buttonMask = drag.button === 0
+        ? 1
+        : drag.button === 1
+          ? 4
+          : 2;
+
+      if (
+        !(event.buttons & buttonMask) ||
+        !getCanNavigate() ||
+        event.shiftKey ||
+        event.altKey ||
+        event.metaKey ||
+        (
+          drag.mode === "look" &&
+          !event[lookBinding.modifier]
+        )
+      ) {
+        finishMouseDrag();
         return;
       }
 
-      if (!event.buttons || !getCanNavigate()) {
-        const moved = mouseDrag.moved;
-        mouseDrag = null;
+      event.preventDefault();
 
-        if (moved) requestGifCapture();
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
 
-        return;
-      }
+      drag.x = event.clientX;
+      drag.y = event.clientY;
 
-      const dx = event.clientX - mouseDrag.x;
-      const dy = event.clientY - mouseDrag.y;
+      if (!dx && !dy) return;
 
-      mouseDrag.x = event.clientX;
-      mouseDrag.y = event.clientY;
+      drag.moved = true;
 
-      if (dx || dy) mouseDrag.moved = true;
+      if (drag.mode === "look") {
+        // Radians par pixel CSS.
+        // Rotation seule : aucune translation ni sélection de pivot.
+        const sensitivity = 0.005;
 
-      navigateWithCollision(() => {
-        if (mouseDrag.button === 0 && !event.shiftKey) {
-          orbitLook(-dx * 0.005, -dy * 0.005);
-        } else {
+        orbitLook(
+          -dx * sensitivity,
+          -dy * sensitivity
+        );
+      } else {
+        navigateWithCollision(() => {
           panPixels(dx, dy, canvas.clientHeight);
-        }
-      }, true);
+        }, true);
+      }
 
       syncCamera();
       requestGifCapture();
@@ -431,11 +556,7 @@ export function createNavigationSystem({
 
     const release = (event) => {
       if (mouseDrag?.id !== event.pointerId) return;
-
-      const moved = mouseDrag.moved;
-      mouseDrag = null;
-
-      if (moved) requestGifCapture();
+      finishMouseDrag();
     };
 
     [
@@ -447,8 +568,15 @@ export function createNavigationSystem({
     });
 
     canvas.addEventListener("wheel", (event) => {
-      event.preventDefault();
+      lastPointer.x = event.clientX;
+      lastPointer.y = event.clientY;
+
       if (!getCanNavigate()) return;
+
+      // Laisser Ctrl + molette au navigateur.
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+      event.preventDefault();
 
       const pixels = event.deltaMode === 1
         ? event.deltaY * 16
@@ -457,13 +585,14 @@ export function createNavigationSystem({
           : event.deltaY;
 
       navigateWithCollision(() => {
-        dollyToTarget(pixels);
+        dollyToCursor(pixels);
       }, true);
 
       syncCamera();
       requestGifCapture();
 
       clearTimeout(wheelTimer);
+
       wheelTimer = setTimeout(() => {
         wheelTimer = null;
         requestGifCapture();
@@ -472,6 +601,11 @@ export function createNavigationSystem({
   }
 
   function installHeldButtons() {
+    if (heldButtonsInstalled) return;
+    heldButtonsInstalled = true;
+
+    // Les deux anciennes grilles peuvent être absentes du HTML.
+    // Seuls les boutons réellement présents sont raccordés.
     document.querySelectorAll("[data-hold]").forEach((button) => {
       function end(key) {
         if (!heldButtons.delete(key)) return;
@@ -484,7 +618,13 @@ export function createNavigationSystem({
       }
 
       async function begin(key) {
-        if (!getCanNavigate() || heldButtons.has(key)) return;
+        if (
+          button.disabled ||
+          !getCanNavigate() ||
+          heldButtons.has(key)
+        ) {
+          return;
+        }
 
         heldButtons.set(key, button);
         button.classList.add("held");
@@ -493,18 +633,35 @@ export function createNavigationSystem({
           button.dataset.hold === "orbitPrincipalPositive" ||
           button.dataset.hold === "orbitPrincipalNegative"
         ) {
-          const selected = await selectPointInView(key, button);
+          try {
+            const selected = await selectPointInView(key, button);
 
-          if (!selected && heldButtons.get(key) === button) {
+            if (!selected && heldButtons.get(key) === button) {
+              end(key);
+            }
+          } catch (error) {
             end(key);
+            console.error("Sélection du pivot :", error);
+
+            setStatus(
+              `Sélection impossible : ${error?.message || error}`,
+              true
+            );
           }
         }
       }
 
       button.addEventListener("pointerdown", (event) => {
-        if (event.button !== 0 || !getCanNavigate()) return;
+        if (
+          event.button !== 0 ||
+          button.disabled ||
+          !getCanNavigate()
+        ) {
+          return;
+        }
 
         event.preventDefault();
+
         button.focus({ preventScroll: true });
         button.setPointerCapture(event.pointerId);
 
@@ -543,14 +700,30 @@ export function createNavigationSystem({
   }
 
   function installKeyboard() {
+    if (keyboardInstalled) return;
+    keyboardInstalled = true;
+
     window.addEventListener("keydown", (event) => {
       if (
+        event.defaultPrevented ||
+        event.isComposing ||
         !getCanNavigate() ||
-        isEditing(event.target) ||
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey
+        isEditing(event.target)
       ) {
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) {
+        // Éviter de laisser un déplacement actif pendant
+        // l’utilisation d’un raccourci système ou de Ctrl + glisser.
+        const wasMoving = [...pressedKeys].some(
+          (key) => !!actionForKey(key)
+        );
+
+        pressedKeys.clear();
+
+        if (wasMoving) requestGifCapture();
+
         return;
       }
 
@@ -558,7 +731,16 @@ export function createNavigationSystem({
 
       if (key === "r") {
         event.preventDefault();
-      } else if (actionForKey(key) || key === "shift") {
+
+        if (!event.repeat && lastSceneBox) {
+          clearNavigation();
+          fitToView(lastSceneBox);
+        }
+
+        return;
+      }
+
+      if (actionForKey(key) || key === "shift") {
         event.preventDefault();
         pressedKeys.add(key);
       }
@@ -566,18 +748,40 @@ export function createNavigationSystem({
 
     window.addEventListener("keyup", (event) => {
       const key = event.key.toLowerCase();
+
       const moving =
         pressedKeys.has(key) && !!actionForKey(key);
 
       pressedKeys.delete(key);
 
-      if (moving) requestGifCapture();
+      // Arrêter le geste dès le relâchement de Ctrl,
+      // même si la souris ne bouge pas ensuite.
+      if (
+        mouseDrag?.mode === "look" &&
+        !event[lookBinding.modifier]
+      ) {
+        finishMouseDrag();
+      }
+
+      if (moving) {
+        requestGifCapture();
+      }
     });
 
     window.addEventListener("blur", clearNavigation);
 
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) clearNavigation();
+      if (document.hidden) {
+        clearNavigation();
+      }
+    });
+
+    // Ne pas continuer à avancer quand on entre dans un champ
+    // ou qu’on prend le focus sur une commande du panneau.
+    document.addEventListener("focusin", (event) => {
+      if (isEditing(event.target)) {
+        clearNavigation();
+      }
     });
   }
 
@@ -593,7 +797,10 @@ export function createNavigationSystem({
 
     pressedKeys.forEach((key) => {
       const action = actionForKey(key);
-      if (action) actions.add(action);
+
+      if (action) {
+        actions.add(action);
+      }
     });
 
     if (!actions.size) return;
@@ -608,6 +815,8 @@ export function createNavigationSystem({
       (pressedKeys.has("shift") ? 3 : 1);
 
     navigateWithCollision(() => {
+      // Compatibilité avec d’éventuels anciens boutons data-hold.
+      // Les flèches clavier ne produisent plus ces actions.
       orbitLook(
         axis("orbitLeft", "orbitRight") * amount,
         axis("orbitDown", "orbitUp") * amount
@@ -648,7 +857,7 @@ export function createNavigationSystem({
     orbitLook,
     panPixels,
     translate,
-    dollyToTarget,
+    dollyToCursor,
     fitToView,
     setView,
     recenterTarget,

@@ -379,122 +379,149 @@ export function createMeasurementSystem({
     node.style.display = "";
   }
 
-  function render() {
-    hideAll();
+    function render() {
+      hideAll();
 
-    if (!active || !start) return;
+      if (!active || !start) return;
 
-    camera.updateMatrixWorld(true);
+      camera.updateMatrixWorld(true);
 
-    const aScreen = project(start);
-    drawMarker(startMarker, aScreen);
+      const aScreen = project(start);
+      drawMarker(startMarker, aScreen);
 
-    if (!rawEnd) return;
+      if (!rawEnd) return;
 
-    const snapped = snapEndpoint(start, rawEnd);
-    const rawScreen = project(rawEnd);
-    const endScreen = project(snapped.point);
+      const snapped = snapEndpoint(start, rawEnd);
+      const rawScreen = project(rawEnd);
+      const endScreen = project(snapped.point);
 
-    drawMarker(endMarker, rawScreen);
-    drawLine(segment, aScreen, endScreen);
+      drawMarker(endMarker, rawScreen);
+      drawLine(segment, aScreen, endScreen);
 
-    if (
-      snapped.kind &&
-      snapped.point.distanceToSquared(rawEnd) > 1e-18
-    ) {
-      drawMarker(snappedMarker, endScreen);
-      drawLine(correction, rawScreen, endScreen);
-    }
+      if (
+        snapped.kind &&
+        snapped.point.distanceToSquared(rawEnd) > 1e-18
+      ) {
+        drawMarker(snappedMarker, endScreen);
+        drawLine(correction, rawScreen, endScreen);
+      }
 
-    if (!aScreen || !endScreen) return;
+      if (!aScreen || !endScreen) return;
 
-    const midpoint = start.clone()
-      .add(snapped.point)
-      .multiplyScalar(0.5);
+      const midpoint = start.clone()
+        .add(snapped.point)
+        .multiplyScalar(0.5);
 
-    const labelPosition = project(midpoint);
-    if (!labelPosition) return;
+      const labelPosition = project(midpoint);
 
-    const distance = start.distanceTo(snapped.point);
+      if (!labelPosition) return;
 
-    // Label principal inchangé : distance au-dessus du segment
-    label.textContent =
-      `${distance.toPrecision(3)} m` +
-      (snapped.kind ? ` · ${snapped.kind}` : "");
+      const distance = start.distanceTo(snapped.point);
 
-    label.setAttribute("x", labelPosition.x);
-    label.setAttribute("y", labelPosition.y - 14);
-    label.style.display = "";
+      label.textContent =
+        `${distance.toPrecision(3)} m` +
+        (snapped.kind ? ` · ${snapped.kind}` : "");
 
-    // Encart infos complémentaires
-    const axis = getPrincipalAxis().clone().normalize();
-    const delta = snapped.point.clone().sub(start);
-    const dVertical = Math.abs(delta.dot(axis));
-    const dHorizontal = Math.sqrt(
-      Math.max(0, delta.lengthSq() - dVertical * dVertical)
-    );
+      label.setAttribute("x", labelPosition.x);
+      label.setAttribute("y", labelPosition.y - 14);
+      label.style.display = "";
 
-    // Recréer les lignes de texte
-    while (infoText.firstChild) {
-      infoText.removeChild(infoText.firstChild);
-    }
+      const axis = getPrincipalAxis().clone().normalize();
+      const delta = snapped.point.clone().sub(start);
 
-    const lines = [
-      `A: (${start.x.toFixed(3)}, ${start.y.toFixed(3)}, ${start.z.toFixed(3)})`,
-      `B: (${snapped.point.x.toFixed(3)}, ${snapped.point.y.toFixed(3)}, ${snapped.point.z.toFixed(3)})`,
-      `D : ${distance.toPrecision(4)} m`,
-      `Dh: ${dHorizontal.toPrecision(4)} m`,
-      `Dv: ${dVertical.toPrecision(4)} m`,
-    ];
+      const dVertical = Math.abs(delta.dot(axis));
+      const dHorizontal = Math.sqrt(
+        Math.max(0, delta.lengthSq() - dVertical * dVertical)
+      );
 
       const projA = projectedOf(start);
       const projB = projectedOf(snapped.point);
 
-      if (projA && projB) {
+      const hasProjectedCoordinates =
+        projA !== null &&
+        projB !== null &&
+        Number.isInteger(projA.epsg) &&
+        projA.epsg === projB.epsg;
+
+      const lines = [];
+
+      if (hasProjectedCoordinates) {
+        // Ne pas afficher les coordonnées locales en doublon.
         lines.push(
-          `EPSG:${projA.epsg}`,
+          `Coordonnées projetées · EPSG:${projA.epsg}`,
           `A: ${formatProjected(projA)}`,
           `B: ${formatProjected(projB)}`
         );
+      } else {
+        lines.push(
+          "Coordonnées locales",
+          `A: (${start.x.toFixed(3)}, ` +
+            `${start.y.toFixed(3)}, ${start.z.toFixed(3)})`,
+          `B: (${snapped.point.x.toFixed(3)}, ` +
+            `${snapped.point.y.toFixed(3)}, ` +
+            `${snapped.point.z.toFixed(3)})`
+        );
       }
 
-    lines.forEach((line, index) => {
-      const tspan = document.createElementNS(SVG_NS, "tspan");
-      tspan.setAttribute("x", "0");
-      tspan.setAttribute("dy", index === 0 ? "0" : "1.25em");
-      tspan.textContent = line;
-      infoText.appendChild(tspan);
-    });
+      lines.push(
+        `D : ${distance.toPrecision(4)} m`,
+        `Dh: ${dHorizontal.toPrecision(4)} m`,
+        `Dv: ${dVertical.toPrecision(4)} m`
+      );
 
-    const rect = canvas.getBoundingClientRect();
-    const containerRect = container.getBoundingClientRect();
+      while (infoText.firstChild) {
+        infoText.removeChild(infoText.firstChild);
+      }
 
-    const canvasLeft = rect.left - containerRect.left;
-    const canvasTop = rect.top - containerRect.top;
-    const canvasRight = canvasLeft + rect.width;
+      const margin = 12;
+      const pad = 10;
+      const lineHeight = 15;
 
-    const margin = 12;
-    const pad = 10;
-    const lineHeight = 15;
-    const textWidth =
-      Math.max(...lines.map((line) => line.length)) * 6.9;
-    const boxWidth = textWidth + pad * 2;
-    const boxHeight = lines.length * lineHeight + pad * 2;
+      lines.forEach((line, index) => {
+        const tspan = document.createElementNS(SVG_NS, "tspan");
 
-    const boxX = canvasRight - boxWidth - margin;
-    const boxY = canvasTop + margin;
+        tspan.setAttribute("x", String(pad));
+        tspan.setAttribute("dy", index === 0 ? "0" : String(lineHeight));
+        tspan.textContent = line;
 
-    infoGroup.setAttribute("transform", `translate(${boxX}, ${boxY})`);
-    infoBox.setAttribute("x", "0");
-    infoBox.setAttribute("y", "0");
-    infoBox.setAttribute("width", String(boxWidth));
-    infoBox.setAttribute("height", String(boxHeight));
+        infoText.appendChild(tspan);
+      });
 
-    infoText.setAttribute("x", String(pad));
-    infoText.setAttribute("y", String(pad + 11));
+      const rect = canvas.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
 
-    infoGroup.style.display = "";
-  }
+      const canvasLeft = rect.left - containerRect.left;
+      const canvasTop = rect.top - containerRect.top;
+      const canvasRight = canvasLeft + rect.width;
+
+      const textWidth =
+        Math.max(...lines.map((line) => line.length)) * 6.9;
+
+      const boxWidth = textWidth + pad * 2;
+      const boxHeight = lines.length * lineHeight + pad * 2;
+
+      const boxX = Math.max(
+        canvasLeft + margin,
+        canvasRight - boxWidth - margin
+      );
+
+      const boxY = canvasTop + margin;
+
+      infoGroup.setAttribute(
+        "transform",
+        `translate(${boxX}, ${boxY})`
+      );
+
+      infoBox.setAttribute("x", "0");
+      infoBox.setAttribute("y", "0");
+      infoBox.setAttribute("width", String(boxWidth));
+      infoBox.setAttribute("height", String(boxHeight));
+
+      infoText.setAttribute("x", String(pad));
+      infoText.setAttribute("y", String(pad + 11));
+
+      infoGroup.style.display = "";
+    }
 
   function onPointerDown(event) {
     if (!event.shiftKey) return;
