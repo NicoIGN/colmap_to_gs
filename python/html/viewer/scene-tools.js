@@ -101,25 +101,43 @@ export function createSceneTools({
     );
   }
 
-  function updateGeorefInfo() {
-    if (!georef) {
-      write("sceneGeorefInfo", "Aucune référence chargée");
-      return;
+    function updateGeorefInfo() {
+      if (!georef) {
+        write("sceneGeorefInfo", "Aucune référence chargée");
+        return;
+      }
+
+      const lines = [
+        georef.type === "local_ENU"
+          ? "Modèle : ENU local · East / North / Up · mètres"
+          : "Modèle : projeté recentré · mètres",
+        `Coordonnées absolues : EPSG:${georef.epsg}`,
+      ];
+
+      if (georef.originGeographic) {
+        const point = georef.originGeographic;
+
+        lines.push(
+          `Origine WGS84 : ${point.lat.toFixed(7)}, ` +
+          `${point.lon.toFixed(7)}, ${point.h.toFixed(3)} m`
+        );
+      }
+
+      if (georef.origin) {
+        const point = georef.origin;
+
+        lines.push(
+          `Origine projetée : ${point.x.toFixed(3)}, ` +
+          `${point.y.toFixed(3)}, ${point.h.toFixed(3)} m`
+        );
+      }
+
+      if (georef.requiresVisualValidation) {
+        lines.push("Recalage à contrôler visuellement.");
+      }
+
+      write("sceneGeorefInfo", lines.join("\n"));
     }
-
-    const origin = georef.origin;
-
-    write(
-      "sceneGeorefInfo",
-      [
-        `EPSG:${georef.epsg} · mètres`,
-        origin
-          ? `Origine : ${origin.x.toFixed(3)}, ` +
-            `${origin.y.toFixed(3)}, ${origin.h.toFixed(3)}`
-          : "Origine non renseignée",
-      ].join("\n")
-    );
-  }
 
   function removeDiagnostic() {
     $("gpsBBoxDetails")?.remove();
@@ -357,10 +375,12 @@ export function createSceneTools({
         point.h
       );
 
-      const model = georef.projectedToWorld(
-        projected.x,
-        projected.y,
-        projected.h
+      // Conversion directe WGS84 -> repère réel du modèle.
+      // Pour local_ENU, même calcul ECEF/ENU que le Python.
+      const model = georef.geographicToWorld(
+        point.lat,
+        point.lon,
+        point.h
       );
 
       const modelPoint = new THREE.Vector3(

@@ -37,8 +37,9 @@
     /* Encart infos scène repliable */
     #sceneInfo {
       position: fixed;
-      top: 12px;
       right: 12px;
+      bottom: 12px; /* <- bas droite */
+      top: auto;    /* sécurité si top était défini */
       z-index: 20;
       box-sizing: border-box;
       width: 340px;
@@ -186,20 +187,21 @@
       color: #b4f0cb;
     }
 
-    @media (max-width: 700px) {
-      #sceneInfo {
-        top: auto;
-        bottom: 12px;
-        right: 12px;
-        width: 300px;
-      }
+      @media (max-width: 700px) {
+        #sceneInfo {
+          right: 12px;
+          bottom: 12px;
+          top: auto;
+          width: 300px;
+        }
 
-      #sceneInfoBody {
-        max-height: 34dvh;
-      }
+        #sceneInfoBody {
+          max-height: 34dvh;
+        }
 
-      #sceneInfo .scene-metadata {
-        grid-template-columns: 90px minmax(0, 1fr);
+        #sceneInfo .scene-metadata {
+          grid-template-columns: 90px minmax(0, 1fr);
+        }
       }
     }
   </style>

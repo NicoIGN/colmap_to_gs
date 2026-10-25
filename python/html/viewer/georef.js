@@ -4,6 +4,10 @@ const MAX_GEOREF_BYTES = 5 * 1024 * 1024;
 
 export const WGS84_EPSG = 4326;
 
+const GEOGRAPHIC = "EPSG:4326";
+const ECEF =
+  "+proj=geocent +datum=WGS84 +units=m +no_defs";
+
 const EPSG_DEFS = {
   4326: "+proj=longlat +datum=WGS84 +no_defs",
   2154:
@@ -17,7 +21,6 @@ for (const [code, definition] of Object.entries(EPSG_DEFS)) {
 }
 
 function requireNumber(value, label) {
-  // Ne pas convertir silencieusement null ou "" en zéro.
   if (
     value === null ||
     value === undefined ||
@@ -27,16 +30,16 @@ function requireNumber(value, label) {
     throw new Error(`${label} manquant ou invalide.`);
   }
 
-  const number = Number(value);
+  const result = Number(value);
 
-  if (!Number.isFinite(number)) {
+  if (!Number.isFinite(result)) {
     throw new Error(`${label} doit être un nombre fini.`);
   }
 
-  return number;
+  return result;
 }
 
-function requireCoordinates(x, y, h) {
+function coordinates(x, y, h) {
   return {
     x: requireNumber(x, "X"),
     y: requireNumber(y, "Y"),
@@ -44,25 +47,48 @@ function requireCoordinates(x, y, h) {
   };
 }
 
+function geographicCoordinates(lat, lon, h) {
+  const result = {
+    lat: requireNumber(lat, "Latitude"),
+    lon: requireNumber(lon, "Longitude"),
+    h: requireNumber(h, "Hauteur"),
+  };
+
+  if (
+    result.lat < -90 ||
+    result.lat > 90 ||
+    result.lon < -180 ||
+    result.lon > 180
+  ) {
+    throw new Error("Latitude ou longitude hors limites.");
+  }
+
+  return result;
+}
+
+function finiteTriple(values, label) {
+  if (
+    !values ||
+    values.length < 3 ||
+    !values.slice(0, 3).every(Number.isFinite)
+  ) {
+    throw new Error(`${label} : résultat non fini.`);
+  }
+
+  return values;
+}
+
 /**
- * Format attendu :
+ * Les fonctions "...World" manipulent le repère local du modèle,
+ * AVANT la matrice d’affichage PlayCanvas.
  *
- * output_reference: {
- *   type: "projected",
- *   epsg: 2154,
- *   units: "meters",
- *   origin_projected: { x, y, h }
- * }
+ * local_ENU :
+ *   coordonnées modèle = East, North, Up.
  *
- * Convention :
- *   X projeté = x modèle + origine.x
- *   Y projeté = y modèle + origine.y
- *   H absolue = z modèle + origine.h
+ * projected :
+ *   coordonnées modèle = coordonnées projetées moins origine.
  *
- * Les fonctions nommées "...World" manipulent ici le repère LOCAL
- * du modèle, avant la matrice d’affichage PlayCanvas.
- *
- * La matrice d’affichage, notamment flipUp, est gérée dans app.js.
+ * Aucune Sim(3) supplémentaire n’est appliquée ici.
  */
 export function parseGeoref(json) {
   const ref = json?.output_reference;
@@ -71,171 +97,293 @@ export function parseGeoref(json) {
     throw new Error("output_reference manquant.");
   }
 
-  if (ref.type !== "projected") {
+  const type = ref.type;
+
+  if (type !== "local_ENU" && type !== "projected") {
     throw new Error(
-      "Référence attendue : type \"projected\". " +
-      "Un repère local_ENU ne peut pas être traité comme un " +
-      "repère projeté simplement recentré."
-    );
-  }
-
-  const epsg = requireNumber(
-    ref.epsg,
-    "output_reference.epsg"
-  );
-
-  if (!Number.isInteger(epsg) || epsg <= 0) {
-    throw new Error("output_reference.epsg invalide.");
-  }
-
-  const crsName = `EPSG:${epsg}`;
-  const definition = proj4.defs(crsName);
-
-  if (!definition) {
-    throw new Error(
-      `${crsName} non pris en charge : définition proj4 absente.`
-    );
-  }
-
-  // Ce pipeline compare des coordonnées et distances en mètres.
-  if (
-    definition.projName === "longlat" ||
-    definition.units !== "m"
-  ) {
-    throw new Error(
-      `${crsName} : un SCR projeté en mètres est attendu.`
+      `Type de référence non supporté : ${String(type)}.`
     );
   }
 
   const units = String(ref.units ?? "").trim().toLowerCase();
 
   if (!["m", "meter", "meters"].includes(units)) {
-    throw new Error(
-      "output_reference.units doit indiquer des mètres."
-    );
+    throw new Error("Le repère du modèle doit être en mètres.");
   }
 
-  const sourceOrigin = ref.origin_projected;
+  const projectedReference = ref.origin_projected;
+
+  const epsg = requireNumber(
+    type === "local_ENU"
+      ? projectedReference?.epsg
+      : ref.epsg,
+    "EPSG projeté"
+  );
+
+  if (!Number.isInteger(epsg) || epsg <= 0) {
+    throw new Error("Code EPSG invalide.");
+  }
+
+  const projectedCrs = `EPSG:${epsg}`;
+  const definition = proj4.defs(projectedCrs);
+
+  if (!definition) {
+    throw new Error(
+      `${projectedCrs} : définition proj4 absente.`
+    );
+  }
 
   if (
-    !sourceOrigin ||
-    typeof sourceOrigin !== "object" ||
-    Array.isArray(sourceOrigin)
+    definition.projName === "longlat" ||
+    definition.units !== "m"
   ) {
     throw new Error(
-      "output_reference.origin_projected manquant. " +
-      "Indique l’origine réellement soustraite lors de l’export."
+      `${projectedCrs} doit être un SCR projeté en mètres.`
     );
   }
-
-  if (sourceOrigin.epsg !== undefined) {
-    const originEpsg = requireNumber(
-      sourceOrigin.epsg,
-      "origin_projected.epsg"
-    );
-
-    if (originEpsg !== epsg) {
-      throw new Error(
-        "L’EPSG de l’origine diffère de celui de la scène."
-      );
-    }
-  }
-
-  const origin = Object.freeze({
-    x: requireNumber(sourceOrigin.x, "origin_projected.x"),
-    y: requireNumber(sourceOrigin.y, "origin_projected.y"),
-    h: requireNumber(sourceOrigin.h, "origin_projected.h"),
-  });
 
   /**
-   * GPX WGS84 -> coordonnées projetées absolues.
-   * proj4 reçoit [longitude, latitude].
-   *
-   * La hauteur est conservée : aucune conversion verticale.
+   * Projection horizontale.
+   * La hauteur GPX brute est conservée, sans correction géoïde.
    */
   function geographicToProjected(lat, lon, h) {
-    const latitude = requireNumber(lat, "Latitude");
-    const longitude = requireNumber(lon, "Longitude");
-    const height = requireNumber(h, "Hauteur");
-
-    if (
-      latitude < -90 ||
-      latitude > 90 ||
-      longitude < -180 ||
-      longitude > 180
-    ) {
-      throw new Error("Latitude ou longitude hors limites.");
-    }
+    const point = geographicCoordinates(lat, lon, h);
 
     const [x, y] = proj4(
-      `EPSG:${WGS84_EPSG}`,
-      crsName,
-      [longitude, latitude]
+      GEOGRAPHIC,
+      projectedCrs,
+      [point.lon, point.lat]
     );
 
-    return requireCoordinates(x, y, height);
+    return coordinates(x, y, point.h);
   }
 
-  /**
-   * Coordonnées projetées absolues -> WGS84.
-   * La hauteur est conservée.
-   */
   function projectedToGeographic(x, y, h) {
-    const projected = requireCoordinates(x, y, h);
+    const point = coordinates(x, y, h);
 
     const [lon, lat] = proj4(
-      crsName,
-      `EPSG:${WGS84_EPSG}`,
-      [projected.x, projected.y]
+      projectedCrs,
+      GEOGRAPHIC,
+      [point.x, point.y]
     );
 
+    return geographicCoordinates(lat, lon, point.h);
+  }
+
+  let origin;
+  let originGeographic = null;
+  let geographicToWorld;
+  let worldToGeographic;
+  let projectedToWorld;
+  let worldToProjected;
+
+  if (type === "local_ENU") {
     if (
-      !Number.isFinite(lat) ||
-      !Number.isFinite(lon) ||
-      lat < -90 ||
-      lat > 90 ||
-      lon < -180 ||
-      lon > 180
+      !Array.isArray(ref.axes) ||
+      ref.axes.length !== 3 ||
+      ref.axes[0] !== "East" ||
+      ref.axes[1] !== "North" ||
+      ref.axes[2] !== "Up"
     ) {
-      throw new Error("Conversion vers WGS84 invalide.");
+      throw new Error(
+        "Axes ENU attendus : [East, North, Up]."
+      );
     }
 
-    return { lat, lon, h: projected.h };
-  }
+    const geographicOrigin = ref.origin_lat_lon_height;
 
-  /**
-   * Coordonnées projetées absolues -> coordonnées locales du modèle.
-   */
-  function projectedToWorld(x, y, h) {
-    const projected = requireCoordinates(x, y, h);
+    if (
+      !Array.isArray(geographicOrigin) ||
+      geographicOrigin.length !== 3
+    ) {
+      throw new Error(
+        "origin_lat_lon_height doit contenir [latitude, longitude, hauteur]."
+      );
+    }
 
-    return requireCoordinates(
-      projected.x - origin.x,
-      projected.y - origin.y,
-      projected.h - origin.h
+    const validatedOrigin = geographicCoordinates(
+      geographicOrigin[0],
+      geographicOrigin[1],
+      geographicOrigin[2]
     );
-  }
 
-  /**
-   * Coordonnées locales du modèle -> coordonnées projetées absolues.
-   */
-  function worldToProjected(x, y, h) {
-    const local = requireCoordinates(x, y, h);
+    originGeographic = Object.freeze(validatedOrigin);
 
-    return requireCoordinates(
-      local.x + origin.x,
-      local.y + origin.y,
-      local.h + origin.h
+    // Origine projetée calculée depuis l’origine géographique réelle.
+    // Elle sert à l’information, pas à une simple soustraction ENU.
+    origin = Object.freeze(
+      geographicToProjected(
+        validatedOrigin.lat,
+        validatedOrigin.lon,
+        validatedOrigin.h
+      )
     );
+
+    const radians = Math.PI / 180;
+    const lat0 = validatedOrigin.lat * radians;
+    const lon0 = validatedOrigin.lon * radians;
+
+    const sinLat = Math.sin(lat0);
+    const cosLat = Math.cos(lat0);
+    const sinLon = Math.sin(lon0);
+    const cosLon = Math.cos(lon0);
+
+    // Même matrice que enu_rotation() dans le Python.
+    const rotation = [
+      [-sinLon, cosLon, 0],
+      [-sinLat * cosLon, -sinLat * sinLon, cosLat],
+      [cosLat * cosLon, cosLat * sinLon, sinLat],
+    ];
+
+    const originEcef = finiteTriple(
+      proj4(
+        GEOGRAPHIC,
+        ECEF,
+        [
+          validatedOrigin.lon,
+          validatedOrigin.lat,
+          validatedOrigin.h,
+        ]
+      ),
+      "Origine ECEF"
+    );
+
+    geographicToWorld = (lat, lon, h) => {
+      const point = geographicCoordinates(lat, lon, h);
+
+      const ecef = finiteTriple(
+        proj4(
+          GEOGRAPHIC,
+          ECEF,
+          [point.lon, point.lat, point.h]
+        ),
+        "Conversion WGS84 vers ECEF"
+      );
+
+      const delta = ecef.map(
+        (value, index) => value - originEcef[index]
+      );
+
+      const enu = rotation.map(
+        (row) =>
+          row[0] * delta[0] +
+          row[1] * delta[1] +
+          row[2] * delta[2]
+      );
+
+      return coordinates(enu[0], enu[1], enu[2]);
+    };
+
+    worldToGeographic = (x, y, h) => {
+      const point = coordinates(x, y, h);
+      const enu = [point.x, point.y, point.h];
+
+      // ENU -> ECEF : origine + transposée(rotation) * ENU.
+      const ecef = originEcef.map(
+        (value, axis) =>
+          value +
+          rotation[0][axis] * enu[0] +
+          rotation[1][axis] * enu[1] +
+          rotation[2][axis] * enu[2]
+      );
+
+      const [lon, lat, height] = finiteTriple(
+        proj4(ECEF, GEOGRAPHIC, ecef),
+        "Conversion ECEF vers WGS84"
+      );
+
+      return geographicCoordinates(lat, lon, height);
+    };
+
+    projectedToWorld = (x, y, h) => {
+      const point = projectedToGeographic(x, y, h);
+
+      return geographicToWorld(
+        point.lat,
+        point.lon,
+        point.h
+      );
+    };
+
+    worldToProjected = (x, y, h) => {
+      const point = worldToGeographic(x, y, h);
+
+      return geographicToProjected(
+        point.lat,
+        point.lon,
+        point.h
+      );
+    };
+  } else {
+    // Compatibilité avec les scènes projetées simplement recentrées.
+    if (
+      !projectedReference ||
+      typeof projectedReference !== "object"
+    ) {
+      throw new Error("origin_projected manquant.");
+    }
+
+    origin = Object.freeze(
+      coordinates(
+        projectedReference.x ?? projectedReference.origin_x,
+        projectedReference.y ?? projectedReference.origin_y,
+        projectedReference.h ??
+          projectedReference.origin_height
+      )
+    );
+
+    projectedToWorld = (x, y, h) => {
+      const point = coordinates(x, y, h);
+
+      return coordinates(
+        point.x - origin.x,
+        point.y - origin.y,
+        point.h - origin.h
+      );
+    };
+
+    worldToProjected = (x, y, h) => {
+      const point = coordinates(x, y, h);
+
+      return coordinates(
+        point.x + origin.x,
+        point.y + origin.y,
+        point.h + origin.h
+      );
+    };
+
+    geographicToWorld = (lat, lon, h) => {
+      const point = geographicToProjected(lat, lon, h);
+
+      return projectedToWorld(point.x, point.y, point.h);
+    };
+
+    worldToGeographic = (x, y, h) => {
+      const point = worldToProjected(x, y, h);
+
+      return projectedToGeographic(point.x, point.y, point.h);
+    };
   }
 
   return {
+    type,
     epsg,
+    units: "meters",
     origin,
+    originGeographic,
+
     geographicToProjected,
     projectedToGeographic,
+
+    geographicToWorld,
+    worldToGeographic,
+
     projectedToWorld,
     worldToProjected,
+
+    matchedGpx: json.matched_gpx ?? null,
+    requiresVisualValidation:
+      json.requires_visual_validation === true,
   };
 }
 
