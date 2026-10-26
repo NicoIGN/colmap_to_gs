@@ -1121,8 +1121,8 @@ def export_geopackage(path, gpx, results):
             crs=crs,
             encoding="UTF-8",
         ) as layer:
-            for feature in features:
-                layer.write(feature)
+            for item in features:
+                layer.write(item)
 
     def feature(geometry_type, coordinates, properties):
         return {
@@ -1190,6 +1190,21 @@ def export_geopackage(path, gpx, results):
         "3D LineString",
         {"model": "str", "segment_id": "int", "reversed": "int"},
         matched_lines(),
+    )
+
+    def camera_trajectory_lines():
+        for result in results:
+            coordinates = result["camera_trajectory_coordinates"]
+            yield feature("LineString", coordinates.tolist(), {
+                "model": result["model"],
+                "vertices": len(coordinates),
+            })
+
+    write_layer(
+        "trajectoire_camera_lissee",
+        "3D LineString",
+        {"model": "str", "vertices": "int"},
+        camera_trajectory_lines(),
     )
 
     def correspondence_lines():
@@ -1275,12 +1290,18 @@ def export_geopackage(path, gpx, results):
     )
 
     expected = {
-        "gpx", "prises_de_vue", "gpx_apparie",
-        "correspondances", "sommets",
+        "gpx",
+        "prises_de_vue",
+        "gpx_apparie",
+        "trajectoire_camera_lissee",
+        "correspondances",
+        "sommets",
     }
     available = set(fiona.listlayers(str(path)))
     if not expected.issubset(available):
-        raise RuntimeError(f"Couches GeoPackage manquantes : {expected - available}")
+        raise RuntimeError(
+            f"Couches GeoPackage manquantes : {expected - available}"
+        )
 
     counts = {}
     for name in sorted(expected):
@@ -1290,6 +1311,85 @@ def export_geopackage(path, gpx, results):
     info(f"GeoPackage : {path}")
     return counts
 
+def export_camera_trajectory_gpx(path, images, fit, sim, origin, folder):
+    """Associe chaque échantillon GPS à un sommet caméra, dans l'ordre."""
+    groups = {}
+    for image in images:
+        if image["folder"] == folder and image["frame"] is not None:
+            groups.setdefault(image["frame"], []).append(image)
+
+    if len(groups) < 2:
+        raise ValueError("Pas assez de centres caméra pour exporter le GPX.")
+
+    # Un centre réel par frame, même si plusieurs images portent le même indice.
+    centers = []
+    for frame in sorted(groups):
+        candidates = groups[frame]
+        median = np.median(
+            [image["center"] for image in candidates], axis=0
+        )
+        chosen = min(
+            candidates,
+            key=lambda image: np.linalg.norm(image["center"] - median),
+        )
+        centers.append(chosen["center"])
+
+    cameras = apply_sim(np.asarray(centers), sim)
+    gps = fit["target"]  # Portion GPS retenue, lissée et rééchantillonnée.
+    n, m = len(gps), len(cameras)
+
+    # Programmation dynamique : indices caméra non décroissants.
+    # Chaque GPS choisit un sommet caméra, sans retour en arrière.
+    previous_cost = np.sum((cameras - gps[0]) ** 2, axis=1)
+    predecessors = np.zeros((n, m), dtype=np.int32)
+
+    for i in range(1, n):
+        current_cost = np.empty(m, dtype=float)
+        best_cost = float("inf")
+        best_index = 0
+        for j in range(m):
+            if previous_cost[j] < best_cost:
+                best_cost = previous_cost[j]
+                best_index = j
+            current_cost[j] = (
+                best_cost + np.sum((cameras[j] - gps[i]) ** 2)
+            )
+            predecessors[i, j] = best_index
+        previous_cost = current_cost
+
+    indices = np.empty(n, dtype=np.int32)
+    indices[-1] = int(np.argmin(previous_cost))
+    for i in range(n - 1, 0, -1):
+        indices[i - 1] = predecessors[i, indices[i]]
+
+    coordinates = enu_to_wgs84(cameras[indices], origin)
+
+    namespace = "http://www.topografix.com/GPX/1/1"
+    ET.register_namespace("", namespace)
+    root = ET.Element(
+        f"{{{namespace}}}gpx",
+        {"version": "1.1", "creator": "COLMAP-GPX georeferencing"},
+    )
+    track = ET.SubElement(root, f"{{{namespace}}}trk")
+    ET.SubElement(track, f"{{{namespace}}}name").text = (
+        "Trajectoire camera georeferencee"
+    )
+    segment = ET.SubElement(track, f"{{{namespace}}}trkseg")
+
+    for lon, lat, height in coordinates:
+        point = ET.SubElement(
+            segment,
+            f"{{{namespace}}}trkpt",
+            {"lat": f"{lat:.10f}", "lon": f"{lon:.10f}"},
+        )
+        ET.SubElement(point, f"{{{namespace}}}ele").text = (
+            f"{height:.4f}"
+        )
+
+    ET.ElementTree(root).write(
+        path, encoding="utf-8", xml_declaration=True
+    )
+    return {"path": str(path.resolve()), "points": n}, coordinates
 
 # ---------------------------------------------------------------------------
 # Pipeline
@@ -1316,8 +1416,19 @@ def process_model(folder, destination, relative, gpx, args):
         destination / f"points3D.{ext}",
         ext, sim,
     )
+    
+    camera_gpx, camera_coordinates = export_camera_trajectory_gpx(
+        destination / "georef_camera_smoothed.gpx",
+        images,
+        fit,
+        sim,
+        gpx["origin"],
+        stats["camera_polyline"]["selected_folder"],
+    )
+
 
     stats.update({
+        "camera_trajectory_gpx": camera_gpx,
         "input_model": str(folder.resolve()),
         "output_model": str(destination.resolve()),
         "images_written": image_count,
@@ -1344,6 +1455,7 @@ def process_model(folder, destination, relative, gpx, args):
         "sim": sim,
         "fit": fit,
         "stats": stats,
+        "camera_trajectory_coordinates": camera_coordinates,
     }
 
 
@@ -1457,6 +1569,7 @@ def main():
             summary["models"].append({
                 "model": str(relative),
                 "status": "exported_requires_validation",
+                "camera_trajectory_gpx": stats["camera_trajectory_gpx"],
                 "stats_file": str(
                     (output / relative / "georef_stats.json").resolve()
                 ),

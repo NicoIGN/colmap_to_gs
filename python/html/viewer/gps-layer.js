@@ -1,117 +1,139 @@
 import * as pc from "playcanvas";
 
+const LINE_COLOR = new pc.Color(140 / 255, 230 / 255, 0); // vert pomme
+const SPHERE_COLOR = new pc.Color(140 / 255, 230 / 255, 0);
+const SPHERE_RADIUS = 0.5; // mètres
+
 export function createGpsLayer({ app }) {
   const checkbox = document.getElementById("gpsTrackVisible");
 
-  let entity = null;
-  let mesh = null;
-  let material = null;
+  let rootEntity = null;
+  let lineEntity = null;
+
+  let lineMesh = null;
+  let lineMaterial = null;
+  let sphereMaterial = null;
+
+  let currentTrack = null;
   let currentPoints = null;
   let disposed = false;
 
   function refreshUI(blocked = false) {
-    if (checkbox) {
-      checkbox.disabled = blocked || !entity;
-    }
+    if (checkbox) checkbox.disabled = blocked || !rootEntity;
+    if (rootEntity) rootEntity.enabled = checkbox ? checkbox.checked : true;
+  }
 
-    if (entity) {
-      entity.enabled = checkbox ? checkbox.checked : true;
-    }
+  function destroySafe(obj) {
+    try {
+      obj?.destroy?.();
+    } catch {}
   }
 
   function clear() {
-    entity?.destroy();
-    mesh?.destroy();
-    material?.destroy();
+    destroySafe(rootEntity);
+    rootEntity = null;
+    lineEntity = null;
 
-    entity = null;
-    mesh = null;
-    material = null;
+    destroySafe(lineMesh);
+    lineMesh = null;
+
+    destroySafe(lineMaterial);
+    lineMaterial = null;
+
+    destroySafe(sphereMaterial);
+    sphereMaterial = null;
+
+    currentTrack = null;
     currentPoints = null;
 
     refreshUI();
+  }
+
+  function makeUnlitMaterial(color) {
+    const mat = new pc.StandardMaterial();
+    mat.useLighting = false;
+    mat.emissive.copy(color);
+    mat.diffuse.copy(color);
+    mat.cull = pc.CULLFACE_NONE;
+    mat.depthTest = true;
+    mat.depthWrite = false;
+    mat.blendType = pc.BLEND_NORMAL;
+    mat.update();
+    return mat;
   }
 
   function update(track) {
     if (disposed) return;
 
     const points = track?.pointsWorld ?? null;
-
-    // Aucun travail GPU tant que la trajectoire n’a pas changé.
-    if (points === currentPoints) return;
+    if (track === currentTrack && points === currentPoints) return;
 
     clear();
-
     if (!points || points.length < 2) return;
 
-    const positions = new Float32Array((points.length - 1) * 6);
-    let offset = 0;
+    const validPoints = points.filter((p) =>
+      [p.x, p.y, p.z].every(Number.isFinite)
+    );
+    if (validPoints.length < 2) return;
 
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i];
-      const b = points[i + 1];
+    rootEntity = new pc.Entity("GPS Track Root");
+    app.root.addChild(rootEntity);
 
-      positions[offset++] = a.x;
-      positions[offset++] = a.y;
-      positions[offset++] = a.z;
-      positions[offset++] = b.x;
-      positions[offset++] = b.y;
-      positions[offset++] = b.z;
+    // Ligne
+    const linePositions = new Float32Array((validPoints.length - 1) * 6);
+    let o = 0;
+    for (let i = 0; i < validPoints.length - 1; i++) {
+      const a = validPoints[i];
+      const b = validPoints[i + 1];
+      linePositions[o++] = a.x;
+      linePositions[o++] = a.y;
+      linePositions[o++] = a.z;
+      linePositions[o++] = b.x;
+      linePositions[o++] = b.y;
+      linePositions[o++] = b.z;
     }
 
-    material = new pc.ShaderMaterial({
-      uniqueName: "GpsTrackRedLine",
+    lineMesh = new pc.Mesh(app.graphicsDevice);
+    lineMesh.setPositions(linePositions);
+    lineMesh.update(pc.PRIMITIVE_LINES, true);
 
-      attributes: {
-        vertex_position: pc.SEMANTIC_POSITION,
-      },
+    lineMaterial = makeUnlitMaterial(LINE_COLOR);
 
-      vertexGLSL: `
-        attribute vec3 vertex_position;
-
-        uniform mat4 matrix_model;
-        uniform mat4 matrix_viewProjection;
-
-        void main(void) {
-          gl_Position =
-            matrix_viewProjection *
-            matrix_model *
-            vec4(vertex_position, 1.0);
-        }
-      `,
-
-      fragmentGLSL: `
-        precision highp float;
-
-        void main(void) {
-          gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
-        }
-      `,
-    });
-
-    material.cull = pc.CULLFACE_NONE;
-    material.depthTest = true;
-    material.depthWrite = false;
-    material.blendType = pc.BLEND_NONE;
-    material.update();
-
-    mesh = new pc.Mesh(app.graphicsDevice);
-    mesh.setPositions(positions);
-    mesh.update(pc.PRIMITIVE_LINES, true);
-
-    const meshInstance = new pc.MeshInstance(mesh, material);
-    meshInstance.cull = false;
-
-    entity = new pc.Entity("Trajectoire GPS");
-    entity.addComponent("render", {
+    lineEntity = new pc.Entity("GPS Track Line");
+    lineEntity.addComponent("render", {
       type: "asset",
-      meshInstances: [meshInstance],
+      meshInstances: [new pc.MeshInstance(lineMesh, lineMaterial)],
     });
+    rootEntity.addChild(lineEntity);
 
-    // Les points sont déjà dans le monde affiché.
-    // Ne pas les placer sous l’entité COLMAP ou sous les splats.
-    app.root.addChild(entity);
+    // Sommets (sphères)
+    sphereMaterial = makeUnlitMaterial(SPHERE_COLOR);
 
+    for (let i = 0; i < validPoints.length; i++) {
+      const p = validPoints[i];
+
+      const sphere = new pc.Entity(`GPS Vertex ${i}`);
+      sphere.addComponent("render", {
+        type: "sphere",
+        material: sphereMaterial,
+      });
+
+      sphere.setLocalPosition(p.x, p.y, p.z);
+      sphere.setLocalScale(
+        SPHERE_RADIUS * 2,
+        SPHERE_RADIUS * 2,
+        SPHERE_RADIUS * 2
+      );
+
+      for (const instance of sphere.render.meshInstances) {
+        instance.material = sphereMaterial;
+        instance.cull = false;
+      }
+
+      rootEntity.addChild(sphere);
+    }
+
+    currentTrack = track;
     currentPoints = points;
     refreshUI();
   }
@@ -127,7 +149,6 @@ export function createGpsLayer({ app }) {
     update,
     clear,
     refreshUI,
-
     dispose() {
       disposed = true;
       checkbox?.removeEventListener("change", onVisibilityChange);

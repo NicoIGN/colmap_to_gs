@@ -575,7 +575,396 @@ export function createMeasurementSystem({
       );
     }
   }
+/*
+    function onPointerDown(event) {
+      if (!event.shiftKey) return;
 
+      consume(event);
+
+      if (event.button !== 0 || !canMeasure()) return;
+
+      activate();
+      if (!active) return;
+
+      const centers = getCenters();
+      if (!centers?.length) return;
+
+      try {
+        const matrix = getModelMatrix();
+        const seed = findSeed(
+          event.clientX,
+          event.clientY,
+          centers,
+          matrix
+        );
+
+        if (!seed) {
+          console.warn("[MEASUREMENT DEBUG] Aucun centre sous le clic", {
+            clientX: event.clientX,
+            clientY: event.clientY,
+            pickTolerancePx,
+            centerCount: Math.floor(centers.length / 3),
+          });
+
+          setStatus("Mesure : aucun point trouvé sous le clic.");
+          return;
+        }
+
+        // Comportement de mesure inchangé.
+        const barycenter = findBarycenter(seed, centers, matrix);
+        const role = start ? "B" : "A";
+
+        if (!start) {
+          start = barycenter;
+          setStatus("Mesure : cliquer sur l’extrémité.");
+        } else {
+          rawEnd = barycenter;
+          setStatus(
+            "Mesure : recliquer pour modifier l’extrémité ; " +
+            "relâcher Shift pour effacer."
+          );
+        }
+
+        // Diagnostic indépendant : une erreur ici ne bloque pas la mesure.
+        let groupOpened = false;
+
+        try {
+          console.group(`[MEASUREMENT DEBUG] Point ${role}`);
+          groupOpened = true;
+
+          const xyz = (p) => ({ x: p.x, y: p.y, z: p.z });
+          const finiteVector = (p) =>
+            [p.x, p.y, p.z].every(Number.isFinite);
+
+          // THREE stocke les Matrix4 en column-major.
+          // Fournir aussi des lignes lisibles pour éviter toute ambiguïté.
+          const rowsOf = (m) => {
+            const e = m.elements;
+            return [
+              [e[0], e[4], e[8], e[12]],
+              [e[1], e[5], e[9], e[13]],
+              [e[2], e[6], e[10], e[14]],
+              [e[3], e[7], e[11], e[15]],
+            ];
+          };
+
+          const determinant = matrix.determinant();
+          const invertible =
+            matrix.elements.every(Number.isFinite) &&
+            Number.isFinite(determinant) &&
+            determinant !== 0;
+
+          const inverse = invertible ? matrix.clone().invert() : null;
+          const localSeed = inverse
+            ? seed.clone().applyMatrix4(inverse)
+            : null;
+          const localBarycenter = inverse
+            ? barycenter.clone().applyMatrix4(inverse)
+            : null;
+
+          const snapped = rawEnd ? snapEndpoint(start, rawEnd) : null;
+          const selectedPoint = snapped ? snapped.point : start;
+
+          // Référence QGIS facultative, définie dans la console.
+          const referenceInput = window.__measurementReference;
+          const reference =
+            referenceInput &&
+            Number.isInteger(referenceInput.epsg) &&
+            Number.isFinite(referenceInput.x) &&
+            Number.isFinite(referenceInput.y)
+              ? {
+                  epsg: referenceInput.epsg,
+                  x: referenceInput.x,
+                  y: referenceInput.y,
+                  h: Number.isFinite(referenceInput.h)
+                    ? referenceInput.h
+                    : null,
+                }
+              : null;
+
+          const report = {
+            version: 1,
+            time: new Date().toISOString(),
+            role,
+            click: {
+              clientX: event.clientX,
+              clientY: event.clientY,
+              pickTolerancePx,
+            },
+            scene: {
+              centerCount: Math.floor(centers.length / 3),
+              centerArrayType: centers.constructor.name,
+              sceneRadius: getSceneRadius(),
+              neighborhoodRadiusRatio,
+              neighborhoodRadius: Math.max(
+                getSceneRadius() * neighborhoodRadiusRatio,
+                1e-9
+              ),
+              principalAxis: xyz(getPrincipalAxis()),
+              flipUpChecked:
+                document.getElementById("flipUp")?.checked ?? null,
+            },
+            camera: {
+              position: xyz(camera.position),
+              quaternion: camera.quaternion.toArray(),
+              up: xyz(camera.up),
+              fov: camera.fov,
+              zoom: camera.zoom,
+              near: camera.near,
+              far: camera.far,
+            },
+            model: {
+              determinant,
+              matrixRows: rowsOf(matrix),
+              inverseRows: inverse ? rowsOf(inverse) : null,
+            },
+            selection: {
+              seedDisplay: xyz(seed),
+              seedModel: localSeed ? xyz(localSeed) : null,
+              barycenterDisplay: xyz(barycenter),
+              barycenterModel: localBarycenter
+                ? xyz(localBarycenter)
+                : null,
+              seedToBarycenterDistance: seed.distanceTo(barycenter),
+              seedToBarycenterVector: xyz(
+                barycenter.clone().sub(seed)
+              ),
+              startDisplay: xyz(start),
+              rawEndDisplay: rawEnd ? xyz(rawEnd) : null,
+              effectiveDisplay: xyz(selectedPoint),
+              snapKind: snapped?.kind ?? "",
+              snapDistance: rawEnd
+                ? rawEnd.distanceTo(selectedPoint)
+                : 0,
+            },
+            reference,
+            variants: [],
+          };
+
+          function evaluate(name, candidate, hypothesis) {
+            const entry = {
+              name,
+              hypothesis,
+              input: xyz(candidate),
+              projected: null,
+              error: null,
+            };
+
+            try {
+              if (!finiteVector(candidate)) {
+                throw new Error("Coordonnées d’entrée non finies.");
+              }
+
+              // Cloner pour ne jamais modifier les points de mesure.
+              const result = getAbsoluteCoordinates(candidate.clone());
+
+              if (!result) {
+                throw new Error(
+                  "Aucune coordonnée absolue retournée : géoréférencement absent ?"
+                );
+              }
+
+              if (![result.x, result.y, result.h].every(Number.isFinite)) {
+                throw new Error("Coordonnées projetées non finies.");
+              }
+
+              entry.projected = {
+                epsg: result.epsg ?? null,
+                x: result.x,
+                y: result.y,
+                h: result.h,
+              };
+            } catch (error) {
+              entry.error = String(error?.message ?? error);
+            }
+
+            report.variants.push(entry);
+            return entry;
+          }
+
+          // Référence de comparaison = résultat réellement utilisé par la mesure.
+          const current = evaluate(
+            "ACTUEL",
+            selectedPoint,
+            "Point affiché après accrochage, conversion actuelle."
+          );
+
+          evaluate(
+            "GRAINE",
+            seed,
+            "Centre retenu par le picking, avant barycentre."
+          );
+
+          evaluate(
+            "BARYCENTRE",
+            barycenter,
+            "Point retenu avant accrochage horizontal/vertical."
+          );
+
+          if (inverse) {
+            evaluate(
+              "ENTREE_M_INVERSE",
+              selectedPoint.clone().applyMatrix4(inverse),
+              "Retirer une matrice d’affichage avant le convertisseur actuel."
+            );
+
+            report.model.roundtripError = barycenter.distanceTo(
+              localBarycenter.clone().applyMatrix4(matrix)
+            );
+          }
+
+          evaluate(
+            "ENTREE_M_SUPPLEMENTAIRE",
+            selectedPoint.clone().applyMatrix4(matrix),
+            "Ajouter une matrice d’affichage avant le convertisseur actuel."
+          );
+
+          evaluate(
+            "ENTREE_FLIP_X_180",
+            new THREE.Vector3(
+              selectedPoint.x,
+              -selectedPoint.y,
+              -selectedPoint.z
+            ),
+            "Tester une inversion Y/Z supplémentaire."
+          );
+
+          evaluate(
+            "ENTREE_PERMUTATION_Y_Z",
+            new THREE.Vector3(
+              selectedPoint.x,
+              selectedPoint.z,
+              selectedPoint.y
+            ),
+            "Tester une confusion Y-up / Z-up ; permutation avec réflexion."
+          );
+
+          evaluate(
+            "ENTREE_ROTATION_X_90",
+            new THREE.Vector3(
+              selectedPoint.x,
+              -selectedPoint.z,
+              selectedPoint.y
+            ),
+            "Tester une rotation supplémentaire de +90° autour de X."
+          );
+
+          evaluate(
+            "ENTREE_ROTATION_X_MOINS_90",
+            new THREE.Vector3(
+              selectedPoint.x,
+              selectedPoint.z,
+              -selectedPoint.y
+            ),
+            "Tester une rotation supplémentaire de -90° autour de X."
+          );
+
+          function difference(a, b) {
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+
+            return {
+              dx,
+              dy,
+              dh: Number.isFinite(b.h) ? a.h - b.h : null,
+              horizontal: Math.hypot(dx, dy),
+            };
+          }
+
+          for (const entry of report.variants) {
+            const p = entry.projected;
+            if (!p) continue;
+
+            if (
+              current.projected &&
+              Number.isInteger(p.epsg) &&
+              p.epsg === current.projected.epsg
+            ) {
+              entry.deltaFromCurrent = difference(p, current.projected);
+            }
+
+            if (reference && p.epsg === reference.epsg) {
+              // Convention : calculé - référence QGIS.
+              entry.errorToReference = difference(p, reference);
+            }
+          }
+
+          console.log("Sélection :", report.selection);
+          console.log("Scène :", report.scene);
+          console.log("Caméra :", report.camera);
+          console.log("Matrice modèle — lignes :", report.model.matrixRows);
+          console.log("Inverse — lignes :", report.model.inverseRows);
+
+          console.table(
+            report.variants.map((entry) => ({
+              variante: entry.name,
+              EPSG: entry.projected?.epsg ?? "",
+              X: entry.projected?.x ?? null,
+              Y: entry.projected?.y ?? null,
+              H: entry.projected?.h ?? null,
+              deltaX_actuel: entry.deltaFromCurrent?.dx ?? null,
+              deltaY_actuel: entry.deltaFromCurrent?.dy ?? null,
+              deltaH_actuel: entry.deltaFromCurrent?.dh ?? null,
+              distanceXY_actuel:
+                entry.deltaFromCurrent?.horizontal ?? null,
+              erreurX_QGIS: entry.errorToReference?.dx ?? null,
+              erreurY_QGIS: entry.errorToReference?.dy ?? null,
+              erreurXY_QGIS:
+                entry.errorToReference?.horizontal ?? null,
+              erreur: entry.error ?? "",
+            }))
+          );
+
+          if (report.selection.seedToBarycenterDistance > 1) {
+            console.warn(
+              "[MEASUREMENT DEBUG] Le barycentre déplace le point de plus de 1 m.",
+              {
+                distance: report.selection.seedToBarycenterDistance,
+                radius: report.scene.neighborhoodRadius,
+              }
+            );
+          }
+
+          if (!reference) {
+            console.info(
+              "Pas de référence QGIS : les deltas comparent les variantes " +
+              "au calcul actuel, pas à la position réelle."
+            );
+          }
+
+          console.info(
+            "Ces variantes testent le chemin d’affichage/conversion. " +
+            "Les conventions Spirula ne sont pas testées sans scene_transform.json."
+          );
+
+          // Snapshot texte : les valeurs ne changent pas après le clic.
+          const json = JSON.stringify(report, null, 2);
+          window.__measurementDebugLast = json;
+
+          console.log("[MEASUREMENT DEBUG] RAPPORT JSON\n" + json);
+          console.info(
+            "Dernier rapport disponible dans window.__measurementDebugLast"
+          );
+        } catch (error) {
+          console.error(
+            "[MEASUREMENT DEBUG] Échec du diagnostic ; mesure conservée :",
+            error
+          );
+        } finally {
+          if (groupOpened) console.groupEnd();
+        }
+
+        render();
+      } catch (error) {
+        console.error("Mesure :", error);
+        setStatus(
+          `Mesure impossible : ${error?.message || error}`,
+          true
+        );
+      }
+    }
+ */
+    
   listen(window, "keydown", (event) => {
     if (event.key !== "Shift") return;
 
