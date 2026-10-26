@@ -22,10 +22,7 @@
       touch-action: none;
     }
 
-    #panel .row > button {
-      min-width: 0;
-    }
-
+    #panel .row > button,
     #panel input[type="range"] {
       min-width: 0;
     }
@@ -34,16 +31,19 @@
       pointer-events: none;
     }
 
-    /* Encart infos scène repliable */
+    /* Encart d’informations repliable, en bas à droite. */
     #sceneInfo {
       position: fixed;
       right: 12px;
-      bottom: 12px; /* <- bas droite */
-      top: auto;    /* sécurité si top était défini */
+      bottom: 12px;
+      top: auto;
       z-index: 20;
       box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
       width: 340px;
       max-width: calc(100vw - 24px);
+      max-height: calc(100vh - 24px);
       max-height: calc(100dvh - 24px);
       overflow: hidden;
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -61,6 +61,7 @@
 
     #sceneInfoHeader {
       display: flex;
+      flex-shrink: 0;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
@@ -76,32 +77,40 @@
 
     #toggleSceneInfo {
       appearance: none;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      background: rgba(255, 255, 255, 0.06);
-      color: #edf2f7;
-      border-radius: 8px;
+      display: inline-grid;
+      flex-shrink: 0;
+      place-items: center;
       width: 28px;
       height: 28px;
-      line-height: 1;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #edf2f7;
       font-size: 16px;
       font-weight: 700;
+      line-height: 1;
       cursor: pointer;
-      display: inline-grid;
-      place-items: center;
-      padding: 0;
     }
 
     #toggleSceneInfo:hover {
       background: rgba(255, 255, 255, 0.12);
     }
 
-    #sceneInfoBody {
-      padding: 12px;
-      max-height: calc(100dvh - 90px);
-      overflow-y: auto;
-      overflow-wrap: anywhere;
+    #toggleSceneInfo:focus-visible {
+      outline: 2px solid #90caf9;
+      outline-offset: 3px;
     }
 
+    #sceneInfoBody {
+      min-height: 0;
+      padding: 12px;
+      overflow-y: auto;
+      overflow-wrap: anywhere;
+      overscroll-behavior: contain;
+    }
+
+    #sceneInfoBody[hidden],
     #sceneInfo[aria-expanded="false"] #sceneInfoBody {
       display: none;
     }
@@ -166,42 +175,41 @@
       overflow-wrap: anywhere;
     }
 
-    #sceneInfo [data-level="warning"],
-    #sceneInfo .warning {
+    #sceneInfo #status[data-level="warning"],
+    #sceneInfo #status.warning {
       border-color: rgba(255, 193, 7, 0.5);
       background: rgba(255, 193, 7, 0.09);
       color: #ffe29a;
     }
 
-    #sceneInfo [data-level="error"],
-    #sceneInfo .error {
+    #sceneInfo #status[data-level="error"],
+    #sceneInfo #status.error,
+    #sceneInfo #collisionStatus.error,
+    #sceneInfo #gifStatus.error {
       border-color: rgba(255, 107, 107, 0.5);
       background: rgba(255, 107, 107, 0.09);
       color: #ffb4b4;
     }
 
-    #sceneInfo [data-level="success"],
-    #sceneInfo .success {
+    #sceneInfo #status[data-level="success"],
+    #sceneInfo #status.success {
       border-color: rgba(107, 213, 151, 0.45);
       background: rgba(107, 213, 151, 0.08);
       color: #b4f0cb;
     }
 
-      @media (max-width: 700px) {
-        #sceneInfo {
-          right: 12px;
-          bottom: 12px;
-          top: auto;
-          width: 300px;
-        }
+    @media (max-width: 700px) {
+      #sceneInfo {
+        width: 300px;
+      }
 
-        #sceneInfoBody {
-          max-height: 34dvh;
-        }
+      #sceneInfoBody {
+        max-height: 34vh;
+        max-height: 34dvh;
+      }
 
-        #sceneInfo .scene-metadata {
-          grid-template-columns: 90px minmax(0, 1fr);
-        }
+      #sceneInfo .scene-metadata {
+        grid-template-columns: 90px minmax(0, 1fr);
       }
     }
   </style>
@@ -223,10 +231,12 @@
   <div id="viewer" aria-label="Vue 3D interactive"></div>
 
   <div id="drop">
-    Déposer un fichier .sog, .ply, .splat ou .ksplat
+    Déposer une scène .sog, .ply, .splat ou .ksplat,
+    un géoréférencement .json ou une trajectoire .gpx.
+    Pour COLMAP, utiliser le bouton d’import du dossier.
   </div>
 
-  <!-- Encart infos repliable -->
+  <!-- Informations : bas droite, repliable via scene-tools.js. -->
   <aside
     id="sceneInfo"
     aria-labelledby="sceneInfoTitle"
@@ -234,6 +244,7 @@
   >
     <div id="sceneInfoHeader">
       <h2 id="sceneInfoTitle">Informations sur la scène</h2>
+
       <button
         type="button"
         id="toggleSceneInfo"
@@ -253,11 +264,15 @@
 
         <dt>Géoréférence</dt>
         <dd id="sceneGeorefInfo">Aucune référence chargée</dd>
+
+        <dt>COLMAP</dt>
+        <dd id="sceneColmapInfo">Aucun modèle chargé</dd>
       </dl>
 
       <div class="scene-messages">
         <div>
           <h3 id="statusHeading" class="message-heading">État</h3>
+
           <div
             id="status"
             role="status"
@@ -271,6 +286,7 @@
           <h3 id="collisionStatusHeading" class="message-heading">
             Anticollision
           </h3>
+
           <p
             id="collisionStatus"
             role="status"
@@ -284,6 +300,7 @@
           <h3 id="gifStatusHeading" class="message-heading">
             Capture GIF
           </h3>
+
           <p
             id="gifStatus"
             role="status"
@@ -319,8 +336,7 @@
     </div>
 
     <div id="panelBody" class="panel-body">
-
-      <!-- Fichier -->
+      <!-- Scène Gaussian Splats -->
       <label class="file-button">
         Ouvrir un fichier…
         <input
@@ -336,13 +352,13 @@
         Axe Y vers le bas — COLMAP
       </label>
 
-      <!-- Cadrage -->
       <div class="section">
         <button type="button" id="fit" class="wide primary">
           ⛶ Cadrer toute la scène · R
         </button>
       </div>
 
+      <!-- Déplacement -->
       <details open>
         <summary>Déplacement</summary>
 
@@ -372,11 +388,11 @@
         <p id="keyboardHelp" class="hint"></p>
 
         <p class="hint">
-          Maj : accélérer · Flèches : orienter le regard · R : cadrer
+          Maj : accélérer · Flèches : se déplacer · R : cadrer
         </p>
       </details>
 
-      <!-- Axe principal et verrou de rotation -->
+      <!-- Axe principal -->
       <details open>
         <summary>Axe principal · verrouillage</summary>
 
@@ -411,9 +427,7 @@
             class="wide"
             title="Remettre l’axe principal vers le haut sans déplacer la caméra ni changer la direction du regard"
             aria-describedby="alignPrincipalUpHelp"
-          >
-            ↑ Redresser la vue
-          </button>
+          >↑ Redresser la vue</button>
 
           <p id="alignPrincipalUpHelp" class="hint">
             Remet l’axe principal sélectionné vers le haut de l’écran,
@@ -422,7 +436,7 @@
         </div>
       </details>
 
-      <!-- Orbite explicite, distincte du regard immersif -->
+      <!-- Orbite -->
       <details open>
         <summary>Tourner autour d’une cible</summary>
 
@@ -529,12 +543,90 @@
         </p>
       </details>
 
+      <!-- Import COLMAP sparse binaire -->
+      <details id="colmapSection" open>
+        <summary>COLMAP sparse · points et caméras</summary>
+
+        <div class="section">
+            <label class="file-button">
+              Importer un dossier COLMAP…
+              <input
+                class="visually-hidden"
+                type="file"
+                id="colmapFolderInput"
+                webkitdirectory
+                multiple
+              />
+            </label>
+        </div>
+
+        <p id="colmapImportHelp" class="hint">
+          Sélectionner le dossier contenant cameras.bin,
+          images.bin et points3D.bin, par exemple sparse/0.
+          Si plusieurs modèles sont présents, sélectionner
+          uniquement le sous-dossier du modèle souhaité.
+        </p>
+
+        <label class="check">
+          <input
+            type="checkbox"
+            id="colmapPointsVisible"
+            disabled
+          />
+          Afficher les points sparse
+        </label>
+
+        <label class="check">
+          <input
+            type="checkbox"
+            id="colmapCamerasVisible"
+            disabled
+          />
+          Afficher les positions des caméras
+        </label>
+
+        <label class="check">
+          <input
+            type="checkbox"
+            id="colmapFrustumsVisible"
+            disabled
+          />
+          Afficher les frustums caméras
+        </label>
+
+        <p class="hint">
+          Décocher une case masque uniquement l’élément correspondant,
+          sans retirer le modèle de la mémoire.
+        </p>
+
+        <p class="hint">
+          Le modèle COLMAP doit utiliser le même repère que les splats.
+          Pour une scène issue du modèle géoréférencé,
+          importer ce modèle transformé, pas le modèle d’origine.
+        </p>
+
+        <div class="section">
+          <button
+            type="button"
+            id="colmapRemove"
+            class="wide"
+            disabled
+          >Retirer le modèle COLMAP</button>
+        </div>
+      </details>
+
+      <!-- GPS -->
       <details id="gpsSection">
         <summary>Trajectoire GPS</summary>
 
         <label class="file-button">
           Importer un GPX…
-          <input class="visually-hidden" type="file" id="gpxInput" accept=".gpx" />
+          <input
+            class="visually-hidden"
+            type="file"
+            id="gpxInput"
+            accept=".gpx"
+          />
         </label>
 
         <label class="check">
@@ -544,16 +636,33 @@
 
         <label class="check">
           <input type="checkbox" id="gpsAutoEnabled" disabled />
-          Auto: début → fin
+          Auto : début → fin
+        </label>
+        <label class="check">
+          <input
+            type="checkbox"
+            id="gpsTrackVisible"
+            checked
+            disabled
+          />
+          Afficher la trajectoire GPS
         </label>
 
         <label class="slider" for="gpsAutoSpeed">
           Vitesse auto
-          <input type="range" id="gpsAutoSpeed" min="0.5" max="10" step="0.5" value="1.0" />
+          <input
+            type="range"
+            id="gpsAutoSpeed"
+            min="0.5"
+            max="10"
+            step="0.5"
+            value="1.0"
+          />
           <output id="gpsAutoSpeedValue" for="gpsAutoSpeed">1.0</output>
         </label>
       </details>
 
+      <!-- Caméra -->
       <details id="cameraSection">
         <summary>Caméra · copier / restaurer</summary>
 
@@ -570,13 +679,8 @@
         ></textarea>
 
         <div class="section row">
-          <button type="button" id="exportCam">
-            Copier la vue
-          </button>
-
-          <button type="button" id="importCam">
-            Restaurer
-          </button>
+          <button type="button" id="exportCam">Copier la vue</button>
+          <button type="button" id="importCam">Restaurer</button>
         </div>
 
         <p class="hint">
@@ -590,6 +694,7 @@
         </p>
       </details>
 
+      <!-- GIF -->
       <details id="gifSection" open>
         <summary>Capture GIF animée</summary>
 
@@ -645,10 +750,11 @@
   </aside>
 
   <div id="help">
-    Glisser avec le clic gauche : orienter la visée ·
-    Clic droit : déplacer latéralement ·
-    Molette : avancer/reculer vers la cible ·
-    ZQSD/WASD : se déplacer
+    Ctrl + clic gauche-glisser : orienter la visée ·
+    Clic droit-glisser : déplacer latéralement ·
+    Molette : avancer/reculer ·
+    ZQSD/WASD ou flèches : se déplacer ·
+    Maj + clic : mesurer
   </div>
 </body>
 </html>

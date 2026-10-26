@@ -14,6 +14,8 @@ import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
+import { createColmapLayer } from "./viewer/colmap.js";
+import { createGpsLayer } from "./viewer/gps-layer.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -90,6 +92,10 @@ let gifRecorder = null;
 let measurement = null;
 let memoryWatchdog = null;
 let sceneTools = null;
+// variable globale
+let colmapLayer = null;
+let gpsLayer = null;
+
 
 const canvas = document.createElement("canvas");
 canvas.setAttribute("aria-label", "Vue 3D des Gaussian Splats");
@@ -191,11 +197,23 @@ function refreshUI() {
 
   const blocked = uiIsBlocked();
 
-  document.querySelectorAll(
-    "#panel button, #panel input, #panel select, #panel textarea"
-  ).forEach((element) => {
-    if (element.id !== "togglePanel") element.disabled = blocked;
-  });
+    document.querySelectorAll(
+      "#panel button, #panel input, #panel select, #panel textarea"
+    ).forEach((element) => {
+      // Ces éléments sont gérés par colmapLayer.refreshUI()
+      if (
+        element.id === "togglePanel" ||
+        element.id === "colmapFolderInput" ||
+        element.id === "colmapPointsVisible" ||
+        element.id === "colmapCamerasVisible" ||
+        element.id === "colmapFrustumsVisible" ||
+        element.id === "colmapRemove"
+      ) {
+        return;
+      }
+
+      element.disabled = blocked;
+    });
 
   for (const id of COLLISION_CONTROL_IDS) {
     const element = $(id);
@@ -210,8 +228,10 @@ function refreshUI() {
     }
   }
 
-  sceneTools?.refreshUI();
-  gifRecorder?.updateUI(sceneReady);
+    sceneTools?.refreshUI();
+    colmapLayer?.refreshUI();
+    gpsLayer?.refreshUI(blocked);
+    gifRecorder?.updateUI(sceneReady);
 }
 
 function collisionIsEnabled() {
@@ -404,6 +424,8 @@ function applyUpFlip() {
 function releaseScene() {
   sceneReady = false;
   sceneTools?.reset();
+  colmapLayer?.clear();
+  gpsLayer?.clear();
 
   pickSerial++;
   picking = false;
@@ -1047,6 +1069,8 @@ function installUI() {
     measurement?.reset();
 
     applyUpFlip();
+    colmapLayer?.setFlipUp($("flipUp").checked);
+
     computeSceneBounds();
     syncCamera();
     requestGifCapture();
@@ -1342,14 +1366,35 @@ async function initialize() {
     navigation.installMouseControls();
     navigation.installHeldButtons();
     navigation.installKeyboard();
+      
+      console.info("[APP] Initialisation COLMAP…");
 
-    installUI();
-    installDnD();
+      colmapLayer = createColmapLayer({
+        app,
+        setStatus,
+        getSceneRadius: () => sceneRadius,
+        getFlipUp: () => $("flipUp").checked,
+      });
 
-    app.on("update", (dt) => {
-      navigation.frame(dt);
-      sceneTools.frame(dt);
-    });
+      console.info("[APP] COLMAP initialisé.");
+
+      gpsLayer = createGpsLayer({ app });
+
+      installUI();
+      installDnD();
+
+      app.on("update", (dt) => {
+        if (disposed) return;
+
+        navigation?.frame(dt);
+        sceneTools?.frame(dt);
+
+        // Peut être null pendant init/teardown.
+        if (gpsLayer && sceneTools?.getGpsTrack) {
+          gpsLayer.update(sceneTools.getGpsTrack());
+          gpsLayer.refreshUI(uiIsBlocked());
+        }
+      });
 
     app.on("postrender", () => {
       measurement?.render();
@@ -1394,7 +1439,13 @@ async function initialize() {
 
       importer?.dispose();
       importer = null;
+        
+        colmapLayer?.dispose();
+        colmapLayer = null;
 
+        gpsLayer?.dispose();
+        gpsLayer = null;
+    
       progress.dispose();
       app?.destroy();
       app = null;

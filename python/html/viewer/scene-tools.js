@@ -928,7 +928,10 @@ export function createSceneTools({
     rebuildTrack,
     frame,
     reset,
-
+    getGpsTrack() {
+      return track;
+    },
+      
     dispose() {
       reset();
       disposed = true;
