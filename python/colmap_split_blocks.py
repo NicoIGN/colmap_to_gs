@@ -756,6 +756,118 @@ def enforce_connectivity(labels, W):
 
     return labels
 
+def balance_primary_blocks(labels, W, requested_k):
+    """Équilibre les blocs par déplacements de frontière sûrs.
+
+    Chaque déplacement doit conserver la connexité du bloc donneur
+    et rejoindre le bloc receveur par au moins une arête de W.
+    """
+    labels = np.asarray(labels, dtype=np.int32).copy()
+    W = W.tocsr()
+    n = len(labels)
+
+    if not np.array_equal(np.unique(labels), np.arange(requested_k)):
+        raise ValueError(
+            "Le clustering n'a pas produit exactement K blocs non vides."
+        )
+
+    targets = np.full(requested_k, n // requested_k, dtype=np.int64)
+    targets[:n % requested_k] += 1
+    counts = np.bincount(labels, minlength=requested_k)
+
+    info(
+        f"Balancing primary images: before={counts.tolist()}, "
+        f"targets={targets.tolist()}"
+    )
+
+    while not np.array_equal(counts, targets):
+        candidates = []
+
+        for node in range(n):
+            source = int(labels[node])
+            if counts[source] <= targets[source]:
+                continue
+
+            start, end = W.indptr[node], W.indptr[node + 1]
+            neighbors = W.indices[start:end]
+            weights = W.data[start:end]
+
+            if not len(neighbors):
+                continue
+
+            neighbor_labels = labels[neighbors]
+            source_affinity = float(
+                weights[neighbor_labels == source].sum()
+            )
+
+            for target in np.unique(neighbor_labels):
+                target = int(target)
+                if target == source or counts[target] >= targets[target]:
+                    continue
+
+                target_affinity = float(
+                    weights[neighbor_labels == target].sum()
+                )
+                if target_affinity > 0:
+                    # Préférer les déplacements qui coupent peu d'arêtes.
+                    candidates.append((
+                        source_affinity - target_affinity,
+                        node,
+                        source,
+                        target,
+                    ))
+
+        candidates.sort()
+        moved = 0
+
+        for _, node, source, target in candidates:
+            if labels[node] != source:
+                continue
+            if counts[source] <= targets[source]:
+                continue
+            if counts[target] >= targets[target]:
+                continue
+
+            start, end = W.indptr[node], W.indptr[node + 1]
+            neighbors = W.indices[start:end]
+            weights = W.data[start:end]
+
+            # Le receveur doit encore être voisin : les étiquettes
+            # ont pu changer depuis la création des candidats.
+            if not np.any(
+                (labels[neighbors] == target) & (weights > 0)
+            ):
+                continue
+
+            remaining = np.flatnonzero(labels == source)
+            remaining = remaining[remaining != node]
+
+            if len(remaining) > 1:
+                components = connected_components(
+                    W[remaining][:, remaining],
+                    directed=False,
+                    return_labels=False,
+                )
+                if components != 1:
+                    continue
+
+            labels[node] = target
+            counts[source] -= 1
+            counts[target] += 1
+            moved += 1
+
+        info(
+            f"Balancing pass: moved={moved}, "
+            f"counts={counts.tolist()}"
+        )
+        if moved == 0:
+            raise RuntimeError(
+                "Impossible d'équilibrer les blocs en préservant leur "
+                "connexité. Examiner le graphe, --min-covisibility "
+                "et le nombre de blocs."
+            )
+
+    return labels
 
 def report_connectivity(labels, W, requested_k):
     unique = np.unique(labels)
@@ -1515,17 +1627,17 @@ def main():
         parser.error("Les dossiers entrée et sortie doivent être différents.")
 
     # Éviter de mélanger anciens .bin, .txt ou anciens blocs.
-    if out_dir.exists() and any(out_dir.glob("block_*")):
+    if out_dir.exists() and any(out_dir.iterdir()):
         parser.error(
-            "Le dossier de sortie contient déjà des block_*. "
-            "Choisir un nouveau dossier pour éviter les fichiers périmés."
+            "Le dossier de sortie n'est pas vide. Choisir un nouveau "
+            "dossier : aucun ancien bloc ou fichier texte ne sera réutilisé."
         )
 
     if args.export_text or args.export_binary:
         export_text = args.export_text
         export_binary = args.export_binary
     else:
-        export_text = True
+        export_text = False
         export_binary = True
 
     info(f"Loading model from {input_dir}")
@@ -1593,7 +1705,10 @@ def main():
         [remap[int(label)] for label in labels],
         dtype=np.int32,
     )
-
+    
+    info("Balancing primary image counts...")
+    labels = balance_primary_blocks(labels, W, args.num_blocks)
+    
     report_connectivity(labels, W, args.num_blocks)
 
     info("Building blocks with limited overlap...")
