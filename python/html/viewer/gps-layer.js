@@ -2,7 +2,10 @@ import * as pc from "playcanvas";
 
 const LINE_COLOR = new pc.Color(140 / 255, 230 / 255, 0); // vert pomme
 const SPHERE_COLOR = new pc.Color(140 / 255, 230 / 255, 0);
-const SPHERE_RADIUS = 0.5; // mètres
+
+const SPHERE_RADIUS_MIN = 0.06; // m
+const SPHERE_RADIUS_MAX = 0.22; // m
+const SPHERE_SCALE_BY_DISTANCE = 0.015; // m par m de distance caméra
 
 export function createGpsLayer({ app }) {
   const checkbox = document.getElementById("gpsTrackVisible");
@@ -109,6 +112,9 @@ export function createGpsLayer({ app }) {
     // Sommets (sphères)
     sphereMaterial = makeUnlitMaterial(SPHERE_COLOR);
 
+    const cameraEntity = app.root.findByName("Camera");
+    const cameraPosition = cameraEntity?.getPosition?.();
+
     for (let i = 0; i < validPoints.length; i++) {
       const p = validPoints[i];
 
@@ -119,11 +125,25 @@ export function createGpsLayer({ app }) {
       });
 
       sphere.setLocalPosition(p.x, p.y, p.z);
-      sphere.setLocalScale(
-        SPHERE_RADIUS * 2,
-        SPHERE_RADIUS * 2,
-        SPHERE_RADIUS * 2
-      );
+
+      let radius = SPHERE_RADIUS_MIN;
+
+      if (cameraPosition) {
+        const dx = p.x - cameraPosition.x;
+        const dy = p.y - cameraPosition.y;
+        const dz = p.z - cameraPosition.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        radius = Math.min(
+          SPHERE_RADIUS_MAX,
+          Math.max(
+            SPHERE_RADIUS_MIN,
+            distance * SPHERE_SCALE_BY_DISTANCE
+          )
+        );
+      }
+
+      sphere.setLocalScale(radius * 2, radius * 2, radius * 2);
 
       for (const instance of sphere.render.meshInstances) {
         instance.material = sphereMaterial;
