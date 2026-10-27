@@ -962,7 +962,10 @@ function navigationIsActive() {
   return (
     picking ||
     navigation.heldButtons.size > 0 ||
-    navigation.pressedKeys.size > 0
+    navigation.pressedKeys.size > 0 ||
+    isPrincipalOrbitActive() ||
+    sceneTools.isAutoEnabled() ||
+    sceneTools.isFollowEnabled()
   );
 }
 
@@ -1290,10 +1293,21 @@ async function initialize() {
       getKeyboardLayout: () => $("keyboardLayout").value,
 
       navigateWithCollision: (move, enabled) =>
-        collision.navigateWithCollision(
-          move,
-          enabled && collisionIsEnabled()
-        ),
+        collision.navigateWithCollision(() => {
+          const before = camera.position.clone();
+          const beforeTarget = target.clone();
+
+          move(); // déplacement demandé par navigation
+
+          const requested = camera.position.clone().sub(before);
+          const constrained =
+            sceneTools?.moveAlongTrackFromWorldDelta?.(requested);
+
+          if (constrained) {
+            camera.position.copy(before).add(constrained);
+            target.copy(beforeTarget).add(constrained);
+          }
+        }, enabled && collisionIsEnabled()),
 
       syncCamera,
       requestGifCapture,
@@ -1399,14 +1413,16 @@ async function initialize() {
     app.on("postrender", () => {
       measurement?.render();
 
-      gifRecorder.processCapture({
-        sceneReady,
-        documentHidden: document.hidden,
-        navigationIsActive,
-        signature: cameraCaptureSignature(),
-        continuous: isPrincipalOrbitActive(),
-        cameraQuaternion: camera.quaternion,
-      });
+        gifRecorder.processCapture({
+          sceneReady,
+          documentHidden: document.hidden,
+          navigationIsActive,
+          signature: cameraCaptureSignature(),
+          continuous:
+            isPrincipalOrbitActive() ||
+            sceneTools.isAutoEnabled(),
+          cameraQuaternion: camera.quaternion,
+        });
     });
 
     app.start();

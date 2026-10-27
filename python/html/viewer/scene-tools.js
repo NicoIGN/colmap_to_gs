@@ -223,7 +223,7 @@ export function createSceneTools({
     follow = false;
     auto = false;
     progress = 0;
-
+    lastFollowCameraPosition = null;
     if (diagnostic) removeDiagnostic();
 
     refreshUI();
@@ -276,6 +276,83 @@ export function createSceneTools({
 
     return { epsg: georef.epsg, ...projected };
   }
+    
+    function nearestProgressFromWorldPoint(worldPoint) {
+      if (!track || !worldPoint) return 0;
+
+      let nearestIndex = 0;
+      let best = Infinity;
+
+      for (let i = 0; i < track.pointsWorld.length; i++) {
+        const d2 = track.pointsWorld[i].distanceToSquared(worldPoint);
+        if (d2 < best) {
+          best = d2;
+          nearestIndex = i;
+        }
+      }
+
+      return THREE.MathUtils.clamp(
+        track.distances[nearestIndex] / track.length,
+        0,
+        1
+      );
+    }
+
+    function tangentAtProgress(t) {
+      if (!track || track.pointsWorld.length < 2) return null;
+
+      const distance = THREE.MathUtils.clamp(t, 0, 1) * track.length;
+
+      let low = 0;
+      let high = track.distances.length - 1;
+
+      while (high - low > 1) {
+        const middle = (low + high) >> 1;
+        if (track.distances[middle] <= distance) low = middle;
+        else high = middle;
+      }
+
+      const a = track.pointsWorld[low];
+      const b = track.pointsWorld[high];
+      const dir = b.clone().sub(a);
+
+      if (dir.lengthSq() < 1e-12) return null;
+      return dir.normalize();
+    }
+
+    function moveAlongTrackFromWorldDelta(worldDelta) {
+      if (!track || !follow || !worldDelta) return null;
+
+      // Recaler la progression sur la position actuelle.
+      const state = getState();
+      const up = getPrincipalAxis().clone().normalize();
+      const eyeHeight = Math.max(state.radius * 0.01, 0.3);
+      const groundPosition = camera.position.clone().addScaledVector(up, -eyeHeight);
+
+      progress = nearestProgressFromWorldPoint(groundPosition);
+
+      const tangent = tangentAtProgress(progress);
+      if (!tangent) return null;
+
+      // Garder seulement la composante dans l’axe de la trajectoire.
+      const signedDistance = worldDelta.dot(tangent);
+
+      const nextDistance = THREE.MathUtils.clamp(
+        progress * track.length + signedDistance,
+        0,
+        track.length
+      );
+
+      const nextProgress = nextDistance / track.length;
+      const oldProgress = progress;
+      progress = nextProgress;
+
+      const oldPos = sample(oldProgress);
+      const newPos = sample(nextProgress);
+
+      // Déplacement réellement appliqué dans le monde.
+      return newPos.sub(oldPos);
+    }
 
   function parseGpx(text) {
     const document = new DOMParser().parseFromString(
@@ -825,58 +902,87 @@ export function createSceneTools({
     );
   }
 
-  function frame(dt) {
-    const state = getState();
+    let lastFollowCameraPosition = null;
 
-    if (
-      !track ||
-      !state.ready ||
-      state.blocked ||
-      (!follow && !auto)
-    ) {
-      return;
+    function frame(dt) {
+      const state = getState();
+
+      if (
+        !track ||
+        !state.ready ||
+        state.blocked ||
+        (!follow && !auto)
+      ) {
+        lastFollowCameraPosition = null;
+        return;
+      }
+
+      const up = getPrincipalAxis().clone().normalize();
+      const eyeHeight = Math.max(state.radius * 0.01, 0.3);
+
+      if (auto) {
+        // Auto: avance le long de la trajectoire et regarde vers l'avant.
+        progress = Math.min(
+          1,
+          progress + speed * Math.max(0, dt) / track.length
+        );
+
+        const position = sample(progress);
+        camera.position.copy(position).addScaledVector(up, eyeHeight);
+
+        const lookDistance = Math.max(state.radius * 0.03, 2);
+        const step = Math.min(1, lookDistance / track.length);
+
+        let direction;
+        if (progress < 1) {
+          direction = sample(Math.min(1, progress + step)).sub(position);
+        } else {
+          direction = position.clone().sub(sample(Math.max(0, 1 - step)));
+        }
+
+        if (direction.lengthSq() > 1e-12) {
+          target.copy(camera.position).addScaledVector(
+            direction.normalize(),
+            lookDistance
+          );
+        }
+
+        lastFollowCameraPosition = camera.position.clone();
+
+        syncCamera();
+        requestCapture();
+
+        if (progress >= 1) {
+          auto = false;
+          refreshUI();
+          setStatus("Fin de la trajectoire GPS.");
+        }
+
+        return;
+      }
+
+      // Follow seul: on snap la POSITION à la trajectoire
+      // mais on garde complètement l'orientation utilisateur.
+      const snappedGround = sample(progress);
+      const snappedCamera = snappedGround.clone().addScaledVector(up, eyeHeight);
+
+      if (!lastFollowCameraPosition) {
+        // Premier snap: translation pure, sans changer le regard.
+        const delta0 = snappedCamera.clone().sub(camera.position);
+        camera.position.add(delta0);
+        target.add(delta0);
+      } else {
+        // Snap continu: translation pure depuis la dernière position suivie.
+        const delta = snappedCamera.clone().sub(lastFollowCameraPosition);
+        camera.position.add(delta);
+        target.add(delta);
+      }
+
+      lastFollowCameraPosition = snappedCamera;
+
+      syncCamera();
+      requestCapture();
     }
-
-    if (auto) {
-      progress = Math.min(
-        1,
-        progress + speed * Math.max(0, dt) / track.length
-      );
-    }
-
-    const position = sample(progress);
-    const lookDistance = Math.max(state.radius * 0.03, 2);
-    const step = Math.min(1, lookDistance / track.length);
-
-    let direction;
-
-    if (progress < 1) {
-      direction = sample(Math.min(1, progress + step)).sub(position);
-    } else {
-      direction = position.clone().sub(sample(Math.max(0, 1 - step)));
-    }
-
-    const up = getPrincipalAxis().clone().normalize();
-    const eyeHeight = Math.max(state.radius * 0.01, 0.3);
-
-    camera.position.copy(position).addScaledVector(up, eyeHeight);
-
-    if (direction.lengthSq() > 1e-12) {
-      target.copy(camera.position).addScaledVector(
-        direction.normalize(),
-        lookDistance
-      );
-    }
-
-    syncCamera();
-    requestCapture();
-
-    if (auto && progress >= 1) {
-      auto = false;
-      refreshUI();
-      setStatus("Fin de la trajectoire GPS.");
-    }
-  }
 
   listen($("gpxInput"), "change", async (event) => {
     const file = event.target.files?.[0];
@@ -895,17 +1001,27 @@ export function createSceneTools({
     refreshUI();
   });
 
-  listen($("gpsAutoEnabled"), "change", () => {
-    auto = Boolean(track && $("gpsAutoEnabled").checked);
+    listen($("gpsAutoEnabled"), "change", () => {
+      auto = Boolean(track && $("gpsAutoEnabled").checked);
 
-    if (auto) {
-      progress = 0;
-      clearNavigation();
-      resetMeasurement();
-    }
+      if (auto) {
+        const state = getState();
+        const up = getPrincipalAxis().clone().normalize();
+        const eyeHeight = Math.max(state.radius * 0.01, 0.3);
 
-    refreshUI();
-  });
+        const groundPosition = camera.position
+          .clone()
+          .addScaledVector(up, -eyeHeight);
+
+        progress = nearestProgressFromWorldPoint(groundPosition);
+
+        clearNavigation();
+        resetMeasurement();
+        frame(0);
+      }
+
+      refreshUI();
+    });
 
   listen($("gpsAutoSpeed"), "input", () => {
     const value = Number($("gpsAutoSpeed").value);
@@ -920,24 +1036,34 @@ export function createSceneTools({
   updateGeorefInfo();
   refreshUI();
 
-  return {
-    setSceneInfo,
-    getAbsoluteCoordinates,
-    importFile,
-    refreshUI,
-    rebuildTrack,
-    frame,
-    reset,
-    getGpsTrack() {
-      return track;
-    },
-      
-    dispose() {
-      reset();
-      disposed = true;
+    return {
+        setSceneInfo,
+        getAbsoluteCoordinates,
+        importFile,
+        refreshUI,
+        rebuildTrack,
+        frame,
+        reset,
+        moveAlongTrackFromWorldDelta,
 
-      for (const remove of removers) remove();
-      removers.length = 0;
-    },
-  };
+        getGpsTrack() {
+          return track;
+        },
+
+        isAutoEnabled() {
+          return auto;
+        },
+
+        isFollowEnabled() {
+          return follow;
+        },
+
+        dispose() {
+          reset();
+          disposed = true;
+
+          for (const remove of removers) remove();
+          removers.length = 0;
+        },
+      };
 }

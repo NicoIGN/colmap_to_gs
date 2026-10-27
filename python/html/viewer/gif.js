@@ -11,10 +11,10 @@ export function createGifRecorder({
   const GIF_MAX_HEIGHT = 720;
   const GIF_SETTLE_MS = 600;
 
-  // Échantillonnage pendant une rotation continue.
+  // Échantillonnage pendant un mouvement continu (orbite, auto GPS, etc.)
   const GIF_SAMPLE_INTERVAL_MS = 100;
   const GIF_SAMPLE_MIN_ANGLE_DEG = 6;
-    
+
   const state = {
     recording: false,
     encoding: false,
@@ -145,96 +145,104 @@ export function createGifRecorder({
     }
   }
 
-    function markCaptured(signature, cameraQuaternion, now) {
-      state.lastCapturedSignature = signature;
-      state.lastSampleAt = now;
+  function markCaptured(signature, cameraQuaternion, now) {
+    state.lastCapturedSignature = signature;
+    state.lastSampleAt = now;
 
-      if (cameraQuaternion) {
-        state.lastSampleQuaternion = state.lastSampleQuaternion
-          ? state.lastSampleQuaternion.copy(cameraQuaternion)
-          : cameraQuaternion.clone();
-      }
+    if (cameraQuaternion) {
+      state.lastSampleQuaternion = state.lastSampleQuaternion
+        ? state.lastSampleQuaternion.copy(cameraQuaternion)
+        : cameraQuaternion.clone();
     }
-    
-    function processCapture({
-      sceneReady,
-      documentHidden,
-      navigationIsActive,
-      signature,
-      continuous = false,
-      cameraQuaternion = null,
-    }) {
+  }
+
+  function processCapture({
+    sceneReady,
+    documentHidden,
+    navigationIsActive,
+    signature,
+    continuous = false,
+    cameraQuaternion = null,
+  }) {
+    if (
+      !state.recording ||
+      !sceneReady ||
+      isLoading() ||
+      documentHidden
+    ) {
+      return;
+    }
+
+    try {
+      const now = performance.now();
+
+      if (signature !== state.observedSignature) {
+        state.observedSignature = signature;
+        state.changedAt = now;
+        state.pendingCapture = true;
+      }
+
+      // MOUVEMENT CONTINU GÉNÉRAL :
+      // - continuous explicite (orbite principale)
+      // - ou navigation active avec changement de signature (auto GPS, pan, dolly...)
+      const movingContinuously =
+        continuous ||
+        (navigationIsActive() && signature !== state.lastCapturedSignature);
+
+      if (movingContinuously) {
+        const elapsed = now - state.lastSampleAt;
+
+        let enoughRotation = true;
+        if (cameraQuaternion && state.lastSampleQuaternion) {
+          const angle = THREE.MathUtils.radToDeg(
+            state.lastSampleQuaternion.angleTo(cameraQuaternion)
+          );
+          enoughRotation = angle >= GIF_SAMPLE_MIN_ANGLE_DEG;
+        }
+
+        // Si translation sans rotation: enoughRotation reste true.
+        if (
+          elapsed >= GIF_SAMPLE_INTERVAL_MS &&
+          enoughRotation &&
+          signature !== state.lastCapturedSignature
+        ) {
+          captureFrame();
+          markCaptured(signature, cameraQuaternion, now);
+        }
+
+        // on garde pendingCapture pour capturer aussi l'image finale stabilisée
+        return;
+      }
+
+      // Mouvement non continu : capture après stabilisation.
       if (
-        !state.recording ||
-        !sceneReady ||
-        isLoading() ||
-        documentHidden
+        !state.pendingCapture ||
+        navigationIsActive() ||
+        now - state.changedAt < GIF_SETTLE_MS
       ) {
         return;
       }
 
-      try {
-        const now = performance.now();
+      state.pendingCapture = false;
 
-        if (signature !== state.observedSignature) {
-          state.observedSignature = signature;
-          state.changedAt = now;
-          state.pendingCapture = true;
-        }
-
-        // Rotation continue : capturer selon le temps et l’angle.
-        if (continuous && cameraQuaternion) {
-          const elapsed = now - state.lastSampleAt;
-
-          const angle = state.lastSampleQuaternion
-            ? THREE.MathUtils.radToDeg(
-                state.lastSampleQuaternion.angleTo(cameraQuaternion)
-              )
-            : Infinity;
-
-          if (
-            elapsed >= GIF_SAMPLE_INTERVAL_MS &&
-            angle >= GIF_SAMPLE_MIN_ANGLE_DEG &&
-            signature !== state.lastCapturedSignature
-          ) {
-            captureFrame();
-            markCaptured(signature, cameraQuaternion, now);
-          }
-
-          // pendingCapture reste actif : la position finale
-          // sera capturée après relâchement et stabilisation.
-          return;
-        }
-
-        // Autres mouvements : capture après stabilisation.
-        if (
-          !state.pendingCapture ||
-          navigationIsActive() ||
-          now - state.changedAt < GIF_SETTLE_MS
-        ) {
-          return;
-        }
-
-        state.pendingCapture = false;
-
-        if (signature === state.lastCapturedSignature) {
-          return;
-        }
-
-        captureFrame();
-        markCaptured(signature, cameraQuaternion, now);
-      } catch (error) {
-        console.error("Capture GIF :", error);
-
-        state.recording = false;
-
-        setStatus(
-          `Capture interrompue : ${error?.message || error}. ` +
-          "Les images déjà capturées restent exportables.",
-          true
-        );
+      if (signature === state.lastCapturedSignature) {
+        return;
       }
+
+      captureFrame();
+      markCaptured(signature, cameraQuaternion, now);
+    } catch (error) {
+      console.error("Capture GIF :", error);
+
+      state.recording = false;
+
+      setStatus(
+        `Capture interrompue : ${error?.message || error}. ` +
+        "Les images déjà capturées restent exportables.",
+        true
+      );
     }
+  }
 
   function loadEncoder() {
     if (!encoderPromise) {
@@ -280,8 +288,8 @@ export function createGifRecorder({
     state.observedSignature = null;
     state.pendingCapture = false;
     state.recording = true;
-      state.lastSampleAt = 0;
-      state.lastSampleQuaternion = null;
+    state.lastSampleAt = 0;
+    state.lastSampleQuaternion = null;
 
     setStatus("● Capture active — attente de stabilisation…");
     updateUI(sceneReady);
@@ -412,14 +420,12 @@ export function createGifRecorder({
     state.pendingCapture = false;
     state.lastCapturedSignature = null;
     state.observedSignature = null;
-      state.lastSampleAt = 0;
-      state.lastSampleQuaternion = null;
+    state.lastSampleAt = 0;
+    state.lastSampleQuaternion = null;
 
     if (hadRecording) {
       setStatus("Enregistrement annulé.");
     }
-      state.lastSampleAt = 0;
-      state.lastSampleQuaternion = null;
 
     updateUI(sceneReady);
   }
