@@ -236,7 +236,11 @@ export_world_splat() {
 
   local max_world_scale="${MAX_WORLD_SCALE:-0.35}"
   local min_opacity="${MIN_OPACITY:-0.02}"
-
+  local radius_factor="${RADIUS_FACTOR:-5}"
+  is_number "$radius_factor" || die "RADIUS_FACTOR invalide : $radius_factor"
+  is_number "$max_world_scale" || die "MAX_WORLD_SCALE invalide : $max_world_scale"
+  is_number "$min_opacity" || die "MIN_OPACITY invalide : $min_opacity"
+  
   local export_cmd=(
       "$python_bin" "$export_script"
       --in-ply "$final_ckpt"
@@ -244,7 +248,7 @@ export_world_splat() {
       --transform "$export_transform"
       --out-ply "$world_splat"
       --format splat
-      --radius-factor 5
+      --radius-factor "$radius_factor"
       --max-world-scale "$max_world_scale"
       --min-opacity "$min_opacity"
       --batch-size 200000
