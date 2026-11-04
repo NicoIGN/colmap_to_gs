@@ -12,7 +12,7 @@ clean="${CLEAN:-false}"
 export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
-export_script="${EXPORT_SCRIPT:-$script_dir/../python/export_ply.py}"
+export_script="${EXPORT_SCRIPT:-$script_dir/../tools/postprocess/export_ply.py}"
 
 quality="${QUALITY:-}"
 cap_max="${CAP_MAX:-}"
@@ -39,7 +39,7 @@ Important:
       {output_dir}/splats/step-XXXXXXXXX.ckpt/splat.ply
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
-      via python/export_ply.py et splats/scene_transform.json
+      via tools/postprocess/export_ply.py et splats/scene_transform.json
   - Marqueurs:
       .train_done = train terminé
       .export_done = export terminé

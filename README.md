@@ -23,14 +23,14 @@ Télécharger des images géolocalisées : [extraction Panoramax par bbox Lamber
 
 Le pipeline se déroule en plusieurs étapes :
 
-1. *(optionnel)* `python/images_to_colmap.py` : dossier d'images → dataset COLMAP prêt à l'emploi ;
+1. *(optionnel)* `tools/preprocess/images_to_colmap.py` : dossier d'images → dataset COLMAP prêt à l'emploi ;
 2. `scripts/run.sh` :
    - génération de `transforms.json` depuis COLMAP ;
    - estimation de `near` / `far` ;
    - entraînement Splatfacto ;
    - export du `.ply` ;
    - nettoyage du `.ply` ;
-3. *(optionnel)* `python/server.py` : serveur web local de visualisation du résultat.
+3. *(optionnel)* `tools/viewer/server.py` : serveur web local de visualisation du résultat.
 
 ### 1.2. Organisation du dépôt
 
@@ -44,18 +44,22 @@ Le pipeline se déroule en plusieurs étapes :
 │       ├── launch.sh              # soumission SLURM + suivi des logs
 │       └── launch.slurm           # job SLURM (appelle scripts/run.sh)
 ├── python
-│   ├── images_to_colmap.py        # images → modèle COLMAP + sparse_pc.ply
 │   ├── colmap_to_transforms.py    # modèle COLMAP → transforms.json
-│   ├── estimate_planes.py        # estimation near / far
-│   ├── clean_ply.py               # nettoyage du .ply exporté
-│   ├── server.py                  # serveur de visualisation
-│   ├── html/index.html            # page de visualisation
-└── scripts
-    ├── run.sh                     # point d'entrée du pipeline
-    ├── train.sh
-    ├── torch_stack_check.sh       # validation PyTorch / CUDA
-    ├── export_splat_to_ply.sh
-    └── clean_ply.sh
+│   └── estimate_planes.py        # estimation near / far
+├── scripts
+│   ├── run.sh                     # point d'entrée du pipeline
+│   ├── run_spirula*.sh            # pipelines Spirula
+│   ├── train.sh
+│   └── torch_stack_check.sh       # validation PyTorch / CUDA
+└── tools
+    ├── preprocess/                # images, vidéo, géoréférencement, blocs COLMAP
+    ├── postprocess/               # nettoyage, export, fusion, GeoPackage
+    ├── viewer/
+    │   ├── server.py              # visualiseur PLY / SPLAT
+    │   ├── html/                  # interface et modules JavaScript
+    │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
+    ├── panoramax/                 # récupération d'images par bbox Lambert-93
+    └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
 ```
 
 ### 1.3. Résumé du flux
@@ -105,7 +109,7 @@ environment/ign.slurm/conda_env.yml
 #### 3.1.1. Commande
 
 ```bash
-python "$GIT_ROOT/python/images_to_colmap.py" \
+python "$GIT_ROOT/tools/preprocess/images_to_colmap.py" \
   --image_dir /path/to/images \
   --output_dir /path/to/dataset \
   --camera_model OPENCV \
@@ -320,8 +324,8 @@ Le script effectue les opérations suivantes :
 4. Vérification du GPU, activation de Conda si demandée et vérification de la version de Python.
 5. **Estimation de `near` / `far`** (`estimate_planes.py`).
 6. **Entraînement Splatfacto** (`scripts/train.sh`).
-7. **Export du `.ply`** (`scripts/export_splat_to_ply.sh`).
-8. **Nettoyage** (`scripts/clean_ply.sh` → `python/clean_ply.py`).
+7. **Export du `.ply`** (`tools/postprocess/export_splat_to_ply.sh`).
+8. **Nettoyage** (`tools/postprocess/clean_ply.sh` → `tools/postprocess/clean_ply.py`).
 
 ### 4.2. Configuration générale
 
@@ -426,7 +430,7 @@ Cette étape est **toujours exécutée** et transmet les valeurs suivantes à l'
 
 #### 5.1.1. Sélection du run et export
 
-`scripts/export_splat_to_ply.sh` :
+`tools/postprocess/export_splat_to_ply.sh` :
 
 - prend le run le plus récent dans `<output-dir>/model3d/splatfacto/` ;
 - lance `ns-export gaussian-splat --load-config <run>/config.yml` ;
@@ -443,24 +447,26 @@ Le script peut aussi archiver le run en ZIP :
 
 #### 5.2.1. Appel et fichiers utilisés
 
-La commande suivante appelle `python/clean_ply.py` :
+La commande suivante appelle `tools/postprocess/clean_ply.py` :
 
 ```bash
-scripts/clean_ply.sh \
-  --dataset-dir <dataset-dir> \
-  --output-dir <output-dir>/model3d
+tools/postprocess/clean_ply.sh \
+  --transform <run>/dataparser_transforms.json \
+  --points <dataset-dir>/colmap/sparse/0/points3D.bin \
+  --in-ply <output-dir>/model3d/splat.ply \
+  --out-ply <output-dir>/model3d/cleaned/scene.ply
 ```
 
 Les arguments transmis sont :
 
 | Argument | Valeur |
 |---|---|
-| `--in-ply` | premier `.ply` trouvé dans `<out>/`, `<out>/model3d/` ou `<out>/exports/` |
+| `--in-ply` | chemin du `.ply` exporté à nettoyer |
 | `--points` | `<dataset-dir>/colmap/sparse/0/points3D.bin` |
 | `--transform` | `dataparser_transforms.json` le plus récent sous `<out>` |
-| `--out-ply` | `<out>/cleaned/<nom>_cleaned.ply` |
+| `--out-ply` | chemin du `.ply` nettoyé à créer |
 
-Ici, `<out>` désigne le dossier passé à `clean_ply.sh --output-dir`.
+Ces quatre chemins sont fournis explicitement au lanceur ; `run.sh` les prépare automatiquement.
 
 Le script utilise `dataparser_transforms.json` — la transformation globale appliquée par Nerfstudio pendant l'entraînement — et non `transforms.json`.
 
@@ -500,20 +506,20 @@ Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeli
 #### 5.5.1. Lancement du serveur
 
 ```bash
-python python/server.py
+python tools/viewer/server.py
 ```
 
 #### 5.5.2. Accès et arrêt
 
 Ce script :
 
-- sert le dossier `python/html/` sur **`http://127.0.0.1:8000/`** ;
+- sert le dossier `tools/viewer/html/` sur **`http://127.0.0.1:8000/`** ;
 - tente d'ouvrir le navigateur automatiquement ;
-- ne prend aucun argument ;
-- utilise un port et un hôte fixés dans le script ;
+- accepte un fichier local optionnel et `--data-directory` pour exposer un dossier de données ;
+- accepte `--port` pour changer le port et `--no-browser` pour ne pas ouvrir le navigateur ;
 - n'écoute qu'en local.
 
-Arrêt : `Ctrl+C`.
+Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](tools/viewer/README.md).
 
 ---
 
@@ -638,7 +644,7 @@ Une fois téléchargées localement, on suppose qu'elles se trouvent dans :
 Lancer `images_to_colmap.py` pour produire un dataset compatible avec `scripts/run.sh` :
 
 ```bash
-python "$GIT_ROOT/python/images_to_colmap.py" \
+python "$GIT_ROOT/tools/preprocess/images_to_colmap.py" \
   --image_dir /tmp/nerfstudio_poster/images \
   --output_dir /tmp/nerfstudio_poster/poster_colmap \
   --camera_model OPENCV \

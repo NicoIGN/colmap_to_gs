@@ -58,10 +58,10 @@ mon_dataset/
 
 Le modèle COLMAP doit contenir les paramètres des caméras et les points 3D. `sparse_pc.ply` sert de nuage initial au modèle et doit être cohérent avec le repère du modèle COLMAP.
 
-Pour créer ce dataset depuis un dossier d'images, le dépôt fournit `python/images_to_colmap.py`. Par exemple :
+Pour créer ce dataset depuis un dossier d'images, le dépôt fournit `tools/preprocess/images_to_colmap.py`. Par exemple :
 
 ```bash
-python3 python/images_to_colmap.py \
+python3 tools/preprocess/images_to_colmap.py \
   --image_dir /chemin/vers/images \
   --output_dir /chemin/vers/mon_dataset \
   --camera_model OPENCV \
@@ -141,7 +141,7 @@ Le fichier `dataparser_transforms.json` décrit les transformations appliquées 
 Le dépôt comprend un visualiseur local. Lancez-le depuis la racine :
 
 ```bash
-python3 python/server.py
+python3 tools/viewer/server.py
 ```
 
 Puis ouvrez `http://127.0.0.1:8000/` dans un navigateur. Le serveur n'écoute que sur la machine locale ; arrêtez-le avec `Ctrl+C`.

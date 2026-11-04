@@ -4,7 +4,7 @@ Ce sous-outil convertit un `.splat` produit par ce dépôt en tileset 3D Tiles 1
 
 ## Données prises en charge
 
-Cette première version vise les `.splat` produits par `python/export_ply.py` après le géoréférencement GPX de `python/georef_colmap_from_gpx.py`. Les positions doivent être en repère **local ENU (Est, Nord, Haut), en mètres**, et l'origine WGS84 `[latitude, longitude, hauteur]` doit provenir du `georef_summary.json` du même traitement.
+Cette première version vise les `.splat` produits par `tools/postprocess/export_ply.py` après le géoréférencement GPX de `tools/preprocess/georef_colmap_from_gpx.py`. Les positions doivent être en repère **local ENU (Est, Nord, Haut), en mètres**, et l'origine WGS84 `[latitude, longitude, hauteur]` doit provenir du `georef_summary.json` du même traitement.
 
 Le `georef_summary.json` de ce dépôt contient un tableau `models` et pointe vers un `georef_stats.json` par modèle. Le convertisseur lit l'origine ENU dans ce fichier de statistiques. Pour un résumé avec un seul modèle, celui-ci est sélectionné automatiquement ; s'il y en a plusieurs, indique le modèle avec `--model`.
 
@@ -56,7 +56,7 @@ Les commentaires `offsetx=0`, `offsety=0`, `offsetz=0` du PLY identifient le rep
 Un lanceur local est fourni, sans dépendance Python externe ni jeton Cesium ion :
 
 ```bash
-bash tools/splat_to_3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
+bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
 ```
 
 Il ouvre une page CesiumJS centrée sur le tileset, avec un fond OpenStreetMap

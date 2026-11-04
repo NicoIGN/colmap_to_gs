@@ -22,7 +22,7 @@ COLMAP_POINTS=""
 IN_PLY=""
 OUT_PLY=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLEANER_SCRIPT="$SCRIPT_DIR/../python/clean_ply.py"
+CLEANER_SCRIPT="$SCRIPT_DIR/clean_ply.py"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

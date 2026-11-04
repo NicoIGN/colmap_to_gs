@@ -358,7 +358,7 @@ if [ "$SKIP_EXPORT" = false ]; then
   OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" \
   EXPORT_DIR="$OUTPUT_DIR" \
   ZIP_RUN=0 \
-    bash "$SCRIPT_DIR/export_splat_to_ply.sh"
+    bash "$SCRIPT_DIR/../tools/postprocess/export_splat_to_ply.sh"
 
   PLY_FILE=$(find "$OUTPUT_DIR" -type f -name "*.ply" | head -n 1 || true)
 
@@ -379,7 +379,7 @@ CLEANED_PLY=""
 if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
 
-  CLEAN_SCRIPT="$SCRIPT_DIR/clean_ply.sh"
+  CLEAN_SCRIPT="$SCRIPT_DIR/../tools/postprocess/clean_ply.sh"
   COLMAP_POINTS="$COLMAP_SPARSE_DIR/points3D.bin"
   CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
   TRANSFORM_SEARCH_DIR="$TRAIN_DIR/$EXPERIMENT_NAME"
