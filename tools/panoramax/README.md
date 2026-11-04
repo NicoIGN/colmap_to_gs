@@ -34,6 +34,7 @@ Options :
 | Option | Description |
 |---|---|
 | `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
+| `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
 | `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
 | `--api-url https://une-instance/api` | Autre API compatible ; défaut : catalogue fédéré `explore.panoramax.fr` |
 | `--timeout 120` | Délai réseau par requête, en secondes |
@@ -78,6 +79,11 @@ Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau
 HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
 par une petite zone et respecter les conditions d'utilisation et d'attribution
 des instances et des photos.
+
+`--image-max` arrête la pagination dès que la limite de photos retenues dans la
+bbox est atteinte. La limite inclut les images déjà présentes et réutilisées :
+par exemple, relancer avec `--image-max 400` peut reprendre jusqu'à 400 images,
+sans compter le nombre de nouveaux téléchargements uniquement.
 
 ## Références
 

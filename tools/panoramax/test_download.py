@@ -100,6 +100,67 @@ class DownloadTest(unittest.TestCase):
             with self.assertRaises(download.argparse.ArgumentTypeError):
                 download.parse_bbox(value)
 
+    def test_image_max_stops_pagination_at_total_selection_limit(self):
+        requests = []
+        photo = b"\xff\xd8test-image\xff\xd9"
+        lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
+
+        def feature(identifier):
+            return {
+                "type": "Feature", "id": identifier, "collection": "sequence",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "assets": {"hd": {"href": "/photo.jpg", "type": "image/jpeg"}},
+            }
+
+        pages = [
+            {"features": [feature("first")], "links": [{"rel": "next", "href": "?page=2"}]},
+            {"features": [feature("second")], "links": []},
+        ]
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                requests.append(self.path)
+                is_image = self.path == "/photo.jpg"
+                payload = photo if is_image else json.dumps(
+                    pages[1 if self.path.endswith("page=2") else 0]
+                ).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg" if is_image else "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                with tempfile.TemporaryDirectory() as temporary:
+                    output = Path(temporary)
+                    args = Namespace(
+                        bbox=(651000, 6861000, 652000, 6862000),
+                        output_dir=output,
+                        api_url=f"http://127.0.0.1:{server.server_port}/api",
+                        datetime=None, quality="hd", timeout=5, image_max=1,
+                    )
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        self.assertEqual(download.run(args), 0)
+                    summary = json.loads((output / "summary.json").read_text())
+                    self.assertEqual(summary["selected"], 1)
+                    self.assertEqual(summary["downloaded"], 1)
+                    self.assertEqual(summary["pages"], 1)
+                    self.assertEqual(len(list((output / "images").glob("*.jpg"))), 1)
+                    self.assertNotIn("/api/search?page=2", requests)
+                    self.assertEqual(download.parse_positive_int("400"), 400)
+                    for invalid in ("0", "-1", "1.5", "invalid"):
+                        with self.assertRaises(download.argparse.ArgumentTypeError):
+                            download.parse_positive_int(invalid)
+            finally:
+                server.shutdown()
+                thread.join()
+
     def test_invalid_geometry(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):

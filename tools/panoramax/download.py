@@ -102,6 +102,16 @@ def parse_bbox(text):
     return bbox
 
 
+def parse_positive_int(text):
+    try:
+        value = int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Un entier positif est requis.") from exc
+    if value < 1:
+        raise argparse.ArgumentTypeError("La valeur doit être supérieure ou égale à 1.")
+    return value
+
+
 def item_in_bbox(feature, bbox, to_l93):
     geometry = feature.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") != "Point":
@@ -122,6 +132,9 @@ def item_in_bbox(feature, bbox, to_l93):
 
 
 def run(args):
+    image_max = getattr(args, "image_max", None)
+    if image_max is not None and image_max < 1:
+        raise ValueError("--image-max doit être supérieur ou égal à 1.")
     output = args.output_dir.expanduser().resolve()
     for folder in ("images", "metadata", "pages"):
         (output / folder).mkdir(parents=True, exist_ok=True)
@@ -147,6 +160,7 @@ def run(args):
         "crs": "EPSG:2154", "bbox": args.bbox, "bbox_wgs84": geographic,
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
+        "image_max": image_max,
     })
     counts = {"pages": 0, "selected": 0, "downloaded": 0, "reused": 0, "failed": 0}
     seen_items, seen_pages = set(), set()
@@ -163,6 +177,8 @@ def run(args):
             counts["pages"] += 1
             atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
             for feature in page["features"]:
+                if image_max is not None and counts["selected"] >= image_max:
+                    break
                 if not isinstance(feature, dict) or not feature.get("id"):
                     raise ValueError("Photo STAC sans identifiant.")
                 key = str(feature.get("collection", "")) + "/" + str(feature["id"])
@@ -224,6 +240,9 @@ def run(args):
                 f"{counts['failed']} erreurs", flush=True,
             )
             next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
+            if image_max is not None and counts["selected"] >= image_max:
+                url = None
+                continue
             if len(next_links) > 1:
                 raise ValueError("Plusieurs liens next : pagination ambiguë.")
             if next_links:
@@ -247,6 +266,11 @@ def main():
     parser.add_argument("--api-url", default="https://explore.panoramax.fr/api", help="Racine API STAC, sans /search")
     parser.add_argument("--datetime", help="Date ou intervalle STAC ISO 8601 (début/fin)")
     parser.add_argument("--quality", choices=("hd", "sd", "thumb"), default="hd")
+    parser.add_argument(
+        "--image-max",
+        type=parse_positive_int,
+        help="Nombre maximum de photos à sélectionner et télécharger (toutes pages confondues)",
+    )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()
     if not math.isfinite(args.timeout) or args.timeout <= 0:
