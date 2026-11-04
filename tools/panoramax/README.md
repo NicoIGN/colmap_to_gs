@@ -80,10 +80,12 @@ HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commenc
 par une petite zone et respecter les conditions d'utilisation et d'attribution
 des instances et des photos.
 
-`--image-max` arrête la pagination dès que la limite de photos retenues dans la
-bbox est atteinte. La limite inclut les images déjà présentes et réutilisées :
-par exemple, relancer avec `--image-max 400` peut reprendre jusqu'à 400 images,
-sans compter le nombre de nouveaux téléchargements uniquement.
+`--image-max` fixe à la fois le nombre demandé à l'API (`limit`) et le plafond
+total de photos retenues par le script. Cela permet de demander plus que la
+limite API par défaut de 100 lorsque l'instance l'accepte. La limite inclut les
+images déjà présentes et réutilisées : par exemple, `--image-max 400` demande
+jusqu'à 400 résultats et en sélectionne au plus 400 dans la bbox. Si l'API
+retourne un lien `rel=next`, le script le suit jusqu'au plafond.
 
 ## Références
 

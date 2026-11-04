@@ -152,7 +152,8 @@ def run(args):
     geographic = (min(longitudes), min(latitudes), max(longitudes), max(latitudes))
     if not all(math.isfinite(value) for value in geographic) or geographic[0] >= geographic[2]:
         raise ValueError("La bbox Lambert-93 ne produit pas une bbox WGS84 exploitable.")
-    parameters = {"bbox": ",".join(map(str, geographic)), "limit": 100}
+    api_limit = image_max or 100
+    parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
         parameters["datetime"] = args.datetime
     url = args.api_url.rstrip("/") + "/search?" + urlencode(parameters)
@@ -161,6 +162,7 @@ def run(args):
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
+        "api_limit": api_limit,
     })
     counts = {"pages": 0, "selected": 0, "downloaded": 0, "reused": 0, "failed": 0}
     seen_items, seen_pages = set(), set()

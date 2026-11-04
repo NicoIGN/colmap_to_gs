@@ -113,8 +113,7 @@ class DownloadTest(unittest.TestCase):
             }
 
         pages = [
-            {"features": [feature("first")], "links": [{"rel": "next", "href": "?page=2"}]},
-            {"features": [feature("second")], "links": []},
+            {"features": [feature("first"), feature("second")], "links": []},
         ]
 
         class Handler(BaseHTTPRequestHandler):
@@ -143,16 +142,21 @@ class DownloadTest(unittest.TestCase):
                         bbox=(651000, 6861000, 652000, 6862000),
                         output_dir=output,
                         api_url=f"http://127.0.0.1:{server.server_port}/api",
-                        datetime=None, quality="hd", timeout=5, image_max=1,
+                        datetime=None, quality="hd", timeout=5, image_max=2,
                     )
                     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                         self.assertEqual(download.run(args), 0)
                     summary = json.loads((output / "summary.json").read_text())
-                    self.assertEqual(summary["selected"], 1)
-                    self.assertEqual(summary["downloaded"], 1)
+                    self.assertEqual(summary["selected"], 2)
+                    self.assertEqual(summary["downloaded"], 2)
                     self.assertEqual(summary["pages"], 1)
-                    self.assertEqual(len(list((output / "images").glob("*.jpg"))), 1)
-                    self.assertNotIn("/api/search?page=2", requests)
+                    self.assertEqual(len(list((output / "images").glob("*.jpg"))), 2)
+                    from urllib.parse import parse_qs, urlsplit
+                    search_query = parse_qs(urlsplit(requests[0]).query)
+                    self.assertEqual(search_query["limit"], ["2"])
+                    request_metadata = json.loads((output / "request.json").read_text())
+                    self.assertEqual(request_metadata["image_max"], 2)
+                    self.assertEqual(request_metadata["api_limit"], 2)
                     self.assertEqual(download.parse_positive_int("400"), 400)
                     for invalid in ("0", "-1", "1.5", "invalid"):
                         with self.assertRaises(download.argparse.ArgumentTypeError):
