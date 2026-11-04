@@ -489,15 +489,19 @@ Le script utilise `dataparser_transforms.json` — la transformation globale app
 <dataset-dir>/transforms.json      # généré
 ```
 
-### 5.4. Visualisation locale
+### 5.4. Conversion en 3D Tiles
 
-#### 5.4.1. Lancement du serveur
+Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeline `.splat` vers 3D Tiles](tools/splat_to_3dtiles/README.md).
+
+### 5.5. Visualisation locale
+
+#### 5.5.1. Lancement du serveur
 
 ```bash
 python python/server.py
 ```
 
-#### 5.4.2. Accès et arrêt
+#### 5.5.2. Accès et arrêt
 
 Ce script :
 
