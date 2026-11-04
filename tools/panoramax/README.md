@@ -113,3 +113,23 @@ bash scripts/run_spirula_sfm.sh \
 séquence (les noms de fichiers sont des empreintes), `--metric-gps full` et
 `--sensor-pairs --sensor-pair-radius 30`. Un code de sortie 4 signifie que le
 modèle a été écrit sans le repère métrique demandé.
+
+Le préréglage lance d'abord `prepare_sfm.py` :
+
+- seules les images de la taille la plus fréquente sont gardées (une bbox
+  mélange souvent plusieurs appareils : 360° en 2:1, téléphones...) ; elles
+  sont liées par lien physique dans `OUTPUT_DIR/sfm/images`, sans toucher
+  aux originaux ; `--keep-size LxH` impose une autre taille ;
+- la focale initiale est déduite du champ de vue horizontal des métadonnées,
+  `f = (largeur / 2) / tan(fov / 2)`, soit environ 1877 px pour une imajbox
+  4096×2160 à 95° ; l'EXIF HD n'ayant pas de focale, Spirula la devinerait
+  sinon très loin ; `--focal` reste prioritaire ;
+- le choix est résumé dans `OUTPUT_DIR/sfm/selection.json`.
+
+`--no-prepare` lance Spirula sur le dataset tel quel. Le script se lance
+seul :
+
+```bash
+python3 tools/panoramax/prepare_sfm.py --dataset OUTPUT_DIR \
+  --output-dir OUTPUT_DIR/sfm --dry-run
+```

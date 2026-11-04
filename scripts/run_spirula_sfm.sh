@@ -11,6 +11,8 @@ output_dir="${OUTPUT_DIR:-}"
 dry_run=false
 preset="${PRESET:-}"
 sensor_pairs="${SENSOR_PAIRS:-false}"
+prepare="${PREPARE:-}"
+keep_size="${KEEP_SIZE:-}"
 
 # Compatible avec le Bash 3.2 fourni par macOS.
 # Chaque option correspond à une variable d'environnement :
@@ -50,8 +52,18 @@ Préréglage :
   --preset NAME              video [défaut] | panoramax
                              panoramax : photos individuelles géolocalisées
                              (data-type individual, pairs auto, sans séquence,
-                             metric-gps full, --sensor-pairs, rayon 30 m).
+                             metric-gps full, --sensor-pairs, rayon 30 m)
+                             et préparation des images (voir --prepare).
                              Les autres options l'emportent sur le préréglage.
+
+Préparation (activée par --preset panoramax) :
+  --prepare                  Avant le calcul : garder les images de la taille
+                             la plus fréquente, les lier dans OUTPUT_DIR/images
+                             et déduire --focal du champ de vue des
+                             métadonnées Panoramax (metadata/*.json).
+                             Résumé dans OUTPUT_DIR/selection.json.
+  --no-prepare               Utiliser le dataset tel quel
+  --keep-size LxH            Taille à garder au lieu de la plus fréquente
 
 Séquence vidéo :
   --data-type TYPE           video [défaut] | individual | internet
@@ -105,7 +117,8 @@ Toutes les options à valeur acceptent --option=valeur.
 Une valeur vide retire l'option de la commande transmise.
 
 Variables d'environnement :
-  SPIRULA_BIN, DATASET, OUTPUT_DIR, PRESET, SENSOR_PAIRS, puis noms d'options en majuscules
+  SPIRULA_BIN, DATASET, OUTPUT_DIR, PRESET, SENSOR_PAIRS, PREPARE,
+  KEEP_SIZE, puis noms d'options en majuscules
   avec "_" : DATA_TYPE, MAX_IMAGE_SIZE, ALIKED_MAX_FEATURES, etc.
   Une variable vide retire l'option correspondante.
 
@@ -183,6 +196,7 @@ case "$preset" in
     set_option metric-gps full
     set_option sensor-pair-radius 30
     sensor_pairs=true
+    [[ -n "$prepare" ]] || prepare=true
     ;;
   *) die "Préréglage inconnu : $preset (video | panoramax)" ;;
 esac
@@ -206,6 +220,23 @@ while [[ $# -gt 0 ]]; do
     --no-sensor-pairs)
       sensor_pairs=false
       shift
+      ;;
+    --prepare)
+      prepare=true
+      shift
+      ;;
+    --no-prepare)
+      prepare=false
+      shift
+      ;;
+    --keep-size=*)
+      keep_size="${1#*=}"
+      shift
+      ;;
+    --keep-size)
+      [[ $# -ge 2 ]] || die "Valeur manquante pour --keep-size"
+      keep_size="$2"
+      shift 2
       ;;
     --preset=*)
       shift
@@ -261,6 +292,35 @@ else
   command -v "$spirula_bin" >/dev/null 2>&1 ||
     die "Commande introuvable : $spirula_bin"
 fi
+
+case "$prepare" in
+  1|true|yes|on)
+    prepare_cmd=(
+      python3 "$script_dir/../tools/panoramax/prepare_sfm.py"
+      --dataset "$dataset" --output-dir "$output_dir" --shell
+    )
+    [[ -z "$keep_size" ]] || prepare_cmd+=(--size "$keep_size")
+    [[ "$dry_run" != true ]] || prepare_cmd+=(--dry-run)
+    prepare_output="$("${prepare_cmd[@]}")" || die "Préparation des images échouée"
+    prepared_images=""
+    prepared_focal=""
+    while IFS='=' read -r key value; do
+      case "$key" in
+        images_dir) prepared_images="$value" ;;
+        focal) prepared_focal="$value" ;;
+      esac
+    done <<< "$prepare_output"
+    [[ -n "$prepared_images" ]] || die "La préparation n'a pas indiqué de dossier d'images"
+    dataset="$prepared_images"
+    for ((i = 0; i < ${#option_names[@]}; i++)); do
+      if [[ "${option_names[$i]}" == focal && -z "${option_values[$i]}" ]]; then
+        option_values[$i]="$prepared_focal"
+      fi
+    done
+    ;;
+  0|false|no|off|"") ;;
+  *) die "PREPARE invalide : $prepare" ;;
+esac
 
 # Spirula valide les types numériques, les valeurs autorisées et les
 # compatibilités entre options. Le wrapper ne duplique pas son parseur.
