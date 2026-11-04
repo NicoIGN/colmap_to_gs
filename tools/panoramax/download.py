@@ -20,6 +20,7 @@ from pyproj import Transformer
 from pyproj.exceptions import ProjError
 
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
+SEARCH_LIMIT = 10000
 
 
 class Progress:
@@ -190,7 +191,7 @@ def run(args):
     geographic = (min(longitudes), min(latitudes), max(longitudes), max(latitudes))
     if not all(math.isfinite(value) for value in geographic) or geographic[0] >= geographic[2]:
         raise ValueError("La bbox Lambert-93 ne produit pas une bbox WGS84 exploitable.")
-    api_limit = image_max or 100
+    api_limit = SEARCH_LIMIT
     parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
         parameters["datetime"] = args.datetime
@@ -202,103 +203,120 @@ def run(args):
         "image_max": image_max,
         "api_limit": api_limit,
     })
-    counts = {"pages": 0, "selected": 0, "downloaded": 0, "reused": 0, "failed": 0}
+    counts = {
+        "pages": 0, "available": 0, "selected": 0,
+        "downloaded": 0, "reused": 0, "failed": 0,
+    }
     progress = Progress(image_max)
     seen_items, seen_pages = set(), set()
     body, method = None, "GET"
-    reached_image_max = False
-    with (output / "manifest.jsonl").open("w", encoding="utf-8") as manifest:
-        while url:
-            page_key = (url, method, json.dumps(body, sort_keys=True))
-            if page_key in seen_pages:
-                raise ValueError("Boucle détectée dans la pagination Panoramax.")
-            seen_pages.add(page_key)
-            page = read_json(url, args.timeout, body, method)
-            if not isinstance(page, dict) or not isinstance(page.get("features"), list):
-                raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
-            counts["pages"] += 1
-            atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
-            for feature in page["features"]:
-                if image_max is not None and counts["selected"] >= image_max:
-                    break
-                if not isinstance(feature, dict) or not feature.get("id"):
-                    raise ValueError("Photo STAC sans identifiant.")
-                key = str(feature.get("collection", "")) + "/" + str(feature["id"])
-                if key in seen_items:
-                    continue
-                seen_items.add(key)
-                if not item_in_bbox(feature, args.bbox, to_l93):
-                    continue
-                counts["selected"] += 1
-                name = hashlib.sha256(key.encode("utf-8")).hexdigest()
-                image = output / "images" / f"{name}.jpg"
-                metadata = output / "metadata" / f"{name}.json"
-                record = {
-                    "id": feature["id"], "collection": feature.get("collection"),
-                    "image": str(image.relative_to(output)),
-                    "metadata": str(metadata.relative_to(output)), "source_page": url,
-                }
-                temporary = None
-                try:
-                    asset = feature.get("assets", {}).get(args.quality)
-                    if not isinstance(asset, dict) or not asset.get("href"):
-                        raise ValueError(f"Asset {args.quality} absent pour {feature['id']}.")
-                    asset_url = urljoin(url, asset["href"])
-                    previous = {}
-                    if metadata.is_file():
-                        previous = json.loads(metadata.read_text(encoding="utf-8")).get("download", {})
-                    if (
-                        image.is_file() and image.stat().st_size > 0
-                        and previous.get("url") == asset_url
-                        and previous.get("bytes") == image.stat().st_size
-                    ):
-                        size = image.stat().st_size
-                        counts["reused"] += 1
-                        record["status"] = "reused"
-                    else:
-                        fd, temporary_name = tempfile.mkstemp(dir=image.parent, suffix=".part")
-                        os.close(fd)
-                        temporary = Path(temporary_name)
-                        size = download_image(asset_url, temporary, args.timeout)
-                        os.replace(temporary, image)
-                        counts["downloaded"] += 1
-                        record["status"] = "downloaded"
-                    atomic_json(metadata, {
-                        "feature": feature, "source_page": url,
-                        "download": {"url": asset_url, "quality": args.quality, "bytes": size},
-                    })
-                except (OSError, ValueError, HTTPException) as exc:
-                    counts["failed"] += 1
-                    record.update(status="failed", error=str(exc))
-                    print(f"Erreur pour {feature['id']} : {exc}", file=sys.stderr)
-                finally:
-                    if temporary is not None:
-                        temporary.unlink(missing_ok=True)
-                progress.update(counts)
-                manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
-                manifest.flush()
-            print(
-                f"Page {counts['pages']} : {counts['selected']} photos sélectionnées, "
-                f"{counts['downloaded']} téléchargées, {counts['reused']} réutilisées, "
-                f"{counts['failed']} erreurs", flush=True,
-            )
-            next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
-            if image_max is not None and counts["selected"] >= image_max:
-                reached_image_max = True
-                url = None
+    candidates = []
+    api_features = 0
+    last_page_count = 0
+    while url:
+        page_key = (url, method, json.dumps(body, sort_keys=True))
+        if page_key in seen_pages:
+            raise ValueError("Boucle détectée dans la pagination Panoramax.")
+        seen_pages.add(page_key)
+        page = read_json(url, args.timeout, body, method)
+        if not isinstance(page, dict) or not isinstance(page.get("features"), list):
+            raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
+        counts["pages"] += 1
+        last_page_count = len(page["features"])
+        api_features += last_page_count
+        atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
+        for feature in page["features"]:
+            if not isinstance(feature, dict) or not feature.get("id"):
+                raise ValueError("Photo STAC sans identifiant.")
+            key = str(feature.get("collection", "")) + "/" + str(feature["id"])
+            if key in seen_items:
                 continue
-            if len(next_links) > 1:
-                raise ValueError("Plusieurs liens next : pagination ambiguë.")
-            if next_links:
-                link = next_links[0]
-                url = urljoin(url, link["href"])
-                method = link.get("method", "GET").upper()
-                if method not in ("GET", "POST") or link.get("merge"):
-                    raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
-                body = link.get("body") if method == "POST" else None
-            else:
-                url = None
-    progress.finish(counts, capped=reached_image_max)
+            seen_items.add(key)
+            if item_in_bbox(feature, args.bbox, to_l93):
+                candidates.append((feature, url, key))
+        next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
+        if len(next_links) > 1:
+            raise ValueError("Plusieurs liens next : pagination ambiguë.")
+        if next_links:
+            link = next_links[0]
+            url = urljoin(url, link["href"])
+            method = link.get("method", "GET").upper()
+            if method not in ("GET", "POST") or link.get("merge"):
+                raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
+            body = link.get("body") if method == "POST" else None
+        else:
+            url = None
+
+    counts["available"] = len(candidates)
+    total_is_exact = last_page_count < api_limit
+    counts["available_is_exact"] = total_is_exact
+    selected = candidates[:image_max] if image_max is not None else candidates
+    progress = Progress(len(selected))
+    print(
+        f"Photos dans la bbox Lambert-93 : "
+        f"{counts['available']}{'' if total_is_exact else '+'}"
+    )
+    if image_max is not None:
+        print(f"Limite appliquée : {len(selected)} photo(s) sur {counts['available']} disponibles")
+    if not total_is_exact:
+        print(
+            f"AVERTISSEMENT : l'API a atteint la limite de recherche "
+            f"{api_limit}; le total réel peut être supérieur.",
+            file=sys.stderr,
+        )
+
+    with (output / "manifest.jsonl").open("w", encoding="utf-8") as manifest:
+        for feature, source_url, key in selected:
+            counts["selected"] += 1
+            name = hashlib.sha256(key.encode("utf-8")).hexdigest()
+            image = output / "images" / f"{name}.jpg"
+            metadata = output / "metadata" / f"{name}.json"
+            record = {
+                "id": feature["id"], "collection": feature.get("collection"),
+                "image": str(image.relative_to(output)),
+                "metadata": str(metadata.relative_to(output)),
+                "source_page": source_url,
+            }
+            temporary = None
+            try:
+                asset = feature.get("assets", {}).get(args.quality)
+                if not isinstance(asset, dict) or not asset.get("href"):
+                    raise ValueError(f"Asset {args.quality} absent pour {feature['id']}.")
+                asset_url = urljoin(source_url, asset["href"])
+                previous = {}
+                if metadata.is_file():
+                    previous = json.loads(metadata.read_text(encoding="utf-8")).get("download", {})
+                if (
+                    image.is_file() and image.stat().st_size > 0
+                    and previous.get("url") == asset_url
+                    and previous.get("bytes") == image.stat().st_size
+                ):
+                    size = image.stat().st_size
+                    counts["reused"] += 1
+                    record["status"] = "reused"
+                else:
+                    fd, temporary_name = tempfile.mkstemp(dir=image.parent, suffix=".part")
+                    os.close(fd)
+                    temporary = Path(temporary_name)
+                    size = download_image(asset_url, temporary, args.timeout)
+                    os.replace(temporary, image)
+                    counts["downloaded"] += 1
+                    record["status"] = "downloaded"
+                atomic_json(metadata, {
+                    "feature": feature, "source_page": source_url,
+                    "download": {"url": asset_url, "quality": args.quality, "bytes": size},
+                })
+            except (OSError, ValueError, HTTPException) as exc:
+                counts["failed"] += 1
+                record.update(status="failed", error=str(exc))
+                print(f"Erreur pour {feature['id']} : {exc}", file=sys.stderr)
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
+            progress.update(counts)
+            manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
+            manifest.flush()
+    progress.finish(counts)
     atomic_json(output / "summary.json", counts)
     print(f"Résultats : {output}", flush=True)
     return 1 if counts["failed"] else 0

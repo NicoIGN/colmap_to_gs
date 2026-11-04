@@ -84,12 +84,15 @@ Dans un terminal interactif, une barre de progression affiche les photos
 téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
 trouvées, la barre se termine à 100 % du total effectivement sélectionné.
 
-`--image-max` fixe à la fois le nombre demandé à l'API (`limit`) et le plafond
-total de photos retenues par le script. Cela permet de demander plus que la
-limite API par défaut de 100 lorsque l'instance l'accepte. La limite inclut les
-images déjà présentes et réutilisées : par exemple, `--image-max 400` demande
-jusqu'à 400 résultats et en sélectionne au plus 400 dans la bbox. Si l'API
-retourne un lien `rel=next`, le script le suit jusqu'au plafond.
+Le script demande jusqu'à 10 000 métadonnées à l'API (sans télécharger les
+images à cette étape), compte les photos dont le point est dans la bbox exacte
+Lambert-93, puis affiche ce total et l'écrit dans `summary.json` (`available`,
+`available_is_exact`). Si l'API renvoie 10 000 résultats sur sa dernière page,
+le total affiché est une borne basse (`+`) et un avertissement le précise.
+
+`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
+sans réduire le comptage : par exemple, `--image-max 400` affiche le total
+disponible dans la bbox et en traite au plus 400.
 
 ## Références
 

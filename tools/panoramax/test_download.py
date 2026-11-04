@@ -85,7 +85,10 @@ class DownloadTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                         self.assertEqual(download.run(args), 0)
                         summary = json.loads((output / "summary.json").read_text())
-                        self.assertEqual(summary, {"pages": 2, "selected": 2, "downloaded": 2, "reused": 0, "failed": 0})
+                        self.assertEqual(summary, {
+                            "pages": 2, "available": 2, "available_is_exact": True,
+                            "selected": 2, "downloaded": 2, "reused": 0, "failed": 0,
+                        })
                         self.assertEqual(len(list((output / "images").glob("*.jpg"))), 2)
                         self.assertEqual(len(list((output / "pages").glob("*.json"))), 2)
                         for image in (output / "images").glob("*.jpg"):
@@ -128,7 +131,7 @@ class DownloadTest(unittest.TestCase):
             }
 
         pages = [
-            {"features": [feature("first"), feature("second")], "links": []},
+            {"features": [feature("first"), feature("second"), feature("third")], "links": []},
         ]
 
         class Handler(BaseHTTPRequestHandler):
@@ -162,16 +165,19 @@ class DownloadTest(unittest.TestCase):
                     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
                         self.assertEqual(download.run(args), 0)
                     summary = json.loads((output / "summary.json").read_text())
+                    self.assertEqual(summary["available"], 3)
+                    self.assertEqual(summary["available_is_exact"], True)
                     self.assertEqual(summary["selected"], 2)
                     self.assertEqual(summary["downloaded"], 2)
                     self.assertEqual(summary["pages"], 1)
                     self.assertEqual(len(list((output / "images").glob("*.jpg"))), 2)
                     from urllib.parse import parse_qs, urlsplit
                     search_query = parse_qs(urlsplit(requests[0]).query)
-                    self.assertEqual(search_query["limit"], ["2"])
+                    self.assertEqual(search_query["limit"], [str(download.SEARCH_LIMIT)])
                     request_metadata = json.loads((output / "request.json").read_text())
                     self.assertEqual(request_metadata["image_max"], 2)
-                    self.assertEqual(request_metadata["api_limit"], 2)
+                    self.assertEqual(request_metadata["api_limit"], download.SEARCH_LIMIT)
+                    self.assertEqual(summary["available"], 3)
                     self.assertEqual(download.parse_positive_int("400"), 400)
                     for invalid in ("0", "-1", "1.5", "invalid"):
                         with self.assertRaises(download.argparse.ArgumentTypeError):
