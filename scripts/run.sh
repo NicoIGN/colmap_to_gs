@@ -10,7 +10,6 @@ MODEL="splatfacto"
 # =========================================
 # Defaults
 # =========================================
-OUTPUT_ROOT="runs/default"
 DATASET_DIR=""
 GSPLAT_PROFILE=""
 MAX_JOBS=2
@@ -22,7 +21,7 @@ IGNORE_PROXY=false
 USE_DEFAULTS=False
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+OUTPUT_ROOT="$SCRIPT_DIR/runs/default"
 
 # =========================================
 # Utils
@@ -66,7 +65,7 @@ Expected layout:
   transforms.json est généré automatiquement depuis le modèle COLMAP.
 
 Options:
-  --output-dir, -o <dir>      Output root (default: runs/default)
+  --output-dir, -o <dir>      Output root (default: scripts/runs/default)
   --name <name>               Basename export PLY (default: gsplat_<timestamp>)
   --gsplat-profile <name>     fast | balanced | quality | quality_plus
   --use-defaults              ignoring all customized params
@@ -102,6 +101,7 @@ done
 
 [ -n "${DATASET_DIR}" ] || { show_help; die "--dataset-dir is required"; }
 DATASET_DIR="$(cd "$DATASET_DIR" && pwd)"
+case "$OUTPUT_ROOT" in /*) ;; *) OUTPUT_ROOT="$PWD/$OUTPUT_ROOT" ;; esac
 BASENAME="${BASENAME:-gsplat_$(date +%Y%m%d_%H%M%S)}"
 
 # =========================================

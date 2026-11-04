@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-spirula_bin="${SPIRULA_BIN:-./build/spirula}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=spirula_common.sh
+source "$script_dir/spirula_common.sh"
+
+spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"
 output_dir="${OUTPUT_DIR:-}"
 clean="${CLEAN:-false}"
@@ -44,7 +48,8 @@ Usage:
 Options:
   --spirula-bin PATH    Chemin vers l'exécutable Spirula
                         Env: SPIRULA_BIN
-                        Défaut: ./build/spirula
+                        Défaut: spirula du PATH, sinon
+                          <dépôt>/../spirula-studio/build/spirula
 
   --dataset PATH        Dossier du dataset d'entrée
                         Env: DATASET

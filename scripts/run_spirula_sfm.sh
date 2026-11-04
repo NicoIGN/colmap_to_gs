@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-spirula_bin="${SPIRULA_BIN:-/Users/nbellaiche/DATA/dev/gsplat/spirula-studio/build/spirula}"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=spirula_common.sh
+source "$script_dir/spirula_common.sh"
+
+spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"
 output_dir="${OUTPUT_DIR:-}"
 dry_run=false
@@ -37,7 +41,8 @@ Usage :
   bash run_spirula_sfm.sh --dataset PATH --output-dir PATH [options]
 
 Entrées :
-  --spirula-bin PATH         Exécutable Spirula
+  --spirula-bin PATH         Exécutable Spirula ; défaut : spirula du PATH,
+                             sinon <dépôt>/../spirula-studio/build/spirula
   --dataset PATH             Dossier d'images ou dataset contenant images/
   --output-dir PATH          Workspace SFM
 

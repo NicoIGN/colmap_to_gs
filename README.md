@@ -49,6 +49,7 @@ Le pipeline se déroule en plusieurs étapes :
 ├── scripts
 │   ├── run.sh                     # point d'entrée du pipeline
 │   ├── run_spirula*.sh            # pipelines Spirula
+│   ├── spirula_common.sh          # exécutable Spirula par défaut
 │   ├── train.sh
 │   └── torch_stack_check.sh       # validation PyTorch / CUDA
 └── tools
@@ -61,6 +62,13 @@ Le pipeline se déroule en plusieurs étapes :
     ├── panoramax/                 # récupération d'images par bbox Lambert-93
     └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
 ```
+
+Tous les scripts peuvent être lancés depuis n'importe quel dossier : les
+chemins relatifs passés en argument sont résolus depuis le dossier courant, et
+les scripts du dépôt sont retrouvés à partir de leur propre emplacement.
+L'exécutable Spirula est, par ordre de priorité, `--spirula-bin`,
+`SPIRULA_BIN`, `spirula` dans le `PATH`, puis
+`<dépôt>/../spirula-studio/build/spirula`.
 
 ### 1.3. Résumé du flux
 

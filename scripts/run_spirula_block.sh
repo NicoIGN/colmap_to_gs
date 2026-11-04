@@ -2,8 +2,10 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=spirula_common.sh
+source "$script_dir/spirula_common.sh"
 
-spirula_bin="${SPIRULA_BIN:-./build/spirula}"
+spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 sparse_dir="${SPARSE_DIR:-}"
 images_dir="${IMAGES_DIR:-}"
 output_dir="${OUTPUT_DIR:-}"
