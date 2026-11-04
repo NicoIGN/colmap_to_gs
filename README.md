@@ -4,6 +4,8 @@ Ce dépôt entraîne un modèle **Gaussian Splatting** avec **Nerfstudio / Splat
 
 ## Sommaire
 
+Télécharger des images géolocalisées : [extraction Panoramax par bbox Lambert-93](tools/panoramax/README.md).
+
 0. [Guide utilisateur](doc/guide_utilisateur.md)
 1. [Présentation du projet](#1-présentation-du-projet)
 2. [Installation et prérequis](#2-installation-et-prérequis)
