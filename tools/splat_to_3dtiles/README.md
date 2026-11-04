@@ -6,6 +6,8 @@ Ce sous-outil convertit un `.splat` produit par ce dépôt en tileset 3D Tiles 1
 
 Cette première version vise les `.splat` produits par `python/export_ply.py` après le géoréférencement GPX de `python/georef_colmap_from_gpx.py`. Les positions doivent être en repère **local ENU (Est, Nord, Haut), en mètres**, et l'origine WGS84 `[latitude, longitude, hauteur]` doit provenir du `georef_summary.json` du même traitement.
 
+Le `georef_summary.json` de ce dépôt contient un tableau `models` et pointe vers un `georef_stats.json` par modèle. Le convertisseur lit l'origine ENU dans ce fichier de statistiques. Pour un résumé avec un seul modèle, celui-ci est sélectionné automatiquement ; s'il y en a plusieurs, indique le modèle avec `--model`.
+
 Le script valide ces métadonnées et les passe au convertisseur 3D Tiles. Il refuse les fichiers sans rapport géographique compatible au lieu de deviner le placement. Les données altimétriques du dépôt sont les altitudes GPX brutes, sans correction de géoïde ; le placement vertical dans Cesium hérite de cette limite.
 
 ## Prérequis
@@ -26,6 +28,17 @@ Le premier lancement du convertisseur peut ouvrir son inspecteur ; la commande c
 python3 tools/splat_to_3dtiles/convert.py \
   --input /chemin/vers/scene.splat \
   --georef-summary /chemin/vers/georef_summary.json \
+  --output-dir /chemin/vers/scene_tiles \
+  --no-open-inspector
+```
+
+Pour un résumé contenant plusieurs modèles :
+
+```bash
+python3 tools/splat_to_3dtiles/convert.py \
+  --input /chemin/vers/scene.splat \
+  --georef-summary /chemin/vers/georef_summary.json \
+  --model "." \
   --output-dir /chemin/vers/scene_tiles \
   --no-open-inspector
 ```

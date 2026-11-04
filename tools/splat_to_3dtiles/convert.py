@@ -62,13 +62,52 @@ end_header
 """
 
 
-def read_georeference(path):
+def read_georeference(path, model=None):
     with path.open(encoding="utf-8") as stream:
         metadata = json.load(stream)
 
     reference = metadata.get("output_reference")
+    if reference is None and isinstance(metadata.get("models"), list):
+        models = [
+            item
+            for item in metadata["models"]
+            if isinstance(item, dict)
+            and item.get("status") != "failed"
+            and item.get("stats_file")
+        ]
+        if model is not None:
+            models = [item for item in models if item.get("model") == model]
+            if not models:
+                raise ValueError(f"Modèle absent du résumé ou en échec : {model}")
+        elif len(models) != 1:
+            choices = ", ".join(str(item.get("model")) for item in models)
+            raise ValueError(
+                "Le résumé contient plusieurs modèles ; choisir explicitement "
+                f"avec --model. Modèles disponibles : {choices or 'aucun'}."
+            )
+        if len(models) != 1:
+            raise ValueError("Impossible de déterminer un modèle unique.")
+
+        model_record = models[0]
+        stats_path = Path(model_record["stats_file"]).expanduser()
+        if not stats_path.is_absolute():
+            stats_path = path.parent / stats_path
+        if not stats_path.is_file():
+            model_path = Path(str(model_record.get("model", ".")))
+            stats_path = path.parent / model_path / "georef_stats.json"
+        if not stats_path.is_file():
+            raise ValueError(
+                "Fichier georef_stats.json introuvable pour le modèle "
+                f"{model_record.get('model')}: {stats_path}"
+            )
+        with stats_path.open(encoding="utf-8") as stream:
+            metadata = json.load(stream)
+        reference = metadata.get("output_reference")
+
     if not isinstance(reference, dict) or reference.get("type") != "local_ENU":
-        raise ValueError("Le georef_summary doit décrire un repère local_ENU.")
+        raise ValueError(
+            "Le rapport de géoréférencement doit décrire un repère local_ENU."
+        )
     if reference.get("axes") != ["East", "North", "Up"]:
         raise ValueError("Le repère attendu doit avoir les axes East, North, Up.")
     if reference.get("units") != "meters":
@@ -139,6 +178,10 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="Fichier .splat en repère local ENU")
     parser.add_argument("--georef-summary", required=True, type=Path, help="georef_summary.json de georef_colmap_from_gpx.py")
+    parser.add_argument(
+        "--model",
+        help="Modèle du résumé à utiliser (requis si le rapport en contient plusieurs)",
+    )
     parser.add_argument("--output-dir", required=True, type=Path, help="Dossier de sortie 3D Tiles")
     parser.add_argument(
         "--converter",
@@ -169,7 +212,7 @@ def main():
         )
 
     try:
-        latitude, longitude, height = read_georeference(georef_path)
+        latitude, longitude, height = read_georeference(georef_path, args.model)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         parser.error(str(exc))
 
