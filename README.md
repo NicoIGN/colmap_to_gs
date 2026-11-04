@@ -4,6 +4,7 @@ Ce dépôt entraîne un modèle **Gaussian Splatting** avec **Nerfstudio / Splat
 
 ## Sommaire
 
+0. [Guide utilisateur](doc/guide_utilisateur.md)
 1. [Présentation du projet](#1-présentation-du-projet)
 2. [Installation et prérequis](#2-installation-et-prérequis)
 3. [Préparation du dataset](#3-préparation-du-dataset)
@@ -47,10 +48,10 @@ Le pipeline se déroule en plusieurs étapes :
 │   ├── clean_ply.py               # nettoyage du .ply exporté
 │   ├── server.py                  # serveur de visualisation
 │   ├── html/index.html            # page de visualisation
-│   └── torch_stack_check.py
 └── scripts
     ├── run.sh                     # point d'entrée du pipeline
     ├── train.sh
+    ├── torch_stack_check.sh       # validation PyTorch / CUDA
     ├── export_splat_to_ply.sh
     └── clean_ply.sh
 ```
@@ -173,7 +174,7 @@ Le dossier produit peut être passé directement à `scripts/run.sh --dataset-di
 └── sparse_pc.ply
 ```
 
-Le fichier `transforms.json` requis par Nerfstudio est généré, et écrasé, dans `<dataset-dir>/transforms.json` à chaque lancement.
+Le fichier `transforms.json` requis par Nerfstudio est généré dans `<dataset-dir>/transforms.json` s'il n'existe pas déjà. Un fichier existant est conservé ; supprime-le explicitement si tu souhaites le régénérer depuis le modèle COLMAP.
 
 #### 3.2.2. Nuage initial : `sparse_pc.ply`
 

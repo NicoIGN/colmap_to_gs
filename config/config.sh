@@ -12,7 +12,7 @@ SKIP_EXPORT=false
 # CONDA
 ############################
 
-CONDA_ENV_FILE="environment/conda_colab.yml"
+CONDA_ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/environment/ign.slurm/conda_env.yml"
 CONDA_ENV_NAME="gsplat"
 
 ############################

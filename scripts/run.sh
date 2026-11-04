@@ -224,7 +224,7 @@ fi
 if [ "$SKIP_CONDA" = false ]; then
   source "$(conda info --base)/etc/profile.d/conda.sh"
   conda activate "$CONDA_ENV_NAME" || die "Cannot activate conda env: $CONDA_ENV_NAME"
-  bash $SCRIPT_DIR/torch_stack_check.sh
+  bash "$SCRIPT_DIR/torch_stack_check.sh"
 else
   echo "⏩ Skipping conda setup"
 fi

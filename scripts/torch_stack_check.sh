@@ -1,7 +1,8 @@
 #!/bin/bash
 set -e
 
-LOG_FILE="torch_stack_check.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/torch_stack_check.log"
 echo "🧪 Torch stack validation starting..." | tee "$LOG_FILE"
 
 run_check () {
