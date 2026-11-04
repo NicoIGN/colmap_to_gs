@@ -22,6 +22,44 @@ from pyproj.exceptions import ProjError
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
 
 
+class Progress:
+    def __init__(self, total):
+        self.total = total
+        self.current = 0
+        self.enabled = sys.stderr.isatty()
+
+    def update(self, counts):
+        if not self.enabled:
+            return
+        self.current += 1
+        self.render(counts)
+
+    def render(self, counts):
+        width = 28
+        if self.total:
+            fraction = min(self.current / self.total, 1)
+            filled = int(width * fraction)
+            bar = f"[{'#' * filled}{'-' * (width - filled)}] {fraction:6.1%}"
+            progress = f"{self.current}/{self.total}"
+        else:
+            bar = f"[{'#' * (self.current % (width + 1)):<{width}}]"
+            progress = f"{self.current} sélectionnées"
+        message = (
+            f"\r{bar} {progress} | "
+            f"{counts['downloaded']} téléchargées, "
+            f"{counts['reused']} réutilisées, "
+            f"{counts['failed']} erreurs"
+        )
+        print(message, end="", file=sys.stderr, flush=True)
+
+    def finish(self, counts, capped=False):
+        if self.enabled and self.current:
+            if self.total and not capped:
+                self.total = self.current
+                self.render(counts)
+            print(file=sys.stderr, flush=True)
+
+
 def atomic_json(path, value):
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, delete=False
@@ -165,8 +203,10 @@ def run(args):
         "api_limit": api_limit,
     })
     counts = {"pages": 0, "selected": 0, "downloaded": 0, "reused": 0, "failed": 0}
+    progress = Progress(image_max)
     seen_items, seen_pages = set(), set()
     body, method = None, "GET"
+    reached_image_max = False
     with (output / "manifest.jsonl").open("w", encoding="utf-8") as manifest:
         while url:
             page_key = (url, method, json.dumps(body, sort_keys=True))
@@ -234,6 +274,7 @@ def run(args):
                 finally:
                     if temporary is not None:
                         temporary.unlink(missing_ok=True)
+                progress.update(counts)
                 manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
                 manifest.flush()
             print(
@@ -243,6 +284,7 @@ def run(args):
             )
             next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
             if image_max is not None and counts["selected"] >= image_max:
+                reached_image_max = True
                 url = None
                 continue
             if len(next_links) > 1:
@@ -256,6 +298,7 @@ def run(args):
                 body = link.get("body") if method == "POST" else None
             else:
                 url = None
+    progress.finish(counts, capped=reached_image_max)
     atomic_json(output / "summary.json", counts)
     print(f"Résultats : {output}", flush=True)
     return 1 if counts["failed"] else 0

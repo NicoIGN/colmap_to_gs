@@ -19,6 +19,21 @@ spec.loader.exec_module(download)
 
 
 class DownloadTest(unittest.TestCase):
+    def test_terminal_progress_bar_shows_counts_and_finishes(self):
+        stream = io.StringIO()
+        stream.isatty = lambda: True
+        counts = {"downloaded": 1, "reused": 2, "failed": 0}
+        with patch.object(download.sys, "stderr", stream):
+            progress = download.Progress(4)
+            for _ in range(3):
+                progress.update(counts)
+            progress.finish(counts)
+        output = stream.getvalue()
+        self.assertIn("3/3", output)
+        self.assertIn("1 téléchargées", output)
+        self.assertIn("2 réutilisées", output)
+        self.assertTrue(output.endswith("\n"))
+
     def test_paginated_selection_resume_and_failure(self):
         requests = []
         photo = b"\xff\xd8test-image\xff\xd9"

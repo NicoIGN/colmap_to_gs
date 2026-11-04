@@ -80,6 +80,10 @@ HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commenc
 par une petite zone et respecter les conditions d'utilisation et d'attribution
 des instances et des photos.
 
+Dans un terminal interactif, une barre de progression affiche les photos
+téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
+trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+
 `--image-max` fixe à la fois le nombre demandé à l'API (`limit`) et le plafond
 total de photos retenues par le script. Cela permet de demander plus que la
 limite API par défaut de 100 lorsque l'instance l'accepte. La limite inclut les
