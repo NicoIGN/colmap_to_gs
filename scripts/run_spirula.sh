@@ -14,6 +14,8 @@ sfm_max_res_option="${SFM_MAX_RES_OPTION:-}"
 
 # Nouveaux paramètres SFM GPS / 360
 metric_gps="${METRIC_GPS:-}"
+sensor_pairs="${SENSOR_PAIRS:-false}"
+sensor_pair_radius="${SENSOR_PAIR_RADIUS:-}"
 camera_model="${CAMERA_MODEL:-}"
 
 # Paramètres d'entraînement Gaussian Splats
@@ -79,7 +81,7 @@ Options:
                           exhaustive
                           sequential
                           prefilter
-                          gps
+                        Appariement par proximité GPS : voir --sensor-pairs
 
   --matcher NAME        Méthode d'appariement SFM
                         Env: MATCHER
@@ -93,16 +95,31 @@ Options:
                           loma-l
                           loma-g
 
-  --metric-gps MODE     Active le repère métrique via GPS EXIF
+  --metric-gps MODE     Repère métrique ENU via le GPS EXIF des images
                         Env: METRIC_GPS
+                        Défaut: celui de Spirula (auto)
                         Valeurs:
-                          horizontal
-                          3d
+                          auto        full si l'EXIF a une altitude
+                          none
+                          horizontal  latitude/longitude seulement
+                          full        latitude/longitude/altitude
+                        (3d est accepté comme alias de full)
+
+  --sensor-pairs        Apparie aussi les images proches selon le GPS EXIF
+                        Env: SENSOR_PAIRS
+                        Défaut: false
+
+  --sensor-pair-radius X
+                        Rayon GPS en mètres pour --sensor-pairs
+                        Env: SENSOR_PAIR_RADIUS
+                        Défaut: celui de Spirula (20)
 
   --camera-model NAME   Force un modèle caméra SFM
                         Env: CAMERA_MODEL
                         Valeurs:
-                          equirect
+                          simple-pinhole pinhole radial opencv full-opencv
+                          opencv-fisheye thin-prism-fisheye equirectangular
+                        (equirect est accepté comme alias de equirectangular)
 
   --sfm-arg ARG         Argument supplémentaire passé tel quel à 'sfm auto'
                         Répétable
@@ -259,6 +276,15 @@ while [[ $# -gt 0 ]]; do
       metric_gps="$2"
       shift 2
       ;;
+    --sensor-pairs)
+      sensor_pairs=true
+      shift
+      ;;
+    --sensor-pair-radius)
+      need_arg "$@"
+      sensor_pair_radius="$2"
+      shift 2
+      ;;
     --camera-model)
       need_arg "$@"
       camera_model="$2"
@@ -350,6 +376,14 @@ while [[ $# -gt 0 ]]; do
       metric_gps="${1#*=}"
       shift
       ;;
+    --sensor-pairs=*)
+      sensor_pairs="${1#*=}"
+      shift
+      ;;
+    --sensor-pair-radius=*)
+      sensor_pair_radius="${1#*=}"
+      shift
+      ;;
     --camera-model=*)
       camera_model="${1#*=}"
       shift
@@ -418,7 +452,8 @@ fi
 
 if [[ -n "$pairs" ]]; then
   case "$pairs" in
-    auto|exhaustive|sequential|prefilter|gps) ;;
+    auto|exhaustive|sequential|prefilter) ;;
+    gps) die "--pairs gps n'existe plus dans Spirula : utilise --sensor-pairs" ;;
     *) die "--pairs invalide: $pairs" ;;
   esac
 fi
@@ -432,15 +467,22 @@ fi
 
 if [[ -n "$metric_gps" ]]; then
   case "$metric_gps" in
-    horizontal|3d) ;;
+    auto|none|horizontal|full) ;;
+    3d) metric_gps=full ;;
     *) die "--metric-gps invalide: $metric_gps" ;;
   esac
 fi
 
+if [[ -n "$sensor_pair_radius" ]]; then
+  is_number "$sensor_pair_radius" ||
+    die "--sensor-pair-radius doit être un nombre positif: $sensor_pair_radius"
+fi
+
 if [[ -n "$camera_model" ]]; then
   case "$camera_model" in
-    equirect) ;;
-    *) die "--camera-model invalide (supporté ici: equirect): $camera_model" ;;
+    equirect) camera_model=equirectangular ;;
+    simple-pinhole|pinhole|radial|opencv|full-opencv|opencv-fisheye|thin-prism-fisheye|equirectangular) ;;
+    *) die "--camera-model invalide: $camera_model" ;;
   esac
 fi
 
@@ -527,7 +569,8 @@ echo "Clean                    : $clean_requested"
 echo "Max resolution           : ${max_resolution:-défaut Spirula}"
 echo "Pairs                    : ${pairs:-défaut Spirula}"
 echo "Matcher                  : ${matcher:-défaut Spirula}"
-echo "Metric GPS               : ${metric_gps:-désactivé}"
+echo "Metric GPS               : ${metric_gps:-défaut Spirula (auto)}"
+echo "Sensor pairs             : $sensor_pairs ${sensor_pair_radius:+(rayon ${sensor_pair_radius} m)}"
 echo "Camera model             : ${camera_model:-défaut Spirula}"
 echo "Quality                  : ${quality:-défaut du preset}"
 echo "Cap max                  : ${cap_max:-défaut du preset}"
@@ -566,6 +609,14 @@ run_sfm() {
 
   if [[ -n "$metric_gps" ]]; then
     cmd+=(--metric-gps "$metric_gps")
+  fi
+
+  if is_true "$sensor_pairs"; then
+    cmd+=(--sensor-pairs)
+  fi
+
+  if [[ -n "$sensor_pair_radius" ]]; then
+    cmd+=(--sensor-pair-radius "$sensor_pair_radius")
   fi
 
   if [[ -n "$camera_model" ]]; then

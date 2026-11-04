@@ -94,3 +94,22 @@ python3 -m unittest discover -s tools/panoramax -p 'test_*.py'
 
 Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélection
 géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
+
+## Reconstruction Spirula géoréférencée par l'EXIF
+
+Les JPEG HD de Panoramax conservent le GPS EXIF (latitude, longitude,
+altitude, cap). Spirula s'en sert directement pour placer le modèle dans un
+repère local est-nord-haut en mètres, sans recalage GPX a posteriori :
+
+```bash
+bash scripts/run_spirula_sfm.sh \
+  --spirula-bin /chemin/vers/spirula \
+  --dataset OUTPUT_DIR \
+  --output-dir OUTPUT_DIR/sfm \
+  --preset panoramax
+```
+
+`--preset panoramax` règle `--data-type individual`, `--pairs auto`, aucune
+séquence (les noms de fichiers sont des empreintes), `--metric-gps full` et
+`--sensor-pairs --sensor-pair-radius 30`. Un code de sortie 4 signifie que le
+modèle a été écrit sans le repère métrique demandé.

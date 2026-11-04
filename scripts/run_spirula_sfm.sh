@@ -5,6 +5,8 @@ spirula_bin="${SPIRULA_BIN:-/Users/nbellaiche/DATA/dev/gsplat/spirula-studio/bui
 dataset="${DATASET:-}"
 output_dir="${OUTPUT_DIR:-}"
 dry_run=false
+preset="${PRESET:-}"
+sensor_pairs="${SENSOR_PAIRS:-false}"
 
 # Compatible avec le Bash 3.2 fourni par macOS.
 # Chaque option correspond à une variable d'environnement :
@@ -17,7 +19,7 @@ option_names=(
   prefilter-neighbors
   max-error min-inliers
   camera-mode camera-model focal
-  metric-gps
+  metric-gps sensor-pair-radius
   masks feature-masks image-exposure
   reuse-features reuse-matches
   threads device
@@ -38,6 +40,13 @@ Entrées :
   --spirula-bin PATH         Exécutable Spirula
   --dataset PATH             Dossier d'images ou dataset contenant images/
   --output-dir PATH          Workspace SFM
+
+Préréglage :
+  --preset NAME              video [défaut] | panoramax
+                             panoramax : photos individuelles géolocalisées
+                             (data-type individual, pairs auto, sans séquence,
+                             metric-gps full, --sensor-pairs, rayon 30 m).
+                             Les autres options l'emportent sur le préréglage.
 
 Séquence vidéo :
   --data-type TYPE           video [défaut] | individual | internet
@@ -70,6 +79,9 @@ Caméras :
                              Exemple 360 : equirectangular
   --focal X                  Focale initiale en pixels ; omission = Spirula
   --metric-gps MODE          auto [défaut] | none | horizontal | full
+                             Repère ENU en mètres à partir du GPS EXIF
+  --sensor-pairs             Apparie aussi les images proches selon le GPS
+  --sensor-pair-radius X     Rayon GPS en mètres ; omission = Spirula (20)
 
 Masques et exposition :
   --masks DIR                Masques d'extraction
@@ -88,7 +100,7 @@ Toutes les options à valeur acceptent --option=valeur.
 Une valeur vide retire l'option de la commande transmise.
 
 Variables d'environnement :
-  SPIRULA_BIN, DATASET, OUTPUT_DIR, puis noms d'options en majuscules
+  SPIRULA_BIN, DATASET, OUTPUT_DIR, PRESET, SENSOR_PAIRS, puis noms d'options en majuscules
   avec "_" : DATA_TYPE, MAX_IMAGE_SIZE, ALIKED_MAX_FEATURES, etc.
   Une variable vide retire l'option correspondante.
 
@@ -147,6 +159,29 @@ set_option() {
   die "Option inconnue : --$name ; utilise --help"
 }
 
+# Le préréglage est lu avant les autres options pour qu'elles le surchargent.
+args=("$@")
+for ((i = 0; i < ${#args[@]}; i++)); do
+  case "${args[$i]}" in
+    --) break ;;
+    --preset=*) preset="${args[$i]#*=}" ;;
+    --preset) preset="${args[$((i + 1))]:-}" ;;
+  esac
+done
+
+case "$preset" in
+  ""|video) ;;
+  panoramax)
+    set_option data-type individual
+    set_option pairs auto
+    set_option sequence ""
+    set_option metric-gps full
+    set_option sensor-pair-radius 30
+    sensor_pairs=true
+    ;;
+  *) die "Préréglage inconnu : $preset (video | panoramax)" ;;
+esac
+
 extra_args=()
 
 while [[ $# -gt 0 ]]; do
@@ -158,6 +193,20 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       dry_run=true
       shift
+      ;;
+    --sensor-pairs)
+      sensor_pairs=true
+      shift
+      ;;
+    --no-sensor-pairs)
+      sensor_pairs=false
+      shift
+      ;;
+    --preset=*)
+      shift
+      ;;
+    --preset)
+      shift 2
       ;;
     --)
       shift
@@ -220,6 +269,12 @@ for ((i = 0; i < ${#option_names[@]}; i++)); do
     cmd+=("--${option_names[$i]}" "${option_values[$i]}")
   fi
 done
+
+case "$sensor_pairs" in
+  1|true|yes|on) cmd+=(--sensor-pairs) ;;
+  0|false|no|off|"") ;;
+  *) die "SENSOR_PAIRS invalide : $sensor_pairs" ;;
+esac
 
 if [[ ${#extra_args[@]} -gt 0 ]]; then
   cmd+=("${extra_args[@]}")
