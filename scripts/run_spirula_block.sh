@@ -236,11 +236,12 @@ export_world_splat() {
   [[ -s "$export_transform" ]] || die "Transformation entraînement absente : $export_transform"
   [[ -s "$export_points" ]] || die "Points COLMAP binaires absents : $export_points"
 
-  local max_world_scale="${MAX_WORLD_SCALE:-0.35}"
+  local max_world_scale="${MAX_WORLD_SCALE:-}"
   local min_opacity="${MIN_OPACITY:-0.02}"
   local radius_factor="${RADIUS_FACTOR:-5}"
   is_number "$radius_factor" || die "RADIUS_FACTOR invalide : $radius_factor"
-  is_number "$max_world_scale" || die "MAX_WORLD_SCALE invalide : $max_world_scale"
+  [[ -z "$max_world_scale" ]] || is_number "$max_world_scale" ||
+    die "MAX_WORLD_SCALE invalide : $max_world_scale"
   is_number "$min_opacity" || die "MIN_OPACITY invalide : $min_opacity"
   
   local export_cmd=(
@@ -251,11 +252,11 @@ export_world_splat() {
       --out-ply "$world_splat"
       --format splat
       --radius-factor "$radius_factor"
-      --max-world-scale "$max_world_scale"
       --min-opacity "$min_opacity"
       --batch-size 200000
       --overwrite
   )
+  [[ -z "$max_world_scale" ]] || export_cmd+=(--max-world-scale "$max_world_scale")
 
   log "Nettoyage + conversion monde -> .splat"
   printf '%q ' "${export_cmd[@]}" > "$output_dir/export_command.sh"

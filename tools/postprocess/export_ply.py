@@ -233,6 +233,8 @@ def clean_gaussians(
     world_scale,
     max_world_scale=None,
     min_opacity=0.0,
+    max_scale_factor=10.0,
+    max_removal_fraction=0.2,
 ):
     """Filtre les Gaussians avant leur export.
 
@@ -250,6 +252,14 @@ def clean_gaussians(
     min_opacity :
         Opacité minimale après sigmoid, comprise dans [0, 1[.
         0 désactive le filtre.
+
+    max_scale_factor :
+        Demi-axe maximal relatif à la médiane des plus grands demi-axes.
+        None désactive ce filtre, indépendant des unités du modèle.
+
+    max_removal_fraction :
+        Au-delà de cette fraction des splats restants, ignore le filtre.
+        Avertit dès que plus de 10 % des splats restants sont concernés.
     """
     if not np.isfinite(distance) or distance <= 0:
         raise ValueError("La marge BBOX doit être finie et positive")
@@ -264,6 +274,15 @@ def clean_gaussians(
 
     if not np.isfinite(min_opacity) or not 0 <= min_opacity < 1:
         raise ValueError("L'opacité minimale doit être dans [0, 1[")
+
+    if max_scale_factor is not None and (
+        not np.isfinite(max_scale_factor) or max_scale_factor <= 1
+    ):
+        raise ValueError("Le facteur de taille doit être fini et > 1")
+    if not np.isfinite(max_removal_fraction) or not 0 <= max_removal_fraction <= 1:
+        raise ValueError("La fraction maximale de suppression doit être dans [0, 1]")
+    if batch_size < 1 or len(splats["means"]) == 0:
+        raise ValueError("Lot et nombre de Gaussians doivent être positifs")
 
     bbox_min = colmap.min(axis=0)
     bbox_max = colmap.max(axis=0)
@@ -291,6 +310,17 @@ def clean_gaussians(
             f"<= {max_world_scale:.9g}"
         )
 
+    if max_scale_factor is not None:
+        log_sizes = splats["scales"].max(axis=1)
+        finite_sizes = log_sizes[np.isfinite(splats["scales"]).all(axis=1)]
+        if len(finite_sizes):
+            relative_limit = np.median(finite_sizes) + np.log(max_scale_factor)
+            max_train_log_scale = (
+                relative_limit if max_train_log_scale is None
+                else min(relative_limit, max_train_log_scale)
+            )
+            log(f"Filtre de taille relatif : {max_scale_factor:g} × demi-axe maximal médian")
+
     min_opacity_logit = None
 
     if min_opacity > 0:
@@ -300,71 +330,55 @@ def clean_gaussians(
         log(f"Opacité minimale : {min_opacity:.3f}")
 
     count = len(splats["means"])
-    mask = np.zeros(count, dtype=bool)
+    mask = np.ones(count, dtype=bool)
 
-    removed = {
-        "invalid": 0,
-        "outside_bbox": 0,
-        "too_large": 0,
-        "low_opacity": 0,
-    }
-
-    for start in range(0, count, batch_size):
-        stop = min(start + batch_size, count)
+    def valid_attributes(start, stop):
         length = stop - start
-
-        xyz = splats["means"][start:stop]
-        scales = splats["scales"][start:stop]
-        quats = splats["quats"][start:stop]
-
         valid = np.ones(length, dtype=bool)
-
         for array in splats.values():
             block = array[start:stop].reshape(length, -1)
             valid &= np.isfinite(block).all(axis=1)
-
-        # Test robuste sans calculer une norme susceptible de déborder.
+        quats = splats["quats"][start:stop]
         valid &= np.max(np.abs(quats), axis=1) > 1e-12
+        return valid
 
-        removed["invalid"] += int(np.count_nonzero(~valid))
+    filters = [
+        ("attributs invalides", valid_attributes),
+        ("hors BBOX", lambda start, stop: (
+            (splats["means"][start:stop] >= expanded_min)
+            & (splats["means"][start:stop] <= expanded_max)
+        ).all(axis=1)),
+    ]
+    if max_train_log_scale is not None:
+        filters.append(("trop grands", lambda start, stop:
+                        splats["scales"][start:stop].max(axis=1) <= max_train_log_scale))
+    if min_opacity_logit is not None:
+        filters.append(("faible opacité", lambda start, stop:
+                        splats["opacity"][start:stop] >= min_opacity_logit))
 
-        inside_bbox = (
-            (xyz >= expanded_min) & (xyz <= expanded_max)
-        ).all(axis=1)
-
-        removed["outside_bbox"] += int(
-            np.count_nonzero(valid & ~inside_bbox)
-        )
-        valid &= inside_bbox
-
-        if max_train_log_scale is not None:
-            size_ok = scales.max(axis=1) <= max_train_log_scale
-
-            removed["too_large"] += int(
-                np.count_nonzero(valid & ~size_ok)
-            )
-            valid &= size_ok
-
-        if min_opacity_logit is not None:
-            opacity_ok = (
-                splats["opacity"][start:stop] >= min_opacity_logit
-            )
-
-            removed["low_opacity"] += int(
-                np.count_nonzero(valid & ~opacity_ok)
-            )
-            valid &= opacity_ok
-
-        mask[start:stop] = valid
+    for label, predicate in filters:
+        remaining = int(np.count_nonzero(mask))
+        if not remaining:
+            break
+        candidate = mask.copy()
+        for start in range(0, count, batch_size):
+            stop = min(start + batch_size, count)
+            candidate[start:stop] &= predicate(start, stop)
+        removed = remaining - int(np.count_nonzero(candidate))
+        log(f"Filtre {label} : {removed}/{remaining} suppressions proposées ({removed / remaining:.1%})")
+        if removed > 0.1 * remaining:
+            log(f"AVERTISSEMENT : filtre {label}, plus de 10 % des splats restants concernés")
+        if removed > max_removal_fraction * remaining:
+            log(f"AVERTISSEMENT : filtre {label} ignoré (plus de {max_removal_fraction:.0%})")
+            if label == "attributs invalides":
+                raise ValueError(
+                    "Attributs invalides conservés : export impossible. "
+                    "Aucun fichier remplacé."
+                )
+            continue
+        mask = candidate
 
     kept = int(np.count_nonzero(mask))
-
-    # Compteurs exclusifs : chaque suppression est comptée
-    # dans le premier filtre qui l'a rejetée.
-    log(f"Supprimés — attributs invalides : {removed['invalid']}")
-    log(f"Supprimés — hors BBOX : {removed['outside_bbox']}")
-    log(f"Supprimés — trop grands : {removed['too_large']}")
-    log(f"Supprimés — faible opacité : {removed['low_opacity']}")
     log(
         f"Gaussians conservés : {kept}/{count} "
         f"({kept / count * 100:.1f} %)"
@@ -493,6 +507,10 @@ def main():
     parser.add_argument("--max-points", type=int, default=4_000_000)
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--max-scale-factor", type=float, default=10.0,
+                        help="Demi-axe maximal / médiane des demi-axes maximaux (défaut : 10)")
+    parser.add_argument("--max-removal-fraction", type=float, default=0.2,
+                        help="Ignorer chaque filtre au-delà de cette fraction des splats restants (défaut : 0.2)")
     parser.add_argument( "--max-world-scale",type=float,default=None,
         help=(
             "Demi-axe maximal d'un Gaussian dans les unités monde COLMAP. "
@@ -538,6 +556,10 @@ def main():
         parser.error("--max-world-scale doit être fini et positif")
     if not np.isfinite(args.min_opacity) or not 0 <= args.min_opacity < 1:
         parser.error("--min-opacity doit être dans [0, 1[")
+    if not np.isfinite(args.max_scale_factor) or args.max_scale_factor <= 1:
+        parser.error("--max-scale-factor doit être fini et > 1")
+    if not np.isfinite(args.max_removal_fraction) or not 0 <= args.max_removal_fraction <= 1:
+        parser.error("--max-removal-fraction doit être dans [0, 1]")
         
     matrix, rotation, scale = load_transform(transform_path)
 
@@ -560,6 +582,8 @@ def main():
         world_scale=scale,
         max_world_scale=args.max_world_scale,
         min_opacity=args.min_opacity,
+        max_scale_factor=args.max_scale_factor,
+        max_removal_fraction=args.max_removal_fraction,
     )
 
     log("Transformation vers le monde et écriture SPLAT...")
