@@ -53,6 +53,23 @@ Les commentaires `offsetx=0`, `offsety=0`, `offsetz=0` du PLY identifient le rep
 
 ## Validation
 
+Un lanceur local est fourni, sans dépendance Python externe ni jeton Cesium ion :
+
+```bash
+bash tools/splat_to_3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
+```
+
+Il ouvre une page CesiumJS centrée sur le tileset, avec un fond OpenStreetMap
+et un bouton pour revenir à la scène. `--port 8080` permet de changer de port ;
+`--no-open` désactive l'ouverture automatique du navigateur. Le serveur écoute
+uniquement sur `127.0.0.1` et s'arrête avec `Ctrl+C`.
+
+Une connexion Internet est nécessaire pour CesiumJS (version 1.147.0, chargée depuis
+jsDelivr) et le fond OSM. Aucun fichier du tileset n'est envoyé à un service externe.
+Le serveur expose les fichiers situés dans le dossier contenant le `tileset.json`,
+mais pas ceux situés en dehors : les contenus référencés doivent donc se trouver
+sous ce dossier. Le fond est sans relief (ellipsoïde WGS84), pas un modèle de terrain.
+
 Après conversion, ouvrir le tileset dans CesiumJS ou l'inspecteur 3D Tiles et vérifier le placement contre des repères connus. Vérifier également l'altitude : un alignement horizontal correct ne garantit pas la cohérence du référentiel vertical.
 
 Cette version ne prend pas en charge les `.splat` en coordonnées projetées (par exemple Lambert-93) ou ECEF, ni d'autres conventions d'axes. Ces entrées nécessitent une transformation cartographique explicite et ne doivent pas être passées en mode ENU.

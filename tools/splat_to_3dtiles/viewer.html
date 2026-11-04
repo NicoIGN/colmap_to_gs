@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gaussian Splats — 3D Tiles</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Widgets/widgets.css">
+  <style>
+    html, body, #map { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    #panel { position: absolute; top: 12px; left: 12px; max-width: 420px;
+      padding: 12px; background: #222e; color: white; font: 14px sans-serif; border-radius: 6px; }
+    #status { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 8px; }
+    button { margin-right: 8px; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel">
+    <div id="status">Chargement de CesiumJS…</div>
+    <button id="center" disabled>Recentrer</button>
+    <label><input id="bounds" type="checkbox"> Limites des tuiles</label>
+  </div>
+  <script>
+    window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/";
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/cesium@1.147.0/Build/Cesium/Cesium.js"></script>
+  <script>
+    (async () => {
+      const status = document.getElementById("status");
+      let hasError = false;
+      const reportError = (error) => {
+        hasError = true;
+        console.error(error);
+        status.textContent = `Erreur : ${error.message || error}`;
+        status.style.color = "#ffb4b4";
+      };
+      try {
+        if (!window.Cesium) {
+          throw new Error("CesiumJS indisponible. Vérifier la connexion à cdn.jsdelivr.net.");
+        }
+        Cesium.Ion.defaultAccessToken = "";
+        const viewer = new Cesium.Viewer("map", {
+          baseLayer: new Cesium.ImageryLayer(new Cesium.OpenStreetMapImageryProvider({
+            url: "https://tile.openstreetmap.org/",
+          })),
+          baseLayerPicker: false,
+          geocoder: false,
+          animation: false,
+          timeline: false,
+          homeButton: false,
+          sceneModePicker: false,
+          navigationHelpButton: false,
+          terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+        });
+        viewer.scene.globe.depthTestAgainstTerrain = false;
+        viewer.scene.renderError.addEventListener((_scene, error) => reportError(error));
+        status.textContent = "Chargement du tileset…";
+        const response = await fetch("/config.json");
+        if (!response.ok) throw new Error(`Configuration HTTP ${response.status}`);
+        const config = await response.json();
+        const tileset = await Cesium.Cesium3DTileset.fromUrl(config.tilesetUrl);
+        tileset.tileFailed.addEventListener((event) => {
+          reportError(new Error(`${event.message}\n${event.url}`));
+        });
+        viewer.scene.primitives.add(tileset);
+        document.getElementById("bounds").addEventListener("change", (event) => {
+          tileset.debugShowBoundingVolume = event.target.checked;
+        });
+        const center = document.getElementById("center");
+        center.disabled = false;
+        center.addEventListener("click", () => viewer.zoomTo(tileset).catch(reportError));
+        const framed = await viewer.zoomTo(tileset);
+        if (framed === false) throw new Error("Impossible de centrer la caméra sur le tileset.");
+        if (!hasError) {
+          status.textContent = "Fond OpenStreetMap · sol ellipsoïdal sans relief\nGéoréférencement et altitude à contrôler.";
+        }
+      } catch (error) {
+        reportError(error);
+      }
+    })();
+  </script>
+</body>
+</html>
