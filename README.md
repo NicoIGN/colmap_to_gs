@@ -60,6 +60,7 @@ Le pipeline se déroule en plusieurs étapes :
     │   ├── html/                  # interface et modules JavaScript
     │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
     ├── panoramax/                 # récupération d'images par bbox Lambert-93
+    ├── spirula/                   # installation et compilation de Spirula Studio
     └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
 ```
 
