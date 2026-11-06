@@ -142,6 +142,12 @@ fusion voxelisée de leurs splats alignés en un unique fichier final. Il prend
 un fichier de configuration Bash (fichier de code de confiance) ; chaque
 variable et son rôle sont commentés dans `tools/panoramax/config.sh.example`.
 
+Le découpage privilégie les séparations de faible covisibilité et vise des
+blocs d'environ `N / NUM_BLOCKS` images principales (tolérance de 20 %,
+arrondie à l'entier). La connexité prime : des tailles plus inégales sont
+acceptées avec un avertissement si aucun déplacement de frontière sûr
+n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
+
 ```bash
 cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 # Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, CAP_MAX, etc.

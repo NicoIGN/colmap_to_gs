@@ -39,5 +39,15 @@ Les sorties de découpage partielles ou incohérentes ne sont jamais supprimées
 automatiquement. `NUM_BLOCKS`, `NUM_ITER`, `CAP_MAX` et les paramètres SfM
 sont configurables par variables d'environnement ; voir `--help`.
 
+Le découpage spectral recherche les séparations de faible covisibilité
+(peu de points 3D partagés, pondérés par la distance entre caméras).
+Un ajustement glouton des frontières vise ensuite environ `N / NUM_BLOCKS`
+images principales par bloc, avec une tolérance de 20 % arrondie à l'entier.
+Il privilégie les déplacements coupant le moins de poids et ne déconnecte
+pas un bloc donneur connexe. Si aucun déplacement sûr n'est possible,
+les tailles inégales sont acceptées avec un avertissement : l'équilibrage
+n'arrête plus le pipeline. Le recouvrement est ajouté après cet ajustement
+et peut augmenter les effectifs finaux.
+
 `CAP_MAX` s'applique à chaque bloc séparément : le plafond cumulé peut donc
 atteindre `NUM_BLOCKS × CAP_MAX` Gaussians.

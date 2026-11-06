@@ -12,6 +12,7 @@ Fonctionnalités :
 - Nettoyage spatial optionnel des points isolés.
 - Graphe de covisibilité pondéré par la distance entre caméras.
 - Clustering spectral + réparation heuristique de connexité.
+- Équilibrage souple autour de N/K, sans imposer des tailles identiques.
 - Recouvrement plafonné par bloc et par image.
 - Export COLMAP binaire et/ou texte.
 - PLY coloré, points multi-blocs en jaune.
@@ -757,10 +758,11 @@ def enforce_connectivity(labels, W):
     return labels
 
 def balance_primary_blocks(labels, W, requested_k):
-    """Équilibre les blocs par déplacements de frontière sûrs.
+    """Rapproche les tailles de N/K, avec une tolérance de 20 %.
 
-    Chaque déplacement doit conserver la connexité du bloc donneur
-    et rejoindre le bloc receveur par au moins une arête de W.
+    Les déplacements de frontière coupant le moins de poids sont prioritaires.
+    La connexité prime sur l'équilibrage : arrêter si aucun déplacement sûr
+    ne rapproche les tailles de la plage souhaitée.
     """
     labels = np.asarray(labels, dtype=np.int32).copy()
     W = W.tocsr()
@@ -771,21 +773,26 @@ def balance_primary_blocks(labels, W, requested_k):
             "Le clustering n'a pas produit exactement K blocs non vides."
         )
 
-    targets = np.full(requested_k, n // requested_k, dtype=np.int64)
-    targets[:n % requested_k] += 1
+    target_size = n / requested_k
+    lower = max(1, math.floor(0.8 * target_size))
+    upper = math.ceil(1.2 * target_size)
     counts = np.bincount(labels, minlength=requested_k)
 
     info(
         f"Balancing primary images: before={counts.tolist()}, "
-        f"targets={targets.tolist()}"
+        f"target={target_size:.1f}, preferred range=[{lower}, {upper}]"
     )
 
-    while not np.array_equal(counts, targets):
+    def needs_move(source, target):
+        # Strictly decreases the sum of squared sizes, even through relay blocks.
+        return counts[source] > counts[target] + 1
+
+    while np.any(counts < lower) or np.any(counts > upper):
         candidates = []
 
         for node in range(n):
             source = int(labels[node])
-            if counts[source] <= targets[source]:
+            if counts[source] <= 1:
                 continue
 
             start, end = W.indptr[node], W.indptr[node + 1]
@@ -802,7 +809,7 @@ def balance_primary_blocks(labels, W, requested_k):
 
             for target in np.unique(neighbor_labels):
                 target = int(target)
-                if target == source or counts[target] >= targets[target]:
+                if target == source or not needs_move(source, target):
                     continue
 
                 target_affinity = float(
@@ -823,9 +830,7 @@ def balance_primary_blocks(labels, W, requested_k):
         for _, node, source, target in candidates:
             if labels[node] != source:
                 continue
-            if counts[source] <= targets[source]:
-                continue
-            if counts[target] >= targets[target]:
+            if not needs_move(source, target):
                 continue
 
             start, end = W.indptr[node], W.indptr[node + 1]
@@ -855,17 +860,20 @@ def balance_primary_blocks(labels, W, requested_k):
             counts[source] -= 1
             counts[target] += 1
             moved += 1
+            if np.all(counts >= lower) and np.all(counts <= upper):
+                break
 
         info(
             f"Balancing pass: moved={moved}, "
             f"counts={counts.tolist()}"
         )
         if moved == 0:
-            raise RuntimeError(
-                "Impossible d'équilibrer les blocs en préservant leur "
-                "connexité. Examiner le graphe, --min-covisibility "
-                "et le nombre de blocs."
+            warn(
+                "Équilibrage souple arrêté pour préserver la connexité : "
+                f"tailles={counts.tolist()}, plage souhaitée=[{lower}, {upper}]. "
+                "Le découpage est conservé malgré les tailles inégales."
             )
+            break
 
     return labels
 
@@ -1706,7 +1714,7 @@ def main():
         dtype=np.int32,
     )
     
-    info("Balancing primary image counts...")
+    info("Soft balancing primary image counts (connectivity first)...")
     labels = balance_primary_blocks(labels, W, args.num_blocks)
     
     report_connectivity(labels, W, args.num_blocks)
