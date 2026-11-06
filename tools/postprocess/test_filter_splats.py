@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 
 from tools.postprocess import export_ply as export
 from tools.postprocess.filter_splats import (
-    SPLAT_DTYPE, contextual_mask, load_sparse_points, sparse_bbox_mask,
+    SPLAT_DTYPE, contextual_mask, load_sparse_points, sparse_bbox_mask, sparse_support_mask,
 )
 
 
@@ -48,6 +48,27 @@ def sparse_cloud():
 
 
 class SparseBBoxTest(unittest.TestCase):
+    def test_surface_patch_support_and_similarity_invariance(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        means = np.array([[0, 0, 0], [0, 0, 4], [0, 0, 0]])
+        scales = np.array([[4, 2, 0.01], [4, 2, 0.01], [40, 20, 0.01]])
+        quats = np.tile([1., 0, 0, 0], (3, 1))
+        mask, report = sparse_support_mask(means, scales, quats, points)
+        self.assertEqual(mask.tolist(), [False, True, True])
+        self.assertEqual(report["centre_supported_but_patch_unsupported"], 1)
+        rotation = Rotation.from_euler("xyz", [0.4, 1.1, -0.3])
+        for scale in (1e-6, 1e6):
+            transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
+            q = np.tile(rotation.as_quat()[[3, 0, 1, 2]], (3, 1))
+            actual, _ = sparse_support_mask(
+                transform(means), scales * scale, q, transform(points), batch_size=1,
+            )
+            np.testing.assert_array_equal(actual, mask)
+        for factor in (0, float("nan")):
+            with self.assertRaises(ValueError):
+                sparse_support_mask(means, scales, quats, points, distance_factor=factor)
+
     def test_outside_centres_rejected_and_similarity_invariant(self):
         points = sparse_cloud()
         means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
@@ -226,6 +247,24 @@ class ContextualFilterTest(unittest.TestCase):
             self.assertEqual(report["applied_rejections"], 1)
             self.assertEqual(report["contextual_input"], len(s["means"]) - 1)
             self.assertGreaterEqual(report["proposed_rejections"], 2)
+            support_command = command + [
+                "--overwrite", "--mode", "off", "--sparse-bbox-mode", "off",
+                "--sparse-support-mode", "diagnostic",
+            ]
+            diagnostic = subprocess.run(support_command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(diagnostic.returncode, 0, diagnostic.stderr)
+            self.assertEqual(output.read_bytes(), source.read_bytes())
+            report = json.loads(output.with_suffix(".filter.json").read_text())
+            self.assertGreater(report["sparse_support"]["unsupported"], 0)
+            applied = subprocess.run(
+                support_command + ["--sparse-support-mode", "apply"],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(applied.returncode, 0, applied.stderr)
+            self.assertEqual(
+                output.stat().st_size,
+                source.stat().st_size - 32 * report["sparse_support"]["unsupported"],
+            )
             write_points3d(points, sparse_cloud() + 1000)
             failed = subprocess.run(command + ["--overwrite"], capture_output=True, text=True,
                                     timeout=30)

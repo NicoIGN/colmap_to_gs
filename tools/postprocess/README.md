@@ -94,6 +94,21 @@ indépendant de `--mode` ; les splats hors bbox sont exclus du filtre contextuel
 et comptés dans `sparse_bbox.outside_sparse_bbox` du JSON. Si aucun centre
 n'est dans la boîte, le filtre échoue (repère probablement différent).
 
+Filtre expérimental des amas flottants : `--sparse-support-mode diagnostic`
+(défaut `off`) teste neuf positions sur le plan central du splat, jusqu'à une
+échelle gaussienne le long de ses deux plus grands axes. Une position est
+supportée si sa distance au sparse est inférieure à
+`--sparse-support-distance-factor` (3) fois l'espacement local, estimé par la
+distance au huitième voisin divisée par sqrt(8). Au moins
+`--sparse-support-min-fraction` (0.5) des positions doivent être supportées.
+Les rapports restent invariants à l'échelle, rotation et translation.
+Le test ne dépend ni de la couleur ni de la hauteur et préserve les grandes
+surfaces correctement couvertes par le sparse ; il peut néanmoins retirer des
+routes, toitures ou végétations peu couvertes. Examiner les rejets avant
+`--sparse-support-mode apply`. Ce mode est indépendant du filtre contextuel et
+de la bbox ; tous les rejets appliqués partagent la limite de sécurité de 20 %.
+Le JSON contient un compteur distinct `sparse_support.unsupported`.
+
 Dans le pipeline Panoramax, **les blocs sont exportés sans filtre géométrique**
 et le nouveau filtre est évalué après fusion, sur l'ensemble de la scène :
 les frontières internes des blocs ne sont pas traitées comme des bords de

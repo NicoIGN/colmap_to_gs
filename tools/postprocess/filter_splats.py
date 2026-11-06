@@ -178,6 +178,56 @@ def sparse_bbox_mask(means, points, *, quantile=0.005, margin=0.05):
     return outside, report
 
 
+def sparse_support_mask(means, scales, quats, points, *, distance_factor=3.0,
+                        min_fraction=0.5, batch_size=20000):
+    """Sample the central principal-plane patch, not just the splat centre.
+
+    Nine samples span +/- one sigma along the two largest axes. Distances
+    are divided by sparse local spacing (eighth neighbour / sqrt(8)).
+    No absolute scene-unit threshold or colour/height classification is used.
+    """
+    if not np.isfinite(distance_factor) or distance_factor <= 0:
+        raise ValueError("Facteur de distance sparse attendu fini et > 0")
+    if not np.isfinite(min_fraction) or not 0 < min_fraction <= 1:
+        raise ValueError("Fraction de support sparse attendue dans ]0,1]")
+    if batch_size < 1:
+        raise ValueError("Taille de lot attendue >= 1")
+    points = np.unique(points, axis=0)
+    if len(points) < 10 or not np.isfinite(points).all():
+        raise ValueError("Au moins 10 points sparse distincts et finis requis")
+    origin = np.median(points, axis=0)
+    extent = np.linalg.norm(points - origin, axis=1).max()
+    if not np.isfinite(extent) or extent <= 0:
+        raise ValueError("Étendue sparse indéterminable")
+    points = (points - origin) / extent
+    tree = cKDTree(points)
+    spacing = tree.query(points, k=9)[0][:, -1] / np.sqrt(8)
+    offsets = np.array([(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1)])
+    rejected = np.zeros(len(means), dtype=bool)
+    centre_only = 0
+    for start in range(0, len(means), batch_size):
+        stop = min(start + batch_size, len(means))
+        q = quats[start:stop]
+        q = q / np.max(np.abs(q), axis=1, keepdims=True)
+        rotation = Rotation.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()
+        axes = np.argsort(scales[start:stop], axis=1)[:, -2:]
+        directions = np.take_along_axis(rotation, axes[:, None, :], axis=2)
+        lengths = np.take_along_axis(scales[start:stop], axes, axis=1) / extent
+        samples = ((means[start:stop] - origin) / extent)[:, None, :] + np.einsum(
+            "nij,nj,kj->nki", directions, lengths, offsets,
+        )
+        distances, near = tree.query(samples.reshape(-1, 3))
+        supported = (distances <= distance_factor * spacing[near]).reshape(-1, 9)
+        rejected[start:stop] = supported.mean(axis=1) < min_fraction
+        centre_only += int((supported[:, 4] & rejected[start:stop]).sum())
+    return rejected, dict(
+        unsupported=int(rejected.sum()), centre_supported_but_patch_unsupported=centre_only,
+        sparse_points=len(points), distance_factor=distance_factor,
+        min_fraction=min_fraction, samples=9, patch_sigma=1,
+        warning="Filtre expérimental : les surfaces peu représentées dans le sparse peuvent être rejetées.",
+    )
+
+
 def write_records(path, records, keep, batch_size=200000):
     """Atomically stream a selected subset, including an empty diagnostic."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -209,6 +259,10 @@ def main():
     parser.add_argument("--sparse-bbox-quantile", type=float, default=0.005)
     parser.add_argument("--sparse-bbox-margin", type=float, default=0.05,
                         help="Margin as a fraction of the largest box side")
+    parser.add_argument("--sparse-support-mode", choices=("off", "diagnostic", "apply"),
+                        default="off")
+    parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
+    parser.add_argument("--sparse-support-min-fraction", type=float, default=0.5)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     try:
@@ -238,12 +292,19 @@ def main():
                 not np.isfinite(means).all() or np.any(np.max(np.abs(quats), axis=1) == 0)):
             raise ValueError("Attributs SPLAT invalides ; aucune sortie remplacée")
         count = len(records)
+        if args.sparse_support_mode != "off" and not args.sparse_points:
+            raise ValueError("--sparse-points requis pour le filtre de support")
+        points = None
+        if args.sparse_points and (
+            args.sparse_bbox_mode != "off" or args.sparse_support_mode != "off"
+        ):
+            points = load_sparse_points(args.sparse_points.resolve())
         bbox_mode = args.sparse_bbox_mode if args.sparse_points else "off"
         outside = np.zeros(count, dtype=bool)
         bbox_report = None
         if bbox_mode != "off":
             outside, bbox_report = sparse_bbox_mask(
-                means, load_sparse_points(args.sparse_points.resolve()),
+                means, points,
                 quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
             )
             bbox_report.update(mode=bbox_mode, points=str(args.sparse_points.resolve()))
@@ -266,15 +327,31 @@ def main():
             contextual[inside[subset]] = True
             report["contextual_input"] = report.pop("total")
         report["contextual_rejections"] = report.pop("proposed_rejections")
-        rejected = outside | contextual
+        unsupported = np.zeros(count, dtype=bool)
+        support_report = dict(mode="off")
+        if args.sparse_support_mode != "off":
+            inside = np.flatnonzero(~outside)
+            subset, support_report = sparse_support_mask(
+                means[inside], scales[inside], quats[inside], points,
+                distance_factor=args.sparse_support_distance_factor,
+                min_fraction=args.sparse_support_min_fraction,
+                batch_size=args.batch_size,
+            )
+            unsupported[inside[subset]] = True
+            support_report["mode"] = args.sparse_support_mode
+            print("[AVERTISSEMENT] " + support_report["warning"], flush=True)
+        rejected = outside | contextual | unsupported
         applied = np.zeros(count, dtype=bool)
         if args.mode == "apply":
             applied |= contextual
         if bbox_mode == "apply":
             applied |= outside
+        if args.sparse_support_mode == "apply":
+            applied |= unsupported
         report.update(
             total=count, mode=args.mode, input=str(source), output=str(output),
             sparse_bbox=bbox_report or dict(mode="off"),
+            sparse_support=support_report,
             proposed_rejections=int(rejected.sum()),
             proposed_fraction=float(rejected.mean()),
             applied_rejections=int(applied.sum()),
