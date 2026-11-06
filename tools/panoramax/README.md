@@ -129,6 +129,33 @@ séquence (les noms de fichiers sont des empreintes), `--metric-gps full` et
 `--sensor-pairs --sensor-pair-radius 30`. Un code de sortie 4 signifie que le
 modèle a été écrit sans le repère métrique demandé.
 
+## Pipeline complet bbox → `.splat`
+
+Le lanceur `run_pipeline.sh` enchaîne le téléchargement Panoramax, le SfM
+géoréférencé, le découpage COLMAP, l'entraînement Spirula de chaque bloc et la
+fusion voxelisée de leurs splats alignés en un unique fichier final. Il prend
+un fichier de configuration Bash (fichier de code de confiance) ; chaque
+variable et son rôle sont commentés dans `config/panoramax_blocks.example.sh`.
+
+```bash
+cp config/panoramax_blocks.example.sh /chemin/vers/paris.sh
+# Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, CAP_MAX, etc.
+bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
+```
+
+Les intermédiaires sont rangés sous `OUTPUT_DIR/panoramax/`. Le résultat est
+`OUTPUT_DIR/SPLAT_NAME`; son dossier adjacent `SPLAT_NAME` sans extension suivi
+de `.georef/` contient `georeference.json`, les métadonnées Panoramax, le
+modèle COLMAP métrique, le manifeste de blocs et les transformations
+d'entraînement. Le `.splat` est en coordonnées du repère métrique local de
+Spirula, aligné sur le GPS EXIF ; ce n'est pas un fichier de coordonnées EPSG
+directes. Ces éléments latéraux conservent les références nécessaires pour
+retrouver/interpréter ce repère.
+
+Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
+qualité et limite d'images. Pour changer la sélection, choisir un nouveau
+OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
+
 Le préréglage lance d'abord `prepare_sfm.py` :
 
 - seules les images de la taille la plus fréquente sont gardées (une bbox

@@ -1,0 +1,111 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+SCRIPT = Path(__file__).with_name("run_pipeline.sh").resolve()
+REPO_ROOT = SCRIPT.parents[2]
+
+
+class PanoramaxPipelineTest(unittest.TestCase):
+    def test_config_drives_download_blocks_merge_and_georef_sidecar(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output = root / "output"
+            dataset = output / "panoramax"
+            sparse = dataset / "sfm-3" / "sparse" / "0"
+            images = dataset / "sfm-3" / "images"
+            sparse.mkdir(parents=True)
+            images.mkdir()
+            for name in ("cameras.bin", "images.bin", "points3D.bin"):
+                (sparse / name).write_bytes(b"colmap")
+            (images / "img.jpg").write_bytes(b"prepared")
+
+            tools = root / "bin"
+            tools.mkdir()
+            fake_python = tools / "python3"
+            fake_python.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, runpy, sys\n"
+                "args = sys.argv[1:]\n"
+                "if args and args[0].endswith('download.py'):\n"
+                "  root = args[args.index('--output-dir') + 1]\n"
+                "  bbox = [float(x) for x in args[args.index('--bbox') + 1].split(',')]\n"
+                "  os.makedirs(os.path.join(root, 'images'), exist_ok=True)\n"
+                "  os.makedirs(os.path.join(root, 'metadata'), exist_ok=True)\n"
+                "  json.dump({'bbox':bbox,'api_url':args[args.index('--api-url')+1],"
+                "    'datetime':None,'quality':args[args.index('--quality')+1],"
+                "    'image_max':int(args[args.index('--image-max')+1]),"
+                "    'crs':'EPSG:2154'}, open(os.path.join(root,'request.json'),'w'))\n"
+                "  json.dump({'available':1,'selected':1}, open(os.path.join(root,'summary.json'),'w'))\n"
+                "  open(os.path.join(root,'images','photo.jpg'),'wb').write(b'jpeg')\n"
+                "  json.dump({'download':{}}, open(os.path.join(root,'metadata','photo.json'),'w'))\n"
+                "  json.dump({'image':'images/photo.jpg','status':'downloaded'},"
+                "    open(os.path.join(root,'manifest.jsonl'),'w'))\n"
+                "elif args and args[0].endswith('colmap_split_blocks.py'):\n"
+                "  out=args[args.index('--output')+1]; n=int(args[args.index('--num-blocks')+1]); os.makedirs(out,exist_ok=True); blocks=[]\n"
+                "  for i in range(n):\n"
+                "    name=f'block_{i:03d}'; folder=os.path.join(out,name); os.makedirs(folder)\n"
+                "    [open(os.path.join(folder,x),'wb').write(b'colmap') for x in ('cameras.bin','images.bin','points3D.bin')]\n"
+                "    blocks.append({'block_id':i})\n"
+                "  json.dump({'blocks':blocks},open(os.path.join(out,'manifest.json'),'w'))\n"
+                "elif args and args[0].endswith('export_ply.py'):\n"
+                "  out=args[args.index('--out-ply')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
+                "elif args and args[0].endswith('merge_splats.py'):\n"
+                "  out=args[args.index('--output')+1]; open(out,'wb').write(b'merged-splat')\n"
+                "else:\n"
+                "  os.execv(sys.executable,[sys.executable,*args])\n"
+            )
+            fake_python.chmod(0o755)
+            spirula = tools / "spirula"
+            spirula.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "args=sys.argv[1:]\n"
+                "if args[0]=='train':\n"
+                "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); splats=os.path.join(root,name); ckpt=os.path.join(splats,f'step-{n:09d}.ckpt'); os.makedirs(ckpt,exist_ok=True)\n"
+                "  open(os.path.join(ckpt,'splat.ply'),'wb').write(b'ply')\n"
+                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(splats,'scene_transform.json'),'w'))\n"
+            )
+            spirula.chmod(0o755)
+            config = root / "dataset.sh"
+            config.write_text(
+                f'OUTPUT_DIR="{output}"\n'
+                'BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'PANORAMAX_API_URL="https://example.test/api"\n'
+                'PANORAMAX_QUALITY="hd"\n'
+                'PANORAMAX_IMAGE_MAX="5"\n'
+                f'SPIRULA_BIN="{spirula}"\n'
+                f'PYTHON_BIN="{fake_python}"\n'
+                'NUM_BLOCKS="2"\nNUM_ITER="3"\nCAP_MAX="1000"\n'
+                'TRAIN_PRESET="3dgs"\nSFM_MAX_IMAGE_SIZE="1600"\n'
+                'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
+                'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
+                'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
+            )
+            result = subprocess.run(
+                ["bash", str(SCRIPT), str(config)],
+                cwd=root,
+                env=dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}"),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual((output / "test.splat").read_bytes(), b"merged-splat")
+            georef = output / "test.georef"
+            self.assertTrue((georef / "georeference.json").is_file())
+            self.assertTrue((georef / "metadata/photo.json").is_file())
+            self.assertTrue((georef / "sparse/images.bin").is_file())
+            self.assertTrue((georef / "blocks_manifest.json").is_file())
+            self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
+            metadata = json.loads((georef / "georeference.json").read_text())
+            self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
+
+
+if __name__ == "__main__":
+    unittest.main()

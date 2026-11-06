@@ -1,0 +1,64 @@
+# Exemple de configuration pour tools/panoramax/run_pipeline.sh.
+# Copier ce fichier, renseigner les chemins et valeurs, puis passer sa copie
+# au lanceur : bash tools/panoramax/run_pipeline.sh /chemin/vers/ma_config.sh
+
+# Emplacement de tous les résultats intermédiaires et du .splat final.
+# Le sous-dossier panoramax/ est réservé aux photos téléchargées par ce script.
+OUTPUT_DIR="/Users/mon_nom/Documents/panoramax-paris"
+
+# Emprise Lambert-93 EPSG:2154, ordre xmin,ymin,xmax,ymax, en mètres.
+BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
+
+# URL racine de l'API Panoramax, sans /search.
+PANORAMAX_API_URL="https://explore.panoramax.fr/api"
+
+# Qualité de l'asset à télécharger : hd, sd ou thumb.
+PANORAMAX_QUALITY="hd"
+
+# Intervalle STAC facultatif, début/fin ISO 8601 ; vide = toutes dates.
+PANORAMAX_DATETIME=""
+
+# Nombre maximal de photos téléchargées ; vide = jusqu'au plafond API de 10000.
+PANORAMAX_IMAGE_MAX="400"
+
+# Exécutable Spirula ; vide = recherche dans PATH puis voisin spirula-studio.
+SPIRULA_BIN=""
+
+# Python avec numpy, scipy, tqdm et pyproj installés.
+PYTHON_BIN="python3"
+
+# Nombre de blocs COLMAP et Gaussian Splats entraînés.
+NUM_BLOCKS="4"
+
+# Nombre d'itérations Spirula par bloc.
+NUM_ITER="30000"
+
+# Plafond de Gaussians par bloc ; le total possible est NUM_BLOCKS × CAP_MAX.
+CAP_MAX="1500000"
+
+# Préréglage d'entraînement Spirula, par exemple 3dgs ou in-the-wild.
+TRAIN_PRESET="3dgs"
+
+# Résolution maximale de travail pour l'extraction SfM Spirula.
+SFM_MAX_IMAGE_SIZE="4096"
+
+# Nombre maximal de points ALIKED détectés par image.
+SFM_ALIKED_MAX_FEATURES="4096"
+
+# Stratégie de sélection des paires Spirula : auto, exhaustive, sequential,
+# prefilter. Pour des photos Panoramax sans ordre de noms, prefilter est adapté.
+SFM_PAIRS="prefilter"
+
+# Fraction maximale d'images ajoutées en recouvrement par le découpeur COLMAP.
+OVERLAP_MAX_FRACTION="0.05"
+
+# Force le réentraînement de tous les blocs en supprimant uniquement leurs
+# dossiers GS, pas le téléchargement, le SfM ni le découpage. true ou false.
+CLEAN_GS="false"
+
+# Nom du fichier .splat fusionné dans OUTPUT_DIR.
+SPLAT_NAME="panoramax.splat"
+
+# Force relative des voxels lors de la fusion des scènes alignées.
+# Plus petit = fusion plus prudente, plus grand = davantage de déduplication.
+SPLAT_MERGE_STRENGTH="1.0"
