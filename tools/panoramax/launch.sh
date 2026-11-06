@@ -31,6 +31,8 @@ fi
 config_path="$(cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")"
 submit_dir="$PWD"
 source "$config_path"
+source "$script_dir/validate_config.sh"
+validate_config slurm || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
 : "${BBOX_LAMBERT93:?BBOX_LAMBERT93 doit être défini dans la configuration}"

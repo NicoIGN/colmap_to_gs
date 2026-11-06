@@ -154,6 +154,25 @@ cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
 ```
 
+Les valeurs sont vérifiées avant téléchargement et, avec `launch.sh`, avant
+toute soumission Slurm. Les erreurs sont regroupées et indiquent le paramètre,
+sa valeur et les valeurs attendues (par exemple `lightblue` est refusé pour
+`SFM_MATCHER`, sans correction automatique). Les listes Spirula correspondent
+aux options prises en charge par ce lanceur ; elles devront être actualisées
+si une future version ajoute des extracteurs, apparieurs ou préréglages.
+La validation seule ne nécessite ni GPU, ni Python, ni Slurm :
+
+```bash
+bash tools/panoramax/validate_config.sh /chemin/vers/paris.sh slurm
+```
+
+Elle contrôle les choix SfM/entraînement, entiers, rayons, recouvrement,
+booléens, bbox ordonnée, URL et nom de sortie, ainsi que la syntaxe des
+ressources Slurm en mode `slurm`. Elle n'exécute pas Spirula, ne vérifie pas
+la disponibilité des partitions/ressources du cluster et ne garantit pas
+la compatibilité de la version installée. Le fichier Bash reste du code
+de confiance et est sourcé, même en validation seule.
+
 Les intermédiaires sont rangés sous `OUTPUT_DIR/panoramax/`. Le résultat est
 `OUTPUT_DIR/SPLAT_NAME`; son dossier adjacent `SPLAT_NAME` sans extension suivi
 de `.georef/` contient `georeference.json`, les métadonnées Panoramax, le

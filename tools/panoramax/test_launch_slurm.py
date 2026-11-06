@@ -20,7 +20,7 @@ class SlurmLaunchTest(unittest.TestCase):
         self.tools.mkdir()
         self.pipeline_dir = self.root / "repo with spaces" / "tools" / "panoramax"
         self.pipeline_dir.mkdir(parents=True)
-        for name in ("launch.sh", "launch.slurm"):
+        for name in ("launch.sh", "launch.slurm", "validate_config.sh"):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"

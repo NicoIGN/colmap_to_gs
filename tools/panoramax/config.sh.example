@@ -2,6 +2,8 @@
 # Copier ce modèle vers config.sh avant de le personnaliser.
 # Copier ce fichier, renseigner les chemins et valeurs, puis passer sa copie
 # au lanceur : bash tools/panoramax/run_pipeline.sh /chemin/vers/ma_config.sh
+# Vérification sans calcul ni soumission :
+# bash tools/panoramax/validate_config.sh /chemin/vers/ma_config.sh slurm
 
 # Emplacement de tous les résultats intermédiaires et du .splat final.
 # Le sous-dossier panoramax/ est réservé aux photos téléchargées par ce script.

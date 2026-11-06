@@ -58,6 +58,8 @@ esac
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
 # The config is an explicitly selected Bash file, equivalent to sourcing env vars.
 source "$config_path"
+source "$script_dir/validate_config.sh"
+validate_config || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
 : "${BBOX_LAMBERT93:?BBOX_LAMBERT93 doit être défini dans la configuration}"
