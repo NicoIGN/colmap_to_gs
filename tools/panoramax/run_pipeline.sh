@@ -87,6 +87,12 @@ SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
 SPLAT_MERGE_STRENGTH="${SPLAT_MERGE_STRENGTH:-1.0}"
 SPLAT_FILTER_MODE="${SPLAT_FILTER_MODE:-diagnostic}"
 SPLAT_FILTER_SIZE_FACTOR="${SPLAT_FILTER_SIZE_FACTOR:-10}"
+SPLAT_SPARSE_BBOX_MODE="${SPLAT_SPARSE_BBOX_MODE:-apply}"
+SPLAT_SPARSE_BBOX_MARGIN="${SPLAT_SPARSE_BBOX_MARGIN:-0.05}"
+SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
+GROWTH_FACTOR="${GROWTH_FACTOR:-}"
+GROWTH_STOP_FRACTION="${GROWTH_STOP_FRACTION:-}"
+FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-off}"
 
 [[ "$NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "NUM_BLOCKS doit être un entier positif."
 [[ "$NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "NUM_ITER doit être un entier positif."
@@ -208,6 +214,10 @@ if [[ "$phase" != merge ]]; then
   NUM_ITER="$NUM_ITER" \
   NUM_BLOCKS="$NUM_BLOCKS" \
   CAP_MAX="$CAP_MAX" \
+  SPLATS_PER_IMAGE="$SPLATS_PER_IMAGE" \
+  GROWTH_FACTOR="$GROWTH_FACTOR" \
+  GROWTH_STOP_FRACTION="$GROWTH_STOP_FRACTION" \
+  FLOATER_SUPPRESSION="$FLOATER_SUPPRESSION" \
   TRAIN_PRESET="$TRAIN_PRESET" \
   SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
   SFM_ALIKED_MAX_FEATURES="$SFM_ALIKED_MAX_FEATURES" \
@@ -244,7 +254,10 @@ pipeline_stage="fusion des splats des blocs"
 pipeline_stage="filtre contextuel global des splats"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
   --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-  --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" --overwrite
+  --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" \
+  --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
+  --sparse-bbox-mode "$SPLAT_SPARSE_BBOX_MODE" \
+  --sparse-bbox-margin "$SPLAT_SPARSE_BBOX_MARGIN" --overwrite
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.

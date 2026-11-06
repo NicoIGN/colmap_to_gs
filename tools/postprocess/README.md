@@ -84,6 +84,16 @@ Plus de 20 % de rejets en mode `apply` provoque une erreur sans remplacer les
 sorties ; examiner le diagnostic avant de modifier `--max-removal-fraction`. Un rejet de tous les splats est toujours refusé.
 Le filtre ne désactive pas silencieusement une règle trop destructive.
 
+`--sparse-points sparse/0/points3D.bin` ajoute un recadrage sur la bbox des
+points COLMAP (même repère monde que le `.splat`). La boîte est orientée sur
+leurs axes principaux, bornée par `--sparse-bbox-quantile` (0.005 de chaque
+côté) et élargie de `--sparse-bbox-margin` (0.05) × son plus grand côté : test
+invariant par rotation, translation et échelle. Seul le centre du splat est
+testé. `--sparse-bbox-mode apply` (défaut), `diagnostic` ou `off` est
+indépendant de `--mode` ; les splats hors bbox sont exclus du filtre contextuel
+et comptés dans `sparse_bbox.outside_sparse_bbox` du JSON. Si aucun centre
+n'est dans la boîte, le filtre échoue (repère probablement différent).
+
 Dans le pipeline Panoramax, **les blocs sont exportés sans filtre géométrique**
 et le nouveau filtre est évalué après fusion, sur l'ensemble de la scène :
 les frontières internes des blocs ne sont pas traitées comme des bords de

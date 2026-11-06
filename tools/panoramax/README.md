@@ -190,6 +190,24 @@ les grands splats périphériques sans support de surface dans
 candidats ; `"off"` désactive le test. Le rapport de taille local se règle par
 `SPLAT_FILTER_SIZE_FACTOR` (défaut 10).
 Voir [la description et les limites du filtre](../postprocess/README.md).
+
+Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D
+sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
+(`SPLAT_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte
+est orientée sur les axes principaux des points, bornée aux quantiles
+0,5 %/99,5 %, et élargie de `SPLAT_SPARSE_BBOX_MARGIN` × son plus grand côté
+(défaut 0.05, sans unité). Le filtre contextuel n'est ensuite évalué que sur les
+splats restants. La limite de 20 % de rejets appliqués reste active.
+
+Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
+`cap_max`, donc atteindre le plafond est attendu. `CAP_MAX` est un plafond dur
+**par bloc** ; le préréglage d'exemple fixe le budget de chaque bloc à
+`min(CAP_MAX, images × SPLATS_PER_IMAGE)` (2000 par image), ralentit la
+croissance (`GROWTH_FACTOR="1.03"`, Spirula : 1.05) et l'arrête à 60 % des
+itérations (`GROWTH_STOP_FRACTION="0.6"`) pour consacrer la fin à l'affinage.
+Laisser ces variables vides restaure le comportement Spirula. Calibrer
+`SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
+étape isolée.
 Les blocs sont réexportés sans filtre de BBOX/taille lors de leur relance,
 sans réentraîner si le checkpoint final existe et `CLEAN_GS=false` ; c'est
 nécessaire pour récupérer les splats supprimés par un ancien export.

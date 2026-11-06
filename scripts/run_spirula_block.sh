@@ -24,6 +24,10 @@ densify_score_mode="${DENSIFY_SCORE_MODE:-}"
 min_init_fraction="${MIN_INIT_FRACTION:-}"
 num_iterations="${NUM_ITERATIONS:-50000}"
 train_resolution_divisor="${TRAIN_RESOLUTION_DIVISOR:-}"
+growth_factor="${GROWTH_FACTOR:-}"
+refine_stop_iter="${REFINE_STOP_ITER:-}"
+refine_stop_num_iter="${REFINE_STOP_NUM_ITER:-}"
+floater_suppression="${FLOATER_SUPPRESSION:-}"
 
 long_axis_split_opacity_k=()
 if [[ -n "${LONG_AXIS_SPLIT_OPACITY_K:-}" ]]; then
@@ -61,6 +65,10 @@ Options:
   --min-init-fraction N
   --num-iterations N
   --train-resolution-divisor N
+  --growth-factor X         Croissance du nombre de splats par cycle (> 1)
+  --refine-stop-iter N      Pas minimal d'arrêt de la croissance
+  --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
+  --floater-suppression M   off, mild ou strong
   --python-bin PATH
   --export-script PATH
   --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
@@ -115,6 +123,10 @@ while [[ $# -gt 0 ]]; do
     --min-init-fraction) need_arg "$@"; min_init_fraction="$2"; shift 2 ;;
     --num-iterations) need_arg "$@"; num_iterations="$2"; shift 2 ;;
     --train-resolution-divisor) need_arg "$@"; train_resolution_divisor="$2"; shift 2 ;;
+    --growth-factor) need_arg "$@"; growth_factor="$2"; shift 2 ;;
+    --refine-stop-iter) need_arg "$@"; refine_stop_iter="$2"; shift 2 ;;
+    --refine-stop-num-iter) need_arg "$@"; refine_stop_num_iter="$2"; shift 2 ;;
+    --floater-suppression) need_arg "$@"; floater_suppression="$2"; shift 2 ;;
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
     --export-script) need_arg "$@"; export_script="$2"; shift 2 ;;
     --export-filter-mode) need_arg "$@"; export_filter_mode="$2"; shift 2 ;;
@@ -159,6 +171,19 @@ if [[ -n "$train_resolution_divisor" ]]; then
   is_nonnegative_integer "$train_resolution_divisor" ||
     die "--train-resolution-divisor doit être un entier >= 0"
 fi
+
+if [[ -n "$growth_factor" ]]; then
+  is_number "$growth_factor" && awk -v x="$growth_factor" 'BEGIN { exit !(x > 1) }' ||
+    die "--growth-factor doit être un nombre > 1"
+fi
+for value in "$refine_stop_iter" "$refine_stop_num_iter"; do
+  [[ -z "$value" ]] || is_nonnegative_integer "$value" ||
+    die "--refine-stop-iter et --refine-stop-num-iter attendent un entier >= 0"
+done
+case "$floater_suppression" in
+  ""|off|mild|strong) ;;
+  *) die "--floater-suppression attend off, mild ou strong" ;;
+esac
 
 if [[ -n "$min_init_fraction" ]]; then
   is_number "$min_init_fraction" || die "--min-init-fraction invalide"
@@ -361,6 +386,10 @@ cmd=(
 [[ -z "$min_init_fraction" ]] || cmd+=(--min-init-fraction "$min_init_fraction")
 [[ -z "$num_iterations" ]] || cmd+=(--num-iterations "$num_iterations")
 [[ -z "$train_resolution_divisor" ]] || cmd+=(--train-resolution-divisor "$train_resolution_divisor")
+[[ -z "$growth_factor" ]] || cmd+=(--growth-factor "$growth_factor")
+[[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
+[[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
+[[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
 
 if [[ ${#long_axis_split_opacity_k[@]} -gt 0 ]]; then
   cmd+=(--long-axis-split-opacity-k "${long_axis_split_opacity_k[@]}")

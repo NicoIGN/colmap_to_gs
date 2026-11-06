@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import struct
 import tempfile
 
 import numpy as np
@@ -118,6 +119,65 @@ def contextual_mask(means, log_scales, quats, *, size_factor=10.0,
     return rejected, report
 
 
+def load_sparse_points(path):
+    """Read finite XYZ from a COLMAP binary points3D.bin."""
+    points = []
+    with open(path, "rb") as stream:
+        size = os.fstat(stream.fileno()).st_size
+        header = stream.read(8)
+        if len(header) != 8:
+            raise ValueError(f"points3D.bin tronqué : {path}")
+        count = struct.unpack("<Q", header)[0]
+        record = struct.Struct("<QdddBBBdQ")
+        for index in range(count):
+            data = stream.read(record.size)
+            if len(data) != record.size:
+                raise ValueError(f"points3D.bin tronqué au point {index} : {path}")
+            values = record.unpack(data)
+            following = stream.tell() + values[-1] * 8
+            if following > size:
+                raise ValueError(f"Track COLMAP tronqué au point {index} : {path}")
+            stream.seek(following)
+            points.append(values[1:4])
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    return points[np.isfinite(points).all(axis=1)]
+
+
+def sparse_bbox_mask(means, points, *, quantile=0.005, margin=0.05):
+    """Return Gaussians whose centre lies outside the robust sparse-point box.
+
+    The box is oriented on the sparse principal axes and bounded by
+    per-axis quantiles; the margin is a fraction of its largest side, so the
+    test is invariant to rotation, translation and global scale. Only centres
+    are tested, so a large road splat whose centre is inside is kept.
+    """
+    if not 0 <= quantile < 0.5:
+        raise ValueError("Quantile de bbox sparse attendu dans [0,0.5)")
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError("Marge relative de bbox sparse attendue finie et >= 0")
+    if len(points) < 10:
+        raise ValueError("Moins de 10 points sparse valides : bbox impossible")
+    origin = np.median(points, axis=0)
+    _, axes = np.linalg.eigh(np.cov((points - origin).T))
+    projected = (points - origin) @ axes
+    lo, hi = np.quantile(projected, [quantile, 1 - quantile], axis=0)
+    span = float(np.max(hi - lo))
+    if not np.isfinite(span) or span <= 0:
+        raise ValueError("Points sparse dégénérés : bbox impossible")
+    pad = margin * span
+    frame = (means - origin) @ axes
+    outside = np.any((frame < lo - pad) | (frame > hi + pad), axis=1)
+    corners = np.array([[x, y, z] for x in (lo[0] - pad, hi[0] + pad)
+                        for y in (lo[1] - pad, hi[1] + pad)
+                        for z in (lo[2] - pad, hi[2] + pad)]) @ axes.T + origin
+    report = dict(
+        sparse_points=len(points), quantile=quantile, margin_fraction=margin,
+        outside_sparse_bbox=int(outside.sum()),
+        world_aabb_of_box=[corners.min(axis=0).tolist(), corners.max(axis=0).tolist()],
+    )
+    return outside, report
+
+
 def write_records(path, records, keep, batch_size=200000):
     """Atomically stream a selected subset, including an empty diagnostic."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +202,13 @@ def main():
     parser.add_argument("--batch-size", type=int, default=20000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-removal-fraction", type=float, default=0.2)
+    parser.add_argument("--sparse-points", type=Path,
+                        help="COLMAP points3D.bin in the same world frame as the splats")
+    parser.add_argument("--sparse-bbox-mode", choices=("apply", "diagnostic", "off"),
+                        default="apply")
+    parser.add_argument("--sparse-bbox-quantile", type=float, default=0.005)
+    parser.add_argument("--sparse-bbox-margin", type=float, default=0.05,
+                        help="Margin as a fraction of the largest box side")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     try:
@@ -170,32 +237,61 @@ def main():
         if (not np.isfinite(scales).all() or np.any(scales <= 0) or
                 not np.isfinite(means).all() or np.any(np.max(np.abs(quats), axis=1) == 0)):
             raise ValueError("Attributs SPLAT invalides ; aucune sortie remplacée")
-        if args.mode == "off":
-            rejected = np.zeros(len(records), dtype=bool)
-            report = dict(total=len(records), proposed_rejections=0)
-        else:
-            rejected, report = contextual_mask(
-                means, np.log(scales), quats, size_factor=args.size_factor,
-                neighbors=args.neighbors, reference_limit=args.reference_limit,
-                batch_size=args.batch_size, seed=args.seed,
+        count = len(records)
+        bbox_mode = args.sparse_bbox_mode if args.sparse_points else "off"
+        outside = np.zeros(count, dtype=bool)
+        bbox_report = None
+        if bbox_mode != "off":
+            outside, bbox_report = sparse_bbox_mask(
+                means, load_sparse_points(args.sparse_points.resolve()),
+                quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
             )
-        report.update(mode=args.mode, input=str(source), output=str(output))
-        fraction = float(rejected.mean())
-        report["proposed_fraction"] = fraction
-        report["applied_rejections"] = int(rejected.sum()) if args.mode == "apply" else 0
+            bbox_report.update(mode=bbox_mode, points=str(args.sparse_points.resolve()))
+            if outside.all():
+                raise ValueError(
+                    "Aucun centre de splat dans la bbox sparse : repère des points "
+                    "COLMAP différent de celui des splats ? Aucune sortie remplacée"
+                )
+        contextual = np.zeros(count, dtype=bool)
+        if args.mode == "off":
+            report = dict(proposed_rejections=0)
+        else:
+            inside = np.flatnonzero(~outside)
+            subset, report = contextual_mask(
+                means[inside], np.log(scales[inside]), quats[inside],
+                size_factor=args.size_factor, neighbors=args.neighbors,
+                reference_limit=args.reference_limit, batch_size=args.batch_size,
+                seed=args.seed,
+            )
+            contextual[inside[subset]] = True
+            report["contextual_input"] = report.pop("total")
+        report["contextual_rejections"] = report.pop("proposed_rejections")
+        rejected = outside | contextual
+        applied = np.zeros(count, dtype=bool)
+        if args.mode == "apply":
+            applied |= contextual
+        if bbox_mode == "apply":
+            applied |= outside
+        report.update(
+            total=count, mode=args.mode, input=str(source), output=str(output),
+            sparse_bbox=bbox_report or dict(mode="off"),
+            proposed_rejections=int(rejected.sum()),
+            proposed_fraction=float(rejected.mean()),
+            applied_rejections=int(applied.sum()),
+        )
+        fraction = float(applied.mean())
         print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if "warning" in report:
             print("[AVERTISSEMENT] " + report["warning"], flush=True)
-        if args.mode == "apply" and fraction > args.max_removal_fraction:
+        if fraction > args.max_removal_fraction:
             raise ValueError(
-                f"Rejet proposé {fraction:.1%} > limite {args.max_removal_fraction:.1%} ; "
+                f"Rejet appliqué {fraction:.1%} > limite {args.max_removal_fraction:.1%} ; "
                 "aucune sortie remplacée. Examiner d'abord le mode diagnostic."
             )
-        if args.mode == "apply" and rejected.all():
+        if applied.all():
             raise ValueError("Le filtre supprimerait tous les splats ; aucune sortie remplacée")
         write_records(rejected_path, records, rejected)
-        keep = ~rejected if args.mode == "apply" else np.ones(len(records), dtype=bool)
-        write_records(output, records, keep)
+        write_records(output, records, ~applied)
         report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except (OSError, ValueError) as exc:
         parser.exit(1, f"[ERREUR] Filtre contextuel : {exc}\n")

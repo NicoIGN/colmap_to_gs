@@ -36,8 +36,22 @@ NUM_BLOCKS="4"
 # Nombre d'itérations Spirula par bloc.
 NUM_ITER="30000"
 
-# Plafond de Gaussians par bloc ; le total possible est NUM_BLOCKS × CAP_MAX.
-CAP_MAX="1500000"
+# Plafond dur de Gaussians par bloc ; le total possible est NUM_BLOCKS × CAP_MAX.
+# Spirula (MCMC) fait croître le nombre de splats jusqu'au budget : l'atteindre
+# est normal. Le budget réel se règle donc par SPLATS_PER_IMAGE ci-dessous.
+CAP_MAX="3000000"
+
+# Préréglage « croissance sobre » (laisser vide = valeur par défaut Spirula).
+# Budget par bloc = min(CAP_MAX, images du bloc × SPLATS_PER_IMAGE).
+SPLATS_PER_IMAGE="2000"
+# Multiplicateur du nombre de splats tous les 100 pas (Spirula : 1.05).
+GROWTH_FACTOR="1.03"
+# Fraction de NUM_ITER après laquelle on n'ajoute plus de splats ; le reste de
+# l'entraînement affine les splats existants (Spirula : jusqu'à max(14000, N-2500)).
+GROWTH_STOP_FRACTION="0.6"
+# Nettoyage des flottants de Spirula : off, mild, strong. mild/strong limitent
+# aussi la taille à l'écran des splats ; comparer d'abord sur un bloc.
+FLOATER_SUPPRESSION="off"
 
 # Préréglage d'entraînement Spirula, par exemple 3dgs ou in-the-wild.
 TRAIN_PRESET="3dgs"
@@ -90,6 +104,14 @@ SPLAT_FILTER_MODE="diagnostic"
 # Grand axe / médiane des grands axes voisins, sans unité.
 # Un dépassement seul ne supprime rien : périphérie et faible support requis.
 SPLAT_FILTER_SIZE_FACTOR="10"
+
+# Recadrage sur la bbox des points 3D sparse (sfm-*/sparse/0/points3D.bin).
+# Boîte orientée sur les axes principaux des points, bornée aux quantiles
+# 0,5 %/99,5 % ; marge = fraction du plus grand côté (sans unité).
+# Seul le centre du splat est testé : une grande route centrée dedans reste.
+# apply (défaut) : retire les splats hors bbox ; diagnostic : les signale ; off.
+SPLAT_SPARSE_BBOX_MODE="apply"
+SPLAT_SPARSE_BBOX_MARGIN="0.05"
 
 # Paramètres facultatifs pour bash tools/panoramax/launch.sh config.sh.
 # Partition GPU du cluster (adapter au site).

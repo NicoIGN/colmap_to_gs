@@ -12,6 +12,10 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 NUM_ITER="${NUM_ITER:-30000}"
 NUM_BLOCKS="${NUM_BLOCKS:-4}"
 CAP_MAX="${CAP_MAX:-1500000}"
+SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
+GROWTH_FACTOR="${GROWTH_FACTOR:-}"
+GROWTH_STOP_FRACTION="${GROWTH_STOP_FRACTION:-}"
+FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
@@ -41,6 +45,10 @@ Variables:
   NUM_ITER                  SfM workspace suffix and training iterations (30000)
   NUM_BLOCKS                Number of COLMAP blocks (4)
   CAP_MAX                   Maximum splats per block (1500000)
+  SPLATS_PER_IMAGE          Optional budget: block cap = min(CAP_MAX, images × value)
+  GROWTH_FACTOR             Optional Spirula growth per refine round (> 1)
+  GROWTH_STOP_FRACTION      Optional fraction of NUM_ITER after which growth stops
+  FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_PRESET              Spirula training preset (3dgs)
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
@@ -90,6 +98,20 @@ for value_name in NUM_ITER NUM_BLOCKS CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_
 done
 [[ "$NUM_BLOCKS" -ge 1 ]] || die "NUM_BLOCKS doit être supérieur ou égal à 1."
 [[ "$CAP_MAX" -ge 1 ]] || die "CAP_MAX doit être supérieur ou égal à 1."
+[[ -z "$SPLATS_PER_IMAGE" || "$SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
+  die "SPLATS_PER_IMAGE doit être vide ou un entier positif."
+[[ -z "$GROWTH_FACTOR" ]] || {
+  [[ "$GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
+} || die "GROWTH_FACTOR doit être vide ou un nombre > 1."
+[[ -z "$GROWTH_STOP_FRACTION" ]] || {
+  [[ "$GROWTH_STOP_FRACTION" =~ ^0?[.][0-9]+$ ]] &&
+    awk -v x="$GROWTH_STOP_FRACTION" 'BEGIN { exit !(x > 0 && x < 1) }'
+} || die "GROWTH_STOP_FRACTION doit être vide ou dans ]0,1[."
+case "$FLOATER_SUPPRESSION" in
+  ""|off|mild|strong) ;;
+  *) die "FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
+esac
 [[ -z "$block_index" || "$block_index" -lt "$NUM_BLOCKS" ]] ||
   die "Indice de bloc $block_index hors de [0,$((NUM_BLOCKS - 1))]."
 [[ -z "$SFM_THREADS" || "$SFM_THREADS" =~ ^[1-9][0-9]*$ ]] ||
@@ -234,18 +256,35 @@ for ((index = first_index; index < last_index; index++)); do
   splat_name="Paris-${NUM_ITER}-block-${block_id}.splat"
   printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$NUM_BLOCKS"
 
+  block_cap="$CAP_MAX"
+  if [[ -n "$SPLATS_PER_IMAGE" ]]; then
+    block_images="$(od -An -t u8 -N 8 "$block_sparse/images.bin" | tr -d '[:space:]')"
+    [[ "$block_images" =~ ^[1-9][0-9]*$ ]] ||
+      die "Nombre d'images illisible : $block_sparse/images.bin"
+    block_cap=$((block_images * SPLATS_PER_IMAGE))
+    ((block_cap <= CAP_MAX)) || block_cap="$CAP_MAX"
+    printf '[pipeline] Budget du bloc : %s images × %s = %s splats (plafond %s).\n' \
+      "$block_images" "$SPLATS_PER_IMAGE" "$block_cap" "$CAP_MAX"
+  fi
   block_args=(
     --spirula-bin "$SPIRULA_BIN"
     --sparse-dir "$block_sparse"
     --images-dir "$SFM_DIR/images"
     --output-dir "$block_output"
     --train-preset "$TRAIN_PRESET"
-    --cap-max "$CAP_MAX"
+    --cap-max "$block_cap"
     --num-iterations "$NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
     --export-filter-mode off
   )
+  [[ -z "$GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$GROWTH_FACTOR")
+  [[ -z "$FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$FLOATER_SUPPRESSION")
+  if [[ -n "$GROWTH_STOP_FRACTION" ]]; then
+    # Spirula grows until max(refine_stop_iter, NUM_ITER - refine_stop_num_iter).
+    growth_stop="$(awk -v n="$NUM_ITER" -v f="$GROWTH_STOP_FRACTION" 'BEGIN { printf "%d", n * f + 0.5 }')"
+    block_args+=(--refine-stop-iter "$growth_stop" --refine-stop-num-iter "$((NUM_ITER - growth_stop))")
+  fi
   [[ "$CLEAN_GS" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"
 done

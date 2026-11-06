@@ -57,6 +57,12 @@ SPLAT_NAME=bad.ply
 SPLAT_MERGE_STRENGTH=0
 SPLAT_FILTER_MODE=aply
 SPLAT_FILTER_SIZE_FACTOR=1
+SPLAT_SPARSE_BBOX_MODE=yes
+SPLAT_SPARSE_BBOX_MARGIN=-0.1
+SPLATS_PER_IMAGE=0
+GROWTH_FACTOR=1
+GROWTH_STOP_FRACTION=1.2
+FLOATER_SUPPRESSION=medium
 SLURM_CPUS_PER_TASK=0
 SLURM_BLOCK_PARALLELISM=-1
 SLURM_GPU_TYPE=gpu:a40
@@ -70,6 +76,9 @@ SLURM_TIME_LIMIT=48:99:00
                      "PANORAMAX_QUALITY", "BBOX_LAMBERT93", "PANORAMAX_API_URL",
                      "SPLAT_NAME", "SPLAT_MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
                      "SPLAT_FILTER_MODE", "SPLAT_FILTER_SIZE_FACTOR",
+                     "SPLAT_SPARSE_BBOX_MODE", "SPLAT_SPARSE_BBOX_MARGIN",
+                     "SPLATS_PER_IMAGE", "GROWTH_FACTOR", "GROWTH_STOP_FRACTION",
+                     "FLOATER_SUPPRESSION",
                      "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
             self.assertIn(name, result.stderr)
@@ -83,6 +92,9 @@ SFM_THREADS=""
 PANORAMAX_IMAGE_MAX=""
 SLURM_BLOCK_PARALLELISM=""
 SFM_MATCHER=bruteforce
+SPLATS_PER_IMAGE=""
+GROWTH_FACTOR=""
+GROWTH_STOP_FRACTION=""
 """, mode)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Paramètres valides", result.stdout)

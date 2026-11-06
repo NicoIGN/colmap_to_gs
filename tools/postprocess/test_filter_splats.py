@@ -1,6 +1,7 @@
 import contextlib
 import io
 import json
+import struct
 from pathlib import Path
 import subprocess
 import sys
@@ -12,7 +13,9 @@ from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
 
 from tools.postprocess import export_ply as export
-from tools.postprocess.filter_splats import SPLAT_DTYPE, contextual_mask
+from tools.postprocess.filter_splats import (
+    SPLAT_DTYPE, contextual_mask, load_sparse_points, sparse_bbox_mask,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -29,6 +32,54 @@ def scene():
         "quats": np.tile([1.0, 0, 0, 0], (len(means), 1)),
         "opacity": np.zeros(len(means)), "dc": np.zeros((len(means), 3)),
     }
+
+
+def write_points3d(path, points):
+    with open(path, "wb") as stream:
+        stream.write(struct.pack("<Q", len(points)))
+        for index, xyz in enumerate(points):
+            stream.write(struct.pack("<QdddBBBdQ", index, *xyz, 1, 2, 3, 0.5, 2))
+            stream.write(struct.pack("<iiii", 0, 0, 1, 0))
+
+
+def sparse_cloud():
+    rng = np.random.default_rng(1)
+    return rng.uniform([-10, -5, -0.5], [10, 5, 3], size=(500, 3))
+
+
+class SparseBBoxTest(unittest.TestCase):
+    def test_outside_centres_rejected_and_similarity_invariant(self):
+        points = sparse_cloud()
+        means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
+        expected, report = sparse_bbox_mask(means, points)
+        self.assertEqual(expected.tolist(), [False, False, True, True, False])
+        self.assertEqual(report["outside_sparse_bbox"], 2)
+        rotation = Rotation.from_euler("xyz", [0.3, 1.2, -0.7])
+        for scale in (1e-5, 1e5):
+            with self.subTest(scale=scale):
+                transform = lambda x: rotation.apply(x) * scale + np.array([4, -1, 7]) * scale
+                mask, _ = sparse_bbox_mask(transform(means), transform(points))
+                np.testing.assert_array_equal(mask, expected)
+
+    def test_margin_and_invalid_inputs(self):
+        points = sparse_cloud()
+        mask, _ = sparse_bbox_mask(np.array([[12, 0, 0]]), points, margin=0.2)
+        self.assertFalse(mask[0])
+        with self.assertRaises(ValueError):
+            sparse_bbox_mask(np.zeros((1, 3)), points[:5])
+        with self.assertRaises(ValueError):
+            sparse_bbox_mask(np.zeros((1, 3)), points, margin=-1)
+        with self.assertRaises(ValueError):
+            sparse_bbox_mask(np.zeros((1, 3)), np.zeros((20, 3)))
+
+    def test_points3d_reader_skips_tracks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "points3D.bin"
+            write_points3d(path, sparse_cloud()[:7])
+            np.testing.assert_allclose(load_sparse_points(path), sparse_cloud()[:7])
+            path.write_bytes(path.read_bytes()[:-3])
+            with self.assertRaisesRegex(ValueError, "tronqué"):
+                load_sparse_points(path)
 
 
 class ContextualFilterTest(unittest.TestCase):
@@ -151,6 +202,35 @@ class ContextualFilterTest(unittest.TestCase):
                                         "--overwrite"], capture_output=True, text=True, timeout=30)
             self.assertNotEqual(same_path.returncode, 0)
             self.assertEqual(source.read_bytes(), original)
+
+    def test_binary_cli_sparse_bbox_applies_independently(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output, points = root / "raw.splat", root / "result.splat", root / "p.bin"
+            s = scene()
+            s["means"] = np.vstack((s["means"], [[200, 0, 0]]))
+            for key in ("scales", "quats", "opacity", "dc"):
+                s[key] = np.concatenate((s[key], s[key][:1]))
+            export.write_world_splat(s, source, np.eye(4), np.eye(3), 1, 100)
+            cloud = np.random.default_rng(2).uniform([-13, -6, -1], [13, 6, 4], (500, 3))
+            write_points3d(points, cloud)
+            command = [sys.executable, str(ROOT / "filter_splats.py"), "--input", str(source),
+                       "--output", str(output), "--sparse-points", str(points)]
+            result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            records = np.fromfile(output, dtype=SPLAT_DTYPE)
+            self.assertEqual(len(records), len(s["means"]) - 1)
+            self.assertFalse(np.any(records["position"][:, 0] == 200))
+            report = json.loads(output.with_suffix(".filter.json").read_text())
+            self.assertEqual(report["sparse_bbox"]["outside_sparse_bbox"], 1)
+            self.assertEqual(report["applied_rejections"], 1)
+            self.assertEqual(report["contextual_input"], len(s["means"]) - 1)
+            self.assertGreaterEqual(report["proposed_rejections"], 2)
+            write_points3d(points, sparse_cloud() + 1000)
+            failed = subprocess.run(command + ["--overwrite"], capture_output=True, text=True,
+                                    timeout=30)
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("repère", failed.stderr)
 
     def test_new_exporter_cli_writes_diagnostics_without_retraining(self):
         with tempfile.TemporaryDirectory() as temporary:

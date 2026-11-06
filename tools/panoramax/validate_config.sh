@@ -43,6 +43,21 @@ validate_config() {
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
+  config_choice SPLAT_SPARSE_BBOX_MODE "${SPLAT_SPARSE_BBOX_MODE:-apply}" 'apply|diagnostic|off'
+  config_choice FLOATER_SUPPRESSION "${FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
+  value="${SPLATS_PER_IMAGE:-}"
+  [[ -z "$value" ]] || config_positive_integer SPLATS_PER_IMAGE "$value"
+  value="${SPLAT_SPARSE_BBOX_MARGIN:-0.05}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+    config_error "SPLAT_SPARSE_BBOX_MARGIN='$value' doit être un nombre >= 0 (fraction de la bbox)."
+  value="${GROWTH_FACTOR:-}"
+  [[ -z "$value" ]] || {
+    [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 1) }'
+  } || config_error "GROWTH_FACTOR='$value' doit être vide ou un nombre > 1."
+  value="${GROWTH_STOP_FRACTION:-}"
+  [[ -z "$value" ]] || {
+    [[ "$value" =~ ^0?[.][0-9]+$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 0 && x < 1) }'
+  } || config_error "GROWTH_STOP_FRACTION='$value' doit être vide ou dans ]0,1[."
   value="${SPLAT_FILTER_SIZE_FACTOR:-10}"
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v x="$value" 'BEGIN { exit !(x > 1 && x / 2 < x) }' ||

@@ -82,7 +82,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  out=args[args.index('--output')+1]; n=int(args[args.index('--num-blocks')+1]); os.makedirs(out,exist_ok=True); blocks=[]\n"
                 "  for i in range(n):\n"
                 "    name=f'block_{i:03d}'; folder=os.path.join(out,name); os.makedirs(folder)\n"
-                "    [open(os.path.join(folder,x),'wb').write(b'colmap') for x in ('cameras.bin','images.bin','points3D.bin')]\n"
+                "    [open(os.path.join(folder,x),'wb').write(b'colmap') for x in ('cameras.bin','points3D.bin')]\n"
+                "    open(os.path.join(folder,'images.bin'),'wb').write((3+i).to_bytes(8,'little'))\n"
                 "    blocks.append({'block_id':i})\n"
                 "  json.dump({'blocks':blocks},open(os.path.join(out,'manifest.json'),'w'))\n"
                 "elif args and args[0].endswith('export_ply.py'):\n"
@@ -94,6 +95,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  import pathlib, shutil\n"
                 "  assert args[args.index('--mode')+1]=='apply'\n"
                 "  assert args[args.index('--size-factor')+1]=='12'\n"
+                "  assert args[args.index('--sparse-points')+1].endswith('sfm-3/sparse/0/points3D.bin')\n"
+                "  assert args[args.index('--sparse-bbox-mode')+1]=='diagnostic'\n"
+                "  assert args[args.index('--sparse-bbox-margin')+1]=='0.1'\n"
                 "  out=pathlib.Path(args[args.index('--output')+1])\n"
                 "  shutil.copyfile(args[args.index('--input')+1],out)\n"
                 "  out.with_suffix('.rejected.splat').write_bytes(b'')\n"
@@ -108,6 +112,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "import json, os, sys\n"
                 "args=sys.argv[1:]\n"
                 "if args[0]=='train':\n"
+                "  get=lambda k: args[args.index(k)+1]\n"
+                "  assert get('--cap-max') in ('600','800'), args\n"
+                "  assert (get('--growth-factor'),get('--refine-stop-iter'),get('--refine-stop-num-iter'),get('--floater-suppression'))==('1.03','2','1','mild'), args\n"
                 "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); splats=os.path.join(root,name); ckpt=os.path.join(splats,f'step-{n:09d}.ckpt'); os.makedirs(ckpt,exist_ok=True)\n"
                 "  open(os.path.join(ckpt,'splat.ply'),'wb').write(b'ply')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(splats,'scene_transform.json'),'w'))\n"
@@ -129,6 +136,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
                 'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
                 'SPLAT_FILTER_MODE="apply"\nSPLAT_FILTER_SIZE_FACTOR="12"\n'
+                'SPLAT_SPARSE_BBOX_MODE="diagnostic"\nSPLAT_SPARSE_BBOX_MARGIN="0.1"\n'
+                'SPLATS_PER_IMAGE="200"\nGROWTH_FACTOR="1.03"\n'
+                'GROWTH_STOP_FRACTION="0.6"\nFLOATER_SUPPRESSION="mild"\n'
             )
             log = root / "commands.log"
 
