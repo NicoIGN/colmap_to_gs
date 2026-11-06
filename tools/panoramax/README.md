@@ -324,6 +324,13 @@ reconstruction et l'entraînement des splats. Le code `139` indique un SIGSEGV,
 pas à lui seul un manque de mémoire GPU. Essayer `SFM_MATCHER="bruteforce"`
 pour contourner LightGlue, ou mettre à jour Spirula ; aucun contournement
 automatique ne change la méthode de calcul à l'insu de l'utilisateur.
+Si `sfm auto` termine avec SIGSEGV après l'export, le wrapper vérifie que les
+trois fichiers binaires de `sparse/0` ont été créés pendant cette exécution,
+se lisent entièrement et contiennent des caméras, images et points. Si ces
+conditions sont satisfaites, il poursuit avec un avertissement explicite.
+Des fichiers préexistants, absents, vides ou tronqués restent bloquants.
+Cette récupération ne corrige pas le crash et ne certifie pas la qualité du
+modèle ; les codes d'erreur de qualité ou de géoréférencement restent propagés.
 `SFM_THREADS` permet de limiter les fils SfM ; sous Slurm, son défaut suit
 `SLURM_CPUS_PER_TASK` au lieu du nombre de CPU physiques du nœud.
 

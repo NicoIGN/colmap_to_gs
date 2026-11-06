@@ -356,7 +356,12 @@ fi
 
 mkdir -p -- "$output_dir"
 
-# Conserver le code de retour exact, notamment pour les résultats partiels.
+# Do not mistake files from a previous reconstruction for recovered output.
+existing_sparse=false
+for name in cameras images points3D; do
+  [[ ! -e "$output_dir/sparse/0/$name.bin" ]] || existing_sparse=true
+done
+
 if "${cmd[@]}"; then
   printf '[SFM] Reconstruction terminée : %s\n' "$output_dir"
 else
@@ -366,12 +371,49 @@ else
     2) message="Aucune reconstruction" ;;
     3) message="Modèle écrit mais reconstruction partielle ou erreur élevée" ;;
     4) message="Modèle écrit mais repère métrique demandé non obtenu" ;;
-    139) message="Segmentation fault dans Spirula (SIGSEGV), avant la fin du SfM" ;;
+    139) message="Segmentation fault dans Spirula (SIGSEGV)" ;;
     *) message="Échec ou interruption" ;;
   esac
   printf '[SFM] %s (code %s). Workspace : %s\n' \
     "$message" "$status" "$output_dir" >&2
   if [[ "$status" -eq 139 ]]; then
+    if [[ "$existing_sparse" == false ]] &&
+       PYTHONPATH="$script_dir/..${PYTHONPATH:+:$PYTHONPATH}" \
+       "${PYTHON_BIN:-python3}" - "$output_dir/sparse/0" <<'PY'
+from pathlib import Path
+import sys
+
+from tools.preprocess.colmap_split_blocks import (
+    read_cameras_binary, read_images_binary, read_points3d_binary,
+)
+
+root = Path(sys.argv[1])
+try:
+    counts = []
+    for name, reader in (
+        ("cameras", read_cameras_binary),
+        ("images", read_images_binary),
+        ("points3D", read_points3d_binary),
+    ):
+        path = root / f"{name}.bin"
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"Fichier absent ou vide : {path}")
+        count = len(reader(path))
+        if count == 0:
+            raise ValueError(f"Modèle vide : {path}")
+        counts.append(count)
+except (OSError, ValueError, EOFError) as exc:
+    print(f"[SFM] Validation des fichiers après SIGSEGV impossible : {exc}", file=sys.stderr)
+    sys.exit(1)
+print(f"[SFM] sparse/0 lisible : {counts[0]} caméras, {counts[1]} images, {counts[2]} points.")
+PY
+    then
+      printf '[AVERTISSEMENT] Spirula a terminé avec SIGSEGV (code 139), mais sparse/0 vient d’être écrit et se lit entièrement. Poursuite avec ce modèle ; la cause du crash reste à diagnostiquer.\n' >&2
+      exit 0
+    fi
+    if [[ "$existing_sparse" == true ]]; then
+      printf '[SFM] Fichiers sparse/0 préexistants : récupération automatique refusée pour éviter de valider un ancien modèle.\n' >&2
+    fi
     printf '[SFM] Si gemm/LightGlue est mentionné plus haut : vérifier la version Spirula et essayer --matcher bruteforce. Ce contournement ne garantit pas de corriger tous les SIGSEGV.\n' >&2
   fi
   exit "$status"
