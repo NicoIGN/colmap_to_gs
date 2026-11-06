@@ -217,6 +217,9 @@ nécessaire pour récupérer les splats supprimés par un ancien export.
 Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
 qualité et limite d'images. Pour changer la sélection, choisir un nouveau
 OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
+Avec `PANORAMAX_REPLACE_REQUEST="true"`, l'ancien `OUTPUT_DIR/panoramax` est
+renommé en `panoramax.replaced-AAAAMMJJ-HHMMSS` (rien n'est supprimé), puis la
+nouvelle requête est téléchargée dans un dossier vide.
 
 ### Filtre exclusif des paires par distance GPS
 

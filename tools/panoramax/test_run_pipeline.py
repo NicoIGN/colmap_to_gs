@@ -35,6 +35,50 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertIn("summary.json", result.stderr)
             self.assertIn("manifest.jsonl", result.stderr)
 
+    def test_changed_request_stops_or_archives_previous_dataset(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "output" / "panoramax"
+            (dataset / "images").mkdir(parents=True)
+            (dataset / "images" / "old.jpg").write_bytes(b"old")
+            (dataset / "request.json").write_text(json.dumps({
+                "bbox": [652600, 6863300, 652900, 6863500],
+                "api_url": "https://explore.panoramax.fr/api", "datetime": None,
+                "quality": "hd", "image_max": None,
+            }))
+            python = root / "python3"
+            python.write_text(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "if sys.argv[1:2] == ['-']:\n"
+                f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
+                "sys.exit(42)\n"
+            )
+            python.chmod(0o755)
+            config = root / "config.sh"
+            config.write_text(
+                f'OUTPUT_DIR="{root / "output"}"\n'
+                'BBOX_LAMBERT93="652600,6863400,652800,6863500"\n'
+                'NUM_BLOCKS=2\nNUM_ITER=3\nCAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                f'PYTHON_BIN="{python}"\n'
+            )
+            run = lambda: subprocess.run(["bash", str(SCRIPT), str(config), "prepare"],
+                                         capture_output=True, text=True, timeout=15)
+            result = run()
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("PANORAMAX_REPLACE_REQUEST", result.stderr)
+            self.assertIn("bbox", result.stderr)
+            self.assertTrue((dataset / "images" / "old.jpg").is_file())
+            with config.open("a") as stream:
+                stream.write('PANORAMAX_REPLACE_REQUEST="true"\n')
+            result = run()
+            self.assertEqual(result.returncode, 42, result.stderr)
+            self.assertIn("archivée", result.stdout)
+            archives = list(dataset.parent.glob("panoramax.replaced-*"))
+            self.assertEqual(len(archives), 1)
+            self.assertTrue((archives[0] / "images" / "old.jpg").is_file())
+            self.assertFalse((dataset / "images" / "old.jpg").exists())
+
     def test_config_drives_download_blocks_merge_and_georef_sidecar(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

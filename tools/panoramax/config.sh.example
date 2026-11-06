@@ -24,6 +24,11 @@ PANORAMAX_DATETIME=""
 # Nombre maximal de photos téléchargées ; vide = jusqu'au plafond API de 10000.
 PANORAMAX_IMAGE_MAX="400"
 
+# Si OUTPUT_DIR contient une autre requête (bbox, dates, qualité, limite) :
+# false = arrêt ; true = archive OUTPUT_DIR/panoramax en panoramax.replaced-DATE
+# (photos, SfM et blocs conservés, à supprimer à la main) puis retéléchargement.
+PANORAMAX_REPLACE_REQUEST="false"
+
 # Exécutable Spirula ; vide = recherche dans PATH puis voisin spirula-studio.
 SPIRULA_BIN=""
 

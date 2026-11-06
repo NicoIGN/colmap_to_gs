@@ -42,6 +42,7 @@ validate_config() {
     '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
+  config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
   config_choice SPLAT_SPARSE_BBOX_MODE "${SPLAT_SPARSE_BBOX_MODE:-apply}" 'apply|diagnostic|off'
   config_choice FLOATER_SUPPRESSION "${FLOATER_SUPPRESSION:-off}" 'off|mild|strong'

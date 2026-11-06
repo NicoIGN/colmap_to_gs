@@ -72,6 +72,7 @@ PANORAMAX_API_URL="${PANORAMAX_API_URL:-https://explore.panoramax.fr/api}"
 PANORAMAX_QUALITY="${PANORAMAX_QUALITY:-hd}"
 PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
+PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
@@ -119,10 +120,11 @@ SFM_DIR="$DATASET_DIR/sfm-$NUM_ITER"
 BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
 GS_ROOT="$DATASET_DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
 prepare_images() {
-  local bbox_args
-  [[ ! -e "$DATASET_DIR/request.json" ]] || "$PYTHON_BIN" - \
+  local bbox_args request_status=0 archive
+  if [[ -e "$DATASET_DIR/request.json" ]]; then
+    "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
-    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY'
+    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY' || request_status=$?
 import json
 import sys
 
@@ -142,11 +144,26 @@ for key, value in expected.items():
         actual = actual.rstrip("/")
         value = value.rstrip("/")
     if actual != value:
-        raise SystemExit(
-            f"Le dossier {path} appartient à une autre configuration "
-            f"({key}: {actual!r} != {value!r}). Choisir un OUTPUT_DIR neuf."
+        print(
+            f"[pipeline] {path} appartient à une autre requête "
+            f"({key}: {actual!r} != {value!r}).", file=sys.stderr,
         )
+        raise SystemExit(3)
 PY
+  fi
+  if ((request_status == 3)); then
+    case "$PANORAMAX_REPLACE_REQUEST" in
+      true|1|yes|on) ;;
+      *) die "Choisir un OUTPUT_DIR neuf, ou PANORAMAX_REPLACE_REQUEST=\"true\" pour archiver $DATASET_DIR et retélécharger." ;;
+    esac
+    # Archive rather than delete: old photos, SfM and blocks stay recoverable.
+    archive="$DATASET_DIR.replaced-$(date +%Y%m%d-%H%M%S)"
+    [[ ! -e "$archive" ]] || die "Archive déjà présente : $archive"
+    mv -- "$DATASET_DIR" "$archive"
+    printf '[pipeline] Ancienne requête archivée dans %s (à supprimer manuellement si inutile).\n' "$archive"
+  elif ((request_status != 0)); then
+    die "Lecture impossible de $DATASET_DIR/request.json (code $request_status)."
+  fi
 
   if [[ ! -e "$DATASET_DIR/request.json" && -d "$DATASET_DIR/images" ]] &&
      [[ -n "$(ls -A "$DATASET_DIR/images" 2>/dev/null)" ]]; then
