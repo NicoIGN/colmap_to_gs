@@ -366,9 +366,13 @@ else
     2) message="Aucune reconstruction" ;;
     3) message="Modèle écrit mais reconstruction partielle ou erreur élevée" ;;
     4) message="Modèle écrit mais repère métrique demandé non obtenu" ;;
+    139) message="Segmentation fault dans Spirula (SIGSEGV), avant la fin du SfM" ;;
     *) message="Échec ou interruption" ;;
   esac
   printf '[SFM] %s (code %s). Workspace : %s\n' \
     "$message" "$status" "$output_dir" >&2
+  if [[ "$status" -eq 139 ]]; then
+    printf '[SFM] Si gemm/LightGlue est mentionné plus haut : vérifier la version Spirula et essayer --matcher bruteforce. Ce contournement ne garantit pas de corriger tous les SIGSEGV.\n' >&2
+  fi
   exit "$status"
 fi

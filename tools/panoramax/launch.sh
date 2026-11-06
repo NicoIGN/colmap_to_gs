@@ -14,7 +14,7 @@ usage() {
 Usage:
   bash tools/panoramax/launch.sh /path/to/config.sh [--wait]
 
-Submit the complete Panoramax pipeline to one Slurm GPU job.
+Submit preparation, a GPU job array (one block per task), then merge.
 Start from tools/panoramax/config.sh.example (trusted Bash configuration).
 --wait waits for completion and returns a failure if the job fails.
 Without --wait, success means submission only.
@@ -45,11 +45,16 @@ SLURM_TIME_LIMIT="${SLURM_TIME_LIMIT:-48:00:00}"
 SLURM_GPU_TYPE="${SLURM_GPU_TYPE:-}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-}"
 SLURM_QOS="${SLURM_QOS:-}"
+SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-$NUM_BLOCKS}"
+[[ "$NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "NUM_BLOCKS doit être un entier positif."
+[[ "$SLURM_BLOCK_PARALLELISM" =~ ^[1-9][0-9]*$ ]] ||
+  die "SLURM_BLOCK_PARALLELISM doit être un entier positif."
 [[ "$SLURM_CPUS_PER_TASK" =~ ^[1-9][0-9]*$ ]] ||
   die "SLURM_CPUS_PER_TASK doit être un entier positif."
 [[ -z "$SLURM_GPU_TYPE" || "$SLURM_GPU_TYPE" =~ ^[a-zA-Z0-9_-]+$ ]] ||
   die "SLURM_GPU_TYPE doit être un type GPU Slurm, sans séparateur ':'."
 command -v sbatch >/dev/null 2>&1 || die "sbatch introuvable ; lancer depuis le cluster."
+command -v scancel >/dev/null 2>&1 || die "scancel introuvable."
 [[ -f "$script_dir/launch.slurm" ]] || die "launch.slurm introuvable."
 [[ -f "$script_dir/run_pipeline.sh" ]] || die "run_pipeline.sh introuvable."
 
@@ -60,45 +65,73 @@ gres="gpu:1"
 [[ -z "$SLURM_GPU_TYPE" ]] || gres="gpu:$SLURM_GPU_TYPE:1"
 sbatch_args=(
   --parsable
-  --job-name=panoramax
   --nodes=1
   --ntasks=1
   "--partition=$SLURM_PARTITION"
   "--cpus-per-task=$SLURM_CPUS_PER_TASK"
   "--mem=$SLURM_MEMORY"
   "--time=$SLURM_TIME_LIMIT"
-  "--gres=$gres"
   "--chdir=$submit_dir"
   --export=ALL
-  "--output=$log_dir/panoramax-%j.out"
-  "--error=$log_dir/panoramax-%j.err"
 )
 [[ -z "$SLURM_ACCOUNT" ]] || sbatch_args+=("--account=$SLURM_ACCOUNT")
 [[ -z "$SLURM_QOS" ]] || sbatch_args+=("--qos=$SLURM_QOS")
-[[ "${2:-}" != --wait ]] || sbatch_args+=(--wait)
 
 printf '[slurm] Configuration : %s\n' "$config_path"
-printf '[slurm] Partition=%s CPU=%s RAM=%s GPU=%s durée=%s\n' \
-  "$SLURM_PARTITION" "$SLURM_CPUS_PER_TASK" "$SLURM_MEMORY" "$gres" "$SLURM_TIME_LIMIT"
-status=0
-submission="$(sbatch "${sbatch_args[@]}" "$script_dir/launch.slurm" \
-  "$repo_root" "$config_path")" || status=$?
-job_id="${submission%%;*}"
-if [[ "$job_id" =~ ^[0-9]+$ ]]; then
-  printf '[slurm] Job : %s\n' "$submission"
-  printf '[slurm] stdout : %s/panoramax-%s.out\n' "$log_dir" "$job_id"
-  printf '[slurm] stderr : %s/panoramax-%s.err\n' "$log_dir" "$job_id"
-  printf '[slurm] Suivi : squeue -j %s\n' "$job_id"
-  printf '[slurm] Bilan : sacct -j %s --format=JobID,State,ExitCode\n' "$job_id"
-elif [[ "$status" -eq 0 ]]; then
-  die "Réponse sbatch invalide : $submission"
-fi
-if [[ "$status" -ne 0 ]]; then
-  printf '[ERREUR] Échec Slurm (soumission ou exécution), code %s.\n' "$status" >&2
-  exit "$status"
-fi
+printf '[slurm] Partition=%s CPU/job=%s RAM/job=%s GPU/bloc=%s durée/job=%s parallélisme=%s\n' \
+  "$SLURM_PARTITION" "$SLURM_CPUS_PER_TASK" "$SLURM_MEMORY" "$gres" \
+  "$SLURM_TIME_LIMIT" "$SLURM_BLOCK_PARALLELISM"
+submitted_jobs=()
+submit_job() {
+  local stage="$1" status=0 submission
+  shift
+  submission="$(sbatch "${sbatch_args[@]}" "$@" "$script_dir/launch.slurm" \
+    "$repo_root" "$config_path" "$stage")" || status=$?
+  job_id="${submission%%;*}"
+  if [[ "$job_id" =~ ^[0-9]+$ ]]; then
+    submitted_jobs+=("$job_id")
+    printf '[slurm] %s : job %s\n' "$stage" "$submission"
+  elif [[ "$status" -eq 0 ]]; then
+    printf '[ERREUR] Réponse sbatch invalide : %s\n' "$submission" >&2
+    status=1
+  fi
+  if [[ "$status" -ne 0 ]]; then
+    printf '[ERREUR] Échec Slurm à l’étape %s (soumission ou exécution), code %s.\n' \
+      "$stage" "$status" >&2
+    if [[ ${#submitted_jobs[@]} -gt 0 ]]; then
+      printf '[slurm] Annulation des jobs restants de cette soumission : %s\n' "${submitted_jobs[*]}"
+      scancel "${submitted_jobs[@]}" ||
+        printf '[AVERTISSEMENT] Annulation incomplète ; vérifier squeue.\n' >&2
+    fi
+    exit "$status"
+  fi
+}
+
+submit_job prepare --job-name=panoramax-prepare "--gres=$gres" \
+  "--output=$log_dir/panoramax-prepare-%j.out" \
+  "--error=$log_dir/panoramax-prepare-%j.err"
+prepare_job="$job_id"
+submit_job train-block --job-name=panoramax-block "--gres=$gres" \
+  "--array=0-$((NUM_BLOCKS - 1))%$SLURM_BLOCK_PARALLELISM" \
+  "--dependency=afterok:$prepare_job" --kill-on-invalid-dep=yes \
+  "--output=$log_dir/panoramax-block-%A_%a.out" \
+  "--error=$log_dir/panoramax-block-%A_%a.err"
+blocks_job="$job_id"
+printf '[slurm] Journaux préparation : %s/panoramax-prepare-%s.{out,err}\n' "$log_dir" "$prepare_job"
+printf '[slurm] Journaux blocs : %s/panoramax-block-%s_INDICE.{out,err}\n' "$log_dir" "$blocks_job"
+merge_args=()
+[[ "${2:-}" != --wait ]] || merge_args+=(--wait)
+submit_job merge --job-name=panoramax-merge --gres=none \
+  "--dependency=afterok:$blocks_job" --kill-on-invalid-dep=yes \
+  "--output=$log_dir/panoramax-merge-%j.out" \
+  "--error=$log_dir/panoramax-merge-%j.err" "${merge_args[@]}"
+printf '[slurm] Journaux fusion : %s/panoramax-merge-%s.{out,err}\n' "$log_dir" "$job_id"
+printf '[slurm] Suivi : squeue -j %s,%s,%s\n' "$prepare_job" "$blocks_job" "$job_id"
+printf '[slurm] Bilan : sacct -j %s,%s,%s --format=JobID,State,ExitCode\n' \
+  "$prepare_job" "$blocks_job" "$job_id"
+printf '[slurm] Annulation : scancel %s %s %s\n' "$prepare_job" "$blocks_job" "$job_id"
 if [[ "${2:-}" == --wait ]]; then
-  printf '[slurm] Job terminé avec succès.\n'
+  printf '[slurm] Pipeline terminé avec succès (préparation, tous les blocs, fusion).\n'
 else
-  printf '[slurm] Job soumis ; calcul en attente ou en cours.\n'
+  printf '[slurm] Jobs soumis ; calcul en attente ou en cours.\n'
 fi

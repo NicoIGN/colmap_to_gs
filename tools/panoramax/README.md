@@ -163,12 +163,19 @@ OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
 
 ### Exécution GPU sur Slurm
 
-`launch.sh` soumet `launch.slurm`, qui lance **le même pipeline complet**
-dans un job à un seul GPU NVIDIA. Les blocs sont entraînés successivement ;
-le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
+`launch.sh` soumet **le même pipeline complet** en trois étapes dépendantes :
+un job GPU de téléchargement/SfM/découpage, un tableau Slurm (`--array`) avec
+un GPU NVIDIA par bloc, puis un job CPU de fusion et de copie du géoréférencement.
+Les blocs sont entraînés en parallèle, sous réserve des GPU disponibles.
+Le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
 Les ressources sont définies par les variables `SLURM_*` commentées dans
 `config.sh.example` : partition, CPU, RAM, durée, type GPU, compte et QoS.
 Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
+CPU, RAM et durée sont demandés **par job/tâche**, pas pour l'ensemble.
+`SLURM_BLOCK_PARALLELISM` limite les blocs simultanés (défaut : `NUM_BLOCKS`,
+`1` pour les entraîner successivement). Quatre blocs simultanés réservent
+jusqu'à quatre GPU et quatre fois les CPU/RAM configurés.
+La partition choisie doit aussi autoriser le job de fusion sans GPU.
 
 ```bash
 # Sur le nœud de connexion, après adaptation de la configuration au cluster :
@@ -177,9 +184,15 @@ bash tools/panoramax/launch.sh /chemin/partage/config.sh
 bash tools/panoramax/launch.sh /chemin/partage/config.sh --wait
 ```
 
-Sans `--wait`, le lanceur confirme uniquement la soumission et affiche l'ID
-du job, les commandes `squeue`/`sacct` et les chemins des journaux :
-`OUTPUT_DIR/logs/submit.log`, `panoramax-JOBID.out` et `panoramax-JOBID.err`.
+Sans `--wait`, le lanceur confirme uniquement les trois soumissions et affiche
+leurs ID, les commandes `squeue`/`sacct`/`scancel` et les chemins des journaux :
+`OUTPUT_DIR/logs/submit.log`, `panoramax-prepare-JOBID.{out,err}`,
+`panoramax-block-ARRAYID_INDICE.{out,err}` et `panoramax-merge-JOBID.{out,err}`.
+Les dépendances `afterok` empêchent d'entraîner sans préparation réussie et de
+fusionner si un bloc échoue. Les jobs dont la dépendance échoue sont annulés
+(`--kill-on-invalid-dep=yes`), sans rester indéfiniment en attente.
+`--wait` attend la fusion et renvoie un échec si elle échoue ou ne peut pas
+démarrer. Une soumission partiellement refusée annule les jobs déjà soumis.
 Le dépôt, la configuration, les exécutables et les données doivent être
 accessibles sur le nœud de calcul aux mêmes chemins. Les chemins relatifs sont
 interprétés depuis le dossier de soumission ; préférer des chemins absolus.
@@ -198,11 +211,32 @@ Pour charger les modules du site ou configurer Vulkan, renseigner
 renseigner `SLURM_CONDA_ENV` (par exemple `gsplat`) et, si nécessaire,
 `SLURM_CONDA_BASE`. Sinon l'environnement est hérité de la soumission.
 Python doit contenir `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
-Le job vérifie ces imports et le GPU via `nvidia-smi` avant le pipeline ;
+Chaque job vérifie ces imports ; les jobs GPU vérifient aussi `nvidia-smi` ;
 toute erreur de préparation ou de calcul est propagée à Slurm.
 En cas d'arrêt du pipeline, un message précise l'étape concernée ; le bilan
 Slurm indique le job, le code de sortie et les chemins des journaux. Les lignes
 `srun: error` relaient cet arrêt et ne sont pas, à elles seules, sa cause.
+
+Si Spirula plante dans LightGlue avec `gemm: weight is ... but out has ...`,
+il s'agit d'une incompatibilité de dimensions dans l'appariement, avant la
+reconstruction et l'entraînement des splats. Le code `139` indique un SIGSEGV,
+pas à lui seul un manque de mémoire GPU. Essayer `SFM_MATCHER="bruteforce"`
+pour contourner LightGlue, ou mettre à jour Spirula ; aucun contournement
+automatique ne change la méthode de calcul à l'insu de l'utilisateur.
+`SFM_THREADS` permet de limiter les fils SfM ; sous Slurm, son défaut suit
+`SLURM_CPUS_PER_TASK` au lieu du nombre de CPU physiques du nœud.
+
+Les étapes sont également accessibles individuellement, avec la même config :
+
+```bash
+bash tools/panoramax/run_pipeline.sh config.sh prepare
+bash tools/panoramax/run_pipeline.sh config.sh train-block 0  # indices 0 à N-1
+bash tools/panoramax/run_pipeline.sh config.sh merge
+```
+
+Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifie
+que sa sortie. `merge` exige tous les splats et ne relance aucun entraînement.
+Sans argument d'étape, le pipeline local reste séquentiel et complet.
 
 Le préréglage lance d'abord `prepare_sfm.py` :
 

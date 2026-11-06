@@ -7,11 +7,13 @@ repo_root="$(cd -- "$script_dir/../.." && pwd)"
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_pipeline.sh /path/to/config.sh
+  bash run_pipeline.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
 The config is a trusted Bash file. Start from tools/panoramax/config.sh.example.
 It defines the Panoramax bbox, output directory, SfM/block/training parameters,
 and final .splat name.
+Default: all. prepare downloads, reconstructs and partitions; train-block trains
+only one prepared zero-based block; merge requires every block to be exported.
 EOF
 }
 
@@ -25,9 +27,12 @@ pipeline_error() {
   local status="$1" line="$2"
   printf '[ERREUR] Pipeline arrêté pendant : %s (code %s, ligne %s).\n' \
     "$pipeline_stage" "$status" "$line" >&2
-  if [[ -n "${DATASET_DIR:-}" ]]; then
+  if [[ "$pipeline_stage" == *"photos"* && -n "${DATASET_DIR:-}" ]]; then
     printf '[ERREUR] Diagnostic téléchargement : %s/summary.json et %s/manifest.jsonl\n' \
       "$DATASET_DIR" "$DATASET_DIR" >&2
+  elif [[ -n "${SFM_DIR:-}" ]]; then
+    printf '[ERREUR] Workspace SfM : %s ; modèles des blocs : %s\n' \
+      "$SFM_DIR" "$GS_ROOT" >&2
   fi
   exit "$status"
 }
@@ -37,8 +42,19 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
-[[ $# -eq 1 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
+[[ $# -ge 1 && $# -le 3 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
 config_path="$1"
+phase="${2:-all}"
+phase_args=()
+case "$phase" in
+  all|prepare|merge)
+    [[ $# -le 2 ]] || die "Trop d'arguments pour $phase." ;;
+  train-block)
+    [[ $# -eq 3 && "$3" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      die "train-block attend un indice de bloc entier positif ou nul."
+    phase_args=(--block "$3") ;;
+  *) die "Étape inconnue : $phase" ;;
+esac
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
 # The config is an explicitly selected Bash file, equivalent to sourcing env vars.
 source "$config_path"
@@ -59,6 +75,9 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_PAIRS="${SFM_PAIRS:-prefilter}"
+SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
+SFM_MATCHER="${SFM_MATCHER:-lightglue}"
+SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"
 OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
 SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
@@ -84,9 +103,14 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BI
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 DATASET_DIR="$OUTPUT_DIR/panoramax"
-[[ ! -e "$DATASET_DIR/request.json" ]] || "$PYTHON_BIN" - \
-  "$DATASET_DIR/request.json" "$BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
-  "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY'
+SFM_DIR="$DATASET_DIR/sfm-$NUM_ITER"
+BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
+GS_ROOT="$DATASET_DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
+prepare_images() {
+  local bbox_args
+  [[ ! -e "$DATASET_DIR/request.json" ]] || "$PYTHON_BIN" - \
+    "$DATASET_DIR/request.json" "$BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
+    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY'
 import json
 import sys
 
@@ -112,23 +136,23 @@ for key, value in expected.items():
         )
 PY
 
-if [[ ! -e "$DATASET_DIR/request.json" && -d "$DATASET_DIR/images" ]] &&
-   [[ -n "$(ls -A "$DATASET_DIR/images" 2>/dev/null)" ]]; then
-  die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
-fi
+  if [[ ! -e "$DATASET_DIR/request.json" && -d "$DATASET_DIR/images" ]] &&
+     [[ -n "$(ls -A "$DATASET_DIR/images" 2>/dev/null)" ]]; then
+    die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
+  fi
 
-bbox_args=(--bbox "$BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
-  --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
-[[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
-[[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
-printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
-pipeline_stage="téléchargement des photos Panoramax"
-"$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
+  bbox_args=(--bbox "$BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
+    --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
+  [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
+  [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
+  printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
+  pipeline_stage="téléchargement des photos Panoramax"
+  "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
 
-# The downloader retains old files for manual resume. The dedicated pipeline
-# directory must contain exactly this run's successful/reused manifest images.
-pipeline_stage="validation des photos téléchargées"
-"$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
+  # The downloader retains old files for manual resume. The dedicated pipeline
+  # directory must contain exactly this run's successful/reused manifest images.
+  pipeline_stage="validation des photos téléchargées"
+  "$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -157,26 +181,45 @@ if stale:
 if not expected:
     raise SystemExit("Aucune photo téléchargée ou réutilisable dans le manifeste.")
 PY
+}
 
-printf '[pipeline] SfM, découpage et entraînement de %s blocs\n' "$NUM_BLOCKS"
-pipeline_stage="reconstruction SfM, découpage COLMAP et entraînement des blocs"
-DIR="$DATASET_DIR" \
-SPIRULA_BIN="$SPIRULA_BIN" \
-PYTHON_BIN="$PYTHON_BIN" \
-NUM_ITER="$NUM_ITER" \
-NUM_BLOCKS="$NUM_BLOCKS" \
-CAP_MAX="$CAP_MAX" \
-TRAIN_PRESET="$TRAIN_PRESET" \
-SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
-SFM_ALIKED_MAX_FEATURES="$SFM_ALIKED_MAX_FEATURES" \
-SFM_PAIRS="$SFM_PAIRS" \
-OVERLAP_MAX_FRACTION="$OVERLAP_MAX_FRACTION" \
-CLEAN_GS="$CLEAN_GS" \
-bash "$repo_root/scripts/run_spirula_blocks.sh"
+if [[ "$phase" == all || "$phase" == prepare ]]; then
+  prepare_images
+fi
 
-SFM_DIR="$DATASET_DIR/sfm-$NUM_ITER"
-BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
-GS_ROOT="$DATASET_DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
+if [[ "$phase" != merge ]]; then
+  if [[ "$phase" == prepare ]]; then
+    phase_args=(--prepare-only)
+    pipeline_stage="reconstruction SfM et découpage COLMAP"
+  elif [[ "$phase" == train-block ]]; then
+    pipeline_stage="entraînement du bloc $3"
+  else
+    pipeline_stage="reconstruction SfM, découpage COLMAP et entraînement des blocs"
+  fi
+  printf '[pipeline] Étape : %s\n' "$pipeline_stage"
+  DIR="$DATASET_DIR" \
+  SPIRULA_BIN="$SPIRULA_BIN" \
+  PYTHON_BIN="$PYTHON_BIN" \
+  NUM_ITER="$NUM_ITER" \
+  NUM_BLOCKS="$NUM_BLOCKS" \
+  CAP_MAX="$CAP_MAX" \
+  TRAIN_PRESET="$TRAIN_PRESET" \
+  SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
+  SFM_ALIKED_MAX_FEATURES="$SFM_ALIKED_MAX_FEATURES" \
+  SFM_PAIRS="$SFM_PAIRS" \
+  SFM_FEATURES="$SFM_FEATURES" \
+  SFM_MATCHER="$SFM_MATCHER" \
+  SFM_THREADS="$SFM_THREADS" \
+  OVERLAP_MAX_FRACTION="$OVERLAP_MAX_FRACTION" \
+  CLEAN_GS="$CLEAN_GS" \
+  bash "$repo_root/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
+fi
+if [[ "$phase" == prepare || "$phase" == train-block ]]; then
+  printf '[pipeline] Étape %s terminée.\n' "$phase"
+  exit 0
+fi
+
+pipeline_stage="vérification des splats avant fusion"
 MERGE_INPUTS=()
 for ((index = 0; index < NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
@@ -199,7 +242,8 @@ mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
 cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
-cp -R "$SFM_DIR/sparse/0" "$GEOREF_DIR/sparse"
+mkdir -p "$GEOREF_DIR/sparse"
+cp -R "$SFM_DIR/sparse/0/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
 for ((index = 0; index < NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"

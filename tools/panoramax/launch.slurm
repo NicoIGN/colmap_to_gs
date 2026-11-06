@@ -6,14 +6,24 @@ die() {
   exit 1
 }
 
-[[ $# -eq 2 ]] || die "Usage : launch.slurm REPO_ROOT CONFIG_SH (via launch.sh)"
+[[ $# -eq 2 || $# -eq 3 ]] ||
+  die "Usage : launch.slurm REPO_ROOT CONFIG_SH [prepare|train-block|merge|all] (via launch.sh)"
 repo_root="$1"
 config_path="$2"
+phase="${3:-all}"
+case "$phase" in
+  all|prepare|merge) ;;
+  train-block)
+    [[ "${SLURM_ARRAY_TASK_ID:-}" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      die "SLURM_ARRAY_TASK_ID requis pour entraîner un bloc." ;;
+  *) die "Étape inconnue : $phase" ;;
+esac
 : "${SLURM_JOB_ID:?Ce script doit être lancé dans une allocation Slurm}"
 [[ -f "$config_path" ]] || die "Configuration inaccessible sur le nœud : $config_path"
 [[ -f "$repo_root/tools/panoramax/run_pipeline.sh" ]] ||
   die "Dépôt inaccessible sur le nœud : $repo_root"
 source "$config_path"
+: "${OUTPUT_DIR:?OUTPUT_DIR requis}"
 
 # Site-specific modules (Vulkan, drivers, Conda) must be loaded on the node.
 if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
@@ -52,24 +62,32 @@ printf '[slurm] Job=%s hôte=%s dossier=%s\n' "$SLURM_JOB_ID" "$(hostname)" "$PW
 printf '[slurm] Python=%s\n' "$(command -v "$PYTHON_BIN")"
 "$PYTHON_BIN" -c 'import numpy, scipy, tqdm, pyproj, plyfile'
 
-# The allocation (and its device cgroup) is inherited by this single job step.
-# Spirula uses Vulkan, not PyTorch/CUDA; all blocks run sequentially on one GPU.
+printf '[slurm] Étape=%s bloc=%s\n' "$phase" "${SLURM_ARRAY_TASK_ID:-sans objet}"
+# Each array task inherits its own GPU allocation and device cgroup.
 exec_status=0
 srun --unbuffered --export=ALL bash -c '
   set -euo pipefail
-  command -v nvidia-smi >/dev/null 2>&1 || {
-    echo "[ERREUR] nvidia-smi introuvable ; GPU NVIDIA requis." >&2
-    exit 1
-  }
-  nvidia-smi -L
-  bash "$1/tools/panoramax/run_pipeline.sh" "$2"
-' bash "$repo_root" "$config_path" || exec_status=$?
+  if [[ "$3" != merge ]]; then
+    command -v nvidia-smi >/dev/null 2>&1 || {
+      echo "[ERREUR] nvidia-smi introuvable ; GPU NVIDIA requis." >&2
+      exit 1
+    }
+    nvidia-smi -L
+  fi
+  args=("$2" "$3")
+  [[ "$3" != train-block ]] || args+=("$SLURM_ARRAY_TASK_ID")
+  bash "$1/tools/panoramax/run_pipeline.sh" "${args[@]}"
+' bash "$repo_root" "$config_path" "$phase" || exec_status=$?
 if [[ "$exec_status" -ne 0 ]]; then
   printf '[ERREUR] Pipeline GPU en échec (job %s, hôte %s, code %s).\n' \
     "$SLURM_JOB_ID" "$(hostname)" "$exec_status" >&2
   printf '[ERREUR] srun relaie un arrêt du pipeline ou du job ; consulter la cause et l’étape indiquées plus haut.\n' >&2
-  printf '[ERREUR] Journaux : %s/logs/panoramax-%s.out et %s/logs/panoramax-%s.err\n' \
-    "$OUTPUT_DIR" "$SLURM_JOB_ID" "$OUTPUT_DIR" "$SLURM_JOB_ID" >&2
+  log_name="panoramax-$phase-$SLURM_JOB_ID"
+  if [[ "$phase" == train-block ]]; then
+    log_name="panoramax-block-${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}"
+  fi
+  printf '[ERREUR] Étape : %s ; journaux : %s/logs/%s.{out,err}\n' \
+    "$phase" "$OUTPUT_DIR" "$log_name" >&2
   exit "$exec_status"
 fi
-printf '[slurm] Pipeline GPU terminé ; .splat et .georef dans OUTPUT_DIR.\n'
+printf '[slurm] Étape %s terminée.\n' "$phase"

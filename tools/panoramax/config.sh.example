@@ -50,6 +50,14 @@ SFM_ALIKED_MAX_FEATURES="4096"
 # prefilter. Pour des photos Panoramax sans ordre de noms, prefilter est adapté.
 SFM_PAIRS="prefilter"
 
+# Extracteur et apparieur SfM. Si LightGlue plante avec une erreur gemm,
+# essayer SFM_MATCHER="bruteforce" sans changer les images ni la bbox.
+SFM_FEATURES="aliked-n16rot"
+SFM_MATCHER="lightglue"
+
+# Nombre de fils SfM ; vide = CPU Slurm alloués, sinon défaut Spirula en local.
+SFM_THREADS=""
+
 # Fraction maximale d'images ajoutées en recouvrement par le découpeur COLMAP.
 OVERLAP_MAX_FRACTION="0.05"
 
@@ -68,18 +76,23 @@ SPLAT_MERGE_STRENGTH="1.0"
 # Partition GPU du cluster (adapter au site).
 SLURM_PARTITION="jean-zellou"
 
-# Nombre de CPU alloués au job unique.
+# Nombre de CPU alloués à chaque job (préparation, chaque bloc, fusion).
 SLURM_CPUS_PER_TASK="16"
 
-# Mémoire RAM du job (pas la VRAM GPU), syntaxe Slurm.
+# Mémoire RAM par job (pas la VRAM GPU), syntaxe Slurm.
 SLURM_MEMORY="64G"
 
-# Durée maximale du job entier, téléchargement et fusion compris.
+# Durée maximale de chaque job, syntaxe Slurm.
 SLURM_TIME_LIMIT="48:00:00"
 
 # Type GPU Slurm facultatif, par exemple a100 ; vide = gpu:1 sans type.
-# Un seul GPU est réservé ; les blocs sont entraînés successivement.
+# Un GPU pour la préparation puis un GPU par bloc ; fusion sans GPU.
 SLURM_GPU_TYPE=""
+
+# Maximum de blocs entraînés simultanément ; vide = NUM_BLOCKS.
+# Exemple : 4 blocs parallèles = jusqu'à 4 GPU et 4 fois la RAM/CPU par job.
+# 1 = entraînement séquentiel ; Slurm peut réduire le parallélisme effectif.
+SLURM_BLOCK_PARALLELISM=""
 
 # Compte de facturation et qualité de service Slurm ; vide = défaut du site.
 SLURM_ACCOUNT=""

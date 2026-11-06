@@ -60,6 +60,11 @@ class BlockPipelineTest(unittest.TestCase):
                 "import json, os, sys\n"
                 "args = sys.argv[1:]\n"
                 "with open(os.environ['COMMAND_LOG'], 'a') as f: f.write(json.dumps(['spirula'] + args) + '\\n')\n"
+                "if args[0] == 'sfm':\n"
+                "  status = int(os.environ.get('TEST_SFM_STATUS', '0'))\n"
+                "  if status: sys.exit(status)\n"
+                "  out=args[args.index('--output')+1]; sparse=os.path.join(out,'sparse','0'); os.makedirs(sparse,exist_ok=True)\n"
+                "  for name in ('cameras.bin','images.bin','points3D.bin'): open(os.path.join(sparse,name),'wb').write(b'colmap')\n"
                 "if args[0] == 'train':\n"
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  name = args[args.index('--output-dir-name') + 1]\n"
@@ -84,9 +89,9 @@ class BlockPipelineTest(unittest.TestCase):
                 CAP_MAX="1000",
             )
 
-            def execute():
+            def execute(*args):
                 return subprocess.run(
-                    ["bash", str(SCRIPT)], cwd=root, env=env,
+                    ["bash", str(SCRIPT), *args], cwd=root, env=env,
                     capture_output=True, text=True, timeout=30,
                 )
 
@@ -103,6 +108,26 @@ class BlockPipelineTest(unittest.TestCase):
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertEqual(sum(cmd[0] == "split" for cmd in commands), 1)
             self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 2)
+
+            for name in ("cameras.bin", "images.bin", "points3D.bin"):
+                (sparse / name).unlink()
+            env.update(SFM_FEATURES="aliked-n16rot", SFM_MATCHER="bruteforce",
+                       SFM_THREADS="6", PREPARE="false")
+            prepared = execute("--prepare-only")
+            self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            sfm = next(cmd for cmd in commands if cmd[:2] == ["spirula", "sfm"])
+            self.assertEqual(sfm[sfm.index("--matcher") + 1], "bruteforce")
+            self.assertEqual(sfm[sfm.index("--features") + 1], "aliked-n16rot")
+            self.assertEqual(sfm[sfm.index("--threads") + 1], "6")
+            self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 2)
+            for name in ("cameras.bin", "images.bin", "points3D.bin"):
+                (sparse / name).unlink()
+            env["TEST_SFM_STATUS"] = "139"
+            failed = execute("--prepare-only")
+            self.assertEqual(failed.returncode, 139)
+            self.assertIn("Segmentation fault dans Spirula", failed.stderr)
+            self.assertIn("--matcher bruteforce", failed.stderr)
 
 
 if __name__ == "__main__":

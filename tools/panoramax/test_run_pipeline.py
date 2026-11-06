@@ -55,6 +55,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, runpy, sys\n"
                 "args = sys.argv[1:]\n"
+                "if args and args[0] != '-':\n"
+                "  with open(os.environ['COMMAND_LOG'], 'a') as log:\n"
+                "    log.write(os.path.basename(args[0]) + '\\n')\n"
                 "if args and args[0].endswith('download.py'):\n"
                 "  root = args[args.index('--output-dir') + 1]\n"
                 "  bbox = [float(x) for x in args[args.index('--bbox') + 1].split(',')]\n"
@@ -110,15 +113,35 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
                 'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
             )
-            result = subprocess.run(
-                ["bash", str(SCRIPT), str(config)],
-                cwd=root,
-                env=dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}"),
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
+            log = root / "commands.log"
+
+            def execute(*phase):
+                return subprocess.run(
+                    ["bash", str(SCRIPT), str(config), *phase], cwd=root,
+                    env=dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}",
+                             COMMAND_LOG=str(log)),
+                    capture_output=True, text=True, timeout=30,
+                )
+
+            result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((dataset / "gs-3-blocks-2").exists())
+            self.assertFalse((output / "test.splat").exists())
+            result = execute("train-block", "0")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((dataset / "gs-3-blocks-2/block_001").exists())
+            result = execute("merge")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Splat du bloc absent", result.stderr)
+            self.assertFalse((output / "test.splat").exists())
+            result = execute("train-block", "1")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            result = execute("merge")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            commands = log.read_text().splitlines()
+            self.assertEqual(commands.count("download.py"), 1)
+            self.assertEqual(commands.count("colmap_split_blocks.py"), 1)
+            self.assertEqual(commands.count("merge_splats.py"), 1)
             self.assertEqual((output / "test.splat").read_bytes(), b"merged-splat")
             georef = output / "test.georef"
             self.assertTrue((georef / "georeference.json").is_file())
@@ -128,6 +151,12 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertFalse((georef / "sparse/0").exists())
+            result = execute("train-block", "2")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("hors de", result.stderr)
 
 
 if __name__ == "__main__":
