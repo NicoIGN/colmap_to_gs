@@ -244,6 +244,7 @@ for ((index = first_index; index < last_index; index++)); do
     --num-iterations "$NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
+    --export-filter-mode off
   )
   [[ "$CLEAN_GS" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"

@@ -85,6 +85,8 @@ OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
 SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
 SPLAT_MERGE_STRENGTH="${SPLAT_MERGE_STRENGTH:-1.0}"
+SPLAT_FILTER_MODE="${SPLAT_FILTER_MODE:-diagnostic}"
+SPLAT_FILTER_SIZE_FACTOR="${SPLAT_FILTER_SIZE_FACTOR:-10}"
 
 [[ "$NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "NUM_BLOCKS doit être un entier positif."
 [[ "$NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "NUM_ITER doit être un entier positif."
@@ -233,10 +235,16 @@ for ((index = 0; index < NUM_BLOCKS; index++)); do
 done
 
 FINAL_SPLAT="$OUTPUT_DIR/$SPLAT_NAME"
-printf '[pipeline] Fusion des blocs vers %s\n' "$FINAL_SPLAT"
+UNFILTERED_SPLAT="$OUTPUT_DIR/${SPLAT_NAME%.splat}.unfiltered.splat"
+printf '[pipeline] Fusion des blocs vers %s\n' "$UNFILTERED_SPLAT"
 pipeline_stage="fusion des splats des blocs"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
-  "${MERGE_INPUTS[@]}" --output "$FINAL_SPLAT" --strength "$SPLAT_MERGE_STRENGTH"
+  "${MERGE_INPUTS[@]}" --output "$UNFILTERED_SPLAT" --strength "$SPLAT_MERGE_STRENGTH"
+[[ -s "$UNFILTERED_SPLAT" ]] || die "Splat fusionné absent ou vide : $UNFILTERED_SPLAT"
+pipeline_stage="filtre contextuel global des splats"
+"$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
+  --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
+  --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" --overwrite
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
@@ -249,6 +257,7 @@ cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$SFM_DIR/sparse/0/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
+cp "$OUTPUT_DIR/${SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
 if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
   cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
 fi
@@ -281,6 +290,7 @@ data = {
         "colmap_sparse_model": "sparse/",
         "block_partition": "blocks_manifest.json",
         "training_transforms": "scene_transforms/",
+        "splat_filter_summary": "splat_filter_summary.json",
     },
     "num_blocks": int(blocks),
     "num_iterations_per_block": int(iterations),

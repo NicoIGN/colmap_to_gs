@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 
 spec = importlib.util.spec_from_file_location(
-    "export_ply", Path(__file__).with_name("export_ply.py")
+    "export_ply_legacy", Path(__file__).with_name("export_ply_legacy.py")
 )
 export = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(export)

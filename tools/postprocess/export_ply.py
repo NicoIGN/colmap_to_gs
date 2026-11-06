@@ -11,6 +11,11 @@ from plyfile import PlyData
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
+try:
+    from .filter_splats import contextual_mask
+except ImportError:
+    from filter_splats import contextual_mask
+
 
 def log(message):
     print(f"[INFO] {message}", flush=True)
@@ -235,164 +240,56 @@ def clean_gaussians(
     min_opacity=0.0,
     max_scale_factor=10.0,
     max_removal_fraction=0.2,
+    filter_mode="diagnostic",
+    return_rejected=False,
+    seed=0,
 ):
-    """Filtre les Gaussians avant leur export.
-
-    distance :
-        Marge BBOX dans le repère d'entraînement.
-
-    world_scale :
-        Échelle uniforme de la transformation monde -> entraînement.
-
-    max_world_scale :
-        Taille maximale autorisée pour chacun des demi-axes
-        du Gaussian dans le repère monde.
-        None désactive le filtre.
-
-    min_opacity :
-        Opacité minimale après sigmoid, comprise dans [0, 1[.
-        0 désactive le filtre.
-
-    max_scale_factor :
-        Demi-axe maximal relatif à la médiane des plus grands demi-axes.
-        None désactive ce filtre, indépendant des unités du modèle.
-
-    max_removal_fraction :
-        Au-delà de cette fraction des splats restants, ignore le filtre.
-        Avertit dès que plus de 10 % des splats restants sont concernés.
-    """
-    if not np.isfinite(distance) or distance <= 0:
-        raise ValueError("La marge BBOX doit être finie et positive")
-
+    """Sanitize attributes; optionally diagnose/apply contextual geometry filtering."""
     if not np.isfinite(world_scale) or world_scale <= 0:
         raise ValueError("L'échelle monde -> entraînement est invalide")
-
-    if max_world_scale is not None and (
-        not np.isfinite(max_world_scale) or max_world_scale <= 0
-    ):
-        raise ValueError("La taille maximale doit être finie et positive")
-
+    if max_world_scale is not None:
+        raise ValueError("--max-world-scale appartient au filtre export_ply_legacy.py")
     if not np.isfinite(min_opacity) or not 0 <= min_opacity < 1:
         raise ValueError("L'opacité minimale doit être dans [0, 1[")
-
-    if max_scale_factor is not None and (
-        not np.isfinite(max_scale_factor) or max_scale_factor <= 1
-    ):
+    if not np.isfinite(max_scale_factor) or max_scale_factor <= 1:
         raise ValueError("Le facteur de taille doit être fini et > 1")
     if not np.isfinite(max_removal_fraction) or not 0 <= max_removal_fraction <= 1:
         raise ValueError("La fraction maximale de suppression doit être dans [0, 1]")
+    if filter_mode not in ("diagnostic", "apply", "off"):
+        raise ValueError("Mode de filtre inconnu")
     if batch_size < 1 or len(splats["means"]) == 0:
         raise ValueError("Lot et nombre de Gaussians doivent être positifs")
-
-    bbox_min = colmap.min(axis=0)
-    bbox_max = colmap.max(axis=0)
-
-    expanded_min = bbox_min - distance
-    expanded_max = bbox_max + distance
-
-    log(f"BBOX COLMAP : {bbox_min} -> {bbox_max}")
-    log(f"Marge BBOX : {distance:.9g}")
-    log(f"BBOX élargie : {expanded_min} -> {expanded_max}")
-
-    # scale_world = exp(scale_train_log) / world_scale
-    #
-    # scale_world <= max_world_scale
-    # équivaut à :
-    # scale_train_log <= log(max_world_scale) + log(world_scale)
-    max_train_log_scale = None
-
-    if max_world_scale is not None:
-        max_train_log_scale = (
-            np.log(max_world_scale) + np.log(world_scale)
-        )
-        log(
-            "Filtre de taille : chaque demi-axe monde doit être "
-            f"<= {max_world_scale:.9g}"
-        )
-
-    if max_scale_factor is not None:
-        log_sizes = splats["scales"].max(axis=1)
-        finite_sizes = log_sizes[np.isfinite(splats["scales"]).all(axis=1)]
-        if len(finite_sizes):
-            relative_limit = np.median(finite_sizes) + np.log(max_scale_factor)
-            max_train_log_scale = (
-                relative_limit if max_train_log_scale is None
-                else min(relative_limit, max_train_log_scale)
-            )
-            log(f"Filtre de taille relatif : {max_scale_factor:g} × demi-axe maximal médian")
-
-    min_opacity_logit = None
-
-    if min_opacity > 0:
-        min_opacity_logit = (
-            np.log(min_opacity) - np.log1p(-min_opacity)
-        )
-        log(f"Opacité minimale : {min_opacity:.3f}")
-
     count = len(splats["means"])
     mask = np.ones(count, dtype=bool)
-
-    def valid_attributes(start, stop):
-        length = stop - start
-        valid = np.ones(length, dtype=bool)
-        for array in splats.values():
-            block = array[start:stop].reshape(length, -1)
-            valid &= np.isfinite(block).all(axis=1)
-        quats = splats["quats"][start:stop]
-        valid &= np.max(np.abs(quats), axis=1) > 1e-12
-        return valid
-
-    filters = [
-        ("attributs invalides", valid_attributes),
-        ("hors BBOX", lambda start, stop: (
-            (splats["means"][start:stop] >= expanded_min)
-            & (splats["means"][start:stop] <= expanded_max)
-        ).all(axis=1)),
-    ]
-    if max_train_log_scale is not None:
-        filters.append(("trop grands", lambda start, stop:
-                        splats["scales"][start:stop].max(axis=1) <= max_train_log_scale))
-    if min_opacity_logit is not None:
-        filters.append(("faible opacité", lambda start, stop:
-                        splats["opacity"][start:stop] >= min_opacity_logit))
-
-    for label, predicate in filters:
-        remaining = int(np.count_nonzero(mask))
-        if not remaining:
-            break
-        candidate = mask.copy()
-        for start in range(0, count, batch_size):
-            stop = min(start + batch_size, count)
-            candidate[start:stop] &= predicate(start, stop)
-        removed = remaining - int(np.count_nonzero(candidate))
-        log(f"Filtre {label} : {removed}/{remaining} suppressions proposées ({removed / remaining:.1%})")
-        if removed > 0.1 * remaining:
-            log(f"AVERTISSEMENT : filtre {label}, plus de 10 % des splats restants concernés")
-        if removed > max_removal_fraction * remaining:
-            log(f"AVERTISSEMENT : filtre {label} ignoré (plus de {max_removal_fraction:.0%})")
-            if label == "attributs invalides":
-                raise ValueError(
-                    "Attributs invalides conservés : export impossible. "
-                    "Aucun fichier remplacé."
-                )
-            continue
-        mask = candidate
-
-    kept = int(np.count_nonzero(mask))
-    log(
-        f"Gaussians conservés : {kept}/{count} "
-        f"({kept / count * 100:.1f} %)"
-    )
-    log(f"Taille SPLAT prévue : {kept * 32 / 1024**2:.2f} MiB")
-
-    if kept == 0:
-        raise ValueError(
-            "Aucun Gaussian conservé : vérifier les repères, "
-            "augmenter --max-world-scale, réduire --min-opacity "
-            "ou augmenter la marge BBOX."
+    for array in splats.values():
+        mask &= np.isfinite(array.reshape(count, -1)).all(axis=1)
+    mask &= np.max(np.abs(splats["quats"]), axis=1) > 0
+    log(f"Attributs invalides supprimés : {count - int(mask.sum())}/{count}")
+    if min_opacity > 0:
+        mask &= splats["opacity"] >= np.log(min_opacity) - np.log1p(-min_opacity)
+    if not mask.any():
+        raise ValueError("Aucun Gaussian valide après contrôle des attributs et de l'opacité")
+    valid = {name: array[mask] for name, array in splats.items()}
+    rejected = np.zeros(len(valid["means"]), dtype=bool)
+    report = dict(total=len(rejected), proposed_rejections=0)
+    if filter_mode != "off":
+        rejected, report = contextual_mask(
+            valid["means"], valid["scales"], valid["quats"],
+            size_factor=max_scale_factor, batch_size=min(batch_size, 20000), seed=seed,
         )
-
-    return {name: array[mask] for name, array in splats.items()}
+    report.update(mode=filter_mode, applied_rejections=int(rejected.sum()) if filter_mode == "apply" else 0)
+    log("Filtre contextuel : " + json.dumps(report, ensure_ascii=False))
+    if "warning" in report:
+        log("AVERTISSEMENT : " + report["warning"])
+    if filter_mode == "apply" and rejected.mean() > max_removal_fraction:
+        raise ValueError("Rejets contextuels au-delà de la limite ; utiliser le mode diagnostic")
+    if filter_mode == "apply" and rejected.all():
+        raise ValueError("Le filtre supprimerait tous les splats")
+    keep = ~rejected if filter_mode == "apply" else np.ones(len(rejected), dtype=bool)
+    result = {name: array[keep] for name, array in valid.items()}
+    if return_rejected:
+        return result, {name: array[rejected] for name, array in valid.items()}, report
+    return result
 
 
 # ============================================================
@@ -496,11 +393,12 @@ def main():
         )
     )
     parser.add_argument("--in-ply", required=True)
-    parser.add_argument("--points", required=True, help="COLMAP points3D.bin")
+    parser.add_argument("--points", required=True, help="Référence COLMAP conservée pour compatibilité ; pas de test de proximité")
     parser.add_argument("--transform", required=True, help="scene_transform.json")
     parser.add_argument("--out-ply", required=True, help="Sortie .splat")
     parser.add_argument("--format", choices=["splat"], default="splat")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--filter-mode", choices=("diagnostic", "apply", "off"), default="diagnostic")
     parser.add_argument("--dist", type=float, default=None)
     parser.add_argument("--outlier-percent", type=float, default=97.0)
     parser.add_argument("--radius-factor", type=float, default=3.0)
@@ -508,9 +406,9 @@ def main():
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--max-scale-factor", type=float, default=10.0,
-                        help="Demi-axe maximal / médiane des demi-axes maximaux (défaut : 10)")
+                        help="Demi-axe maximal / médiane locale (défaut : 10)")
     parser.add_argument("--max-removal-fraction", type=float, default=0.2,
-                        help="Ignorer chaque filtre au-delà de cette fraction des splats restants (défaut : 0.2)")
+                        help="Refuser l'application au-delà de cette fraction de rejets contextuels (défaut : 0.2)")
     parser.add_argument( "--max-world-scale",type=float,default=None,
         help=(
             "Demi-axe maximal d'un Gaussian dans les unités monde COLMAP. "
@@ -563,33 +461,43 @@ def main():
         
     matrix, rotation, scale = load_transform(transform_path)
 
-    colmap = load_colmap_points(points_path, matrix, args.max_points)
-    colmap = filter_outliers(colmap, args.outlier_percent)
-
-    distance = (
-        args.dist
-        if args.dist is not None
-        else estimate_radius(colmap, args.radius_factor, args.seed)
-    )
-    log(f"Rayon dans le repère d'entraînement : {distance:.9g}")
-
+    if args.max_world_scale is not None:
+        parser.error("--max-world-scale : utiliser export_ply_legacy.py pour le filtre absolu")
+    log("Nouveau filtre : pas de suppression BBOX ni de proximité COLMAP ; "
+        "--points/--dist/--radius-factor/--outlier-percent/--max-points "
+        "n'interviennent plus dans le nettoyage.")
+    rejected_path = output.with_suffix(".rejected.splat")
+    report_path = output.with_suffix(".filter.json")
+    for sidecar in (rejected_path, report_path):
+        if sidecar in (source, points_path, transform_path) or (
+            sidecar.exists() and any(os.path.samefile(sidecar, p)
+                                     for p in (source, points_path, transform_path))
+        ):
+            parser.error("Une sortie diagnostic écraserait une entrée")
+        if sidecar.exists() and not args.overwrite:
+            parser.error("Diagnostic existant : utiliser --overwrite")
     splats = load_gaussians(source)
-    splats = clean_gaussians(
+    splats, rejected, report = clean_gaussians(
         splats,
-        colmap,
-        distance,
+        None,
+        None,
         args.batch_size,
         world_scale=scale,
         max_world_scale=args.max_world_scale,
         min_opacity=args.min_opacity,
         max_scale_factor=args.max_scale_factor,
         max_removal_fraction=args.max_removal_fraction,
+        filter_mode=args.filter_mode,
+        return_rejected=True,
+        seed=args.seed,
     )
 
     log("Transformation vers le monde et écriture SPLAT...")
     write_world_splat(
         splats, output, matrix, rotation, scale, args.batch_size
     )
+    write_world_splat(rejected, rejected_path, matrix, rotation, scale, args.batch_size)
+    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     log(f"Export terminé : {output}")
     log(f"Repère : monde COLMAP ; Gaussians : {len(splats['means'])}")

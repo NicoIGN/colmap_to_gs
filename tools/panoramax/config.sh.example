@@ -81,6 +81,16 @@ SPLAT_NAME="panoramax.splat"
 # Plus petit = fusion plus prudente, plus grand = davantage de déduplication.
 SPLAT_MERGE_STRENGTH="1.0"
 
+# Filtre global après fusion (pas de découpe aux frontières internes des blocs).
+# diagnostic : garde tout, exporte les candidats dans *.rejected.splat.
+# apply : retire ces candidats ; off : aucun test géométrique.
+# L'original fusionné est toujours conservé dans *.unfiltered.splat.
+SPLAT_FILTER_MODE="diagnostic"
+
+# Grand axe / médiane des grands axes voisins, sans unité.
+# Un dépassement seul ne supprime rien : périphérie et faible support requis.
+SPLAT_FILTER_SIZE_FACTOR="10"
+
 # Paramètres facultatifs pour bash tools/panoramax/launch.sh config.sh.
 # Partition GPU du cluster (adapter au site).
 SLURM_PARTITION="jean-zellou"

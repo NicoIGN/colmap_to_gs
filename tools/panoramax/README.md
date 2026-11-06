@@ -182,6 +182,18 @@ Spirula, aligné sur le GPS EXIF ; ce n'est pas un fichier de coordonnées EPSG
 directes. Ces éléments latéraux conservent les références nécessaires pour
 retrouver/interpréter ce repère.
 
+Le filtre géométrique est maintenant **global, après fusion**, sans seuil en
+mètres. Par défaut `SPLAT_FILTER_MODE="diagnostic"` conserve la scène et exporte
+les grands splats périphériques sans support de surface dans
+`NOM.rejected.splat`. `NOM.unfiltered.splat` conserve la fusion d'origine et
+`NOM.filter.json` donne les compteurs. Après examen, `"apply"` retire les
+candidats ; `"off"` désactive le test. Le rapport de taille local se règle par
+`SPLAT_FILTER_SIZE_FACTOR` (défaut 10).
+Voir [la description et les limites du filtre](../postprocess/README.md).
+Les blocs sont réexportés sans filtre de BBOX/taille lors de leur relance,
+sans réentraîner si le checkpoint final existe et `CLEAN_GS=false` ; c'est
+nécessaire pour récupérer les splats supprimés par un ancien export.
+
 Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
 qualité et limite d'images. Pour changer la sélection, choisir un nouveau
 OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.

@@ -15,6 +15,7 @@ export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../tools/postprocess/export_ply.py}"
+export_filter_mode="${SPLAT_FILTER_MODE:-diagnostic}"
 
 quality="${QUALITY:-}"
 cap_max="${CAP_MAX:-}"
@@ -62,6 +63,7 @@ Options:
   --train-resolution-divisor N
   --python-bin PATH
   --export-script PATH
+  --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
   --name FILENAME           Nom de sortie (défaut: block.splat)
   --clean
 EOF
@@ -115,6 +117,7 @@ while [[ $# -gt 0 ]]; do
     --train-resolution-divisor) need_arg "$@"; train_resolution_divisor="$2"; shift 2 ;;
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
     --export-script) need_arg "$@"; export_script="$2"; shift 2 ;;
+    --export-filter-mode) need_arg "$@"; export_filter_mode="$2"; shift 2 ;;
     --name) need_arg "$@"; export_name="$2"; shift 2 ;;
     --clean)
       if [[ "${2:-}" == "true" || "${2:-}" == "false" ]]; then
@@ -185,6 +188,14 @@ command -v "$python_bin" >/dev/null 2>&1 ||
   die "Python introuvable : $python_bin"
 
 [[ -f "$export_script" ]] || die "Script d'export introuvable : $export_script"
+default_export_script="$(canonical_path "$script_dir/../tools/postprocess/export_ply.py")"
+if [[ "$export_script" == "$default_export_script" && -n "${MAX_WORLD_SCALE:-}" ]]; then
+  die "MAX_WORLD_SCALE impose une limite absolue : le nouveau filtre ne l'accepte pas. Retirer cette variable ou utiliser export_ply_legacy.py via --export-script."
+fi
+case "$export_filter_mode" in
+  diagnostic|apply|off) ;;
+  *) die "Mode d'export invalide : $export_filter_mode (diagnostic, apply, off)" ;;
+esac
 
 model_ext=""
 for ext in bin txt; do
@@ -237,7 +248,7 @@ export_world_splat() {
   [[ -s "$export_points" ]] || die "Points COLMAP binaires absents : $export_points"
 
   local max_world_scale="${MAX_WORLD_SCALE:-}"
-  local min_opacity="${MIN_OPACITY:-0.02}"
+  local min_opacity="${MIN_OPACITY:-0}"
   local radius_factor="${RADIUS_FACTOR:-5}"
   is_number "$radius_factor" || die "RADIUS_FACTOR invalide : $radius_factor"
   [[ -z "$max_world_scale" ]] || is_number "$max_world_scale" ||
@@ -257,6 +268,9 @@ export_world_splat() {
       --overwrite
   )
   [[ -z "$max_world_scale" ]] || export_cmd+=(--max-world-scale "$max_world_scale")
+  if [[ "$export_script" == "$default_export_script" ]]; then
+    export_cmd+=(--filter-mode "$export_filter_mode")
+  fi
 
   log "Nettoyage + conversion monde -> .splat"
   printf '%q ' "${export_cmd[@]}" > "$output_dir/export_command.sh"

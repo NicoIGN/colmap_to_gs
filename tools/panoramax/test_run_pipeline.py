@@ -86,9 +86,18 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "    blocks.append({'block_id':i})\n"
                 "  json.dump({'blocks':blocks},open(os.path.join(out,'manifest.json'),'w'))\n"
                 "elif args and args[0].endswith('export_ply.py'):\n"
+                "  assert args[args.index('--filter-mode')+1]=='off'\n"
                 "  out=args[args.index('--out-ply')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
                 "elif args and args[0].endswith('merge_splats.py'):\n"
                 "  out=args[args.index('--output')+1]; open(out,'wb').write(b'merged-splat')\n"
+                "elif args and args[0].endswith('filter_splats.py'):\n"
+                "  import pathlib, shutil\n"
+                "  assert args[args.index('--mode')+1]=='apply'\n"
+                "  assert args[args.index('--size-factor')+1]=='12'\n"
+                "  out=pathlib.Path(args[args.index('--output')+1])\n"
+                "  shutil.copyfile(args[args.index('--input')+1],out)\n"
+                "  out.with_suffix('.rejected.splat').write_bytes(b'')\n"
+                "  out.with_suffix('.filter.json').write_text('{}')\n"
                 "else:\n"
                 "  os.execv(sys.executable,[sys.executable,*args])\n"
             )
@@ -119,6 +128,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
                 'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
                 'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
+                'SPLAT_FILTER_MODE="apply"\nSPLAT_FILTER_SIZE_FACTOR="12"\n'
             )
             log = root / "commands.log"
 
@@ -154,12 +164,15 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(commands.count("download.py"), 1)
             self.assertEqual(commands.count("colmap_split_blocks.py"), 1)
             self.assertEqual(commands.count("merge_splats.py"), 1)
+            self.assertEqual(commands.count("filter_splats.py"), 1)
+            self.assertEqual((output / "test.unfiltered.splat").read_bytes(), b"merged-splat")
             self.assertEqual((output / "test.splat").read_bytes(), b"merged-splat")
             georef = output / "test.georef"
             self.assertTrue((georef / "georeference.json").is_file())
             self.assertTrue((georef / "metadata/photo.json").is_file())
             self.assertTrue((georef / "sparse/images.bin").is_file())
             self.assertTrue((georef / "blocks_manifest.json").is_file())
+            self.assertTrue((georef / "splat_filter_summary.json").is_file())
             self.assertEqual(json.loads((georef / "gps_filter_summary.json").read_text())["max_distance_m"], 30)
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())

@@ -42,6 +42,11 @@ validate_config() {
     '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
+  config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
+  value="${SPLAT_FILTER_SIZE_FACTOR:-10}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$value" 'BEGIN { exit !(x > 1 && x / 2 < x) }' ||
+    config_error "SPLAT_FILTER_SIZE_FACTOR='$value' doit être fini et > 1."
   for name in SFM_PAIR_MAX_DISTANCE SPLAT_MERGE_STRENGTH; do
     value="${!name:-}"
     [[ "$name" != SPLAT_MERGE_STRENGTH ]] || value="${value:-1.0}"
