@@ -49,6 +49,7 @@ Le pipeline se déroule en plusieurs étapes :
 ├── scripts
 │   ├── run.sh                     # point d'entrée du pipeline
 │   ├── run_spirula*.sh            # pipelines Spirula
+│   ├── run_spirula_blocks.sh      # découpe SfM et entraînement par blocs
 │   ├── spirula_common.sh          # exécutable Spirula par défaut
 │   ├── train.sh
 │   └── torch_stack_check.sh       # validation PyTorch / CUDA
