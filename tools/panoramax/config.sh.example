@@ -25,7 +25,7 @@ PANORAMAX_IMAGE_MAX="400"
 # Exécutable Spirula ; vide = recherche dans PATH puis voisin spirula-studio.
 SPIRULA_BIN=""
 
-# Python avec numpy, scipy, tqdm et pyproj installés.
+# Python avec numpy, scipy, tqdm, pyproj et plyfile installés.
 PYTHON_BIN="python3"
 
 # Nombre de blocs COLMAP et Gaussian Splats entraînés.
@@ -63,3 +63,35 @@ SPLAT_NAME="panoramax.splat"
 # Force relative des voxels lors de la fusion des scènes alignées.
 # Plus petit = fusion plus prudente, plus grand = davantage de déduplication.
 SPLAT_MERGE_STRENGTH="1.0"
+
+# Paramètres facultatifs pour bash tools/panoramax/launch.sh config.sh.
+# Partition GPU du cluster (adapter au site).
+SLURM_PARTITION="jean-zellou"
+
+# Nombre de CPU alloués au job unique.
+SLURM_CPUS_PER_TASK="16"
+
+# Mémoire RAM du job (pas la VRAM GPU), syntaxe Slurm.
+SLURM_MEMORY="64G"
+
+# Durée maximale du job entier, téléchargement et fusion compris.
+SLURM_TIME_LIMIT="48:00:00"
+
+# Type GPU Slurm facultatif, par exemple a100 ; vide = gpu:1 sans type.
+# Un seul GPU est réservé ; les blocs sont entraînés successivement.
+SLURM_GPU_TYPE=""
+
+# Compte de facturation et qualité de service Slurm ; vide = défaut du site.
+SLURM_ACCOUNT=""
+SLURM_QOS=""
+
+# Script Bash de confiance sourcé sur le nœud avant Conda (module load, Vulkan).
+# Vide = aucun script ; utiliser un chemin absolu accessible depuis le nœud.
+SLURM_ENV_SETUP=""
+
+# Environnement Conda à activer sur le nœud ; vide = environnement hérité.
+SLURM_CONDA_ENV=""
+
+# Racine d'installation Conda ; vide = conda info --base.
+# Utilisé uniquement si SLURM_CONDA_ENV est renseigné.
+SLURM_CONDA_BASE=""

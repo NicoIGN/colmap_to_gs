@@ -156,6 +156,46 @@ Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
 qualité et limite d'images. Pour changer la sélection, choisir un nouveau
 OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
 
+### Exécution GPU sur Slurm
+
+`launch.sh` soumet `launch.slurm`, qui lance **le même pipeline complet**
+dans un job à un seul GPU NVIDIA. Les blocs sont entraînés successivement ;
+le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
+Les ressources sont définies par les variables `SLURM_*` commentées dans
+`config.sh.example` : partition, CPU, RAM, durée, type GPU, compte et QoS.
+Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
+
+```bash
+# Sur le nœud de connexion, après adaptation de la configuration au cluster :
+bash tools/panoramax/launch.sh /chemin/partage/config.sh
+# Ou attendre la fin, avec un code de retour non nul si le job échoue :
+bash tools/panoramax/launch.sh /chemin/partage/config.sh --wait
+```
+
+Sans `--wait`, le lanceur confirme uniquement la soumission et affiche l'ID
+du job, les commandes `squeue`/`sacct` et les chemins des journaux :
+`OUTPUT_DIR/logs/submit.log`, `panoramax-JOBID.out` et `panoramax-JOBID.err`.
+Le dépôt, la configuration, les exécutables et les données doivent être
+accessibles sur le nœud de calcul aux mêmes chemins. Les chemins relatifs sont
+interprétés depuis le dossier de soumission ; préférer des chemins absolus.
+Ne pas modifier la configuration tant que le job est en attente ou en cours.
+Le nœud doit avoir accès à l'API Panoramax pour le téléchargement.
+
+Spirula doit être compilé pour **Vulkan sous Linux** (par exemple
+`spirula-studio/build_vulkan/spirula`, à renseigner dans `SPIRULA_BIN`) ;
+la disponibilité CUDA/PyTorch seule ne suffit pas. Le pilote NVIDIA et son
+ICD Vulkan doivent être installés sur les nœuds. Slurm doit isoler les
+périphériques du job (cgroups) : `CUDA_VISIBLE_DEVICES` seul ne sélectionne
+pas un GPU Vulkan. Les GPU MIG ne sont pas pris en charge par ce lanceur.
+
+Pour charger les modules du site ou configurer Vulkan, renseigner
+`SLURM_ENV_SETUP` avec un script Bash de confiance. Pour activer Conda,
+renseigner `SLURM_CONDA_ENV` (par exemple `gsplat`) et, si nécessaire,
+`SLURM_CONDA_BASE`. Sinon l'environnement est hérité de la soumission.
+Python doit contenir `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
+Le job vérifie ces imports et le GPU via `nvidia-smi` avant le pipeline ;
+toute erreur de préparation ou de calcul est propagée à Slurm.
+
 Le préréglage lance d'abord `prepare_sfm.py` :
 
 - seules les images de la taille la plus fréquente sont gardées (une bbox
