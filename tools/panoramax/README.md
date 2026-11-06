@@ -135,10 +135,10 @@ Le lanceur `run_pipeline.sh` enchaîne le téléchargement Panoramax, le SfM
 géoréférencé, le découpage COLMAP, l'entraînement Spirula de chaque bloc et la
 fusion voxelisée de leurs splats alignés en un unique fichier final. Il prend
 un fichier de configuration Bash (fichier de code de confiance) ; chaque
-variable et son rôle sont commentés dans `config/panoramax_blocks.example.sh`.
+variable et son rôle sont commentés dans `tools/panoramax/config.sh.example`.
 
 ```bash
-cp config/panoramax_blocks.example.sh /chemin/vers/paris.sh
+cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 # Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, CAP_MAX, etc.
 bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
 ```

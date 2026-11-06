@@ -9,7 +9,7 @@ usage() {
 Usage:
   bash run_pipeline.sh /path/to/config.sh
 
-The config is a trusted Bash file. Start from config/panoramax_blocks.example.sh.
+The config is a trusted Bash file. Start from tools/panoramax/config.sh.example.
 It defines the Panoramax bbox, output directory, SfM/block/training parameters,
 and final .splat name.
 EOF
