@@ -204,7 +204,9 @@ Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
 **par bloc** ; le préréglage d'exemple fixe le budget de chaque bloc à
 `min(CAP_MAX, images × SPLATS_PER_IMAGE)` (2000 par image), ralentit la
 croissance (`GROWTH_FACTOR="1.03"`, Spirula : 1.05) et l'arrête à 60 % des
-itérations (`GROWTH_STOP_FRACTION="0.6"`) pour consacrer la fin à l'affinage.
+itérations (`REFINE_STOP_ITER`/`REFINE_STOP_NUM_ITER` : arrêt au pas
+`max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)` ; défauts Spirula
+14000/2500) pour consacrer la fin à l'affinage.
 Laisser ces variables vides restaure le comportement Spirula. Calibrer
 `SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
 étape isolée.

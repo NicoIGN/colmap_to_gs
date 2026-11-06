@@ -54,10 +54,11 @@ validate_config() {
   [[ -z "$value" ]] || {
     [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 1) }'
   } || config_error "GROWTH_FACTOR='$value' doit être vide ou un nombre > 1."
-  value="${GROWTH_STOP_FRACTION:-}"
-  [[ -z "$value" ]] || {
-    [[ "$value" =~ ^0?[.][0-9]+$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 0 && x < 1) }'
-  } || config_error "GROWTH_STOP_FRACTION='$value' doit être vide ou dans ]0,1[."
+  for name in REFINE_STOP_ITER REFINE_STOP_NUM_ITER; do
+    value="${!name:-}"
+    [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
+      config_error "$name='$value' doit être vide ou un entier >= 0."
+  done
   value="${SPLAT_FILTER_SIZE_FACTOR:-10}"
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v x="$value" 'BEGIN { exit !(x > 1 && x / 2 < x) }' ||

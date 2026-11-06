@@ -14,7 +14,8 @@ NUM_BLOCKS="${NUM_BLOCKS:-4}"
 CAP_MAX="${CAP_MAX:-1500000}"
 SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
 GROWTH_FACTOR="${GROWTH_FACTOR:-}"
-GROWTH_STOP_FRACTION="${GROWTH_STOP_FRACTION:-}"
+REFINE_STOP_ITER="${REFINE_STOP_ITER:-}"
+REFINE_STOP_NUM_ITER="${REFINE_STOP_NUM_ITER:-}"
 FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
@@ -47,7 +48,9 @@ Variables:
   CAP_MAX                   Maximum splats per block (1500000)
   SPLATS_PER_IMAGE          Optional budget: block cap = min(CAP_MAX, images × value)
   GROWTH_FACTOR             Optional Spirula growth per refine round (> 1)
-  GROWTH_STOP_FRACTION      Optional fraction of NUM_ITER after which growth stops
+  REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
+  REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+                            Growth stops at max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)
   FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_PRESET              Spirula training preset (3dgs)
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
@@ -104,10 +107,17 @@ done
   [[ "$GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v x="$GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
 } || die "GROWTH_FACTOR doit être vide ou un nombre > 1."
-[[ -z "$GROWTH_STOP_FRACTION" ]] || {
-  [[ "$GROWTH_STOP_FRACTION" =~ ^0?[.][0-9]+$ ]] &&
-    awk -v x="$GROWTH_STOP_FRACTION" 'BEGIN { exit !(x > 0 && x < 1) }'
-} || die "GROWTH_STOP_FRACTION doit être vide ou dans ]0,1[."
+for value_name in REFINE_STOP_ITER REFINE_STOP_NUM_ITER; do
+  value="${!value_name}"
+  [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
+    die "$value_name doit être vide ou un entier >= 0 : $value"
+done
+growth_stop=$(( ${REFINE_STOP_ITER:-14000} > NUM_ITER - ${REFINE_STOP_NUM_ITER:-2500} ?
+                ${REFINE_STOP_ITER:-14000} : NUM_ITER - ${REFINE_STOP_NUM_ITER:-2500} ))
+if ((growth_stop >= NUM_ITER)); then
+  printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
+    "$growth_stop" "$NUM_ITER" >&2
+fi
 case "$FLOATER_SUPPRESSION" in
   ""|off|mild|strong) ;;
   *) die "FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
@@ -280,11 +290,9 @@ for ((index = first_index; index < last_index; index++)); do
   )
   [[ -z "$GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$GROWTH_FACTOR")
   [[ -z "$FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$FLOATER_SUPPRESSION")
-  if [[ -n "$GROWTH_STOP_FRACTION" ]]; then
-    # Spirula grows until max(refine_stop_iter, NUM_ITER - refine_stop_num_iter).
-    growth_stop="$(awk -v n="$NUM_ITER" -v f="$GROWTH_STOP_FRACTION" 'BEGIN { printf "%d", n * f + 0.5 }')"
-    block_args+=(--refine-stop-iter "$growth_stop" --refine-stop-num-iter "$((NUM_ITER - growth_stop))")
-  fi
+  [[ -z "$REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$REFINE_STOP_ITER")
+  [[ -z "$REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$REFINE_STOP_NUM_ITER")
+  printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < NUM_ITER ? growth_stop : NUM_ITER))" "$NUM_ITER"
   [[ "$CLEAN_GS" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"
 done

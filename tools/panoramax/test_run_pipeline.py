@@ -138,7 +138,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'SPLAT_FILTER_MODE="apply"\nSPLAT_FILTER_SIZE_FACTOR="12"\n'
                 'SPLAT_SPARSE_BBOX_MODE="diagnostic"\nSPLAT_SPARSE_BBOX_MARGIN="0.1"\n'
                 'SPLATS_PER_IMAGE="200"\nGROWTH_FACTOR="1.03"\n'
-                'GROWTH_STOP_FRACTION="0.6"\nFLOATER_SUPPRESSION="mild"\n'
+                'REFINE_STOP_ITER="2"\nREFINE_STOP_NUM_ITER="1"\nFLOATER_SUPPRESSION="mild"\n'
             )
             log = root / "commands.log"
 
