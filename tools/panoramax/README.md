@@ -161,6 +161,47 @@ Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
 qualité et limite d'images. Pour changer la sélection, choisir un nouveau
 OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
 
+### Filtre exclusif des paires par distance GPS
+
+Dans le fichier de configuration :
+
+```bash
+SFM_PAIR_MAX_DISTANCE="30"  # mètres ; "" désactive le filtre (défaut)
+```
+
+Quand il est activé, le pipeline exécute les commandes natives Spirula
+`sfm extract`, `sfm match`, puis filtre les correspondances **avant**
+`sfm map`. Aucun patch ni recompilation de Spirula n'est nécessaire.
+Pour deux photos positionnées, seules les paires à distance **strictement
+inférieure** au rayon sont conservées. Les paires dont au moins une photo
+n'a pas de GPS exploitable sont conservées, avec un avertissement.
+La distance est géodésique horizontale WGS84, calculée depuis les coordonnées
+des métadonnées Panoramax ; l'altitude n'intervient pas.
+
+Ce filtre retire des paires candidates ; il n'en ajoute aucune, contrairement
+au `--sensor-pairs` du mode auto non filtré. `SFM_PAIRS` continue de choisir les
+candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
+réduit donc pas son coût et ne corrige pas un plantage LightGlue. En cas de
+plantage connu, configurer séparément `SFM_MATCHER="bruteforce"`.
+
+Le workspace `panoramax/sfm-NUM_ITER/` conserve `matches.bin` original,
+`matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
+retirées et sans GPS). Le résumé est aussi copié dans le dossier final
+`.georef/`. Les formats VKMT v2, v3 et v4 sont reconnus ; un format inconnu
+ou tronqué provoque une erreur explicite, sans écraser l'original.
+Si aucune paire ne subsiste, la reconstruction ne démarre pas.
+
+Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final :
+il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
+calcul existant, déplacer le workspace `panoramax/sfm-NUM_ITER/` **et**
+les entraînements `panoramax/gs-NUM_ITER-blocks-NUM_BLOCKS/` en sauvegarde,
+puis relancer la préparation et les blocs ; garder `images/` et `metadata/`
+pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
+la signature ne correspond pas au rayon, aux paramètres et aux entrées.
+À paramètres identiques, un SfM filtré terminé est réutilisé ; après un échec
+avant reconstruction, extraction et appariement sont relancés. Un modèle
+partiel doit être déplacé en sauvegarde avant de réessayer.
+
 ### Exécution GPU sur Slurm
 
 `launch.sh` soumet **le même pipeline complet** en trois étapes dépendantes :

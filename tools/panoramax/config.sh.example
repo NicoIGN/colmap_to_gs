@@ -58,6 +58,13 @@ SFM_MATCHER="lightglue"
 # Nombre de fils SfM ; vide = CPU Slurm alloués, sinon défaut Spirula en local.
 SFM_THREADS=""
 
+# Rayon GPS maximal des paires avant reconstruction, en mètres.
+# Vide = désactivé (SfM auto habituel). Exemple "30" : conserver seulement
+# les paires à distance strictement < 30 m ; conserver les paires sans GPS.
+# Filtre les correspondances après appariement, sans ajout de paires ni patch
+# Spirula. Distance géodésique horizontale WGS84 des métadonnées Panoramax.
+SFM_PAIR_MAX_DISTANCE=""
+
 # Fraction maximale d'images ajoutées en recouvrement par le découpeur COLMAP.
 OVERLAP_MAX_FRACTION="0.05"
 

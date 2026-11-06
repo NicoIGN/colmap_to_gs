@@ -72,6 +72,12 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'download':{}}, open(os.path.join(root,'metadata','photo.json'),'w'))\n"
                 "  json.dump({'image':'images/photo.jpg','status':'downloaded'},"
                 "    open(os.path.join(root,'manifest.jsonl'),'w'))\n"
+                "elif args and args[0].endswith('run_sfm_filtered.py'):\n"
+                "  root=args[args.index('--output')+1]\n"
+                "  json.dump(args[1:],open(os.path.join(root,'gps_filter_args.json'),'w'))\n"
+                "  json.dump({'max_distance_m':float(args[args.index('--max-distance')+1])},"
+                "    open(os.path.join(root,'gps_filter_summary.json'),'w'))\n"
+                "  json.dump({'complete':True},open(os.path.join(root,'gps_filter_run.json'),'w'))\n"
                 "elif args and args[0].endswith('colmap_split_blocks.py'):\n"
                 "  out=args[args.index('--output')+1]; n=int(args[args.index('--num-blocks')+1]); os.makedirs(out,exist_ok=True); blocks=[]\n"
                 "  for i in range(n):\n"
@@ -110,6 +116,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'NUM_BLOCKS="2"\nNUM_ITER="3"\nCAP_MAX="1000"\n'
                 'TRAIN_PRESET="3dgs"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
+                'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
                 'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
                 'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
             )
@@ -127,6 +134,11 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((dataset / "gs-3-blocks-2").exists())
             self.assertFalse((output / "test.splat").exists())
+            gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
+            for flag, value in (("--max-distance", "30"), ("--matcher", "bruteforce"),
+                                ("--threads", "6"), ("--max-image-size", "1600"),
+                                ("--aliked-max-features", "2048")):
+                self.assertEqual(gps_args[gps_args.index(flag) + 1], value)
             result = execute("train-block", "0")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((dataset / "gs-3-blocks-2/block_001").exists())
@@ -148,6 +160,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertTrue((georef / "metadata/photo.json").is_file())
             self.assertTrue((georef / "sparse/images.bin").is_file())
             self.assertTrue((georef / "blocks_manifest.json").is_file())
+            self.assertEqual(json.loads((georef / "gps_filter_summary.json").read_text())["max_distance_m"], 30)
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
@@ -157,6 +170,17 @@ class PanoramaxPipelineTest(unittest.TestCase):
             result = execute("train-block", "2")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("hors de", result.stderr)
+            with config.open("a") as stream:
+                stream.write('SFM_PAIR_MAX_DISTANCE=""\n')
+            result = execute("prepare")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Ce SfM a été filtré par GPS", result.stderr)
+            with config.open("a") as stream:
+                stream.write('SFM_PAIR_MAX_DISTANCE="30"\n')
+            (dataset / "sfm-3").rename(dataset / "sfm-3-backup")
+            result = execute("prepare")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("anciens entraînements", result.stderr)
 
 
 if __name__ == "__main__":

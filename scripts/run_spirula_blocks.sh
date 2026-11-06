@@ -19,6 +19,7 @@ SFM_PAIRS="${SFM_PAIRS:-prefilter}"
 SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
+SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
 mode=all
@@ -47,6 +48,7 @@ Variables:
   SFM_FEATURES              Feature extractor (aliked-n16rot)
   SFM_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   SFM_THREADS               SfM CPU threads (empty: Spirula default)
+  SFM_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
   OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
   CLEAN_GS=true             Re-train blocks from scratch (destructive to GS outputs)
   MVK_CONFIG_LOG_LEVEL      MoltenVK logging level
@@ -92,6 +94,11 @@ done
   die "Indice de bloc $block_index hors de [0,$((NUM_BLOCKS - 1))]."
 [[ -z "$SFM_THREADS" || "$SFM_THREADS" =~ ^[1-9][0-9]*$ ]] ||
   die "SFM_THREADS doit être vide ou un entier positif."
+if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
+  [[ "$SFM_PAIR_MAX_DISTANCE" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v radius="$SFM_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
+    die "SFM_PAIR_MAX_DISTANCE doit être vide ou un nombre positif."
+fi
 [[ "$OVERLAP_MAX_FRACTION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] ||
   die "OVERLAP_MAX_FRACTION doit être dans [0,1] : $OVERLAP_MAX_FRACTION"
 case "$CLEAN_GS" in
@@ -119,7 +126,24 @@ export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
-  if [[ -s "$SPARSE_DIR/cameras.bin" &&
+  if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
+    if [[ -d "$GS_ROOT" && ( ! -s "$SPARSE_DIR/cameras.bin" ||
+          ! -s "$SPARSE_DIR/images.bin" || ! -s "$SPARSE_DIR/points3D.bin" ) ]]; then
+      die "Recalcul du SfM filtré avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
+    fi
+    sfm_args=(
+      "$repo_root/tools/panoramax/run_sfm_filtered.py"
+      --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
+      --max-distance "$SFM_PAIR_MAX_DISTANCE" --pairs "$SFM_PAIRS"
+      --features "$SFM_FEATURES" --matcher "$SFM_MATCHER"
+      --max-image-size "$SFM_MAX_IMAGE_SIZE"
+      --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
+    )
+    [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
+    "$PYTHON_BIN" "${sfm_args[@]}"
+  elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
+    die "Ce SfM a été filtré par GPS ; conserver SFM_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
+  elif [[ -s "$SPARSE_DIR/cameras.bin" &&
         -s "$SPARSE_DIR/images.bin" &&
         -s "$SPARSE_DIR/points3D.bin" ]]; then
     printf '[pipeline] SfM existant : %s (ignoré).\n' "$SPARSE_DIR"

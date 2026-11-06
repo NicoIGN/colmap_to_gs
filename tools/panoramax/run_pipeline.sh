@@ -78,6 +78,7 @@ SFM_PAIRS="${SFM_PAIRS:-prefilter}"
 SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"
+SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
 SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
@@ -210,6 +211,7 @@ if [[ "$phase" != merge ]]; then
   SFM_FEATURES="$SFM_FEATURES" \
   SFM_MATCHER="$SFM_MATCHER" \
   SFM_THREADS="$SFM_THREADS" \
+  SFM_PAIR_MAX_DISTANCE="$SFM_PAIR_MAX_DISTANCE" \
   OVERLAP_MAX_FRACTION="$OVERLAP_MAX_FRACTION" \
   CLEAN_GS="$CLEAN_GS" \
   bash "$repo_root/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
@@ -245,6 +247,9 @@ cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$SFM_DIR/sparse/0/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
+if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
+  cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
+fi
 for ((index = 0; index < NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
   transform="$GS_ROOT/block_$block_id/splats/scene_transform.json"
