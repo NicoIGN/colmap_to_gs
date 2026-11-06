@@ -107,7 +107,8 @@ class DownloadTest(unittest.TestCase):
                         datetime="2026-01-01T00:00:00Z/2026-12-31T23:59:59Z",
                         quality="hd", timeout=5,
                     )
-                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    errors = io.StringIO()
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(errors):
                         self.assertEqual(download.run(args), 0)
                         summary = json.loads((output / "summary.json").read_text())
                         self.assertEqual(summary, {
@@ -124,16 +125,23 @@ class DownloadTest(unittest.TestCase):
                         self.assertEqual(requests.count("/photo.jpg"), 2)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["reused"], 2)
                         pages[1]["features"].append(feature("missing-asset", [lon, lat], False))
-                        self.assertEqual(download.run(args), 1)
+                        self.assertEqual(download.run(args), 0)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["failed"], 1)
+                        self.assertIn("[AVERTISSEMENT] Photo missing-asset ignorée", errors.getvalue())
+                        self.assertNotIn("[ERREUR]", errors.getvalue())
                         entries = [json.loads(line) for line in (output / "manifest.jsonl").read_text().splitlines()]
                         self.assertEqual(entries[-1]["status"], "failed")
                         self.assertEqual(list((output / "images").glob("*.part")), [])
                         next((output / "images").glob("*.jpg")).unlink()
                         photo = b"invalid-jpeg"
-                        self.assertEqual(download.run(args), 1)
+                        self.assertEqual(download.run(args), 0)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["failed"], 2)
                         self.assertEqual(list((output / "images").glob("*.part")), [])
+                        for image in (output / "images").glob("*.jpg"):
+                            image.unlink()
+                        self.assertEqual(download.run(args), 1)
+                        self.assertEqual(json.loads((output / "summary.json").read_text())["failed"], 3)
+                        self.assertIn("[ERREUR] Aucune photo utilisable", errors.getvalue())
             finally:
                 server.shutdown()
                 thread.join()

@@ -292,7 +292,6 @@ def run(args):
                     and previous.get("bytes") == image.stat().st_size
                 ):
                     size = image.stat().st_size
-                    counts["reused"] += 1
                     record["status"] = "reused"
                 else:
                     fd, temporary_name = tempfile.mkstemp(dir=image.parent, suffix=".part")
@@ -300,16 +299,19 @@ def run(args):
                     temporary = Path(temporary_name)
                     size = download_image(asset_url, temporary, args.timeout)
                     os.replace(temporary, image)
-                    counts["downloaded"] += 1
                     record["status"] = "downloaded"
                 atomic_json(metadata, {
                     "feature": feature, "source_page": source_url,
                     "download": {"url": asset_url, "quality": args.quality, "bytes": size},
                 })
+                counts[record["status"]] += 1
             except (OSError, ValueError, HTTPException) as exc:
                 counts["failed"] += 1
                 record.update(status="failed", error=str(exc))
-                print(f"Erreur pour {feature['id']} : {exc}", file=sys.stderr)
+                print(
+                    f"[AVERTISSEMENT] Photo {feature['id']} ignorée : {exc}",
+                    file=sys.stderr,
+                )
             finally:
                 if temporary is not None:
                     temporary.unlink(missing_ok=True)
@@ -319,7 +321,22 @@ def run(args):
     progress.finish(counts)
     atomic_json(output / "summary.json", counts)
     print(f"Résultats : {output}", flush=True)
-    return 1 if counts["failed"] else 0
+    usable = counts["downloaded"] + counts["reused"]
+    if counts["failed"]:
+        print(
+            f"[AVERTISSEMENT] {counts['failed']} photo(s) ignorée(s) ; "
+            f"{usable} utilisable(s). Détails : {output / 'manifest.jsonl'}",
+            file=sys.stderr,
+        )
+    if not usable:
+        print(
+            f"[ERREUR] Aucune photo utilisable après la recherche et le téléchargement "
+            f"({counts['selected']} sélectionnée(s), {counts['failed']} en échec). "
+            f"Vérifier la bbox, les accès réseau et {output / 'manifest.jsonl'}.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def main():

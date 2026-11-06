@@ -65,7 +65,11 @@ srun --unbuffered --export=ALL bash -c '
   bash "$1/tools/panoramax/run_pipeline.sh" "$2"
 ' bash "$repo_root" "$config_path" || exec_status=$?
 if [[ "$exec_status" -ne 0 ]]; then
-  printf '[ERREUR] Pipeline GPU en échec, code %s.\n' "$exec_status" >&2
+  printf '[ERREUR] Pipeline GPU en échec (job %s, hôte %s, code %s).\n' \
+    "$SLURM_JOB_ID" "$(hostname)" "$exec_status" >&2
+  printf '[ERREUR] srun relaie un arrêt du pipeline ou du job ; consulter la cause et l’étape indiquées plus haut.\n' >&2
+  printf '[ERREUR] Journaux : %s/logs/panoramax-%s.out et %s/logs/panoramax-%s.err\n' \
+    "$OUTPUT_DIR" "$SLURM_JOB_ID" "$OUTPUT_DIR" "$SLURM_JOB_ID" >&2
   exit "$exec_status"
 fi
 printf '[slurm] Pipeline GPU terminé ; .splat et .georef dans OUTPUT_DIR.\n'

@@ -70,8 +70,11 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 Relancer la même commande reprend les images dont l'URL et la taille correspondent
 aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
-avant remplacement ; les photos en échec sont indiquées dans le manifeste et
-entraînent un code de sortie non nul. Les réponses API brutes sont conservées.
+avant remplacement ; les photos en échec sont signalées par un avertissement,
+indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
+avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
+ou une autre erreur fatale entraîne un code de sortie non nul.
+Les réponses API brutes sont conservées.
 Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
 sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
 Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
@@ -197,6 +200,9 @@ renseigner `SLURM_CONDA_ENV` (par exemple `gsplat`) et, si nécessaire,
 Python doit contenir `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
 Le job vérifie ces imports et le GPU via `nvidia-smi` avant le pipeline ;
 toute erreur de préparation ou de calcul est propagée à Slurm.
+En cas d'arrêt du pipeline, un message précise l'étape concernée ; le bilan
+Slurm indique le job, le code de sortie et les chemins des journaux. Les lignes
+`srun: error` relaient cet arrêt et ne sont pas, à elles seules, sa cause.
 
 Le préréglage lance d'abord `prepare_sfm.py` :
 

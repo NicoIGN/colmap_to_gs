@@ -12,6 +12,29 @@ REPO_ROOT = SCRIPT.parents[2]
 
 
 class PanoramaxPipelineTest(unittest.TestCase):
+    def test_download_fatal_error_names_stage_and_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            python = root / "failed-python"
+            python.write_text("#!/bin/sh\nexit 13\n")
+            python.chmod(0o755)
+            config = root / "config.sh"
+            config.write_text(
+                f'OUTPUT_DIR="{root / "output"}"\n'
+                'BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'NUM_BLOCKS=2\nNUM_ITER=3\nCAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                f'PYTHON_BIN="{python}"\n'
+            )
+            result = subprocess.run(
+                ["bash", str(SCRIPT), str(config)],
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 13)
+            self.assertIn("téléchargement des photos Panoramax", result.stderr)
+            self.assertIn("code 13", result.stderr)
+            self.assertIn("summary.json", result.stderr)
+            self.assertIn("manifest.jsonl", result.stderr)
+
     def test_config_drives_download_blocks_merge_and_georef_sidecar(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

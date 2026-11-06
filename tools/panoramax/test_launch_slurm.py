@@ -158,6 +158,10 @@ class SlurmLaunchTest(unittest.TestCase):
         self.assertEqual(result.returncode, 7, result.stdout + result.stderr)
         self.assertNotIn("Job terminé avec succès", result.stdout)
         self.assertIn("Pipeline GPU en échec", (self.output / "logs/panoramax-12345.err").read_text())
+        error = (self.output / "logs/panoramax-12345.err").read_text()
+        self.assertIn("job 12345", error)
+        self.assertIn("code 7", error)
+        self.assertIn("Journaux :", error)
 
     def test_gpu_and_import_failures_stop_before_pipeline(self):
         for variable in ("TEST_GPU_STATUS", "TEST_IMPORT_STATUS"):

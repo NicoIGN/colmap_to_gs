@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
@@ -19,6 +19,19 @@ die() {
   printf '[ERREUR] %s\n' "$*" >&2
   exit 1
 }
+
+pipeline_stage="configuration et validation des paramètres"
+pipeline_error() {
+  local status="$1" line="$2"
+  printf '[ERREUR] Pipeline arrêté pendant : %s (code %s, ligne %s).\n' \
+    "$pipeline_stage" "$status" "$line" >&2
+  if [[ -n "${DATASET_DIR:-}" ]]; then
+    printf '[ERREUR] Diagnostic téléchargement : %s/summary.json et %s/manifest.jsonl\n' \
+      "$DATASET_DIR" "$DATASET_DIR" >&2
+  fi
+  exit "$status"
+}
+trap 'pipeline_error "$?" "$LINENO"' ERR
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
@@ -109,10 +122,12 @@ bbox_args=(--bbox "$BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
 [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
 [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
 printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
+pipeline_stage="téléchargement des photos Panoramax"
 "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
 
 # The downloader retains old files for manual resume. The dedicated pipeline
 # directory must contain exactly this run's successful/reused manifest images.
+pipeline_stage="validation des photos téléchargées"
 "$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
 import json
 import sys
@@ -144,6 +159,7 @@ if not expected:
 PY
 
 printf '[pipeline] SfM, découpage et entraînement de %s blocs\n' "$NUM_BLOCKS"
+pipeline_stage="reconstruction SfM, découpage COLMAP et entraînement des blocs"
 DIR="$DATASET_DIR" \
 SPIRULA_BIN="$SPIRULA_BIN" \
 PYTHON_BIN="$PYTHON_BIN" \
@@ -171,12 +187,14 @@ done
 
 FINAL_SPLAT="$OUTPUT_DIR/$SPLAT_NAME"
 printf '[pipeline] Fusion des blocs vers %s\n' "$FINAL_SPLAT"
+pipeline_stage="fusion des splats des blocs"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
   "${MERGE_INPUTS[@]}" --output "$FINAL_SPLAT" --strength "$SPLAT_MERGE_STRENGTH"
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
 GEOREF_DIR="$OUTPUT_DIR/${SPLAT_NAME%.splat}.georef"
+pipeline_stage="copie des références de géoréférencement"
 mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
