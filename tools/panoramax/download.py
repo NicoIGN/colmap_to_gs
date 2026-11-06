@@ -110,7 +110,7 @@ def read_json(url, timeout, body=None, method=None):
 def download_image(url, destination, timeout):
     def consume(response):
         mime = response.headers.get_content_type()
-        if mime not in ("image/jpeg", "application/octet-stream"):
+        if mime not in ("image/jpeg", "application/octet-stream", "binary/octet-stream"):
             raise ValueError(f"Réponse non JPEG ({mime}) : {url}")
         with destination.open("wb") as stream:
             shutil.copyfileobj(response, stream)

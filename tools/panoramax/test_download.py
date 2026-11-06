@@ -6,6 +6,7 @@ import tempfile
 import threading
 import unittest
 from argparse import Namespace
+from email.message import Message
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -19,6 +20,30 @@ spec.loader.exec_module(download)
 
 
 class DownloadTest(unittest.TestCase):
+    def test_jpeg_and_generic_binary_content_types(self):
+        photo = b"\xff\xd8test-image\xff\xd9"
+        for mime in ("image/jpeg", "application/octet-stream", "binary/octet-stream"):
+            for payload in (photo, b"<html>not a JPEG</html>"):
+                with self.subTest(mime=mime, valid=payload == photo):
+                    response = io.BytesIO(payload)
+                    response.headers = Message()
+                    response.headers["Content-Type"] = mime
+                    response.headers["Content-Length"] = str(len(payload))
+                    with tempfile.TemporaryDirectory() as temporary:
+                        destination = Path(temporary) / "photo.part"
+                        with patch.object(download, "urlopen", return_value=response):
+                            if payload == photo:
+                                size = download.download_image(
+                                    "http://localhost/photo.jpg", destination, 1
+                                )
+                                self.assertEqual(size, len(photo))
+                                self.assertEqual(destination.read_bytes(), photo)
+                            else:
+                                with self.assertRaisesRegex(ValueError, "Signature JPEG invalide"):
+                                    download.download_image(
+                                        "http://localhost/photo.jpg", destination, 1
+                                    )
+
     def test_terminal_progress_bar_shows_counts_and_finishes(self):
         stream = io.StringIO()
         stream.isatty = lambda: True

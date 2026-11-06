@@ -72,6 +72,8 @@ Relancer la même commande reprend les images dont l'URL et la taille correspond
 aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
 avant remplacement ; les photos en échec sont indiquées dans le manifeste et
 entraînent un code de sortie non nul. Les réponses API brutes sont conservées.
+Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
+sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
 Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
 restent présents, donc utiliser un dossier distinct pour une autre sélection.
 
