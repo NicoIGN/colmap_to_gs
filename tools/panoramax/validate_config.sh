@@ -44,6 +44,28 @@ validate_config() {
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
+  config_choice TRAIN_MASKS "${TRAIN_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
+  config_choice TRAIN_MASKS_MODE "${TRAIN_MASKS_MODE:-auto}" 'auto|ignore|empty'
+  case "${TRAIN_MASKS:-off}" in
+    on|true|1|yes)
+      [[ -n "${TRAIN_MASKS_MODEL:-}" ]] ||
+        config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/segmentation_masks/install.sh)."
+      [[ -n "$(printf '%s' "${TRAIN_MASKS_LABELS:-sky}" | tr -d ',[:space:]')" ]] ||
+        config_error "TRAIN_MASKS_LABELS doit contenir au moins un label."
+      ;;
+  esac
+  value="${TRAIN_MASKS_CONFIDENCE:-0.5}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$value" 'BEGIN { exit !(x > 0 && x <= 1) }' ||
+    config_error "TRAIN_MASKS_CONFIDENCE='$value' doit être dans ]0,1]."
+  value="${TRAIN_MASKS_DILATE:-auto}"
+  [[ "$value" == auto ]] || {
+    [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x < 0.1) }'
+  } || config_error "TRAIN_MASKS_DILATE='$value' doit être auto ou dans [0,0.1[."
+  value="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$value" 'BEGIN { exit !(x > 0 && x <= 1) }' ||
+    config_error "TRAIN_MASKS_MAX_FRACTION='$value' doit être dans ]0,1]."
   config_choice SPLAT_CLEANER "${SPLAT_CLEANER:-contextual}" 'contextual|cleangs'
   config_choice CLEANGS_MODE "${CLEANGS_MODE:-diagnostic}" 'diagnostic|apply'
   config_positive_integer CLEANGS_MIN_VIEWS "${CLEANGS_MIN_VIEWS:-2}"

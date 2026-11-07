@@ -70,6 +70,11 @@ GROWTH_FACTOR=1
 REFINE_STOP_ITER=1.5
 REFINE_STOP_NUM_ITER=-1
 FLOATER_SUPPRESSION=medium
+TRAIN_MASKS=maybe
+TRAIN_MASKS_MODE=hide
+TRAIN_MASKS_CONFIDENCE=0
+TRAIN_MASKS_DILATE=0.5
+TRAIN_MASKS_MAX_FRACTION=2
 SLURM_CPUS_PER_TASK=0
 SLURM_BLOCK_PARALLELISM=-1
 SLURM_GPU_TYPE=gpu:a40
@@ -87,7 +92,8 @@ SLURM_TIME_LIMIT=48:99:00
                      "CLEANGS_SKY_CONFIDENCE", "CLEANGS_MAX_REMOVAL_FRACTION",
                      "SPLAT_SPARSE_BBOX_MODE", "SPLAT_SPARSE_BBOX_MARGIN",
                      "SPLATS_PER_IMAGE", "GROWTH_FACTOR", "REFINE_STOP_ITER", "REFINE_STOP_NUM_ITER",
-                     "FLOATER_SUPPRESSION",
+                     "FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_MODE",
+                     "TRAIN_MASKS_CONFIDENCE", "TRAIN_MASKS_DILATE", "TRAIN_MASKS_MAX_FRACTION",
                      "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
             self.assertIn(name, result.stderr)
@@ -115,6 +121,20 @@ REFINE_STOP_NUM_ITER=""
             ["bash", str(ROOT / "validate_config.sh"), str(ROOT / "config.sh.example"), "slurm"],
             capture_output=True, text=True, timeout=10,
         )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_training_masks_require_model_and_labels(self):
+        result, _ = self.execute("validate_config.sh", 'TRAIN_MASKS=on\nTRAIN_MASKS_LABELS=" , "\n')
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("TRAIN_MASKS_MODEL", result.stderr)
+        self.assertIn("TRAIN_MASKS_LABELS", result.stderr)
+        result, _ = self.execute("validate_config.sh", """
+TRAIN_MASKS=on
+TRAIN_MASKS_MODEL=/models/segformer
+TRAIN_MASKS_LABELS="sky,person,car"
+TRAIN_MASKS_MODE=ignore
+TRAIN_MASKS_DILATE=0.003
+""")
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_nonfinite_and_malformed_bbox_rejected(self):

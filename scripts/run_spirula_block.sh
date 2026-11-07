@@ -28,6 +28,8 @@ growth_factor="${GROWTH_FACTOR:-}"
 refine_stop_iter="${REFINE_STOP_ITER:-}"
 refine_stop_num_iter="${REFINE_STOP_NUM_ITER:-}"
 floater_suppression="${FLOATER_SUPPRESSION:-}"
+masks_dir="${MASKS_DIR:-}"
+mask_mode="${MASK_MODE:-ignore}"
 
 long_axis_split_opacity_k=()
 if [[ -n "${LONG_AXIS_SPLIT_OPACITY_K:-}" ]]; then
@@ -69,6 +71,8 @@ Options:
   --refine-stop-iter N      Pas minimal d'arrêt de la croissance
   --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
   --floater-suppression M   off, mild ou strong
+  --masks-dir PATH          Masques d'entraînement (<image>.png, 255 gardé, 0 masqué)
+  --mask-mode MODE          ignore (pixels exclus de la perte) ou empty (appris vides)
   --python-bin PATH
   --export-script PATH
   --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
@@ -127,6 +131,8 @@ while [[ $# -gt 0 ]]; do
     --refine-stop-iter) need_arg "$@"; refine_stop_iter="$2"; shift 2 ;;
     --refine-stop-num-iter) need_arg "$@"; refine_stop_num_iter="$2"; shift 2 ;;
     --floater-suppression) need_arg "$@"; floater_suppression="$2"; shift 2 ;;
+    --masks-dir) need_arg "$@"; masks_dir="$2"; shift 2 ;;
+    --mask-mode) need_arg "$@"; mask_mode="$2"; shift 2 ;;
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
     --export-script) need_arg "$@"; export_script="$2"; shift 2 ;;
     --export-filter-mode) need_arg "$@"; export_filter_mode="$2"; shift 2 ;;
@@ -187,6 +193,14 @@ esac
 
 if [[ -n "$min_init_fraction" ]]; then
   is_number "$min_init_fraction" || die "--min-init-fraction invalide"
+fi
+case "$mask_mode" in
+  ignore|empty) ;;
+  *) die "--mask-mode attend ignore ou empty" ;;
+esac
+if [[ -n "$masks_dir" ]]; then
+  [[ -d "$masks_dir" ]] || die "Masques introuvables : $masks_dir"
+  masks_dir="$(canonical_path "$masks_dir")"
 fi
 
 if [[ ${#long_axis_split_opacity_k[@]} -gt 0 ]]; then
@@ -310,9 +324,24 @@ export_world_splat() {
   log "Marqueur export : $export_done_file"
 }
 
+masks_signature_file="$output_dir/train_masks.txt"
+masks_signature="masks=none"
+if [[ -n "$masks_dir" ]]; then
+  [[ -s "$masks_dir/masks.json" ]] || die "masks.json absent dans $masks_dir"
+  masks_settings="$("$python_bin" -c 'import json, sys
+print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["settings"], sort_keys=True))' \
+    "$masks_dir/masks.json")" || die "masks.json illisible : $masks_dir/masks.json"
+  masks_signature="$(printf 'masks=%s\nmode=%s\nsettings=%s' "$masks_dir" "$mask_mode" "$masks_settings")"
+fi
+
 if [[ "$clean" == false ]]; then
   if [[ -s "$final_ckpt" ]]; then
     log "Checkpoint final déjà présent. Entraînement ignoré."
+    previous_signature="masks=none"
+    [[ ! -f "$masks_signature_file" ]] || previous_signature="$(cat "$masks_signature_file")"
+    if [[ "$previous_signature" != "$masks_signature" ]]; then
+      echo "[AVERTISSEMENT] Ce bloc a été entraîné avec d'autres masques (voir $masks_signature_file) ; --clean pour réentraîner." >&2
+    fi
     mark_train_done "found_final_ckpt"
     export_world_splat
     exit 0
@@ -365,6 +394,14 @@ else
   ln -s "$images_dir" "$images_link"
 fi
 
+masks_link="$output_dir/masks"
+if [[ -L "$masks_link" ]]; then
+  rm -f -- "$masks_link"
+elif [[ -e "$masks_link" ]]; then
+  die "$masks_link existe et n'est pas un lien symbolique (Spirula le chargerait)"
+fi
+[[ -z "$masks_dir" ]] || ln -s "$masks_dir" "$masks_link"
+
 cmd=(
   "$spirula_bin" train "$train_preset"
   --data "$output_dir"
@@ -391,6 +428,14 @@ cmd=(
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
 
+if [[ -n "$masks_dir" ]]; then
+  apply_loss_for_mask=0
+  [[ "$mask_mode" != empty ]] || apply_loss_for_mask=1
+  cmd+=(--mask-dir masks --load-masks 1 --apply-loss-for-mask "$apply_loss_for_mask")
+else
+  cmd+=(--load-masks 0)
+fi
+
 if [[ ${#long_axis_split_opacity_k[@]} -gt 0 ]]; then
   cmd+=(--long-axis-split-opacity-k "${long_axis_split_opacity_k[@]}")
 fi
@@ -400,11 +445,13 @@ log "Bloc    : $sparse_dir"
 log "Images  : $images_dir"
 log "Sortie  : $output_dir"
 log "Preset  : $train_preset"
+[[ -z "$masks_dir" ]] || log "Masques : $masks_dir (mode $mask_mode)"
 
 printf '%q ' "${cmd[@]}" > "$output_dir/train_command.sh"
 printf '\n' >> "$output_dir/train_command.sh"
 
 rm -f -- "$train_done_file" "$export_done_file"
+printf '%s\n' "$masks_signature" > "$masks_signature_file"
 
 if command -v stdbuf >/dev/null 2>&1; then
   stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"

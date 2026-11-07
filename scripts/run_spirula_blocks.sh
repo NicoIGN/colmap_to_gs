@@ -27,6 +27,15 @@ SFM_THREADS="${SFM_THREADS:-}"
 SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
+TRAIN_MASKS="${TRAIN_MASKS:-off}"
+TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
+TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
+TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
+TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-auto}"
+TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
+TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
+TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
+TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
 mode=all
 block_index=""
 
@@ -62,6 +71,15 @@ Variables:
   SFM_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
   OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
   CLEAN_GS=true             Re-train blocks from scratch (destructive to GS outputs)
+  TRAIN_MASKS               off (default) or on: segmentation masks for training
+  TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
+  TRAIN_MASKS_MODEL         Local segmentation model directory
+  TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
+  TRAIN_MASKS_MODE          auto (empty for sky only, else ignore), ignore, empty
+  TRAIN_MASKS_CONFIDENCE    Minimum label probability (0.5)
+  TRAIN_MASKS_DILATE        auto (0 empty, 0.002 ignore) or fraction of image diagonal
+  TRAIN_MASKS_MAX_FRACTION  Above this masked fraction, an image is kept unmasked (0.8)
+  TRAIN_MASKS_DEVICE        auto, cuda, cuda:N, mps or cpu
   MVK_CONFIG_LOG_LEVEL      MoltenVK logging level
 
 Existing SfM and a complete matching block split are reused. Incomplete or
@@ -139,6 +157,34 @@ case "$CLEAN_GS" in
   *) die "CLEAN_GS invalide : $CLEAN_GS" ;;
 esac
 
+case "$TRAIN_MASKS" in
+  on|true|1|yes) TRAIN_MASKS=on ;;
+  off|false|0|no) TRAIN_MASKS=off ;;
+  *) die "TRAIN_MASKS doit être on ou off : $TRAIN_MASKS" ;;
+esac
+if [[ "$TRAIN_MASKS" == on ]]; then
+  case "$TRAIN_MASKS_MODE" in
+    auto)
+      TRAIN_MASKS_MODE=ignore
+      labels_lower="$(printf '%s' "$TRAIN_MASKS_LABELS" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+      [[ ! "$labels_lower" =~ ^(sky,?)+$ ]] || TRAIN_MASKS_MODE=empty ;;
+    ignore|empty) ;;
+    *) die "TRAIN_MASKS_MODE doit être auto, ignore ou empty : $TRAIN_MASKS_MODE" ;;
+  esac
+  if [[ "$TRAIN_MASKS_DILATE" == auto ]]; then
+    TRAIN_MASKS_DILATE=0
+    [[ "$TRAIN_MASKS_MODE" != ignore ]] || TRAIN_MASKS_DILATE=0.002
+  fi
+  [[ "$TRAIN_MASKS_DILATE" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+    die "TRAIN_MASKS_DILATE doit être auto ou un nombre >= 0 : $TRAIN_MASKS_DILATE"
+  command -v "$TRAIN_MASKS_PYTHON" >/dev/null 2>&1 ||
+    die "Python des masques introuvable : $TRAIN_MASKS_PYTHON"
+  if [[ "$mode" != block ]]; then
+    [[ -n "$TRAIN_MASKS_MODEL" && -d "$TRAIN_MASKS_MODEL" ]] ||
+      die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/segmentation_masks/install.sh)."
+  fi
+fi
+
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
 if [[ "$SPIRULA_BIN" == */* ]]; then
   [[ -x "$SPIRULA_BIN" ]] || die "Spirula introuvable ou non exécutable : $SPIRULA_BIN"
@@ -150,6 +196,7 @@ DIR="$(cd -- "$DIR" && pwd)"
 SFM_DIR="$DIR/sfm-$NUM_ITER"
 SPARSE_DIR="$SFM_DIR/sparse/0"
 BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
+MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
@@ -200,6 +247,17 @@ prepare_blocks() {
     [[ -s "$SPARSE_DIR/$file" ]] || die "Artefact SfM absent ou vide : $SPARSE_DIR/$file"
   done
   [[ -d "$SFM_DIR/images" ]] || die "Images préparées par SfM absentes : $SFM_DIR/images"
+
+  if [[ "$TRAIN_MASKS" == on ]]; then
+    printf '[pipeline] Masques d’entraînement : labels %s, mode %s.\n' \
+      "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
+    "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
+      --images "$SFM_DIR/images" --output "$MASKS_DIR" \
+      --model "$TRAIN_MASKS_MODEL" --labels "$TRAIN_MASKS_LABELS" \
+      --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
+      --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" ||
+      die "Génération des masques d’entraînement échouée."
+  fi
 
   if [[ -s "$BLOCKS_DIR/manifest.json" ]]; then
     block_count="$("$PYTHON_BIN" - "$BLOCKS_DIR/manifest.json" <<'PY'
@@ -254,6 +312,10 @@ if [[ "$mode" == block ]]; then
   done
   [[ -d "$SFM_DIR/images" ]] || die "Images préparées absentes : $SFM_DIR/images"
 fi
+if [[ "$TRAIN_MASKS" == on ]]; then
+  grep -q '"status": "complete"' "$MASKS_DIR/masks.json" 2>/dev/null ||
+    die "Masques d’entraînement incomplets : $MASKS_DIR (relancer la préparation)."
+fi
 
 mkdir -p "$GS_ROOT"
 first_index="${block_index:-0}"
@@ -293,6 +355,7 @@ for ((index = first_index; index < last_index; index++)); do
   [[ -z "$REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$REFINE_STOP_ITER")
   [[ -z "$REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$REFINE_STOP_NUM_ITER")
   printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < NUM_ITER ? growth_stop : NUM_ITER))" "$NUM_ITER"
+  [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
   [[ "$CLEAN_GS" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"
 done

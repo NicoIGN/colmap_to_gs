@@ -12,8 +12,7 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
-    def test_splits_once_and_trains_each_block(self):
-        with tempfile.TemporaryDirectory() as temporary:
+    def fixture(self, temporary):
             root = Path(temporary)
             data = root / "dataset"
             (data / "images").mkdir(parents=True)
@@ -45,6 +44,10 @@ class BlockPipelineTest(unittest.TestCase):
                 "    for file in ('cameras.bin', 'images.bin', 'points3D.bin'): open(os.path.join(folder, file), 'wb').write(b'colmap')\n"
                 "    blocks.append({'block_id': i})\n"
                 "  json.dump({'blocks': blocks}, open(os.path.join(output, 'manifest.json'), 'w'))\n"
+                "elif args and args[0].endswith('generate_masks.py'):\n"
+                "  with open(log, 'a') as f: f.write(json.dumps(['masks'] + args[1:]) + '\\n')\n"
+                "  output = args[args.index('--output') + 1]; os.makedirs(output, exist_ok=True)\n"
+                "  json.dump({'status': 'complete', 'settings': {'labels': args[args.index('--labels') + 1]}}, open(os.path.join(output, 'masks.json'), 'w'))\n"
                 "elif args and args[0].endswith('export_ply.py'):\n"
                 "  with open(log, 'a') as f: f.write(json.dumps(['export']) + '\\n')\n"
                 "  output = args[args.index('--out-ply') + 1]\n"
@@ -95,6 +98,11 @@ class BlockPipelineTest(unittest.TestCase):
                     capture_output=True, text=True, timeout=30,
                 )
 
+            return root, data, sparse, env, log, execute
+
+    def test_splits_once_and_trains_each_block(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
             first = execute()
             self.assertEqual(first.returncode, 0, first.stderr + first.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -128,6 +136,60 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(failed.returncode, 139)
             self.assertIn("Segmentation fault dans Spirula", failed.stderr)
             self.assertIn("--matcher bruteforce", failed.stderr)
+
+
+    def test_training_masks_are_generated_and_passed_to_spirula(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            model = root / "model"
+            model.mkdir()
+            env.update(TRAIN_MASKS="on", TRAIN_MASKS_MODEL=str(model),
+                       TRAIN_MASKS_LABELS="sky", NUM_BLOCKS="1")
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            masks = next(cmd for cmd in commands if cmd[0] == "masks")
+            masks_dir = data / "sfm-3" / "train_masks"
+            self.assertEqual(masks[masks.index("--output") + 1], str(masks_dir))
+            self.assertEqual(masks[masks.index("--dilate-fraction") + 1], "0")
+            train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
+            self.assertEqual(train[train.index("--mask-dir") + 1], "masks")
+            self.assertEqual(train[train.index("--apply-loss-for-mask") + 1], "1")
+            block = data / "gs-3-blocks-1" / "block_000"
+            self.assertEqual((block / "masks").resolve(), masks_dir.resolve())
+            self.assertIn("mode=empty", (block / "train_masks.txt").read_text())
+
+            again = execute()
+            self.assertEqual(again.returncode, 0, again.stderr)
+            self.assertNotIn("autres masques", again.stderr)
+
+            env.update(TRAIN_MASKS_LABELS="sky,person")
+            changed = execute()
+            self.assertEqual(changed.returncode, 0, changed.stderr)
+            self.assertIn("autres masques", changed.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            masks = [cmd for cmd in commands if cmd[0] == "masks"][-1]
+            self.assertEqual(masks[masks.index("--dilate-fraction") + 1], "0.002")
+
+            env.update(TRAIN_MASKS="off")
+            off = execute()
+            self.assertEqual(off.returncode, 0, off.stderr)
+            self.assertIn("autres masques", off.stderr)
+            env.update(CLEAN_GS="true")
+            clean = execute()
+            self.assertEqual(clean.returncode, 0, clean.stderr)
+            self.assertFalse((block / "masks").exists() or (block / "masks").is_symlink())
+            train = [json.loads(line) for line in log.read_text().splitlines()
+                     if json.loads(line)[:2] == ["spirula", "train"]][-1]
+            self.assertEqual(train[train.index("--load-masks") + 1], "0")
+
+    def test_training_masks_require_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env.update(TRAIN_MASKS="on", TRAIN_MASKS_MODEL=str(root / "missing"))
+            result = execute()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_MASKS_MODEL", result.stderr)
 
 
 if __name__ == "__main__":

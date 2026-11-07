@@ -202,6 +202,14 @@ L'installation complète se fait avec `bash tools/clean_gs/install.sh
 --install-dir /chemin/partage/cleangs --python python3` ; le script affiche
 `CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
 
+Masques d'entraînement optionnels (`TRAIN_MASKS="on"`, défaut `off`) : avant
+le découpage, un segmenteur local génère un masque par image dans
+`sfm-*/train_masks/`, transmis à Spirula. Par défaut seul le ciel (nuages
+compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
+peuvent être ajoutés via `TRAIN_MASKS_LABELS`. Installation, variables et
+limites : [tools/segmentation_masks](../segmentation_masks/README.md).
+Les blocs déjà entraînés ne sont pas recalculés : utiliser `CLEAN_GS=true`.
+
 Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D
 sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
 (`SPLAT_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte

@@ -92,6 +92,24 @@ SFM_PAIR_MAX_DISTANCE=""
 # Fraction maximale d'images ajoutées en recouvrement par le découpeur COLMAP.
 OVERLAP_MAX_FRACTION="0.05"
 
+# Masques de segmentation pour l'entraînement 3DGS (outil optionnel :
+# tools/segmentation_masks, installer avec tools/segmentation_masks/install.sh).
+# off = désactivé. on = masques générés en préparation dans sfm-*/train_masks.
+TRAIN_MASKS="off"
+TRAIN_MASKS_PYTHON=""              # vide : PYTHON_BIN ; sinon venv de l'installateur
+TRAIN_MASKS_MODEL=""               # dossier local du modèle (affiché par install.sh)
+# Labels du modèle à masquer, séparés par des virgules (voir labels.txt du
+# modèle). sky couvre aussi les nuages. Exemple ADE20K : "sky,person,car".
+TRAIN_MASKS_LABELS="sky"
+# auto : empty si seul sky est masqué (le ciel est appris vide, ce qui
+# décourage les flotteurs-nuages), sinon ignore (pixels exclus de la perte,
+# adapté aux objets mobiles). ignore ou empty pour forcer.
+TRAIN_MASKS_MODE="auto"
+TRAIN_MASKS_CONFIDENCE="0.5"       # probabilité minimale pour masquer un pixel
+TRAIN_MASKS_DILATE="auto"          # auto : 0 en empty, 0.002 en ignore (fraction de diagonale)
+TRAIN_MASKS_MAX_FRACTION="0.8"     # image masquée au-delà : masque désactivé
+TRAIN_MASKS_DEVICE="auto"          # auto, cuda, mps ou cpu
+
 # Force le réentraînement de tous les blocs en supprimant uniquement leurs
 # dossiers GS, pas le téléchargement, le SfM ni le découpage. true ou false.
 CLEAN_GS="false"
