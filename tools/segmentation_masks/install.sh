@@ -51,7 +51,13 @@ runtime="$venv/bin/python"
 "$runtime" -m pip install --upgrade pip
 # PyPI torch wheels include CUDA on Linux x86_64 and MPS on macOS arm64.
 "$runtime" -m pip install 'torch>=2.1,<2.9' 'transformers==4.46.3' 'safetensors' \
-  'pillow' 'scipy' 'numpy<3'
+  'pillow' 'scipy' 'numpy>=1.24,<2'
+
+# Older macOS torch wheels use the NumPy 1.x ABI; check both bridge directions.
+"$runtime" -c 'import numpy as np, torch
+a = np.zeros((2, 2), dtype=np.float32)
+assert np.array_equal(torch.from_numpy(a).numpy(), a)' ||
+  die "Le pont NumPy/PyTorch ne fonctionne pas dans $venv."
 
 model_dir="$install_dir/models/${model_id//\//--}"
 "$runtime" - "$model_id" "$model_dir" "$labels" "$script_dir" <<'PY'
@@ -92,6 +98,6 @@ printf '[installation] Accélérateur détecté ici : %s\n' "$device"
   printf '[AVERTISSEMENT] Pas de GPU ici : la génération restera possible mais lente.\n'
 
 printf '\nÀ ajouter dans config.sh :\n'
-printf 'TRAIN_MASKS="on"\nTRAIN_MASKS_PYTHON="%s"\nTRAIN_MASKS_MODEL="%s"\n' "$runtime" "$model_dir"
+printf 'TRAIN_MASKS="on"\nTRAIN_MASKS_BACKEND="segmentation"\nTRAIN_MASKS_PYTHON="%s"\nTRAIN_MASKS_MODEL="%s"\n' "$runtime" "$model_dir"
 printf 'TRAIN_MASKS_LABELS="%s"\nTRAIN_MASKS_MODE="auto"\n' "$labels"
 printf 'Labels disponibles : %s/labels.txt\n' "$model_dir"

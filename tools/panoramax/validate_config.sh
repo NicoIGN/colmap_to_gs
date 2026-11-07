@@ -45,11 +45,17 @@ validate_config() {
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
   config_choice TRAIN_MASKS "${TRAIN_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
+  config_choice TRAIN_MASKS_BACKEND "${TRAIN_MASKS_BACKEND:-segmentation}" 'segmentation|spirula'
   config_choice TRAIN_MASKS_MODE "${TRAIN_MASKS_MODE:-auto}" 'auto|ignore|empty'
   case "${TRAIN_MASKS:-off}" in
     on|true|1|yes)
-      [[ -n "${TRAIN_MASKS_MODEL:-}" ]] ||
-        config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/segmentation_masks/install.sh)."
+      if [[ "${TRAIN_MASKS_BACKEND:-segmentation}" == spirula ]]; then
+        [[ -n "${TRAIN_MASKS_SPIRULA_MODEL:-}" ]] ||
+          config_error "TRAIN_MASKS_SPIRULA_MODEL doit désigner le checkpoint SAM 3 GGML local."
+      else
+        [[ -n "${TRAIN_MASKS_MODEL:-}" ]] ||
+          config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/segmentation_masks/install.sh)."
+      fi
       [[ -n "$(printf '%s' "${TRAIN_MASKS_LABELS:-sky}" | tr -d ',[:space:]')" ]] ||
         config_error "TRAIN_MASKS_LABELS doit contenir au moins un label."
       ;;

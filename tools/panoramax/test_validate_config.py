@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 import subprocess
 import tempfile
@@ -71,6 +72,7 @@ REFINE_STOP_ITER=1.5
 REFINE_STOP_NUM_ITER=-1
 FLOATER_SUPPRESSION=medium
 TRAIN_MASKS=maybe
+TRAIN_MASKS_BACKEND=bad
 TRAIN_MASKS_MODE=hide
 TRAIN_MASKS_CONFIDENCE=0
 TRAIN_MASKS_DILATE=0.5
@@ -92,7 +94,7 @@ SLURM_TIME_LIMIT=48:99:00
                      "CLEANGS_SKY_CONFIDENCE", "CLEANGS_MAX_REMOVAL_FRACTION",
                      "SPLAT_SPARSE_BBOX_MODE", "SPLAT_SPARSE_BBOX_MARGIN",
                      "SPLATS_PER_IMAGE", "GROWTH_FACTOR", "REFINE_STOP_ITER", "REFINE_STOP_NUM_ITER",
-                     "FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_MODE",
+                     "FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
                      "TRAIN_MASKS_CONFIDENCE", "TRAIN_MASKS_DILATE", "TRAIN_MASKS_MAX_FRACTION",
                      "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
@@ -123,6 +125,34 @@ REFINE_STOP_NUM_ITER=""
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_example_covers_pipeline_parameters_with_actual_defaults(self):
+        example = (ROOT / "config.sh.example").read_text()
+        assignments = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)="([^"]*)"$',
+                                 example, re.MULTILINE)
+        values = dict(assignments)
+        self.assertEqual(len(values), len(assignments), "Duplicate config parameters")
+        required = {"OUTPUT_DIR", "BBOX_LAMBERT93", "NUM_BLOCKS", "NUM_ITER",
+                    "CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
+                    "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
+        for script in ("run_pipeline.sh", "launch.sh"):
+            defaults = re.findall(
+                r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
+                (ROOT / script).read_text(), re.MULTILINE)
+            required.update(name for name, _ in defaults)
+            for name, default in defaults:
+                self.assertIn(name, values)
+                self.assertEqual(values[name], "" if "$" in default else default, name)
+        self.assertFalse(required - values.keys(), required - values.keys())
+        block_defaults = dict(re.findall(
+            r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
+            (ROOT.parents[1] / "scripts" / "run_spirula_blocks.sh").read_text(),
+            re.MULTILINE))
+        for name in ("NUM_BLOCKS", "NUM_ITER", "CAP_MAX", "TRAIN_PRESET"):
+            self.assertEqual(values[name], block_defaults[name], name)
+        self.assertIn('SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"',
+                      (ROOT / "run_pipeline.sh").read_text())
+        self.assertEqual(values["SFM_THREADS"], "")
+
     def test_training_masks_require_model_and_labels(self):
         result, _ = self.execute("validate_config.sh", 'TRAIN_MASKS=on\nTRAIN_MASKS_LABELS=" , "\n')
         self.assertEqual(result.returncode, 1)
@@ -136,6 +166,18 @@ TRAIN_MASKS_MODE=ignore
 TRAIN_MASKS_DILATE=0.003
 """)
         self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.execute("validate_config.sh", """
+TRAIN_MASKS=on
+TRAIN_MASKS_BACKEND=spirula
+TRAIN_MASKS_SPIRULA_MODEL=/models/sam3-q4_0.ggml
+TRAIN_MASKS_LABELS="sky,person"
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                "TRAIN_MASKS=on\nTRAIN_MASKS_BACKEND=spirula\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("TRAIN_MASKS_SPIRULA_MODEL", result.stderr)
+        self.assertNotIn("TRAIN_MASKS_MODEL doit", result.stderr)
 
     def test_nonfinite_and_malformed_bbox_rejected(self):
         for bbox in ("nan,0,1,1", "0,0,inf,1", "0,0,1e9999,1",

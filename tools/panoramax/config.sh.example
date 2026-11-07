@@ -1,187 +1,328 @@
-# Exemple de configuration pour tools/panoramax/run_pipeline.sh.
-# Copier ce modèle vers config.sh avant de le personnaliser.
-# Copier ce fichier, renseigner les chemins et valeurs, puis passer sa copie
-# au lanceur : bash tools/panoramax/run_pipeline.sh /chemin/vers/ma_config.sh
-# Vérification sans calcul ni soumission :
-# bash tools/panoramax/validate_config.sh /chemin/vers/ma_config.sh slurm
+# Configuration complete du pipeline Panoramax (Bash de confiance).
+# Copier vers config.sh, puis adapter les deux champs obligatoires ci-dessous.
+# Execution locale : bash tools/panoramax/run_pipeline.sh config.sh
+# Slurm : bash tools/panoramax/launch.sh config.sh [--wait]
+# Validation sans calcul : bash tools/panoramax/validate_config.sh config.sh slurm
+#
+# Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
+# "" signifie une option non forcee ; le commentaire indique alors le repli.
+# OUTPUT_DIR et BBOX_LAMBERT93 n'ont aucun defaut : valeurs d'exemple a remplacer.
+# NUM_BLOCKS, NUM_ITER, CAP_MAX et TRAIN_PRESET sont obligatoires dans une config ;
+# leurs valeurs ci-dessous reprennent les defauts du lanceur de blocs.
+# Ce fichier couvre les options exposees par le pipeline et son lanceur Slurm,
+# pas toutes les options CLI des outils utilisables independamment.
 
-# Emplacement de tous les résultats intermédiaires et du .splat final.
-# Le sous-dossier panoramax/ est réservé aux photos téléchargées par ce script.
-OUTPUT_DIR="/Users/mon_nom/Documents/panoramax-paris"
+# ============================================================================
+# 0. Chemins et environnement communs
+# ============================================================================
 
-# Emprise Lambert-93 EPSG:2154, ordre xmin,ymin,xmax,ymax, en mètres.
-BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
+# Obligatoire, aucun defaut. Dossier de sortie non vide, accessible en ecriture.
+# Contient panoramax/ (photos, SfM, blocs), le .splat final et les references GPS.
+# Slurm : choisir un chemin absolu visible depuis tous les noeuds.
+OUTPUT_DIR="/chemin/vers/resultats/panoramax-paris"
 
-# URL racine de l'API Panoramax, sans /search.
-PANORAMAX_API_URL="https://explore.panoramax.fr/api"
-
-# Qualité de l'asset à télécharger : hd, sd ou thumb.
-PANORAMAX_QUALITY="hd"
-
-# Intervalle STAC facultatif, début/fin ISO 8601 ; vide = toutes dates.
-PANORAMAX_DATETIME=""
-
-# Nombre maximal de photos téléchargées ; vide = jusqu'au plafond API de 10000.
-PANORAMAX_IMAGE_MAX="400"
-
-# Si OUTPUT_DIR contient une autre requête (bbox, dates, qualité, limite) :
-# false = arrêt ; true = archive OUTPUT_DIR/panoramax en panoramax.replaced-DATE
-# (photos, SfM et blocs conservés, à supprimer à la main) puis retéléchargement.
-PANORAMAX_REPLACE_REQUEST="false"
-
-# Exécutable Spirula ; vide = recherche dans PATH puis voisin spirula-studio.
+# Defaut : "". Chemin executable ou commande ; vide = spirula dans PATH,
+# puis ../spirula-studio/build/spirula a cote de ce depot.
 SPIRULA_BIN=""
 
-# Python avec numpy, scipy, tqdm, pyproj et plyfile installés.
+# Defaut : python3. Commande ou chemin du Python avec numpy, scipy, tqdm,
+# pyproj, plyfile et Pillow (Pillow est requis si les masques sont actives).
 PYTHON_BIN="python3"
 
-# Nombre de blocs COLMAP et Gaussian Splats entraînés.
-NUM_BLOCKS="4"
+# Defaut : 1. MoltenVK sur macOS : 0 = silencieux, 1 = erreurs,
+# 2 = avertissements, 3 = informations, 4 = debug (entier dans [0,4]).
+# Export explicite pour transmettre cette variable aux processus Spirula.
+export MVK_CONFIG_LOG_LEVEL="1"
 
-# Nombre d'itérations Spirula par bloc.
-NUM_ITER="30000"
+# ============================================================================
+# 1. Recherche et telechargement Panoramax
+# ============================================================================
 
-# Plafond dur de Gaussians par bloc ; le total possible est NUM_BLOCKS × CAP_MAX.
-# Spirula (MCMC) fait croître le nombre de splats jusqu'au budget : l'atteindre
-# est normal. Le budget réel se règle donc par SPLATS_PER_IMAGE ci-dessous.
-CAP_MAX="3000000"
+# Obligatoire, aucun defaut. Exemple a remplacer : emprise EPSG:2154 (metres),
+# ordre xmin,ymin,xmax,ymax ; quatre nombres finis, xmin<xmax et ymin<ymax.
+BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
 
-# Préréglage « croissance sobre » (laisser vide = valeur par défaut Spirula).
-# Budget par bloc = min(CAP_MAX, images du bloc × SPLATS_PER_IMAGE).
-SPLATS_PER_IMAGE="2000"
-# Multiplicateur du nombre de splats tous les 100 pas (Spirula : 1.05).
-GROWTH_FACTOR="1.03"
-# Arrêt de l'ajout de splats au pas max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER) ;
-# la suite de l'entraînement affine les splats existants. Défauts Spirula :
-# 14000 et 2500 (avec NUM_ITER < 16500, la croissance dure jusqu'à 14000).
-# Ici : arrêt à 60 % de NUM_ITER=30000.
-REFINE_STOP_ITER="18000"
-REFINE_STOP_NUM_ITER="12000"
-# Nettoyage des flottants de Spirula : off, mild, strong. mild/strong limitent
-# aussi la taille à l'écran des splats ; comparer d'abord sur un bloc.
-FLOATER_SUPPRESSION="off"
+# Defaut : https://explore.panoramax.fr/api.
+# URL HTTP(S) racine de l'API STAC, sans /search ni espaces.
+PANORAMAX_API_URL="https://explore.panoramax.fr/api"
 
-# Préréglage d'entraînement Spirula, par exemple 3dgs ou in-the-wild.
-TRAIN_PRESET="3dgs"
+# Defaut : hd. Valeurs : hd (haute definition), sd, thumb (vignette).
+PANORAMAX_QUALITY="hd"
 
-# Résolution maximale de travail pour l'extraction SfM Spirula.
+# Defaut : "". Vide = toutes dates ; sinon filtre datetime STAC ISO 8601
+# (instant ou intervalle debut/fin, ex. "2024-01-01T00:00:00Z/..").
+PANORAMAX_DATETIME=""
+
+# Defaut : "". Vide = aucune limite utilisateur (recherche API plafonnee
+# a 10000 resultats) ; sinon entier > 0, nombre maximal de photos.
+PANORAMAX_IMAGE_MAX=""
+
+# Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
+# false = arret si la requete differe de celle du dataset existant.
+# true = archive panoramax/ dans panoramax.replaced-DATE, puis retelecharge.
+# L'archive conserve photos, SfM et blocs ; aucune suppression automatique.
+PANORAMAX_REPLACE_REQUEST="false"
+
+# ============================================================================
+# 2. Reconstruction SfM et appariement
+# ============================================================================
+
+# Defaut : 4096. Entier > 0 ; taille maximale de travail en pixels.
 SFM_MAX_IMAGE_SIZE="4096"
 
-# Nombre maximal de points ALIKED détectés par image.
+# Defaut : 4096. Entier > 0 ; budget de points ALIKED par image.
 SFM_ALIKED_MAX_FEATURES="4096"
 
-# Stratégie de sélection des paires Spirula : auto, exhaustive, sequential,
-# prefilter. Pour des photos Panoramax sans ordre de noms, prefilter est adapté.
+# Defaut : prefilter. Valeurs : auto|prefilter|exhaustive|sequential.
+# prefilter convient aux photos Panoramax sans ordre chronologique des noms.
 SFM_PAIRS="prefilter"
 
-# Extracteur et apparieur SfM. Si LightGlue plante avec une erreur gemm,
-# essayer SFM_MATCHER="bruteforce" sans changer les images ni la bbox.
+# Defaut : aliked-n16rot.
+# Valeurs : sift|aliked-n16rot|aliked-n32|loma-b128|loma-b.
 SFM_FEATURES="aliked-n16rot"
+
+# Defaut : lightglue.
+# Valeurs : bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g.
+# bruteforce contourne LightGlue si celui-ci plante (par exemple erreur gemm).
 SFM_MATCHER="lightglue"
 
-# Nombre de fils SfM ; vide = CPU Slurm alloués, sinon défaut Spirula en local.
+# Defaut : "". Vide = SLURM_CPUS_PER_TASK si defini, sinon defaut Spirula.
+# Sinon entier > 0 : nombre de fils CPU du SfM. Definir explicitement en local
+# pour ne pas utiliser la valeur SLURM_CPUS_PER_TASK de ce fichier.
 SFM_THREADS=""
 
-# Rayon GPS maximal des paires avant reconstruction, en mètres.
-# Vide = désactivé (SfM auto habituel). Exemple "30" : conserver seulement
-# les paires à distance strictement < 30 m ; conserver les paires sans GPS.
-# Filtre les correspondances après appariement, sans ajout de paires ni patch
-# Spirula. Distance géodésique horizontale WGS84 des métadonnées Panoramax.
+# Defaut : "". Vide = filtre GPS des paires desactive ; sinon nombre fini > 0
+# en metres : garder les paires a distance horizontale strictement < au rayon.
+# Les paires sans GPS sont gardees ; ne rajoute aucune paire.
 SFM_PAIR_MAX_DISTANCE=""
 
-# Fraction maximale d'images ajoutées en recouvrement par le découpeur COLMAP.
+# ============================================================================
+# 3. Calcul optionnel des masques d'entraînement (apres SfM, avant decoupage)
+# ============================================================================
+# Les masques ne filtrent pas le SfM. Sortie : sfm-*/train_masks/<image>.png,
+# 255 = garde, 0 = masque ; controle visuel conseille avant un long calcul.
+
+# Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
+TRAIN_MASKS="off"
+
+# Defaut : segmentation. Valeurs : segmentation|spirula.
+# segmentation = SegFormer/Mask2Former Python ; spirula = SAM 3 natif Vulkan.
+TRAIN_MASKS_BACKEND="segmentation"
+
+# Defaut : "". Backend segmentation : dossier local du modele transformers,
+# obligatoire si active ; affiche par tools/segmentation_masks/install.sh.
+# Ne pas utiliser un checkpoint GGML ici.
+TRAIN_MASKS_MODEL=""
+
+# Defaut : "" (repli PYTHON_BIN). Backend segmentation : commande/chemin du
+# Python du venv de l'installateur. Backend spirula : ignore, utilise PYTHON_BIN.
+TRAIN_MASKS_PYTHON=""
+
+# Defaut : "". Backend spirula : fichier local SAM 3 GGML obligatoire si
+# active, ex. /chemin/sam3-q4_0.ggml. Requiert SS_BUILD_SAM=ON et Vulkan.
+# Accepter la licence Meta avec Spirula avant un lancement non interactif.
+TRAIN_MASKS_SPIRULA_MODEL=""
+
+# Defaut : auto. Backend spirula : auto, indice GPU Vulkan (0,1,...),
+# fragment du nom du GPU ou uuid:<hex>. Pas de noms cuda/mps ici.
+TRAIN_MASKS_SPIRULA_DEVICE="auto"
+
+# Defaut : sky. Liste non vide, separee par des virgules.
+# segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
+# insensible a la casse. sky couvre aussi les nuages dans ADE20K.
+# spirula : prompts anglais libres, unis par SAM, ex. "sky,person,car".
+TRAIN_MASKS_LABELS="sky"
+
+# Defaut : auto. Valeurs : auto|ignore|empty.
+# auto = empty si seulement sky, sinon ignore.
+# empty = apprendre les pixels masques comme vides (ciel/flotteurs).
+# ignore = exclure ces pixels de la perte (personnes/voitures sans creuser
+# les facades derriere). Un seul mode pour tous les labels d'un entrainement.
+TRAIN_MASKS_MODE="auto"
+
+# Defaut : 0.5. Nombre dans ]0,1].
+# segmentation : probabilite minimale par pixel des labels choisis.
+# spirula : score minimal de detection SAM (pas une probabilite par pixel).
+TRAIN_MASKS_CONFIDENCE="0.5"
+
+# Defaut : auto. Valeurs : auto ou nombre dans [0,0.1[.
+# Fraction de la diagonale de l'image pour elargir les zones masquees ;
+# auto = 0 en empty, 0.002 en ignore. Meme unite pour les deux moteurs.
+TRAIN_MASKS_DILATE="auto"
+
+# Defaut : 0.8. Nombre dans ]0,1] : fraction masquee maximale par image.
+# Au-dela, masque entierement blanc avec avertissement (vue conservee).
+TRAIN_MASKS_MAX_FRACTION="0.8"
+
+# Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
+# auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
+TRAIN_MASKS_DEVICE="auto"
+
+# ============================================================================
+# 4. Decoupage COLMAP en blocs
+# ============================================================================
+
+# Valeur initiale : 4 (defaut du lanceur de blocs). Entier >= 1 ;
+# champ obligatoire du pipeline : nombre de modeles COLMAP/3DGS.
+NUM_BLOCKS="4"
+
+# Defaut : 0.05. Nombre dans [0,1] : fraction maximale d'images supplementaires
+# par bloc pour le recouvrement. 0 = aucun recouvrement.
 OVERLAP_MAX_FRACTION="0.05"
 
-# Masques de segmentation pour l'entraînement 3DGS (outil optionnel :
-# tools/segmentation_masks, installer avec tools/segmentation_masks/install.sh).
-# off = désactivé. on = masques générés en préparation dans sfm-*/train_masks.
-TRAIN_MASKS="off"
-TRAIN_MASKS_PYTHON=""              # vide : PYTHON_BIN ; sinon venv de l'installateur
-TRAIN_MASKS_MODEL=""               # dossier local du modèle (affiché par install.sh)
-# Labels du modèle à masquer, séparés par des virgules (voir labels.txt du
-# modèle). sky couvre aussi les nuages. Exemple ADE20K : "sky,person,car".
-TRAIN_MASKS_LABELS="sky"
-# auto : empty si seul sky est masqué (le ciel est appris vide, ce qui
-# décourage les flotteurs-nuages), sinon ignore (pixels exclus de la perte,
-# adapté aux objets mobiles). ignore ou empty pour forcer.
-TRAIN_MASKS_MODE="auto"
-TRAIN_MASKS_CONFIDENCE="0.5"       # probabilité minimale pour masquer un pixel
-TRAIN_MASKS_DILATE="auto"          # auto : 0 en empty, 0.002 en ignore (fraction de diagonale)
-TRAIN_MASKS_MAX_FRACTION="0.8"     # image masquée au-delà : masque désactivé
-TRAIN_MASKS_DEVICE="auto"          # auto, cuda, mps ou cpu
+# ============================================================================
+# 5. Entrainement 3DGS de chaque bloc
+# ============================================================================
 
-# Force le réentraînement de tous les blocs en supprimant uniquement leurs
-# dossiers GS, pas le téléchargement, le SfM ni le découpage. true ou false.
+# Valeur initiale : 3dgs (defaut du lanceur de blocs). Champ obligatoire.
+# Valeurs : 3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing.
+TRAIN_PRESET="3dgs"
+
+# Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
+# Iterations par bloc ; sert aussi de suffixe sfm-NUM_ITER et gs-NUM_ITER.
+NUM_ITER="30000"
+
+# Valeur initiale : 1500000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
+# Plafond de splats par bloc ; total maximal theorique NUM_BLOCKS * CAP_MAX.
+CAP_MAX="1500000"
+
+# Defaut : "". Vide = budget CAP_MAX ; sinon entier > 0 :
+# budget du bloc = min(CAP_MAX, nombre d'images du bloc * SPLATS_PER_IMAGE).
+SPLATS_PER_IMAGE=""
+
+# Defaut : "". Vide = defaut Spirula (1.05) ; sinon nombre > 1.
+# Multiplicateur de croissance du nombre de splats par cycle de raffinement.
+GROWTH_FACTOR=""
+
+# Defaut : "". Vide = defaut Spirula (14000) ; sinon entier >= 0.
+# Pas minimal d'arret de croissance : arret effectif au maximum de
+# REFINE_STOP_ITER et NUM_ITER - REFINE_STOP_NUM_ITER.
+REFINE_STOP_ITER=""
+
+# Defaut : "". Vide = defaut Spirula (2500) ; sinon entier >= 0.
+# Nombre de pas reserves a l'affinage seul en fin de calcul, sous reserve
+# du minimum REFINE_STOP_ITER. Si l'arret effectif >= NUM_ITER, avertissement.
+REFINE_STOP_NUM_ITER=""
+
+# Defaut : off. Valeurs : off|mild|strong.
+# Suppression native des flotteurs ; mild/strong limitent aussi leur taille
+# a l'ecran. Comparer sur un bloc avant de generaliser.
+FLOATER_SUPPRESSION="off"
+
+# Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
+# true = supprime uniquement les sorties GS des blocs et les reentraine.
+# Ne supprime ni photos, ni SfM, ni decoupage. Necessaire pour appliquer de
+# nouveaux masques a des blocs deja entraines (sinon reutilisation avertie).
 CLEAN_GS="false"
 
-# Nom du fichier .splat fusionné dans OUTPUT_DIR.
+# ============================================================================
+# 6. Fusion, nettoyage final et export georeference
+# ============================================================================
+
+# Defaut : panoramax.splat. Nom simple non vide, sans "/", termine par .splat.
+# Le fichier fusionne original reste dans <nom>.unfiltered.splat.
 SPLAT_NAME="panoramax.splat"
 
-# Force relative des voxels lors de la fusion des scènes alignées.
-# Plus petit = fusion plus prudente, plus grand = davantage de déduplication.
+# Defaut : 1.0. Nombre fini > 0 : force relative des voxels de fusion.
+# Plus petit = deduplication prudente ; plus grand = deduplication accrue.
 SPLAT_MERGE_STRENGTH="1.0"
 
-# Sélection du nettoyage final : contextual (existant) ou cleangs (CUDA).
+# Defaut : contextual. Valeurs : contextual|cleangs.
+# contextual = filtres geometriques ci-dessous ; cleangs = nettoyage ciel
+# multivues via segmentation (CUDA, modele et venv propres a Clean-GS).
 SPLAT_CLEANER="contextual"
-# Options de l'adaptation Clean-GS ciel ; modèle téléchargé localement.
-CLEANGS_PYTHON=""                  # vide : PYTHON_BIN
-CLEANGS_MODEL=""                   # dossier local du modèle de segmentation
-CLEANGS_MODE="diagnostic"          # diagnostic ou apply
-CLEANGS_MIN_VIEWS="2"
-CLEANGS_SKY_CONFIDENCE="0.9"
-CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 
-# Filtre global après fusion (pas de découpe aux frontières internes des blocs).
-# diagnostic : garde tout, exporte les candidats dans *.rejected.splat.
-# apply : retire ces candidats ; off : aucun test géométrique.
-# L'original fusionné est toujours conservé dans *.unfiltered.splat.
+# --- Nettoyage contextual (ignore si SPLAT_CLEANER=cleangs) ---
+
+# Defaut : diagnostic. Valeurs : diagnostic|apply|off.
+# diagnostic = garde tout et exporte les candidats dans <nom>.rejected.splat ;
+# apply = retire les candidats ; off = desactive le test contextuel.
+# Le recadrage sparse ci-dessous est independant et peut rester actif.
 SPLAT_FILTER_MODE="diagnostic"
 
-# Grand axe / médiane des grands axes voisins, sans unité.
-# Un dépassement seul ne supprime rien : périphérie et faible support requis.
+# Defaut : 10. Nombre fini > 1, sans unite.
+# Grand axe / mediane des grands axes voisins ; le depassement seul ne retire
+# rien : il faut aussi une position peripherique et un faible support.
 SPLAT_FILTER_SIZE_FACTOR="10"
 
-# Recadrage sur la bbox des points 3D sparse (sfm-*/sparse/0/points3D.bin).
-# Boîte orientée sur les axes principaux des points, bornée aux quantiles
-# 0,5 %/99,5 % ; marge = fraction du plus grand côté (sans unité).
-# Seul le centre du splat est testé : une grande route centrée dedans reste.
-# apply (défaut) : retire les splats hors bbox ; diagnostic : les signale ; off.
+# Defaut : apply. Valeurs : apply|diagnostic|off.
+# Bbox orientee des points sparse aux quantiles 0.5 % / 99.5 % :
+# apply = retire les centres hors bbox ; diagnostic = signale ; off = desactive.
+# Pas de decoupe aux frontieres internes des blocs ; seul le centre est teste.
 SPLAT_SPARSE_BBOX_MODE="apply"
+
+# Defaut : 0.05. Nombre >= 0, sans unite.
+# Marge de bbox = fraction du plus grand cote ; 0 = aucune marge.
 SPLAT_SPARSE_BBOX_MARGIN="0.05"
 
-# Paramètres facultatifs pour bash tools/panoramax/launch.sh config.sh.
-# Partition GPU du cluster (adapter au site).
+# --- Nettoyage cleangs (ignore si SPLAT_CLEANER=contextual) ---
+
+# Defaut : "" (repli PYTHON_BIN). Commande/chemin du Python du venv Clean-GS,
+# affiche par bash tools/clean_gs/install.sh.
+CLEANGS_PYTHON=""
+
+# Defaut : "". Dossier local du modele de segmentation obligatoire si
+# SPLAT_CLEANER=cleangs ; affiche par l'installateur Clean-GS.
+CLEANGS_MODEL=""
+
+# Defaut : diagnostic. Valeurs : diagnostic|apply.
+# diagnostic = signale sans supprimer ; apply = applique le nettoyage.
+CLEANGS_MODE="diagnostic"
+
+# Defaut : 2. Entier > 0 : nombre minimal de vues ciel concordantes.
+CLEANGS_MIN_VIEWS="2"
+
+# Defaut : 0.9. Nombre dans ]0.5,1] : confiance minimale du label ciel.
+CLEANGS_SKY_CONFIDENCE="0.9"
+
+# Defaut : 0.2. Nombre dans [0,1[ : fraction maximale de splats supprimables.
+# En apply, le depassement provoque un arret, pas une suppression tronquee.
+CLEANGS_MAX_REMOVAL_FRACTION="0.2"
+
+# ============================================================================
+# 7. Execution Slurm (ignore en local, sauf repli de SFM_THREADS)
+# ============================================================================
+# Un GPU pour la preparation, un par bloc, fusion sans GPU sauf si cleangs.
+# Chaque job dispose des CPU/RAM/duree ci-dessous. Chemins et config partages.
+
+# Defaut : jean-zellou. Nom de partition GPU existante ; adapter au cluster.
 SLURM_PARTITION="jean-zellou"
 
-# Nombre de CPU alloués à chaque job (préparation, chaque bloc, fusion).
+# Defaut : 16. Entier > 0 : CPU alloues par job (preparation, bloc, fusion).
+# Sert aussi de repli a SFM_THREADS, meme en local si defini dans la config.
 SLURM_CPUS_PER_TASK="16"
 
-# Mémoire RAM par job (pas la VRAM GPU), syntaxe Slurm.
+# Defaut : 64G. Entier >= 0 avec suffixe optionnel K|M|G|T (casse indifferente).
+# Sans suffixe : Mo Slurm ; 0 = memoire du noeud selon le site. RAM, pas VRAM.
 SLURM_MEMORY="64G"
 
-# Durée maximale de chaque job, syntaxe Slurm.
+# Defaut : 48:00:00. Syntaxe Slurm : minutes, minutes:secondes, hh:mm:ss,
+# jours-hh[:mm[:ss]], ou UNLIMITED ; minutes/secondes dans [0,59] apres ":".
+# Duree maximale par job, soumise aux limites de la partition.
 SLURM_TIME_LIMIT="48:00:00"
 
-# Type GPU Slurm facultatif, par exemple a100 ; vide = gpu:1 sans type.
-# Un GPU pour la préparation puis un GPU par bloc ; fusion sans GPU.
+# Defaut : "". Vide = gpu:1 sans type ; sinon type GPU Slurm,
+# lettres/chiffres/"_"/"-" uniquement (ex. a100), sans ":".
 SLURM_GPU_TYPE=""
 
-# Maximum de blocs entraînés simultanément ; vide = NUM_BLOCKS.
-# Exemple : 4 blocs parallèles = jusqu'à 4 GPU et 4 fois la RAM/CPU par job.
-# 1 = entraînement séquentiel ; Slurm peut réduire le parallélisme effectif.
+# Defaut : "" (repli NUM_BLOCKS). Sinon entier > 0 : blocs simultanes au plus.
+# 1 = sequentiel ; une valeur > NUM_BLOCKS n'ajoute aucun bloc.
+# Le cluster peut reduire le parallelisme effectif.
 SLURM_BLOCK_PARALLELISM=""
 
-# Compte de facturation et qualité de service Slurm ; vide = défaut du site.
+# Defaut : "". Compte de facturation Slurm ; vide = defaut du site.
 SLURM_ACCOUNT=""
+
+# Defaut : "". Qualite de service Slurm ; vide = defaut du site.
 SLURM_QOS=""
 
-# Script Bash de confiance sourcé sur le nœud avant Conda (module load, Vulkan).
-# Vide = aucun script ; utiliser un chemin absolu accessible depuis le nœud.
+# Defaut : "". Chemin absolu d'un script Bash de confiance visible des noeuds,
+# source avant Conda (ex. module load Vulkan) ; vide = aucun script.
 SLURM_ENV_SETUP=""
 
-# Environnement Conda à activer sur le nœud ; vide = environnement hérité.
+# Defaut : "". Nom/chemin d'un environnement Conda ; vide = environnement herite.
 SLURM_CONDA_ENV=""
 
-# Racine d'installation Conda ; vide = conda info --base.
-# Utilisé uniquement si SLURM_CONDA_ENV est renseigné.
+# Defaut : "". Racine Conda ; vide = conda info --base.
+# Utilise uniquement si SLURM_CONDA_ENV est non vide.
 SLURM_CONDA_BASE=""

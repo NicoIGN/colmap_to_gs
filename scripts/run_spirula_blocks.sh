@@ -28,6 +28,9 @@ SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
 CLEAN_GS="${CLEAN_GS:-false}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
+TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
+TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
+TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
 TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
@@ -72,6 +75,9 @@ Variables:
   OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
   CLEAN_GS=true             Re-train blocks from scratch (destructive to GS outputs)
   TRAIN_MASKS               off (default) or on: segmentation masks for training
+  TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
+  TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
+  TRAIN_MASKS_SPIRULA_DEVICE Vulkan device: auto, index, name or uuid
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
   TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
@@ -163,6 +169,10 @@ case "$TRAIN_MASKS" in
   *) die "TRAIN_MASKS doit être on ou off : $TRAIN_MASKS" ;;
 esac
 if [[ "$TRAIN_MASKS" == on ]]; then
+  case "$TRAIN_MASKS_BACKEND" in
+    segmentation|spirula) ;;
+    *) die "TRAIN_MASKS_BACKEND doit être segmentation ou spirula." ;;
+  esac
   case "$TRAIN_MASKS_MODE" in
     auto)
       TRAIN_MASKS_MODE=ignore
@@ -177,11 +187,19 @@ if [[ "$TRAIN_MASKS" == on ]]; then
   fi
   [[ "$TRAIN_MASKS_DILATE" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
     die "TRAIN_MASKS_DILATE doit être auto ou un nombre >= 0 : $TRAIN_MASKS_DILATE"
+  if [[ "$TRAIN_MASKS_BACKEND" == spirula ]]; then
+    TRAIN_MASKS_PYTHON="$PYTHON_BIN"
+  fi
   command -v "$TRAIN_MASKS_PYTHON" >/dev/null 2>&1 ||
     die "Python des masques introuvable : $TRAIN_MASKS_PYTHON"
   if [[ "$mode" != block ]]; then
-    [[ -n "$TRAIN_MASKS_MODEL" && -d "$TRAIN_MASKS_MODEL" ]] ||
-      die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/segmentation_masks/install.sh)."
+    if [[ "$TRAIN_MASKS_BACKEND" == spirula ]]; then
+      [[ -f "$TRAIN_MASKS_SPIRULA_MODEL" ]] ||
+        die "TRAIN_MASKS_SPIRULA_MODEL doit désigner un checkpoint SAM 3 GGML local."
+    else
+      [[ -n "$TRAIN_MASKS_MODEL" && -d "$TRAIN_MASKS_MODEL" ]] ||
+        die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/segmentation_masks/install.sh)."
+    fi
   fi
 fi
 
@@ -249,11 +267,15 @@ prepare_blocks() {
   [[ -d "$SFM_DIR/images" ]] || die "Images préparées par SfM absentes : $SFM_DIR/images"
 
   if [[ "$TRAIN_MASKS" == on ]]; then
-    printf '[pipeline] Masques d’entraînement : labels %s, mode %s.\n' \
-      "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
+    local mask_model="$TRAIN_MASKS_MODEL"
+    [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
+    printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
+      "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
     "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
       --images "$SFM_DIR/images" --output "$MASKS_DIR" \
-      --model "$TRAIN_MASKS_MODEL" --labels "$TRAIN_MASKS_LABELS" \
+      --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
+      --spirula-device "$TRAIN_MASKS_SPIRULA_DEVICE" \
+      --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
       --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" ||
       die "Génération des masques d’entraînement échouée."

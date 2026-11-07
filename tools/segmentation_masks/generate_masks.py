@@ -14,6 +14,7 @@ import math
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -89,11 +90,79 @@ def list_images(root):
 
 def model_fingerprint(model_dir):
     digest = hashlib.sha256()
+    if Path(model_dir).is_file():
+        stat = Path(model_dir).stat()
+        digest.update(f"{stat.st_size}:{stat.st_mtime_ns}".encode())
+        return digest.hexdigest()
     for name in ("config.json", "preprocessor_config.json"):
         path = Path(model_dir, name)
         if path.is_file():
             digest.update(name.encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()
+
+
+class SpirulaSegmenter:
+    """Run native SAM once on independent images, preserving raw orientation."""
+
+    def __init__(self, args):
+        self.args = args
+        self.id2label = dict(enumerate(parse_labels(args.labels)))
+        self.temporary = tempfile.TemporaryDirectory(prefix="spirula-masks-")
+        self.paths = {}
+        binary = shutil.which(args.spirula_bin)
+        if binary is None:
+            self.close()
+            raise ValueError(f"Spirula introuvable : {args.spirula_bin}")
+        self.binary = str(Path(binary).resolve())
+        stat = Path(self.binary).stat()
+        self.settings = {"backend": "spirula", "binary": self.binary,
+                         "binary_fingerprint": f"{stat.st_size}:{stat.st_mtime_ns}",
+                         "device": args.spirula_device}
+
+    def close(self):
+        self.temporary.cleanup()
+
+    def prepare(self, images_dir, names):
+        if not names:
+            return
+        from PIL import Image
+
+        root = Path(self.temporary.name)
+        frames, masks = root / "frames", root / "masks"
+        frames.mkdir()
+        masks.mkdir()
+        for index, name in enumerate(names):
+            source = images_dir / name
+            # SAM track has a flat input directory and a restricted extension list.
+            if source.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}:
+                raise ValueError(f"Format non pris en charge par Spirula SAM : {source}")
+            with Image.open(source) as image:
+                image.load()
+            (frames / f"{index:09d}{source.suffix.lower()}").symlink_to(source)
+            self.paths[str(source)] = masks / f"frame_{index:05d}.png"
+        subprocess.run(
+            [self.binary, "sam", "track", "--model", str(self.args.model.resolve()),
+             "--frames", str(frames), "--out", str(masks),
+             "--text", "; ".join(self.id2label.values()),
+             "--mask-mode", "image", "--remove-prompted", "--dilate-ratio", "0",
+             "--threshold", str(self.args.confidence),
+             "--device", self.args.spirula_device], check=True)
+        for source, path in self.paths.items():
+            if not path.is_file():
+                raise ValueError(f"Spirula n'a pas écrit le masque de {source} : {path}")
+            with Image.open(source) as image, Image.open(path) as mask:
+                mask.load()
+                if mask.mode != "L" or mask.size != image.size:
+                    raise ValueError(f"Masque Spirula invalide (mode ou dimensions) : {path}")
+
+    def raw_mask(self, source, args):
+        from PIL import Image
+
+        with Image.open(source) as image, Image.open(self.paths[str(source)]) as mask:
+            orientation = int(image.getexif().get(0x0112, 1) or 1)
+            probability = np.asarray(mask) < 128
+            radius = dilation_radius(image.width, image.height, args.dilate_fraction)
+        return keep_mask(probability, 0.5, radius), orientation
 
 
 class Segmenter:
@@ -177,17 +246,20 @@ def write_json(data, path):
 def mask_one(segmenter, source, label_ids, args):
     from PIL import Image, ImageOps
 
-    with Image.open(source) as raw:
-        orientation = int(raw.getexif().get(0x0112, 1) or 1)
-        upright = ImageOps.exif_transpose(raw).convert("RGB")
-    radius = dilation_radius(upright.width, upright.height, args.dilate_fraction)
-    keep = keep_mask(segmenter.probability(upright, label_ids), args.confidence, radius)
+    if isinstance(segmenter, SpirulaSegmenter):
+        keep, orientation = segmenter.raw_mask(source, args)
+    else:
+        with Image.open(source) as raw:
+            orientation = int(raw.getexif().get(0x0112, 1) or 1)
+            upright = ImageOps.exif_transpose(raw).convert("RGB")
+        radius = dilation_radius(upright.width, upright.height, args.dilate_fraction)
+        keep = keep_mask(segmenter.probability(upright, label_ids), args.confidence, radius)
     masked_fraction = float(np.count_nonzero(keep == 0)) / keep.size
     status = "masked"
     if masked_fraction > args.max_masked_fraction:
         keep[:] = 255
         status = "overmasked_kept"
-    if orientation in INVERSE_ORIENTATION:
+    if orientation in INVERSE_ORIENTATION and not isinstance(segmenter, SpirulaSegmenter):
         keep = np.asarray(Image.fromarray(keep).transpose(
             Image.Transpose(INVERSE_ORIENTATION[orientation])))
     return keep, {"masked_fraction": round(masked_fraction, 6), "status": status,
@@ -229,6 +301,8 @@ def run(args, segmenter=None):
         "max_masked_fraction": args.max_masked_fraction,
         "convention": "255 = gardé, 0 = masqué ; <nom image>.png ; orientation brute",
     }
+    if isinstance(segmenter, SpirulaSegmenter):
+        settings.update(segmenter.settings)
 
     previous = {}
     target = output
@@ -247,8 +321,12 @@ def run(args, segmenter=None):
     stats = {}
     done = skipped = 0
     try:
-        if target == output and not report_path.is_file():
-            write_json({"status": "partial", "settings": settings, "images": {}}, report_path)
+        write_json({"status": "partial", "settings": settings, "images": previous},
+                   target / REPORT_NAME)
+        if isinstance(segmenter, SpirulaSegmenter):
+            pending = [name for name in images if not (
+                target == output and (target / (name + ".png")).is_file() and name in previous)]
+            segmenter.prepare(images_dir, pending)
         for index, name in enumerate(images, 1):
             path = target / (name + ".png")
             if target == output and path.is_file() and name in previous:
@@ -301,7 +379,10 @@ def main(argv=None):
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--images", type=Path, help="Dossier des images")
     parser.add_argument("--output", type=Path, help="Dossier des masques")
-    parser.add_argument("--model", type=Path, required=True, help="Modèle transformers local")
+    parser.add_argument("--backend", choices=("segmentation", "spirula"), default="segmentation")
+    parser.add_argument("--spirula-bin", default="spirula", help="Exécutable Spirula avec SAM")
+    parser.add_argument("--spirula-device", default="auto", help="Périphérique Vulkan : auto, index, nom ou uuid")
+    parser.add_argument("--model", type=Path, required=True, help="Dossier transformers ou fichier SAM GGML local")
     parser.add_argument("--labels", default="sky",
                         help="Labels à masquer, séparés par des virgules (défaut : sky)")
     parser.add_argument("--confidence", type=float, default=0.5,
@@ -314,17 +395,27 @@ def main(argv=None):
     parser.add_argument("--list-labels", action="store_true",
                         help="Afficher les labels du modèle et quitter")
     args = parser.parse_args(argv)
+    native = None
     try:
+        if args.backend == "spirula":
+            if args.list_labels:
+                raise ValueError("SAM utilise des prompts libres, pas une liste de classes")
+            if not args.model.is_file():
+                raise ValueError(f"Checkpoint SAM GGML introuvable : {args.model}")
+            native = SpirulaSegmenter(args)
         if args.list_labels:
             from transformers import AutoConfig
             config = AutoConfig.from_pretrained(str(args.model), local_files_only=True)
             for key, name in sorted((int(k), v) for k, v in config.id2label.items()):
                 print(f"{key}\t{name}")
             return 0
-        run(args)
+        run(args, segmenter=native)
     except ValueError as error:
         print(f"[ERREUR] {error}", file=sys.stderr)
         return 2
+    finally:
+        if native is not None:
+            native.close()
     return 0
 
 

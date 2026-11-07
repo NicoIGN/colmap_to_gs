@@ -6,6 +6,11 @@ un masque transmis à l'entraînement Spirula. Par défaut il masque le **ciel**
 « nuage » distincte dans ADE20K ou Mapillary Vistas). D'autres objets peuvent
 être masqués en listant leurs labels.
 
+Deux moteurs sont disponibles via `TRAIN_MASKS_BACKEND` :
+`segmentation` (défaut, SegFormer/Mask2Former avec Python) et `spirula`
+(SAM natif sur Vulkan). Ce choix change le **calcul** des masques, pas leur
+utilisation par l'entraînement.
+
 ## Installation
 
 ```bash
@@ -17,7 +22,7 @@ bash tools/segmentation_masks/install.sh \
 Le script :
 
 1. crée un environnement isolé `INSTALL/venv` (torch, transformers 4.46.3,
-   Pillow, SciPy) ;
+   Pillow, SciPy, NumPy >= 1.24 et < 2) ;
 2. télécharge le modèle dans `INSTALL/models/<organisation>--<modèle>` ;
 3. écrit `labels.txt` (toutes les classes du modèle) dans ce dossier ;
 4. vérifie que les labels demandés (`--labels`, défaut `sky`) existent ;
@@ -27,6 +32,54 @@ Options : `--model ID_HUGGING_FACE`, `--labels "sky,person,car"`.
 Le nœud d'installation doit accéder à PyPI et Hugging Face ; le calcul utilise
 ensuite uniquement le modèle local. Linux (CUDA) et macOS (MPS) sont pris en
 charge ; sans GPU, la génération fonctionne sur CPU mais lentement.
+
+### Correction NumPy/PyTorch sur macOS
+
+Les roues PyTorch 2.2.x ne sont pas compatibles avec NumPy 2 (`_ARRAY_API
+not found`). L'installateur impose désormais `numpy<2`, y compris dans un
+environnement existant, et vérifie le pont NumPy/PyTorch avant de télécharger
+le modèle. Relancer la même commande d'installation suffit ; pas besoin de
+supprimer le venv ni les poids déjà téléchargés.
+
+### Backend natif Spirula
+
+```bash
+TRAIN_MASKS="on"
+TRAIN_MASKS_BACKEND="spirula"
+TRAIN_MASKS_SPIRULA_MODEL="/chemin/sam3-q4_0.ggml"
+TRAIN_MASKS_SPIRULA_DEVICE="auto"
+TRAIN_MASKS_LABELS="sky"
+TRAIN_MASKS_MODE="auto"
+```
+
+Il faut un Spirula compilé avec `SS_BUILD_SAM=ON` (backend Vulkan) et un
+checkpoint **SAM 3 GGML**, pas les poids transformers de l'installateur.
+Obtenir les poids via Spirula et accepter leur licence Meta avant un lancement
+non interactif, avec le même compte et le même HOME que les jobs. Par exemple,
+`"$SPIRULA_BIN" sam devices --accept-license sam3` affiche les termes et demande
+confirmation sur un terminal. Aucune licence n'est acceptée automatiquement
+par ce pipeline.
+
+`TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode :
+le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy,
+Pillow et SciPy (ce dernier seulement si une dilatation est demandée).
+`TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`.
+
+Les labels deviennent des **prompts anglais libres**, unis par SAM :
+`"sky,person,car"` devient `"sky; person; car"`. SAM 2 seul n'accepte pas de
+texte ; cette intégration attend donc SAM 3. Chaque image est segmentée
+indépendamment (`spirula sam track --mask-mode image --remove-prompted`),
+sans suivi vidéo, car les photos Panoramax ne constituent pas une séquence
+ordonnée. Les sorties `frame_XXXXX.png` sont renommées pour l'entraînement,
+y compris pour des images dans des sous-dossiers. Les formats pris en charge
+sont JPEG, PNG, BMP et TIFF ; un autre format provoque une erreur explicite.
+
+`TRAIN_MASKS_CONFIDENCE` règle ici le **score de détection SAM**, pas une
+probabilité sémantique par pixel. La dilatation reste une fraction de la
+diagonale de l'image, appliquée après SAM ; son élargissement natif par objet
+est désactivé. Le garde-fou `TRAIN_MASKS_MAX_FRACTION` reste actif.
+Un changement de moteur régénère les masques ; `CLEAN_GS=true` est nécessaire
+pour réentraîner des blocs déjà terminés.
 
 ### Segmenteurs
 
@@ -57,6 +110,7 @@ leur compatibilité avec l'usage prévu, en particulier commercial.
 
 ```bash
 TRAIN_MASKS="on"                      # off par défaut
+TRAIN_MASKS_BACKEND="segmentation"    # segmentation ou spirula
 TRAIN_MASKS_PYTHON="/chemin/partage/segmentation-masks/venv/bin/python"
 TRAIN_MASKS_MODEL="/chemin/partage/segmentation-masks/models/nvidia--segformer-b5-finetuned-ade-640-640"
 TRAIN_MASKS_LABELS="sky"              # ex. "sky,person,car,bicycle"

@@ -191,6 +191,34 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_MASKS_MODEL", result.stderr)
 
+    def test_native_backend_uses_sam_model_without_transformers_environment(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            model = root / "sam3-q4_0.ggml"
+            model.write_bytes(b"sam")
+            env.update(TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model),
+                       TRAIN_MASKS_SPIRULA_DEVICE="0",
+                       TRAIN_MASKS_MODEL="", TRAIN_MASKS_PYTHON="/missing/python",
+                       NUM_BLOCKS="1")
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            masks = next(cmd for cmd in commands if cmd[0] == "masks")
+            self.assertEqual(masks[masks.index("--backend") + 1], "spirula")
+            self.assertEqual(masks[masks.index("--model") + 1], str(model))
+            self.assertEqual(masks[masks.index("--spirula-device") + 1], "0")
+            train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
+            self.assertEqual(train[train.index("--apply-loss-for-mask") + 1], "1")
+            model.unlink()
+            failed = execute("--prepare-only")
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("TRAIN_MASKS_SPIRULA_MODEL", failed.stderr)
+            env.update(TRAIN_MASKS_BACKEND="bad")
+            failed = execute()
+            self.assertNotEqual(failed.returncode, 0)
+            self.assertIn("TRAIN_MASKS_BACKEND", failed.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

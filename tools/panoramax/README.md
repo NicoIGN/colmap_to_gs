@@ -140,7 +140,10 @@ Le lanceur `run_pipeline.sh` enchaîne le téléchargement Panoramax, le SfM
 géoréférencé, le découpage COLMAP, l'entraînement Spirula de chaque bloc et la
 fusion voxelisée de leurs splats alignés en un unique fichier final. Il prend
 un fichier de configuration Bash (fichier de code de confiance) ; chaque
-variable et son rôle sont commentés dans `tools/panoramax/config.sh.example`.
+variable, ses valeurs possibles et son défaut sont commentés dans
+`tools/panoramax/config.sh.example`, organisé par étape du pipeline.
+Le modèle reprend les défauts, sans préréglage de croissance sobre ; seuls
+`OUTPUT_DIR` et `BBOX_LAMBERT93` sont des exemples obligatoires à remplacer.
 
 Le découpage privilégie les séparations de faible covisibilité et vise des
 blocs d'environ `N / NUM_BLOCKS` images principales (tolérance de 20 %,
@@ -202,7 +205,10 @@ L'installation complète se fait avec `bash tools/clean_gs/install.sh
 --install-dir /chemin/partage/cleangs --python python3` ; le script affiche
 `CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
 
-Masques d'entraînement optionnels (`TRAIN_MASKS="on"`, défaut `off`) : avant
+Masques d'entraînement optionnels (`TRAIN_MASKS="on"`, défaut `off`) :
+`TRAIN_MASKS_BACKEND="segmentation"` utilise SegFormer/Mask2Former ;
+`TRAIN_MASKS_BACKEND="spirula"` utilise SAM 3 natif sur Vulkan, avec
+`TRAIN_MASKS_SPIRULA_MODEL` pointant vers un checkpoint GGML local. Avant
 le découpage, un segmenteur local génère un masque par image dans
 `sfm-*/train_masks/`, transmis à Spirula. Par défaut seul le ciel (nuages
 compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
@@ -220,13 +226,15 @@ splats restants. La limite de 20 % de rejets appliqués reste active.
 
 Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
 `cap_max`, donc atteindre le plafond est attendu. `CAP_MAX` est un plafond dur
-**par bloc** ; le préréglage d'exemple fixe le budget de chaque bloc à
-`min(CAP_MAX, images × SPLATS_PER_IMAGE)` (2000 par image), ralentit la
-croissance (`GROWTH_FACTOR="1.03"`, Spirula : 1.05) et l'arrête à 60 % des
-itérations (`REFINE_STOP_ITER`/`REFINE_STOP_NUM_ITER` : arrêt au pas
-`max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)` ; défauts Spirula
-14000/2500) pour consacrer la fin à l'affinage.
-Laisser ces variables vides restaure le comportement Spirula. Calibrer
+**par bloc** (valeur initiale 1500000). Par défaut `SPLATS_PER_IMAGE`,
+`GROWTH_FACTOR`, `REFINE_STOP_ITER` et `REFINE_STOP_NUM_ITER` restent vides :
+budget `CAP_MAX`, croissance Spirula 1.05 et paramètres d'arrêt 14000/2500.
+Pour un réglage plus sobre, définir par exemple `SPLATS_PER_IMAGE="2000"`
+(budget `min(CAP_MAX, images × SPLATS_PER_IMAGE)`), `GROWTH_FACTOR="1.03"`,
+`REFINE_STOP_ITER="18000"` et `REFINE_STOP_NUM_ITER="12000"` : avec 30000
+itérations, la croissance s'arrête à 60 % du calcul. L'arrêt effectif est
+`max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)`.
+Calibrer
 `SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
 étape isolée.
 Les blocs sont réexportés sans filtre de BBOX/taille lors de leur relance,
