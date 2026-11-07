@@ -212,6 +212,14 @@ if "--wait" in args:
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("--array=0-1%1", self.jobs()[1])
 
+    def test_cleangs_merge_allocates_gpu(self):
+        with self.config.open("a") as stream:
+            stream.write('SPLAT_CLEANER=cleangs\nCLEANGS_MODEL="/local/model"\n')
+        result = self.launch("--wait")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("--gres=gpu:1", self.jobs()[2])
+        self.assertIn("GPU 0", (self.output / "logs/panoramax-merge-12347.out").read_text())
+
     def test_prepare_failure_prevents_all_training_and_merge(self):
         self.env["TEST_FAIL_STAGE"] = "prepare"
         result = self.launch("--wait")

@@ -88,6 +88,13 @@ SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
 SPLAT_MERGE_STRENGTH="${SPLAT_MERGE_STRENGTH:-1.0}"
 SPLAT_FILTER_MODE="${SPLAT_FILTER_MODE:-diagnostic}"
 SPLAT_FILTER_SIZE_FACTOR="${SPLAT_FILTER_SIZE_FACTOR:-10}"
+SPLAT_CLEANER="${SPLAT_CLEANER:-contextual}"
+CLEANGS_PYTHON="${CLEANGS_PYTHON:-$PYTHON_BIN}"
+CLEANGS_MODEL="${CLEANGS_MODEL:-}"
+CLEANGS_MODE="${CLEANGS_MODE:-diagnostic}"
+CLEANGS_MIN_VIEWS="${CLEANGS_MIN_VIEWS:-2}"
+CLEANGS_SKY_CONFIDENCE="${CLEANGS_SKY_CONFIDENCE:-0.9}"
+CLEANGS_MAX_REMOVAL_FRACTION="${CLEANGS_MAX_REMOVAL_FRACTION:-0.2}"
 SPLAT_SPARSE_BBOX_MODE="${SPLAT_SPARSE_BBOX_MODE:-apply}"
 SPLAT_SPARSE_BBOX_MARGIN="${SPLAT_SPARSE_BBOX_MARGIN:-0.05}"
 SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
@@ -270,13 +277,22 @@ pipeline_stage="fusion des splats des blocs"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
   "${MERGE_INPUTS[@]}" --output "$UNFILTERED_SPLAT" --strength "$SPLAT_MERGE_STRENGTH"
 [[ -s "$UNFILTERED_SPLAT" ]] || die "Splat fusionné absent ou vide : $UNFILTERED_SPLAT"
-pipeline_stage="filtre contextuel global des splats"
-"$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
-  --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-  --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" \
-  --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
-  --sparse-bbox-mode "$SPLAT_SPARSE_BBOX_MODE" \
-  --sparse-bbox-margin "$SPLAT_SPARSE_BBOX_MARGIN" --overwrite
+if [[ "$SPLAT_CLEANER" == cleangs ]]; then
+  pipeline_stage="filtre Clean-GS multivues"
+  "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
+    --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
+    --scene "$SFM_DIR" --model "$CLEANGS_MODEL" --mode "$CLEANGS_MODE" \
+    --min-views "$CLEANGS_MIN_VIEWS" --sky-confidence "$CLEANGS_SKY_CONFIDENCE" \
+    --max-removal-fraction "$CLEANGS_MAX_REMOVAL_FRACTION" --overwrite
+else
+  pipeline_stage="filtre contextuel global des splats"
+  "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
+    --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
+    --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" \
+    --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
+    --sparse-bbox-mode "$SPLAT_SPARSE_BBOX_MODE" \
+    --sparse-bbox-margin "$SPLAT_SPARSE_BBOX_MARGIN" --overwrite
+fi
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.

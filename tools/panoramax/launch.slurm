@@ -24,6 +24,7 @@ esac
   die "Dépôt inaccessible sur le nœud : $repo_root"
 source "$config_path"
 : "${OUTPUT_DIR:?OUTPUT_DIR requis}"
+export SPLAT_CLEANER="${SPLAT_CLEANER:-contextual}"
 
 # Site-specific modules (Vulkan, drivers, Conda) must be loaded on the node.
 if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
@@ -67,7 +68,7 @@ printf '[slurm] Étape=%s bloc=%s\n' "$phase" "${SLURM_ARRAY_TASK_ID:-sans objet
 exec_status=0
 srun --unbuffered --export=ALL bash -c '
   set -euo pipefail
-  if [[ "$3" != merge ]]; then
+  if [[ "$3" != merge || "${SPLAT_CLEANER:-contextual}" == cleangs ]]; then
     command -v nvidia-smi >/dev/null 2>&1 || {
       echo "[ERREUR] nvidia-smi introuvable ; GPU NVIDIA requis." >&2
       exit 1

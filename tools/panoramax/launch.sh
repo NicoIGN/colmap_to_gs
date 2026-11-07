@@ -123,7 +123,9 @@ printf '[slurm] Journaux préparation : %s/panoramax-prepare-%s.{out,err}\n' "$l
 printf '[slurm] Journaux blocs : %s/panoramax-block-%s_INDICE.{out,err}\n' "$log_dir" "$blocks_job"
 merge_args=()
 [[ "${2:-}" != --wait ]] || merge_args+=(--wait)
-submit_job merge --job-name=panoramax-merge --gres=none \
+merge_gres=none
+[[ "${SPLAT_CLEANER:-contextual}" != cleangs ]] || merge_gres="$gres"
+submit_job merge --job-name=panoramax-merge "--gres=$merge_gres" \
   "--dependency=afterok:$blocks_job" --kill-on-invalid-dep=yes \
   "--output=$log_dir/panoramax-merge-%j.out" \
   "--error=$log_dir/panoramax-merge-%j.err" "${merge_args[@]}"

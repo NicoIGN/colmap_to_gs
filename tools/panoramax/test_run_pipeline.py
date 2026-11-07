@@ -146,6 +146,14 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  shutil.copyfile(args[args.index('--input')+1],out)\n"
                 "  out.with_suffix('.rejected.splat').write_bytes(b'')\n"
                 "  out.with_suffix('.filter.json').write_text('{}')\n"
+                "elif args and args[0].endswith('clean_sky.py'):\n"
+                "  import pathlib, shutil\n"
+                "  assert args[args.index('--scene')+1].endswith('sfm-3')\n"
+                "  assert args[args.index('--model')+1]=='/local/model'\n"
+                "  assert args[args.index('--mode')+1]=='diagnostic'\n"
+                "  out=pathlib.Path(args[args.index('--output')+1])\n"
+                "  shutil.copyfile(args[args.index('--input')+1],out)\n"
+                "  out.with_suffix('.filter.json').write_text('{\"algorithm\":\"cleangs\"}')\n"
                 "else:\n"
                 "  os.execv(sys.executable,[sys.executable,*args])\n"
             )
@@ -231,6 +239,13 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
+            with config.open("a") as stream:
+                stream.write('SPLAT_CLEANER="cleangs"\nCLEANGS_MODEL="/local/model"\n')
+            result = execute("merge")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads((georef / "splat_filter_summary.json").read_text())["algorithm"], "cleangs")
+            with config.open("a") as stream:
+                stream.write('SPLAT_CLEANER="contextual"\n')
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((georef / "sparse/0").exists())

@@ -103,6 +103,16 @@ SPLAT_NAME="panoramax.splat"
 # Plus petit = fusion plus prudente, plus grand = davantage de déduplication.
 SPLAT_MERGE_STRENGTH="1.0"
 
+# Sélection du nettoyage final : contextual (existant) ou cleangs (CUDA).
+SPLAT_CLEANER="contextual"
+# Options de l'adaptation Clean-GS ciel ; modèle téléchargé localement.
+CLEANGS_PYTHON=""                  # vide : PYTHON_BIN
+CLEANGS_MODEL=""                   # dossier local du modèle de segmentation
+CLEANGS_MODE="diagnostic"          # diagnostic ou apply
+CLEANGS_MIN_VIEWS="2"
+CLEANGS_SKY_CONFIDENCE="0.9"
+CLEANGS_MAX_REMOVAL_FRACTION="0.2"
+
 # Filtre global après fusion (pas de découpe aux frontières internes des blocs).
 # diagnostic : garde tout, exporte les candidats dans *.rejected.splat.
 # apply : retire ces candidats ; off : aucun test géométrique.

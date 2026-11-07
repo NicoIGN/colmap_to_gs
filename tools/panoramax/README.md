@@ -191,6 +191,14 @@ candidats ; `"off"` désactive le test. Le rapport de taille local se règle par
 `SPLAT_FILTER_SIZE_FACTOR` (défaut 10).
 Voir [la description et les limites du filtre](../postprocess/README.md).
 
+Pour remplacer ce filtre par le nettoyage expérimental du ciel multivues,
+définir `SPLAT_CLEANER="cleangs"` et `CLEANGS_MODEL` (dossier local de
+segmentation). `CLEANGS_MODE="diagnostic"` conserve les splats et exporte les
+rejets ; `apply` les retire. La fusion Slurm demande alors un GPU NVIDIA.
+Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel :
+installation, dépendances et précautions sont décrites dans
+[tools/clean_gs](../clean_gs/README.md).
+
 Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D
 sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
 (`SPLAT_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte

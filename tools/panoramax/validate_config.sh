@@ -44,6 +44,20 @@ validate_config() {
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SPLAT_FILTER_MODE "${SPLAT_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
+  config_choice SPLAT_CLEANER "${SPLAT_CLEANER:-contextual}" 'contextual|cleangs'
+  config_choice CLEANGS_MODE "${CLEANGS_MODE:-diagnostic}" 'diagnostic|apply'
+  config_positive_integer CLEANGS_MIN_VIEWS "${CLEANGS_MIN_VIEWS:-2}"
+  if [[ "${SPLAT_CLEANER:-contextual}" == cleangs && -z "${CLEANGS_MODEL:-}" ]]; then
+    config_error "CLEANGS_MODEL doit désigner le modèle de segmentation local."
+  fi
+  value="${CLEANGS_SKY_CONFIDENCE:-0.9}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$value" 'BEGIN { exit !(x > 0.5 && x <= 1) }' ||
+    config_error "CLEANGS_SKY_CONFIDENCE='$value' doit être dans ]0.5,1]."
+  value="${CLEANGS_MAX_REMOVAL_FRACTION:-0.2}"
+  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$value" 'BEGIN { exit !(x >= 0 && x < 1) }' ||
+    config_error "CLEANGS_MAX_REMOVAL_FRACTION='$value' doit être dans [0,1[."
   config_choice SPLAT_SPARSE_BBOX_MODE "${SPLAT_SPARSE_BBOX_MODE:-apply}" 'apply|diagnostic|off'
   config_choice FLOATER_SUPPRESSION "${FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
   value="${SPLATS_PER_IMAGE:-}"
