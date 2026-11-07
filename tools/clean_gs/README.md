@@ -14,28 +14,70 @@ qui se projettent devant les bâtiments ou la végétation.
 
 ## Installation
 
-Sur Linux avec GPU NVIDIA, CUDA et `nvcc`, installer Clean-GS selon ses
-instructions, à la révision de référence de l'API
-`78a39e941c14df5857903b1112040d117f230ac4`, puis installer `transformers`
-dans son environnement Python. Un environnement séparé est possible :
-`CLEANGS_PYTHON` doit alors désigner son interpréteur et contenir également
-numpy, scipy, tqdm et plyfile. Les versions et compatibilités CUDA doivent être
-vérifiées selon le cluster. Exemple après installation des prérequis CUDA et
-PyTorch indiqués par Clean-GS :
+L'installateur prépare un environnement **séparé de `gsplat`**, la révision
+Clean-GS `78a39e941c14df5857903b1112040d117f230ac4` avec son verrou de dépendances,
+PyTorch CUDA 12.8, transformers, pyproj et le modèle SegFormer local :
 
 ```bash
-git clone https://github.com/smlab-niser/clean-gs.git
-git -C clean-gs checkout 78a39e941c14df5857903b1112040d117f230ac4
-python -m pip install -e ./clean-gs
-python -m pip install 'transformers==4.46.3' pyproj
+bash "$GIT_ROOT/tools/clean_gs/install.sh" \
+  --install-dir /shared/home/NBellaiche/envs/cleangs \
+  --python python3
 ```
 
-Préparer localement un modèle Hugging Face de segmentation ADE20K contenant
-une classe nommée `sky`, par exemple
-`nvidia/segformer-b0-finetuned-ade-512-512`. Télécharger ses fichiers avec
-`huggingface-cli download nvidia/segformer-b0-finetuned-ade-512-512 --local-dir /chemin/segformer`
-dans un environnement autorisé à accéder au réseau. L'inférence utilise
-uniquement ces fichiers locaux : aucune image n'est envoyée au service.
+Prérequis : Linux, Python **3.11 ou 3.12** avec `venv`, git, accès réseau
+(GitHub, PyPI, PyTorch et Hugging Face), compilateur C++ pour les dépendances
+natives et plusieurs Go libres. Le dossier choisi doit être accessible depuis
+les nœuds GPU. Sans options, l'installation utilise
+`$HOME/.local/share/colmap-to-gs/cleangs`. `CLEANGS_INSTALL_DIR` et
+`CLEANGS_INSTALL_PYTHON` sont les alternatives aux arguments correspondants.
+Une relance réutilise le dossier ; une source modifiée ou à une autre révision
+est refusée. Aucun environnement existant n'est supprimé.
+
+Le GPU n'est pas obligatoire sur le nœud d'installation. **Avant utilisation**,
+charger CUDA 12.8 (`nvcc`) et un compilateur C++ dans une allocation GPU NVIDIA,
+puis vérifier la compilation effective et un petit rendu :
+
+```bash
+/shared/home/NBellaiche/envs/cleangs/source/.venv/bin/python \
+  "$GIT_ROOT/tools/clean_gs/check_runtime.py"
+```
+
+L'option `--check-gpu` fait cette vérification à la fin de l'installation si
+elle est lancée directement sur un nœud GPU. Le script ne peut pas installer
+le pilote NVIDIA ni les modules CUDA du cluster : ils doivent être fournis
+par le site. Le cache de compilation gsplat doit rester accessible en écriture.
+Les images ne sont jamais envoyées à un service ; seule l'installation
+télécharge les poids, l'inférence les charge ensuite sans accès réseau.
+
+## Variables à ajouter dans la configuration Panoramax
+
+L'installateur affiche les chemins exacts à reporter dans `config.sh` :
+
+```bash
+SPLAT_CLEANER="cleangs"  # contextual : conserver le nettoyage existant
+CLEANGS_PYTHON="/shared/home/NBellaiche/envs/cleangs/source/.venv/bin/python"
+CLEANGS_MODEL="/shared/home/NBellaiche/envs/cleangs/models/segformer"
+CLEANGS_MODE="diagnostic"  # apply après inspection des masques et rejets
+CLEANGS_MIN_VIEWS="2"
+CLEANGS_SKY_CONFIDENCE="0.9"
+CLEANGS_MAX_REMOVAL_FRACTION="0.2"
+```
+
+`PYTHON_BIN` et `SLURM_CONDA_ENV` peuvent rester ceux du pipeline habituel :
+seul le nettoyage utilise `CLEANGS_PYTHON`. En mode `cleangs`, la fusion Slurm
+réserve automatiquement un GPU. Si les modules CUDA/C++ ne sont pas hérités,
+ajouter dans la config :
+
+```bash
+SLURM_ENV_SETUP="/chemin/absolu/vers/setup-cuda.sh"
+```
+
+Ce script Bash de confiance doit charger les modules CUDA 12.8 et compilateur
+du **site** (leurs noms dépendent du cluster). Il est chargé avant Conda.
+Pour revenir à l'ancien nettoyage, mettre `SPLAT_CLEANER="contextual"`.
+Les options `SPLAT_FILTER_*` et `SPLAT_SPARSE_BBOX_*` n'agissent pas en mode
+`cleangs`. Le diagnostic produit le `.splat` final sans suppressions ;
+`CLEANGS_MODE="apply"` active le nettoyage avec la limite indiquée.
 
 ## Utilisation autonome
 
