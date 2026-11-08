@@ -1,0 +1,28 @@
+# Chemins
+export GIT_ROOT="/Users/nbellaiche/Documents/DEV/colmap_to_gs"
+export TRAIN_MASKS_INSTALL_DIR="$HOME/.local/share/colmap-to-gs/segmentation-masks"
+export TRAIN_MASKS_PYTHON="$TRAIN_MASKS_INSTALL_DIR/venv/bin/python"
+
+export IMAGES_DIR="/Users/nbellaiche/Documents/temp/paname/images"
+export MASKS_DIR="/Users/nbellaiche/Documents/temp/paname/masks"
+
+# Segmentation
+export TRAIN_MASKS_MODEL="mapillary"
+export TRAIN_MASKS_LABELS="sky"
+export TRAIN_MASKS_DEVICE="cpu"
+export TRAIN_MASKS_CONFIDENCE="0"
+export TRAIN_MASKS_MAX_FRACTION="0.95"
+export TRAIN_MASKS_DILATE="0"
+
+# Génération des masques
+"$TRAIN_MASKS_PYTHON" "$GIT_ROOT/tools/segmentation_masks/generate_masks.py" \
+  --backend segmentation \
+  --images "$IMAGES_DIR" \
+  --output "$MASKS_DIR" \
+  --model "$TRAIN_MASKS_MODEL" \
+  --labels "$TRAIN_MASKS_LABELS" \
+  --confidence "$TRAIN_MASKS_CONFIDENCE" \
+  --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" \
+  --dilate-fraction "$TRAIN_MASKS_DILATE" \
+  --device "$TRAIN_MASKS_DEVICE" \
+  --verbose
