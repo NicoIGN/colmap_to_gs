@@ -1,4 +1,6 @@
 from argparse import Namespace
+from contextlib import redirect_stdout
+import io
 import json
 from pathlib import Path
 import sys
@@ -58,6 +60,38 @@ class PureFunctionsTest(unittest.TestCase):
         self.assertEqual(int((gm.keep_mask(probability, 0.7, 0) == 0).sum()), 0)
         self.assertEqual(int((gm.keep_mask(probability, 0.5, 1) == 0).sum()), 5)
         self.assertEqual(gm.dilation_radius(300, 400, 0.01), 5)
+
+
+@unittest.skipIf(Image is None, "Pillow requis")
+class ProgressTest(unittest.TestCase):
+    def test_segmentation_and_reused_masks_report_progress_without_verbose(self):
+        class Segmenter:
+            id2label = {0: "wall", 1: "sky"}
+
+            def prediction(self, image, label_ids):
+                shape = (image.height, image.width)
+                return np.ones(shape, np.float32), np.zeros(shape, np.int32)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            images, model = root / "images", root / "model"
+            images.mkdir()
+            model.mkdir()
+            for name in ("a.jpg", "b.jpg"):
+                Image.new("RGB", (8, 8)).save(images / name)
+            args = Namespace(images=images, output=root / "feature_masks", model=model,
+                             labels="sky", confidence=0.5, dilate_fraction=0,
+                             max_masked_fraction=0.8, verbose=False)
+            for generated, reused in ((2, 0), (0, 2)):
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    summary = gm.run(args, Segmenter())
+                self.assertEqual((summary["generated"], summary["reused"]),
+                                 (generated, reused))
+                self.assertIn("feature_masks : 2 images", output.getvalue())
+                self.assertRegex(output.getvalue(), r"Génération des masques .*2/2")
+                self.assertNotIn("\r", output.getvalue())
+            self.assertFalse((args.output / "tmp_labels").exists())
 
 
 @unittest.skipIf(Image is None, "Pillow requis")

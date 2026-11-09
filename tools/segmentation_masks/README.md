@@ -70,6 +70,13 @@ Lire les conditions de la licence SAM 3 Meta avant de l'accepter. Pour un lancem
 
 On peut aussi accepter sur un terminal avec `"$SPIRULA_BIN" sam devices --accept-license sam3`, avec le même compte et le même `HOME` que les jobs. Les messages et erreurs de Spirula sont transmis aux journaux, même sans `--verbose`.
 
+La progression `fait/total` est affichée sans `--verbose`, pour les deux
+backends et les masques réutilisés. Avec SAM, `Calcul SAM` compte les PNG
+écrits pendant l'inférence ; `Génération des masques` suit ensuite leur
+adaptation et leur export. Chaque mise à jour est une ligne lisible dans
+les logs Slurm. `--verbose` reste réservé aux diagnostics détaillés et
+force la régénération : il n'est pas nécessaire pour suivre l'avancement.
+
 `TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`.
 
 Les labels deviennent des **prompts anglais libres**, unis par SAM : `"sky,person,car"` devient `"sky; person; car"`. SAM 2 seul n'accepte pas de texte ; cette intégration attend donc SAM 3. Chaque image est segmentée indépendamment (`spirula sam track --mask-mode image --remove-prompted`), sans suivi vidéo, car les photos Panoramax ne constituent pas une séquence ordonnée. Les sorties `frame_XXXXX.png` sont renommées pour l'entraînement, y compris pour des images dans des sous-dossiers. Formats pris en charge par ce backend : JPEG, PNG, BMP et TIFF ; un autre format provoque une erreur explicite.

@@ -55,9 +55,10 @@ def log(message, args=None, *, force=False):
     if force or (args is not None and args.verbose):
         print(f"[masques] {message}", flush=True)
 
-def progress(current, total, args, label="Traitement"):
-    """Display a compact in-place progress bar in verbose mode."""
-    if not args.verbose:
+def progress(current, total, args, label="Traitement", *, force=False):
+    """Keep progress readable in both terminals and redirected job logs."""
+    step = max(1, math.ceil(total / 100))
+    if not force and current not in (0, total) and current % step:
         return
     total = max(total, 1)
     width = 32
@@ -66,8 +67,7 @@ def progress(current, total, args, label="Traitement"):
     bar = "#" * filled + "-" * (width - filled)
     percent = ratio * 100
     print(
-        f"\r[masques] {label:<22} [{bar}] {current}/{total} ({percent:5.1f}%)",
-        end="\n" if current >= total else "",
+        f"[masques] {label:<22} [{bar}] {current}/{total} ({percent:5.1f}%)",
         flush=True,
     )
 
@@ -172,6 +172,7 @@ class SpirulaSegmenter:
         frames, masks = root / "frames", root / "masks"
         frames.mkdir()
         masks.mkdir()
+        progress(0, len(names), self.args, "Préparation des images")
         for index, name in enumerate(names, 1):
             source = images_dir / name
             # SAM track has a flat input directory and a restricted extension list.
@@ -191,7 +192,22 @@ class SpirulaSegmenter:
         if self.args.accept_spirula_license:
             command += ["--accept-license", "sam3=yes"]
             print("[masques] Acceptation explicite de la licence SAM 3 transmise à Spirula.", flush=True)
-        subprocess.run(command, check=True)
+        progress(0, len(names), self.args, "Calcul SAM")
+        completed = 0
+        with subprocess.Popen(command) as process:
+            while True:
+                try:
+                    status = process.wait(timeout=0.5)
+                except subprocess.TimeoutExpired:
+                    status = None
+                count = sum(1 for _ in masks.glob("frame_*.png"))
+                if count != completed:
+                    progress(count, len(names), self.args, "Calcul SAM", force=True)
+                    completed = count
+                if status is not None:
+                    if status:
+                        raise subprocess.CalledProcessError(status, command)
+                    break
         for source, path in self.paths.items():
             if not path.is_file():
                 raise ValueError(f"Spirula n'a pas écrit le masque de {source} : {path}")
@@ -456,6 +472,8 @@ def run(args, segmenter=None):
     if not images:
         raise ValueError(f"Aucune image dans {images_dir}")
     labels = parse_labels(args.labels)
+    log(f"{output.name} : {len(images)} images ; labels={','.join(labels)}",
+        force=True)
     if segmenter is None:
         if not Path(args.model).is_dir():
             raise ValueError(f"Modèle local introuvable : {args.model}")
@@ -517,14 +535,17 @@ def run(args, segmenter=None):
         if isinstance(segmenter, SpirulaSegmenter):
             pending = [name for name in images if args.verbose or not (
                 target == output and (target / (name + ".png")).is_file() and name in previous)]
-            log(f"Préparation de {len(pending)} images pour Spirula SAM…", args)
+            log(f"Calcul SAM : {len(pending)} à calculer, "
+                f"{len(images) - len(pending)} déjà disponibles.", force=True)
             segmenter.prepare(images_dir, pending)
             log("Préparation Spirula terminée.", args)
+        progress(0, len(images), args, "Génération des masques")
         for index, name in enumerate(images, 1):
             path = target / (name + ".png")
             if target == output and path.is_file() and name in previous and not args.verbose:
                 stats[name] = previous[name]
                 skipped += 1
+                progress(index, len(images), args, "Génération des masques")
                 continue
             keep, stats[name], label_map, probability, debug_rgb = mask_one(
                 segmenter, images_dir / name, label_ids, args)
@@ -567,7 +588,8 @@ def run(args, segmenter=None):
     if target != output:
         shutil.rmtree(output)
         os.replace(target, output)
-    log(f"{summary['images']} masques ({done} générés, {skipped} réutilisés) dans {output}", args)
+    log(f"{summary['images']} masques ({done} générés, {skipped} réutilisés) dans {output}",
+        force=True)
     log(f"Fraction masquée : moyenne {summary['mean_masked_fraction']:.1%}, max {summary['max_masked_fraction']:.1%}", args)
     if overmasked and args.verbose:
         print(f"[masques] AVERTISSEMENT : {len(overmasked)} image(s) masquée(s) à plus de "

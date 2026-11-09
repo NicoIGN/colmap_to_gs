@@ -110,9 +110,12 @@ def prepare(dataset, workspace, check_only=False):
     artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
     artifacts = artifacts or any(workspace.glob("blocks-*"))
     compatible = {signature}
-    # This generator update changes only consent forwarding and diagnostics.
-    if generator_hash == "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e":
+    # These generator updates change only consent forwarding and diagnostics.
+    if generator_hash in (
+            "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
+            "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896"):
         compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"))
+        compatible.add(fingerprint("6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e"))
     if (artifacts or previous) and previous.get("signature") not in compatible:
         raise ValueError(
             "SfM existant/partiel avec une autre politique de masques (ou sans signature). "

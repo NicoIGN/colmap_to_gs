@@ -64,6 +64,10 @@ class NativeMasksTest(unittest.TestCase):
     def test_native_arguments_raw_orientation_resume_and_label_change(self):
         result = self.execute()
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertRegex(result.stdout, r"Calcul SAM .*0/2")
+        self.assertRegex(result.stdout, r"Calcul SAM .*2/2")
+        self.assertRegex(result.stdout, r"Génération des masques .*2/2")
+        self.assertNotIn("\r", result.stdout)
         command = json.loads(self.log.read_text())
         self.assertEqual(command[:2], ["sam", "track"])
         for flag, value in (("--mask-mode", "image"), ("--device", "0"),
@@ -83,6 +87,8 @@ class NativeMasksTest(unittest.TestCase):
         result = self.execute()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.log.read_text().splitlines()), 1)
+        self.assertIn("0 générés, 2 réutilisés", result.stdout)
+        self.assertRegex(result.stdout, r"Génération des masques .*2/2")
         result = self.execute("--labels", "sky,person,car", "--max-masked-fraction", "0.1")
         self.assertEqual(result.returncode, 0, result.stderr)
         command = json.loads(self.log.read_text().splitlines()[-1])
@@ -113,6 +119,20 @@ class NativeMasksTest(unittest.TestCase):
         result = self.execute()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(self.log.read_text().splitlines()), 1)
+
+    def test_native_progress_is_emitted_before_the_process_finishes(self):
+        source = self.binary.read_text()
+        source = source.replace("import json, os, sys", "import json, os, sys, time")
+        source += (
+            "        if index == 0: time.sleep(1.1)\n"
+            "print('SAM process finished', flush=True)\n"
+        )
+        self.binary.write_text(source)
+        result = self.execute()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertRegex(result.stdout, r"Calcul SAM .*1/2")
+        self.assertLess(result.stdout.index("1/2", result.stdout.index("Calcul SAM")),
+                        result.stdout.index("SAM process finished"))
 
     def test_diagonal_dilation_and_detection_threshold(self):
         result = self.execute("--confidence", "0.7", "--dilate-fraction", "0.04")

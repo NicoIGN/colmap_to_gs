@@ -158,11 +158,15 @@ class PrepareMasksTest(unittest.TestCase):
                    [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
                    (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
                    "5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"]
-        report["signature"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
-        marker.write_text(json.dumps(report))
         (self.workspace / "sparse").mkdir()
-        self.run_prepare()
-        self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
+        for code_hash in (
+                "5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379",
+                "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e"):
+            payload[-1] = code_hash
+            report["signature"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+            marker.write_text(json.dumps(report))
+            self.run_prepare()
+            self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
 
 
 if __name__ == "__main__":
