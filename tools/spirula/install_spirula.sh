@@ -81,7 +81,7 @@ git submodule update --init --recursive
 
 printf '[Spirula] Compilation Vulkan dans %s/%s\n' "$PWD" "$build_dir"
 # Le script officiel gère la génération, MoltenVK et le parallélisme selon la RAM.
-build_cmd=(bash build_develop.bash -DSS_BACKEND=vulkan -DCMAKE_BUILD_TYPE=Release)
+build_cmd=(bash build_develop.bash -DSS_BACKEND=vulkan -DSS_BUILD_SAM=ON -DCMAKE_BUILD_TYPE=Release)
 if [[ ${#cmake_args[@]} -gt 0 ]]; then
   build_cmd+=("${cmake_args[@]}")
 fi
