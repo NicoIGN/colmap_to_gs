@@ -47,6 +47,40 @@ validate_config() {
   config_choice TRAIN_MASKS "${TRAIN_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   config_choice TRAIN_MASKS_BACKEND "${TRAIN_MASKS_BACKEND:-segmentation}" 'segmentation|spirula'
   config_choice TRAIN_MASKS_MODE "${TRAIN_MASKS_MODE:-auto}" 'auto|ignore|empty'
+  config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
+  local suffix sfm_name train_name backend
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+    sfm_name="SFM_MASKS_$suffix"
+    train_name="TRAIN_MASKS_$suffix"
+    value="${!sfm_name:-${!train_name:-}}"
+    local "$sfm_name=$value"
+  done
+  case "${SFM_MASKS:-off}" in
+    on|true|1|yes)
+      backend="${SFM_MASKS_BACKEND:-segmentation}"
+      config_choice SFM_MASKS_BACKEND "$backend" 'segmentation|spirula'
+      if [[ "$backend" == spirula ]]; then
+        [[ -n "$SFM_MASKS_SPIRULA_MODEL" ]] || config_error "SFM_MASKS_SPIRULA_MODEL doit être défini."
+      else
+        [[ -n "$SFM_MASKS_MODEL" ]] || config_error "SFM_MASKS_MODEL doit être défini."
+      fi
+      [[ -n "$(printf '%s' "${SFM_MASKS_LABELS:-sky}" | tr -d ',[:space:]')" ]] ||
+        config_error "SFM_MASKS_LABELS doit contenir au moins un label."
+      value="${SFM_MASKS_CONFIDENCE:-0.5}"
+      [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+        awk -v x="$value" 'BEGIN { exit !(x >= 0 && x <= 1) }' ||
+        config_error "SFM_MASKS_CONFIDENCE doit être dans [0,1]."
+      value="${SFM_MASKS_MAX_FRACTION:-0.8}"
+      [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+        awk -v x="$value" 'BEGIN { exit !(x > 0 && x <= 1) }' ||
+        config_error "SFM_MASKS_MAX_FRACTION doit être dans ]0,1]."
+      value="${SFM_MASKS_DILATE:-0.002}"
+      [[ "$value" == auto ]] || {
+        [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+          awk -v x="$value" 'BEGIN { exit !(x < 0.1) }'
+      } || config_error "SFM_MASKS_DILATE doit être auto ou dans [0,0.1[."
+      ;;
+  esac
   case "${TRAIN_MASKS:-off}" in
     on|true|1|yes)
       if [[ "${TRAIN_MASKS_BACKEND:-segmentation}" == spirula ]]; then
@@ -62,8 +96,8 @@ validate_config() {
   esac
   value="${TRAIN_MASKS_CONFIDENCE:-0.5}"
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-    awk -v x="$value" 'BEGIN { exit !(x > 0 && x <= 1) }' ||
-    config_error "TRAIN_MASKS_CONFIDENCE='$value' doit être dans ]0,1]."
+    awk -v x="$value" 'BEGIN { exit !(x >= 0 && x <= 1) }' ||
+    config_error "TRAIN_MASKS_CONFIDENCE='$value' doit être dans [0,1]."
   value="${TRAIN_MASKS_DILATE:-auto}"
   [[ "$value" == auto ]] || {
     [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x < 0.1) }'

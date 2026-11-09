@@ -172,10 +172,17 @@ elif stage == "map":
 """)
             spirula.chmod(0o755)
             output = dataset / "sfm-3"
+            masks = root / "masks"
+            masks.mkdir()
+            (masks / "a.jpg.png").write_bytes(b"mask")
+            (masks / "masks.json").write_text(json.dumps({
+                "settings": {"labels": ["sky"]}, "summary": {"generated": 1}
+            }))
             command = [
                 sys.executable, str(ROOT / "run_sfm_filtered.py"), "--dataset", str(dataset),
                 "--output", str(output), "--spirula-bin", str(spirula), "--max-distance", "30",
                 "--matcher", "bruteforce", "--threads", "4",
+                "--feature-masks", str(masks),
             ]
             env = dict(os.environ, COMMAND_LOG=str(log), MATCHES_FIXTURE=str(fixture))
 
@@ -190,13 +197,23 @@ elif stage == "map":
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertEqual([cmd[1] for cmd in commands], ["extract", "match", "map"])
             self.assertIn("--focal", commands[1])
+            self.assertEqual(commands[0][commands[0].index("--feature-masks") + 1], str(masks))
             self.assertNotIn("--sensor-pairs", commands[1])
             self.assertEqual(commands[2][2], str(output / "matches-gps.bin"))
             # Rewriting identical metadata does not invalidate reuse.
             metadata(dataset / "metadata")
+            # Resume statistics change, but mask pixels/settings do not.
+            (masks / "masks.json").write_text(json.dumps({
+                "settings": {"labels": ["sky"]}, "summary": {"reused": 1}
+            }))
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(len(log.read_text().splitlines()), 3)
+            (masks / "a.jpg.png").write_bytes(b"changed")
+            result = execute()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sauvegarde", result.stderr)
+            (masks / "a.jpg.png").write_bytes(b"mask")
             changed = command.copy()
             changed[changed.index("--max-distance") + 1] = "40"
             result = execute(changed)

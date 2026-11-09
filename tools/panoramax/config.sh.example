@@ -97,9 +97,9 @@ SFM_THREADS=""
 SFM_PAIR_MAX_DISTANCE=""
 
 # ============================================================================
-# 3. Calcul optionnel des masques d'entraînement (apres SfM, avant decoupage)
+# 3. Calcul optionnel des masques SfM et d'entrainement
 # ============================================================================
-# Les masques ne filtrent pas le SfM. Sortie : sfm-*/train_masks/<image>.png,
+# TRAIN_MASKS seul ne filtre pas le SfM. Sortie : sfm-*/train_masks/<image>.png,
 # 255 = garde, 0 = masque ; controle visuel conseille avant un long calcul.
 
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -140,8 +140,8 @@ TRAIN_MASKS_LABELS="sky"
 # les facades derriere). Un seul mode pour tous les labels d'un entrainement.
 TRAIN_MASKS_MODE="auto"
 
-# Defaut : 0.5. Nombre dans ]0,1].
-# segmentation : probabilite minimale par pixel des labels choisis.
+# Defaut : 0.5. Nombre dans [0,1].
+# segmentation : seuil supplementaire sur les classes predites (0 = sans seuil).
 # spirula : score minimal de detection SAM (pas une probabilite par pixel).
 TRAIN_MASKS_CONFIDENCE="0.5"
 
@@ -157,6 +157,47 @@ TRAIN_MASKS_MAX_FRACTION="0.8"
 # Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
 # auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
 TRAIN_MASKS_DEVICE="auto"
+
+# --- Masques des caracteristiques SfM (avant extraction/appariement) ---
+# Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
+# on prepare les images et calcule les masques AVANT le SfM.
+SFM_MASKS="off"
+
+# Defaut : "" = herite du parametre TRAIN_MASKS correspondant.
+# BACKEND : segmentation|spirula ; PYTHON : executable Python (segmentation).
+# MODEL : dossier transformers ; SPIRULA_MODEL : fichier SAM 3 GGML.
+SFM_MASKS_BACKEND=""
+SFM_MASKS_PYTHON=""
+SFM_MASKS_MODEL=""
+SFM_MASKS_SPIRULA_MODEL=""
+
+# Defaut : "" = TRAIN_MASKS_SPIRULA_DEVICE (auto par defaut).
+# Vulkan : auto, indice, fragment du nom GPU ou uuid:<hex>.
+SFM_MASKS_SPIRULA_DEVICE=""
+
+# Defaut : "" = TRAIN_MASKS_LABELS (sky par defaut).
+# Liste de labels/prompts separes par des virgules ; ordre/casse ignores.
+SFM_MASKS_LABELS=""
+
+# Defaut : "" = TRAIN_MASKS_CONFIDENCE (0.5 par defaut). Nombre dans [0,1].
+# Seuil supplementaire de segmentation, ou score de detection SAM.
+SFM_MASKS_CONFIDENCE=""
+
+# Defaut : 0.002. Fraction de diagonale dans [0,0.1[ ; auto = 0.002.
+# Aucune notion de perte ignore/empty dans le SfM.
+SFM_MASKS_DILATE="0.002"
+
+# Defaut : "" = TRAIN_MASKS_MAX_FRACTION (0.8 par defaut). Nombre dans ]0,1].
+SFM_MASKS_MAX_FRACTION=""
+
+# Defaut : "" = TRAIN_MASKS_DEVICE (auto par defaut).
+# Transformers : auto|cpu|mps|cuda|cuda:N ; ignore avec Spirula.
+SFM_MASKS_DEVICE=""
+
+# Si les deux politiques de generation sont identiques, feature_masks est
+# un lien vers train_masks : un seul calcul. Des seuils/modeles differents
+# imposent deux calculs meme avec des labels identiques.
+# Un ancien SfM sans signature compatible est refuse : nouveau workspace requis.
 
 # ============================================================================
 # 4. Decoupage COLMAP en blocs

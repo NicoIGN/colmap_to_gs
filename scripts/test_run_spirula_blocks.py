@@ -4,6 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import shutil
 import unittest
 
 
@@ -190,6 +191,47 @@ class BlockPipelineTest(unittest.TestCase):
             result = execute()
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_MASKS_MODEL", result.stderr)
+
+    def test_shared_masks_precede_sfm_and_are_used_by_training(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(sparse.parent)
+            jpeg = (b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" +
+                    (2160).to_bytes(2, "big") + (4096).to_bytes(2, "big") +
+                    b"\x01\x01\x11\x00\xff\xd9")
+            (data / "images/img.jpg").write_bytes(jpeg)
+            model = root / "sam3.ggml"
+            model.write_bytes(b"sam")
+            env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
+                       TRAIN_MASKS_LABELS="sky,person,car", TRAIN_MASKS_MODE="ignore",
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model), NUM_BLOCKS="1")
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual(sum(cmd[0] == "masks" for cmd in commands), 1)
+            sfm = next(cmd for cmd in commands if cmd[:2] == ["spirula", "sfm"])
+            self.assertLess(next(i for i, cmd in enumerate(commands) if cmd[0] == "masks"),
+                            commands.index(sfm))
+            self.assertIn("--reuse-features", sfm)
+            self.assertEqual(sfm[sfm.index("--matcher") + 1], "lightglue")
+            features = data / "sfm-3/feature_masks"
+            self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(features))
+            self.assertTrue(features.is_symlink())
+            self.assertEqual(features.resolve(), data / "sfm-3/train_masks")
+            block = execute("--block", "0")
+            self.assertEqual(block.returncode, 0, block.stderr + block.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual(sum(cmd[0] == "masks" for cmd in commands), 1)
+            again = execute("--prepare-only")
+            self.assertEqual(again.returncode, 0, again.stderr + again.stdout)
+            env["SFM_MASKS_LABELS"] = "sky"
+            changed = execute("--prepare-only")
+            self.assertNotEqual(changed.returncode, 0)
+            self.assertIn("CLEAN_GS", changed.stderr)
+            env["SFM_MASKS"] = "off"
+            disabled = execute("--prepare-only")
+            self.assertNotEqual(disabled.returncode, 0)
+            self.assertIn("conserver SFM_MASKS", disabled.stderr)
 
     def test_native_backend_uses_sam_model_without_transformers_environment(self):
         with tempfile.TemporaryDirectory() as temporary:

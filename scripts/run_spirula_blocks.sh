@@ -39,6 +39,14 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+SFM_MASKS="${SFM_MASKS:-off}"
+# SfM settings inherit generation settings, not the training loss mode.
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+  sfm_name="SFM_MASKS_$suffix"
+  train_name="TRAIN_MASKS_$suffix"
+  printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
+done
+SFM_MASKS_DILATE="${SFM_MASKS_DILATE:-0.002}"
 mode=all
 block_index=""
 
@@ -86,6 +94,9 @@ Variables:
   TRAIN_MASKS_DILATE        auto (0 empty, 0.002 ignore) or fraction of image diagonal
   TRAIN_MASKS_MAX_FRACTION  Above this masked fraction, an image is kept unmasked (0.8)
   TRAIN_MASKS_DEVICE        auto, cuda, cuda:N, mps or cpu
+  SFM_MASKS                 off (default) or on: generate feature masks before SfM
+  SFM_MASKS_*               Same generation settings as TRAIN_MASKS_* (inherited);
+                            DILATE defaults to 0.002; no training loss mode
   MVK_CONFIG_LOG_LEVEL      MoltenVK logging level
 
 Existing SfM and a complete matching block split are reused. Incomplete or
@@ -168,6 +179,11 @@ case "$TRAIN_MASKS" in
   off|false|0|no) TRAIN_MASKS=off ;;
   *) die "TRAIN_MASKS doit être on ou off : $TRAIN_MASKS" ;;
 esac
+case "$SFM_MASKS" in
+  on|true|1|yes) SFM_MASKS=on ;;
+  off|false|0|no) SFM_MASKS=off ;;
+  *) die "SFM_MASKS doit être on ou off." ;;
+esac
 if [[ "$TRAIN_MASKS" == on ]]; then
   case "$TRAIN_MASKS_BACKEND" in
     segmentation|spirula) ;;
@@ -219,15 +235,29 @@ GS_ROOT="$DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
+if [[ "$SFM_MASKS" == on ]]; then
+  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
+    export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
+  done
+fi
 
 prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
+  local feature_args=()
+  if [[ ( "$SFM_MASKS" == on || -n "$SFM_PAIR_MAX_DISTANCE" ) &&
+        -d "$GS_ROOT" && ( ! -s "$SPARSE_DIR/cameras.bin" ||
+        ! -s "$SPARSE_DIR/images.bin" || ! -s "$SPARSE_DIR/points3D.bin" ) ]]; then
+    die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
+  fi
+  if [[ "$SFM_MASKS" == on ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR"
+    feature_args=(--feature-masks "$SFM_DIR/feature_masks")
+  elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
+    die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
+  fi
   if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
-    if [[ -d "$GS_ROOT" && ( ! -s "$SPARSE_DIR/cameras.bin" ||
-          ! -s "$SPARSE_DIR/images.bin" || ! -s "$SPARSE_DIR/points3D.bin" ) ]]; then
-      die "Recalcul du SfM filtré avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
-    fi
     sfm_args=(
       "$repo_root/tools/panoramax/run_sfm_filtered.py"
       --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
@@ -237,6 +267,7 @@ prepare_blocks() {
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
+    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
     "$PYTHON_BIN" "${sfm_args[@]}"
   elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
     die "Ce SfM a été filtré par GPS ; conserver SFM_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
@@ -258,6 +289,7 @@ prepare_blocks() {
       --matcher "$SFM_MATCHER"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
+    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo --reuse-matches redo)
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi
 
@@ -266,7 +298,7 @@ prepare_blocks() {
   done
   [[ -d "$SFM_DIR/images" ]] || die "Images préparées par SfM absentes : $SFM_DIR/images"
 
-  if [[ "$TRAIN_MASKS" == on ]]; then
+  if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
     local mask_model="$TRAIN_MASKS_MODEL"
     [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
     printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
@@ -326,6 +358,11 @@ fi
 }
 
 if [[ "$mode" == block ]]; then
+  if [[ "$SFM_MASKS" == on ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" --check
+  elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
+    die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
+  fi
   [[ -s "$BLOCKS_DIR/manifest.json" ]] ||
     die "Découpage absent : lancer --prepare-only avant --block."
   for file in cameras.bin images.bin points3D.bin; do

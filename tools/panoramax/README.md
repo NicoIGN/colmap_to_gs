@@ -214,6 +214,44 @@ le découpage, un segmenteur local génère un masque par image dans
 compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
 peuvent être ajoutés via `TRAIN_MASKS_LABELS`. Installation, variables et
 limites : [tools/segmentation_masks](../segmentation_masks/README.md).
+
+### Masques avant SfM et partage avec l'entraînement
+
+`SFM_MASKS="on"` prépare les images puis calcule les masques **avant**
+l'extraction/appariement. Le lanceur transmet `--feature-masks` à Spirula
+(y compris avec le filtre GPS), et force la réextraction lorsqu'un nouveau
+SfM est nécessaire. Le téléchargement, les jobs Slurm et le reste du pipeline
+restent inchangés ; aucun script de calcul personnalisé n'est nécessaire.
+
+Les paramètres `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`,
+`SFM_MASKS_SPIRULA_MODEL`, `SFM_MASKS_SPIRULA_DEVICE`, `SFM_MASKS_MODEL`,
+`SFM_MASKS_PYTHON`, `SFM_MASKS_DEVICE`, `SFM_MASKS_CONFIDENCE` et
+`SFM_MASKS_MAX_FRACTION` héritent de leurs équivalents `TRAIN_MASKS_*` si vides.
+`SFM_MASKS_DILATE` vaut 0.002 par défaut (ou `auto`, équivalent).
+Ils peuvent tous être réglés indépendamment. Le mode de perte
+`TRAIN_MASKS_MODE` reste propre au 3DGS.
+
+Si les labels (ordre/casse ignorés), le backend, le modèle, le périphérique,
+le Python et les seuils de génération sont identiques, le pipeline calcule
+une seule série dans `sfm-*/train_masks/` puis crée le lien symbolique
+`sfm-*/feature_masks -> train_masks`. Sinon, il calcule les deux séries.
+Des labels identiques avec des seuils différents ne doivent pas partager
+les mêmes PNG. Mettre `TRAIN_MASKS=off` permet aussi de masquer uniquement le SfM.
+
+La politique SfM est enregistrée dans `sfm_mask_policy.json`. Un SfM ou des
+caractéristiques déjà présents sans signature compatible sont refusés :
+choisir un nouvel `OUTPUT_DIR` ou déplacer le workspace en sauvegarde.
+`CLEAN_GS=true` ne recalcule **pas** le SfM. Ne pas modifier les fichiers
+de masques manuellement pendant les calculs.
+Si `feature_masks` est déjà un dossier réel et qu'un nouveau réglage demande
+un partage, le pipeline refuse de le remplacer par un lien : utiliser un
+nouveau workspace. Inversement, séparer des masques précédemment partagés
+préserve une copie des masques SfM avant de changer ceux d'entraînement.
+
+Pour les nuages, `SFM_MASKS_LABELS="sky"` peut réduire les correspondances
+parasites. Ajouter `person,car` retire également des points sur les voitures
+stationnées et peut réduire le nombre de vues enregistrées. Les résultats
+avec SAM/Spirula réels restent à contrôler sur votre matériel.
 Les blocs déjà entraînés ne sont pas recalculés : utiliser `CLEAN_GS=true`.
 
 Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D

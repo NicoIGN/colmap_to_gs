@@ -74,7 +74,7 @@ FLOATER_SUPPRESSION=medium
 TRAIN_MASKS=maybe
 TRAIN_MASKS_BACKEND=bad
 TRAIN_MASKS_MODE=hide
-TRAIN_MASKS_CONFIDENCE=0
+TRAIN_MASKS_CONFIDENCE=-1
 TRAIN_MASKS_DILATE=0.5
 TRAIN_MASKS_MAX_FRACTION=2
 SLURM_CPUS_PER_TASK=0
@@ -185,6 +185,25 @@ TRAIN_MASKS_LABELS="sky,person"
             result, _ = self.execute("validate_config.sh", f'BBOX_LAMBERT93="{bbox}"\n')
             self.assertEqual(result.returncode, 1, bbox)
             self.assertIn("BBOX_LAMBERT93", result.stderr)
+
+    def test_sfm_masks_inheritance_and_validation(self):
+        result, _ = self.execute("validate_config.sh", """
+SFM_MASKS=on
+TRAIN_MASKS_BACKEND=spirula
+TRAIN_MASKS_SPIRULA_MODEL=/models/sam3.ggml
+SFM_MASKS_LABELS="sky,car,person"
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.execute("validate_config.sh", """
+SFM_MASKS=on
+SFM_MASKS_BACKEND=spirula
+SFM_MASKS_CONFIDENCE=2
+SFM_MASKS_DILATE=-1
+SFM_MASKS_MAX_FRACTION=0
+""")
+        self.assertNotEqual(result.returncode, 0)
+        for key in ("SPIRULA_MODEL", "CONFIDENCE", "DILATE", "MAX_FRACTION"):
+            self.assertIn(f"SFM_MASKS_{key}", result.stderr)
 
 
 if __name__ == "__main__":

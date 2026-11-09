@@ -23,8 +23,22 @@ def signature(args, images):
         (str(p.relative_to(args.dataset / "metadata")), hashlib.sha256(p.read_bytes()).hexdigest())
         for p in sorted((args.dataset / "metadata").rglob("*.json"))
     ]
-    settings = {key: str(value) for key, value in vars(args).items()}
-    return hashlib.sha256(json.dumps([settings, files, metadata], sort_keys=True).encode()).hexdigest()
+    settings = {key: str(value) for key, value in vars(args).items()
+                if key != "feature_masks" or value is not None}
+    masks = []
+    if args.feature_masks:
+        if not args.feature_masks.is_dir():
+            raise ValueError(f"Dossier de masques SfM introuvable : {args.feature_masks}")
+        masks = [(str(p.relative_to(args.feature_masks)), hashlib.sha256(p.read_bytes()).hexdigest())
+                 for p in sorted(args.feature_masks.rglob("*"))
+                 if p.is_file() and p.name != "masks.json"]
+        report = args.feature_masks / "masks.json"
+        if report.is_file():
+            masks.append(("settings", json.loads(report.read_text())["settings"]))
+    fingerprint = [settings, files, metadata]
+    if args.feature_masks:
+        fingerprint.append(masks)
+    return hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
 
 
 def run(args):
@@ -72,6 +86,8 @@ def run(args):
     ]
     if args.threads:
         extract += ["--decode-threads", str(args.threads)]
+    if args.feature_masks:
+        extract += ["--feature-masks", str(args.feature_masks.resolve())]
     match = [
         args.spirula_bin, "sfm", "match", str(features), "--output", str(original),
         "--pairs", ("prefilter" if selection["selected"] >= 100 else "exhaustive")
@@ -114,6 +130,7 @@ def main():
     parser.add_argument("--max-image-size", type=int, default=4096)
     parser.add_argument("--aliked-max-features", type=int, default=4096)
     parser.add_argument("--threads", type=int, default=0)
+    parser.add_argument("--feature-masks", type=Path)
     args = parser.parse_args()
     try:
         return run(args)
