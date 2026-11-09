@@ -59,7 +59,7 @@ Options:
   --images-dir PATH
   --output-dir PATH
   --train-preset NAME
-  --quality LEVEL
+  --quality LEVEL           low, medium, high, ultra; explicit budgets take priority
   --cap-max N
   --densify-loss-map-mode MODE
   --densify-score-mode MODE
@@ -164,6 +164,10 @@ case "$clean" in
   true|1|yes|on) clean=true ;;
   false|0|no|off) clean=false ;;
   *) die "CLEAN invalide : $clean" ;;
+esac
+case "$quality" in
+  ""|low|medium|high|ultra) ;;
+  *) die "--quality doit être low, medium, high ou ultra." ;;
 esac
 
 is_positive_integer "$num_iterations" ||

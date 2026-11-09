@@ -215,6 +215,16 @@ compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
 peuvent être ajoutés via `TRAIN_MASKS_LABELS`. Installation, variables et
 limites : [tools/segmentation_masks](../segmentation_masks/README.md).
 
+### Qualité d'entraînement
+
+Le paramètre optionnel `TRAIN_QUALITY=""` transmet `--quality` à
+`spirula train` lorsqu'il vaut `low`, `medium`, `high` ou `ultra`, en local
+comme sous Slurm. Vide conserve le comportement précédent. Dans Spirula,
+cette macro propose un budget de splats et une durée ; ce n'est pas un
+réglage de résolution. Les valeurs explicites `CAP_MAX` (éventuellement
+limité par `SPLATS_PER_IMAGE`) et `NUM_ITER` du pipeline restent prioritaires :
+changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
+
 ### Masques avant SfM et partage avec l'entraînement
 
 `SFM_MASKS="on"` prépare les images puis calcule les masques **avant**

@@ -214,6 +214,16 @@ SFM_MASKS_MAX_FRACTION=0
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("SAM_ACCEPT_LICENSE", result.stderr)
 
+    def test_training_quality_choices(self):
+        for value in ("", "low", "medium", "high", "ultra"):
+            result, _ = self.execute("validate_config.sh", f'TRAIN_QUALITY="{value}"\n')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        for script in ("run_pipeline.sh", "launch.sh"):
+            result, root = self.execute(script, 'TRAIN_QUALITY="maximum"\n')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_QUALITY", result.stderr)
+            self.assertFalse((root / "output").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

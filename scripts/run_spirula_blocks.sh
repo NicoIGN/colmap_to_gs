@@ -18,6 +18,7 @@ REFINE_STOP_ITER="${REFINE_STOP_ITER:-}"
 REFINE_STOP_NUM_ITER="${REFINE_STOP_NUM_ITER:-}"
 FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
+TRAIN_QUALITY="${TRAIN_QUALITY:-}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_PAIRS="${SFM_PAIRS:-prefilter}"
@@ -74,6 +75,8 @@ Variables:
                             Growth stops at max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)
   FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_PRESET              Spirula training preset (3dgs)
+  TRAIN_QUALITY             Optional macro: low, medium, high, ultra;
+                            explicit cap and iterations remain authoritative
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
   SFM_PAIRS                 Spirula pair selection (prefilter)
@@ -158,6 +161,10 @@ fi
 case "$FLOATER_SUPPRESSION" in
   ""|off|mild|strong) ;;
   *) die "FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
+esac
+case "$TRAIN_QUALITY" in
+  ""|low|medium|high|ultra) ;;
+  *) die "TRAIN_QUALITY doit être vide, low, medium, high ou ultra." ;;
 esac
 [[ -z "$block_index" || "$block_index" -lt "$NUM_BLOCKS" ]] ||
   die "Indice de bloc $block_index hors de [0,$((NUM_BLOCKS - 1))]."
@@ -420,6 +427,7 @@ for ((index = first_index; index < last_index; index++)); do
     --python-bin "$PYTHON_BIN"
     --export-filter-mode off
   )
+  [[ -z "$TRAIN_QUALITY" ]] || block_args+=(--quality "$TRAIN_QUALITY")
   [[ -z "$GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$GROWTH_FACTOR")
   [[ -z "$FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$FLOATER_SUPPRESSION")
   [[ -z "$REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$REFINE_STOP_ITER")

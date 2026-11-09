@@ -224,6 +224,11 @@ OVERLAP_MAX_FRACTION="0.05"
 # Valeurs : 3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing.
 TRAIN_PRESET="3dgs"
 
+# Defaut : "". Vide = ne pas transmettre --quality (Spirula : medium).
+# Valeurs : low|medium|high|ultra. Macro de budget et duree, pas de resolution.
+# Le pipeline force CAP_MAX et NUM_ITER : ils restent prioritaires sur la macro.
+TRAIN_QUALITY=""
+
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
 # Iterations par bloc ; sert aussi de suffixe sfm-NUM_ITER et gs-NUM_ITER.
 NUM_ITER="30000"

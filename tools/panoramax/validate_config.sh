@@ -40,6 +40,8 @@ validate_config() {
   config_choice SFM_PAIRS "${SFM_PAIRS:-prefilter}" 'auto|prefilter|exhaustive|sequential'
   config_choice TRAIN_PRESET "${TRAIN_PRESET:-}" \
     '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
+  [[ -z "${TRAIN_QUALITY:-}" ]] ||
+    config_choice TRAIN_QUALITY "$TRAIN_QUALITY" 'low|medium|high|ultra'
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice CLEAN_GS "${CLEAN_GS:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
