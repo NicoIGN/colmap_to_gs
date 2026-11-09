@@ -287,7 +287,25 @@ Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
 `cap_max`, donc atteindre le plafond est attendu. `TRAIN_CAP_MAX` est un plafond dur
 **par bloc** (valeur initiale 1500000). Par défaut `TRAIN_SPLATS_PER_IMAGE`,
 `TRAIN_GROWTH_FACTOR`, `TRAIN_REFINE_STOP_ITER` et `TRAIN_REFINE_STOP_NUM_ITER` restent vides :
-budget `TRAIN_CAP_MAX`, croissance Spirula 1.05 et paramètres d'arrêt 14000/2500.
+budget `TRAIN_CAP_MAX`, croissance estimée automatiquement et paramètres d'arrêt 14000/2500.
+Si `TRAIN_GROWTH_FACTOR` est absent ou vide, chaque worker, local ou Slurm,
+estime le facteur pour approcher le plafond **à la fin de la croissance** :
+`facteur = (plafond / nombre_initial_estimé)^(1 / cycles)`, borné à **[1.001, 1.05]**.
+L'initialisation supposée est 10 % du budget (donc le rapport vaut 10, quel que
+soit le plafond, y compris avec `TRAIN_SPLATS_PER_IMAGE`). Une éventuelle option
+worker `--min-init-fraction` remplace cette fraction.
+Les cycles ont lieu tous les 100 pas, strictement après 500 et strictement avant
+`min(TRAIN_NUM_ITER, arrêt_effectif)`, selon le calendrier natif Spirula.
+Avec 20000 itérations et un arrêt 14000/4000, cela fait 154 cycles et un facteur
+d'environ **1.015064**, laissant 4000 pas sans croissance.
+Une valeur explicite reste prioritaire et n'est pas bornée automatiquement.
+Le facteur estimé, le nombre de cycles et les hypothèses sont affichés dans les
+logs du worker ; un bornage déclenche un avertissement. Sans cycle disponible,
+ou avec une fraction initiale nulle, l'estimation échoue explicitement :
+modifier le calendrier ou fournir un facteur explicite.
+C'est une approximation, pas une garantie d'atteindre le plafond : le nombre
+initial peut dépasser 10 % si le nuage sparse est plus fourni, et la dynamique
+réelle de densification/relocalisation peut modifier la trajectoire.
 Pour un réglage plus sobre, définir par exemple `TRAIN_SPLATS_PER_IMAGE="2000"`
 (budget `min(TRAIN_CAP_MAX, images × TRAIN_SPLATS_PER_IMAGE)`), `TRAIN_GROWTH_FACTOR="1.03"`,
 `TRAIN_REFINE_STOP_ITER="18000"` et `TRAIN_REFINE_STOP_NUM_ITER="12000"` : avec 30000

@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -91,6 +92,7 @@ class BlockPipelineTest(unittest.TestCase):
                 TRAIN_NUM_ITER="3",
                 SPLIT_NUM_BLOCKS="2",
                 TRAIN_CAP_MAX="1000",
+                TRAIN_GROWTH_FACTOR="1.05",
             )
 
             def execute(*args):
@@ -100,6 +102,95 @@ class BlockPipelineTest(unittest.TestCase):
                 )
 
             return root, data, sparse, env, log, execute
+
+    def test_automatic_growth_in_local_and_array_workers(self):
+        for mode in ("local", "array"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
+                root, data, sparse, env, log, execute = self.fixture(temporary)
+                env.update(TRAIN_NUM_ITER="20000", TRAIN_CAP_MAX="8000000",
+                           TRAIN_REFINE_STOP_ITER="14000", TRAIN_REFINE_STOP_NUM_ITER="4000")
+                if mode == "local":
+                    env["TRAIN_GROWTH_FACTOR"] = ""
+                else:
+                    env.pop("TRAIN_GROWTH_FACTOR")
+                (data / "sfm-3").rename(data / "sfm-20000")
+                if mode == "array":
+                    prepared = execute("--prepare-only")
+                    self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
+                    result = execute("--block", "0")
+                else:
+                    result = execute()
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                commands = [json.loads(line) for line in log.read_text().splitlines()]
+                trains = [cmd for cmd in commands if cmd[:2] == ["spirula", "train"]]
+                self.assertEqual(len(trains), 2 if mode == "local" else 1)
+                for train in trains:
+                    factor = float(train[train.index("--growth-factor") + 1])
+                    self.assertAlmostEqual(factor, 10 ** (1 / 154), places=11)
+                    self.assertAlmostEqual(800000 * factor ** 154, 8000000, delta=0.01)
+                    self.assertLess(800000 * factor ** 153, 8000000)
+                self.assertIn("154 cycles avant le pas 16000", result.stdout)
+                command_file = data / "gs-20000-blocks-2/block_000/train_command.sh"
+                self.assertIn("--growth-factor", command_file.read_text())
+
+    def test_worker_growth_estimation_bounds_defaults_and_overrides(self):
+        cases = (
+            # Every growth step is strictly inside (500, stop).
+            ({}, ["--num-iterations", "20000"], 10 ** (1 / 169), 169, False),
+            ({"TRAIN_REFINE_STOP_ITER": "18000", "TRAIN_REFINE_STOP_NUM_ITER": "12000"},
+             ["--num-iterations", "30000"], 10 ** (1 / 174), 174, False),
+            ({"TRAIN_REFINE_STOP_ITER": "14000", "TRAIN_REFINE_STOP_NUM_ITER": "4000"},
+             ["--num-iterations", "20000", "--min-init-fraction", "0.2"],
+             5 ** (1 / 154), 154, False),
+            ({}, ["--num-iterations", "700"], 1.05, 1, True),
+            ({}, ["--num-iterations", "300000"], 1.001, 2969, True),
+            ({"TRAIN_GROWTH_FACTOR": "1.08"}, ["--num-iterations", "3"], 1.08, None, False),
+            ({"TRAIN_GROWTH_FACTOR": "1.01"}, ["--num-iterations", "20000"],
+             1.01, None, False),
+            ({"TRAIN_GROWTH_FACTOR": "1.01"},
+             ["--num-iterations", "20000", "--growth-factor", "1.02"], 1.02, None, False),
+        )
+        for settings, args, expected, cycles, bounded in cases:
+            with self.subTest(settings=settings, args=args), tempfile.TemporaryDirectory() as temporary:
+                root, data, sparse, env, log, execute = self.fixture(temporary)
+                env["TRAIN_GROWTH_FACTOR"] = ""
+                env.update(settings)
+                result = subprocess.run(
+                    ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                     "--output-dir", str(root / "worker"), *args],
+                    env=env, capture_output=True, text=True, timeout=30)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                train = next(json.loads(line) for line in log.read_text().splitlines()
+                             if json.loads(line)[:2] == ["spirula", "train"])
+                factor = float(train[train.index("--growth-factor") + 1])
+                self.assertTrue(math.isfinite(factor))
+                self.assertAlmostEqual(factor, expected, places=11)
+                if cycles is not None:
+                    self.assertIn(f"{cycles} cycles", result.stdout)
+                    self.assertGreaterEqual(factor, 1.001)
+                    self.assertLessEqual(factor, 1.05)
+                else:
+                    self.assertNotIn("estimé", result.stdout)
+                self.assertEqual("borné" in result.stderr, bounded)
+
+    def test_impossible_automatic_growth_is_rejected_before_training(self):
+        for args in (["--num-iterations", "600"],
+                     ["--num-iterations", "20000", "--min-init-fraction", "0"],
+                     ["--num-iterations", "20000", "--refine-stop-iter", "500",
+                      "--refine-stop-num-iter", "19500"]):
+            with self.subTest(args=args), tempfile.TemporaryDirectory() as temporary:
+                root, data, sparse, env, log, execute = self.fixture(temporary)
+                env.pop("TRAIN_GROWTH_FACTOR")
+                result = subprocess.run(
+                    ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                     "--output-dir", str(root / "unused"), *args],
+                    env=env, capture_output=True, text=True, timeout=10)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Estimation TRAIN_GROWTH_FACTOR impossible", result.stderr)
+                self.assertFalse(log.exists())
+                self.assertFalse((root / "unused").exists())
 
     def test_splits_once_and_trains_each_block(self):
         with tempfile.TemporaryDirectory() as temporary:

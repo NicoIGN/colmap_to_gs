@@ -248,8 +248,12 @@ TRAIN_CAP_MAX="1500000"
 # budget du bloc = min(TRAIN_CAP_MAX, nombre d'images du bloc * TRAIN_SPLATS_PER_IMAGE).
 TRAIN_SPLATS_PER_IMAGE=""
 
-# Defaut : "". Vide = defaut Spirula (1.05) ; sinon nombre > 1.
+# Defaut : "". Vide ou absent = estimation automatique bornee a [1.001, 1.05].
+# Sinon nombre > 1 : valeur explicite prioritaire, sans bornage automatique.
 # Multiplicateur de croissance du nombre de splats par cycle de raffinement.
+# Estimation : (1 / 0.1)^(1 / cycles), avec initialisation supposee a 10 % du
+# budget et cycles tous les 100 pas, strictement apres 500 et avant l'arret.
+# Vise le plafond a la fin de la croissance, pas a la derniere iteration.
 TRAIN_GROWTH_FACTOR=""
 
 # Defaut : "". Vide = defaut Spirula (14000) ; sinon entier >= 0.

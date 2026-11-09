@@ -71,7 +71,7 @@ Options:
   --min-init-fraction N
   --num-iterations N
   --train-resolution-divisor N
-  --growth-factor X         Croissance du nombre de splats par cycle (> 1)
+  --growth-factor X         Croissance explicite (> 1); sinon estimation [1.001, 1.05]
   --refine-stop-iter N      Pas minimal d'arrêt de la croissance
   --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
   --floater-suppression M   off, mild ou strong
@@ -206,6 +206,33 @@ esac
 
 if [[ -n "$min_init_fraction" ]]; then
   is_number "$min_init_fraction" || die "--min-init-fraction invalide"
+fi
+if [[ -z "$growth_factor" ]]; then
+  # Spirula grows at multiples of 100 strictly after 500 and before the stop.
+  growth_estimate="$(awk \
+    -v total="$num_iterations" \
+    -v stop_iter="${refine_stop_iter:-14000}" \
+    -v stop_tail="${refine_stop_num_iter:-2500}" \
+    -v fraction="${min_init_fraction:-0.1}" 'BEGIN {
+      if (fraction <= 0) exit 1
+      if (fraction > 1) fraction = 1
+      stop = total - stop_tail
+      if (stop_iter > stop) stop = stop_iter
+      if (stop > total) stop = total
+      last = int((stop - 1) / 100) * 100
+      cycles = int((last - 600) / 100) + 1
+      if (cycles <= 0) exit 2
+      raw = exp(log(1 / fraction) / cycles)
+      factor = raw
+      if (factor < 1.001) factor = 1.001
+      if (factor > 1.05) factor = 1.05
+      printf "%.12f %.12f %d %d %.12g\n", factor, raw, cycles, stop, fraction
+    }')" || die "Estimation TRAIN_GROWTH_FACTOR impossible : fraction initiale > 0 et au moins un cycle de croissance requis ; définir un facteur explicite ou modifier le calendrier."
+  read -r growth_factor growth_raw growth_cycles growth_stop growth_fraction <<< "$growth_estimate"
+  log "TRAIN_GROWTH_FACTOR estimé : $growth_factor ($growth_cycles cycles avant le pas $growth_stop ; fraction initiale supposée $growth_fraction du budget)."
+  if awk -v x="$growth_raw" 'BEGIN { exit !(x < 1.001 || x > 1.05) }'; then
+    echo "[AVERTISSEMENT] Facteur théorique $growth_raw borné à $growth_factor ; l'arrivée au plafond à l'arrêt de croissance n'est pas garantie." >&2
+  fi
 fi
 case "$mask_mode" in
   ignore|empty) ;;

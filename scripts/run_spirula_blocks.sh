@@ -72,7 +72,7 @@ Variables:
   SPLIT_NUM_BLOCKS                Number of COLMAP blocks (4)
   TRAIN_CAP_MAX                   Maximum splats per block (1500000)
   TRAIN_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_CAP_MAX, images × value)
-  TRAIN_GROWTH_FACTOR             Optional Spirula growth per refine round (> 1)
+  TRAIN_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
   TRAIN_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
   TRAIN_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
                             Growth stops at max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)
