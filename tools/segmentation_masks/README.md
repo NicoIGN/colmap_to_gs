@@ -66,7 +66,9 @@ TRAIN_MASKS_MODE="auto"
 
 Il faut un Spirula compilé avec `SS_BUILD_SAM=ON` (backend Vulkan) et un checkpoint **SAM 3 GGML**, pas les poids Transformers de l'installateur.
 
-Obtenir les poids via Spirula et accepter leur licence Meta avant un lancement non interactif, avec le même compte et le même `HOME` que les jobs. Par exemple, `"$SPIRULA_BIN" sam devices --accept-license sam3` affiche les termes et demande confirmation sur un terminal. Aucune licence n'est acceptée automatiquement par ce pipeline.
+Lire les conditions de la licence SAM 3 Meta avant de l'accepter. Pour un lancement non interactif, après acceptation explicite par l'utilisateur, définir `SAM_ACCEPT_LICENSE="true"` dans la configuration : chaque appel natif reçoit `--accept-license sam3=yes`, aussi bien pour le SfM que pour le 3DGS. Cette option vaut `false` par défaut. Pour le générateur autonome, l'équivalent est `--accept-spirula-license`.
+
+On peut aussi accepter sur un terminal avec `"$SPIRULA_BIN" sam devices --accept-license sam3`, avec le même compte et le même `HOME` que les jobs. Les messages et erreurs de Spirula sont transmis aux journaux, même sans `--verbose`.
 
 `TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`.
 

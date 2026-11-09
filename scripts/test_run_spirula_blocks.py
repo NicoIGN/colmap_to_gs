@@ -204,11 +204,13 @@ class BlockPipelineTest(unittest.TestCase):
             model.write_bytes(b"sam")
             env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
                        TRAIN_MASKS_LABELS="sky,person,car", TRAIN_MASKS_MODE="ignore",
-                       TRAIN_MASKS_SPIRULA_MODEL=str(model), NUM_BLOCKS="1")
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model), NUM_BLOCKS="1",
+                       SAM_ACCEPT_LICENSE="true")
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertEqual(sum(cmd[0] == "masks" for cmd in commands), 1)
+            self.assertIn("--accept-spirula-license", next(cmd for cmd in commands if cmd[0] == "masks"))
             sfm = next(cmd for cmd in commands if cmd[:2] == ["spirula", "sfm"])
             self.assertLess(next(i for i, cmd in enumerate(commands) if cmd[0] == "masks"),
                             commands.index(sfm))
@@ -242,7 +244,7 @@ class BlockPipelineTest(unittest.TestCase):
                        TRAIN_MASKS_SPIRULA_MODEL=str(model),
                        TRAIN_MASKS_SPIRULA_DEVICE="0",
                        TRAIN_MASKS_MODEL="", TRAIN_MASKS_PYTHON="/missing/python",
-                       NUM_BLOCKS="1")
+                       NUM_BLOCKS="1", SAM_ACCEPT_LICENSE="true")
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -250,6 +252,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(masks[masks.index("--backend") + 1], "spirula")
             self.assertEqual(masks[masks.index("--model") + 1], str(model))
             self.assertEqual(masks[masks.index("--spirula-device") + 1], "0")
+            self.assertIn("--accept-spirula-license", masks)
             train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
             self.assertEqual(train[train.index("--apply-loss-for-mask") + 1], "1")
             model.unlink()

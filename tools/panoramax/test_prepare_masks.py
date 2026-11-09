@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 from pathlib import Path
 import tempfile
@@ -144,6 +145,24 @@ class PrepareMasksTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "refuser de modifier"):
             self.run_prepare()
         self.assertEqual(self.calls, [])
+
+    def test_previous_generator_signature_is_compatible(self):
+        self.run_prepare()
+        marker = self.workspace / "sfm_mask_policy.json"
+        report = json.loads(marker.read_text())
+        image = self.data / "images/a.jpg"
+        model = Path(os.environ["SFM_MASKS_SPIRULA_MODEL"])
+        binary = Path(os.environ["SPIRULA_BIN"]).resolve()
+        payload = [masks.policy("SFM_MASKS"),
+                   [("images/a.jpg", image.stat().st_size, image.stat().st_mtime_ns)],
+                   [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
+                   (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
+                   "5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"]
+        report["signature"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        marker.write_text(json.dumps(report))
+        (self.workspace / "sparse").mkdir()
+        self.run_prepare()
+        self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
 
 
 if __name__ == "__main__":

@@ -124,7 +124,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'complete':True},open(os.path.join(root,'gps_filter_run.json'),'w'))\n"
                 "elif args and args[0].endswith('prepare_masks.py'):\n"
                 "  root=args[2]\n"
-                "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS')},"
+                "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='SAM_ACCEPT_LICENSE'},"
                 "    open(os.path.join(root,'mask_env.json'),'w'))\n"
                 "elif args and args[0].endswith('colmap_split_blocks.py'):\n"
                 "  out=args[args.index('--output')+1]; n=int(args[args.index('--num-blocks')+1]); os.makedirs(out,exist_ok=True); blocks=[]\n"
@@ -222,7 +222,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS=on\nSFM_MASKS_BACKEND=spirula\n'
                     'SFM_MASKS_SPIRULA_MODEL=/models/sam3.ggml\n'
                     'SFM_MASKS_LABELS=sky,car,person\nSFM_MASKS_CONFIDENCE=0.6\n'
-                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\n')
+                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nSAM_ACCEPT_LICENSE=true\n')
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             mask_env = json.loads((dataset / "sfm-3/mask_env.json").read_text())
@@ -230,6 +230,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(mask_env["SFM_MASKS_BACKEND"], "spirula")
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
             self.assertEqual(mask_env["SFM_MASKS_DILATE"], "0.003")
+            self.assertEqual(mask_env["SAM_ACCEPT_LICENSE"], "true")
             gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
             self.assertEqual(gps_args[gps_args.index("--feature-masks") + 1],
                              str(dataset / "sfm-3/feature_masks"))

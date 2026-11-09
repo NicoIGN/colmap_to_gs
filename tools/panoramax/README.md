@@ -231,6 +231,10 @@ Les paramètres `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`,
 Ils peuvent tous être réglés indépendamment. Le mode de perte
 `TRAIN_MASKS_MODE` reste propre au 3DGS.
 
+Pour les appels SAM 3 non interactifs, `SAM_ACCEPT_LICENSE="true"` transmet
+explicitement `--accept-license sam3=yes` pour les deux calculs. Ne l'activer
+qu'après lecture et acceptation des conditions Meta ; défaut `false`.
+
 Si les labels (ordre/casse ignorés), le backend, le modèle, le périphérique,
 le Python et les seuils de génération sont identiques, le pipeline calcule
 une seule série dans `sfm-*/train_masks/` puis crée le lien symbolique

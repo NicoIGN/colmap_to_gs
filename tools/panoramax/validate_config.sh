@@ -47,6 +47,7 @@ validate_config() {
   config_choice TRAIN_MASKS "${TRAIN_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   config_choice TRAIN_MASKS_BACKEND "${TRAIN_MASKS_BACKEND:-segmentation}" 'segmentation|spirula'
   config_choice TRAIN_MASKS_MODE "${TRAIN_MASKS_MODE:-auto}" 'auto|ignore|empty'
+  config_choice SAM_ACCEPT_LICENSE "${SAM_ACCEPT_LICENSE:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   local suffix sfm_name train_name backend
   for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do

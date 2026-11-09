@@ -31,6 +31,7 @@ TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
 TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
+SAM_ACCEPT_LICENSE="${SAM_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
 TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
@@ -86,6 +87,7 @@ Variables:
   TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
   TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
   TRAIN_MASKS_SPIRULA_DEVICE Vulkan device: auto, index, name or uuid
+  SAM_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
   TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
@@ -184,6 +186,11 @@ case "$SFM_MASKS" in
   off|false|0|no) SFM_MASKS=off ;;
   *) die "SFM_MASKS doit être on ou off." ;;
 esac
+case "$SAM_ACCEPT_LICENSE" in
+  true|1|yes|on) SAM_ACCEPT_LICENSE=true ;;
+  false|0|no|off) SAM_ACCEPT_LICENSE=false ;;
+  *) die "SAM_ACCEPT_LICENSE doit être true ou false." ;;
+esac
 if [[ "$TRAIN_MASKS" == on ]]; then
   case "$TRAIN_MASKS_BACKEND" in
     segmentation|spirula) ;;
@@ -236,7 +243,7 @@ SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
-  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE
+  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE SAM_ACCEPT_LICENSE
   for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
     export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
   done
@@ -300,7 +307,10 @@ prepare_blocks() {
 
   if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
     local mask_model="$TRAIN_MASKS_MODEL"
+    local license_args=()
     [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
+    [[ "$TRAIN_MASKS_BACKEND" != spirula || "$SAM_ACCEPT_LICENSE" != true ]] ||
+      license_args+=(--accept-spirula-license)
     printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
       "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
     "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
@@ -309,7 +319,8 @@ prepare_blocks() {
       --spirula-device "$TRAIN_MASKS_SPIRULA_DEVICE" \
       --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
-      --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" ||
+      --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
+      "${license_args[@]}" ||
       die "Génération des masques d’entraînement échouée."
   fi
 

@@ -74,6 +74,7 @@ FLOATER_SUPPRESSION=medium
 TRAIN_MASKS=maybe
 TRAIN_MASKS_BACKEND=bad
 TRAIN_MASKS_MODE=hide
+SAM_ACCEPT_LICENSE=maybe
 TRAIN_MASKS_CONFIDENCE=-1
 TRAIN_MASKS_DILATE=0.5
 TRAIN_MASKS_MAX_FRACTION=2
@@ -204,6 +205,14 @@ SFM_MASKS_MAX_FRACTION=0
         self.assertNotEqual(result.returncode, 0)
         for key in ("SPIRULA_MODEL", "CONFIDENCE", "DILATE", "MAX_FRACTION"):
             self.assertIn(f"SFM_MASKS_{key}", result.stderr)
+
+    def test_sam_license_acceptance_is_explicit(self):
+        for value in ("true", "false"):
+            result, _ = self.execute("validate_config.sh", f"SAM_ACCEPT_LICENSE={value}\n")
+            self.assertEqual(result.returncode, 0, result.stderr)
+        result, _ = self.execute("validate_config.sh", "SAM_ACCEPT_LICENSE=maybe\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SAM_ACCEPT_LICENSE", result.stderr)
 
 
 if __name__ == "__main__":

@@ -127,6 +127,11 @@ TRAIN_MASKS_SPIRULA_MODEL=""
 # fragment du nom du GPU ou uuid:<hex>. Pas de noms cuda/mps ici.
 TRAIN_MASKS_SPIRULA_DEVICE="auto"
 
+# Defaut : false. Mettre true uniquement apres lecture et acceptation des
+# conditions SAM 3 Meta : transmet --accept-license sam3=yes pour chaque
+# calcul natif SfM ou 3DGS, y compris les jobs Slurm non interactifs.
+SAM_ACCEPT_LICENSE="false"
+
 # Defaut : sky. Liste non vide, separee par des virgules.
 # segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
 # insensible a la casse. sky couvre aussi les nuages dans ADE20K.

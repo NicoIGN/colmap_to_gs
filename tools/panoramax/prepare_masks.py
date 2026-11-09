@@ -70,6 +70,8 @@ def generate(settings, images, output):
         "--spirula-device", settings["device"] if settings["backend"] == "spirula" else "auto",
         "--device", settings["device"] if settings["backend"] != "spirula" else "auto",
     ]
+    if settings["backend"] == "spirula" and enabled(os.environ.get("SAM_ACCEPT_LICENSE", "false")):
+        command.append("--accept-spirula-license")
     print(f"[masques] {output.name} : {settings['backend']}, {settings['labels']}", flush=True)
     subprocess.run(command, check=True)
     report = json.loads((output / "masks.json").read_text())
@@ -93,18 +95,25 @@ def prepare(dataset, workspace, check_only=False):
                for p in model_files if p.is_file()]
     binary = Path(os.environ["SPIRULA_BIN"]).resolve()
     binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
-    signature = hashlib.sha256(json.dumps(
-        [sfm, inputs, metadata, weights, binary_stamp,
-         hashlib.sha256((Path(__file__).parents[1] /
-                         "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()],
-        sort_keys=True).encode()).hexdigest()
+    generator_hash = hashlib.sha256((Path(__file__).parents[1] /
+                                     "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
+    def fingerprint(code_hash):
+        return hashlib.sha256(json.dumps(
+            [sfm, inputs, metadata, weights, binary_stamp, code_hash],
+            sort_keys=True).encode()).hexdigest()
+
+    signature = fingerprint(generator_hash)
     marker = workspace / "sfm_mask_policy.json"
     previous = json.loads(marker.read_text()) if marker.is_file() else {}
     if not isinstance(previous, dict):
         raise ValueError(f"Signature de masques invalide : {marker}")
     artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
     artifacts = artifacts or any(workspace.glob("blocks-*"))
-    if (artifacts or previous) and previous.get("signature") != signature:
+    compatible = {signature}
+    # This generator update changes only consent forwarding and diagnostics.
+    if generator_hash == "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e":
+        compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"))
+    if (artifacts or previous) and previous.get("signature") not in compatible:
         raise ValueError(
             "SfM existant/partiel avec une autre politique de masques (ou sans signature). "
             f"Déplacer {workspace} en sauvegarde ou choisir un nouvel OUTPUT_DIR. "

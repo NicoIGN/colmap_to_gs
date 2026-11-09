@@ -182,15 +182,16 @@ class SpirulaSegmenter:
             (frames / f"{index:09d}{source.suffix.lower()}").symlink_to(source)
             self.paths[str(source)] = masks / f"frame_{index - 1:05d}.png"
             progress(index, len(names), self.args, "Préparation des images")
-        subprocess.run(
-            [self.binary, "sam", "track", "--model", str(self.args.model.resolve()),
+        command = [self.binary, "sam", "track", "--model", str(self.args.model.resolve()),
              "--frames", str(frames), "--out", str(masks),
              "--text", "; ".join(self.id2label.values()),
              "--mask-mode", "image", "--remove-prompted", "--dilate-ratio", "0",
              "--threshold", str(self.args.confidence),
-             "--device", self.args.spirula_device], check=True,
-            stdout=None if self.args.verbose else subprocess.DEVNULL,
-            stderr=None if self.args.verbose else subprocess.DEVNULL)
+             "--device", self.args.spirula_device]
+        if self.args.accept_spirula_license:
+            command += ["--accept-license", "sam3=yes"]
+            print("[masques] Acceptation explicite de la licence SAM 3 transmise à Spirula.", flush=True)
+        subprocess.run(command, check=True)
         for source, path in self.paths.items():
             if not path.is_file():
                 raise ValueError(f"Spirula n'a pas écrit le masque de {source} : {path}")
@@ -597,6 +598,8 @@ def main(argv=None):
     parser.add_argument("--backend", choices=("segmentation", "spirula"), default="segmentation")
     parser.add_argument("--spirula-bin", default="spirula", help="Exécutable Spirula avec SAM")
     parser.add_argument("--spirula-device", default="auto", help="Périphérique Vulkan : auto, index, nom ou uuid")
+    parser.add_argument("--accept-spirula-license", action="store_true",
+                        help="Confirmer explicitement l'acceptation de la licence SAM 3")
     parser.add_argument(
         "--model",
         default=os.environ.get("TRAIN_MASKS_MODEL", "ade20k"),

@@ -37,7 +37,8 @@ class NativeMasksTest(unittest.TestCase):
             "from PIL import Image\n"
             "args = sys.argv[1:]\n"
             "with open(os.environ['SAM_LOG'], 'a') as f: f.write(json.dumps(args) + '\\n')\n"
-            "if os.environ.get('SAM_FAIL'): sys.exit(7)\n"
+            "if os.environ.get('SAM_FAIL'):\n"
+            "    print('SAM failure diagnostic', file=sys.stderr); sys.exit(7)\n"
             "frames = Path(args[args.index('--frames') + 1])\n"
             "out = Path(args[args.index('--out') + 1])\n"
             "for index, source in enumerate(sorted(frames.iterdir())):\n"
@@ -69,6 +70,7 @@ class NativeMasksTest(unittest.TestCase):
                             ("--dilate-ratio", "0"), ("--text", "sky")):
             self.assertEqual(command[command.index(flag) + 1], value)
         self.assertIn("--remove-prompted", command)
+        self.assertNotIn("--accept-license", command)
         for name in ("a.jpg", "sub/a.jpg"):
             with Image.open(self.output / (name + ".png")) as image:
                 mask = np.asarray(image)
@@ -85,7 +87,8 @@ class NativeMasksTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         command = json.loads(self.log.read_text().splitlines()[-1])
         self.assertEqual(command[command.index("--text") + 1], "sky; person; car")
-        self.assertIn("masque désactivé", result.stderr)
+        report = json.loads((self.output / "masks.json").read_text())
+        self.assertEqual(report["summary"]["overmasked_kept"], 2)
         with Image.open(self.output / "a.jpg.png") as image:
             self.assertTrue((np.asarray(image) == 255).all())
 
@@ -95,10 +98,21 @@ class NativeMasksTest(unittest.TestCase):
                 self.env[flag] = "1"
                 result = self.execute()
                 self.assertNotEqual(result.returncode, 0)
+                if flag == "SAM_FAIL":
+                    self.assertIn("SAM failure diagnostic", result.stderr)
                 report = json.loads((self.output / "masks.json").read_text())
                 self.assertEqual(report["status"], "partial")
                 self.assertFalse((self.output / "a.jpg.png").exists())
                 del self.env[flag]
+
+    def test_explicit_license_is_forwarded_without_changing_cache(self):
+        result = self.execute("--accept-spirula-license")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        command = json.loads(self.log.read_text())
+        self.assertEqual(command[command.index("--accept-license") + 1], "sam3=yes")
+        result = self.execute()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(len(self.log.read_text().splitlines()), 1)
 
     def test_diagonal_dilation_and_detection_threshold(self):
         result = self.execute("--confidence", "0.7", "--dilate-fraction", "0.04")
