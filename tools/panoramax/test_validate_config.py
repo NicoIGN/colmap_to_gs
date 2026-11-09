@@ -224,6 +224,17 @@ SFM_MASKS_MAX_FRACTION=0
             self.assertIn("TRAIN_QUALITY", result.stderr)
             self.assertFalse((root / "output").exists())
 
+    def test_distraction_robustness_choices(self):
+        for value in ("off", "mild", "strong"):
+            result, _ = self.execute("validate_config.sh",
+                                    f'TRAIN_DISTRACTION_ROBUSTNESS="{value}"\n')
+            self.assertEqual(result.returncode, 0, result.stderr)
+        for script in ("run_pipeline.sh", "launch.sh"):
+            result, root = self.execute(script, 'TRAIN_DISTRACTION_ROBUSTNESS="invalid"\n')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_DISTRACTION_ROBUSTNESS", result.stderr)
+            self.assertFalse((root / "output").exists())
+
     def test_legacy_names_are_rejected_even_when_empty_or_new_name_exists(self):
         for old, new in (
                 ("CAP_MAX", "TRAIN_CAP_MAX"), ("NUM_ITER", "TRAIN_NUM_ITER"),

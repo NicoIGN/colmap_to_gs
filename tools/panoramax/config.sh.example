@@ -229,6 +229,13 @@ TRAIN_PRESET="3dgs"
 # Le pipeline force TRAIN_CAP_MAX et TRAIN_NUM_ITER : ils restent prioritaires sur la macro.
 TRAIN_QUALITY=""
 
+# Defaut : off. Valeurs : off|mild|strong.
+# Robustesse de la densification aux incoherences entre photos.
+# mild reduit l'influence des erreurs extremes ; strong utilise aussi une
+# carte robuste sensible aux contours et un score median entre observations.
+# Ne remplace pas les masques ni TRAIN_FLOATER_SUPPRESSION.
+TRAIN_DISTRACTION_ROBUSTNESS="off"
+
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
 # Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.
 TRAIN_NUM_ITER="30000"

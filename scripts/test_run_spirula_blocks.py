@@ -111,6 +111,8 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 2)
             self.assertTrue(all("--quality" not in cmd for cmd in commands
                                 if cmd[:2] == ["spirula", "train"]))
+            self.assertTrue(all(cmd[cmd.index("--distraction-robustness") + 1] == "off"
+                                for cmd in commands if cmd[:2] == ["spirula", "train"]))
             self.assertTrue((data / "gs-3-blocks-2/block_000/splats/Paris-3-block-000.splat").is_file())
             self.assertTrue((data / "gs-3-blocks-2/block_001/splats/Paris-3-block-001.splat").is_file())
 
@@ -270,12 +272,14 @@ class BlockPipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
             env["TRAIN_QUALITY"] = "ultra"
+            env["TRAIN_DISTRACTION_ROBUSTNESS"] = "strong"
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             for cmd in commands:
                 if cmd[:2] == ["spirula", "train"]:
                     self.assertEqual(cmd[cmd.index("--quality") + 1], "ultra")
+                    self.assertEqual(cmd[cmd.index("--distraction-robustness") + 1], "strong")
                     self.assertEqual(cmd[cmd.index("--cap-max") + 1], "1000")
                     self.assertEqual(cmd[cmd.index("--num-iterations") + 1], "3")
             env["TRAIN_QUALITY"] = "invalid"
@@ -289,6 +293,23 @@ class BlockPipelineTest(unittest.TestCase):
                 env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("--quality doit", result.stderr)
+            self.assertFalse((root / "unused").exists())
+
+    def test_invalid_distraction_robustness_is_rejected_by_workers(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env["TRAIN_DISTRACTION_ROBUSTNESS"] = "invalid"
+            result = execute("--prepare-only")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_DISTRACTION_ROBUSTNESS", result.stderr)
+            result = subprocess.run(
+                ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                 "--output-dir", str(root / "unused"),
+                 "--distraction-robustness", "invalid"],
+                env=env, capture_output=True, text=True, timeout=10)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--distraction-robustness doit", result.stderr)
             self.assertFalse((root / "unused").exists())
 
 

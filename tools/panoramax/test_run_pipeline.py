@@ -171,6 +171,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  get=lambda k: args[args.index(k)+1]\n"
                 "  assert get('--cap-max') in ('600','800'), args\n"
                 "  assert get('--quality')=='high', args\n"
+                "  assert get('--distraction-robustness')=='mild', args\n"
                 "  assert get('--num-iterations')=='3', args\n"
                 "  assert (get('--growth-factor'),get('--refine-stop-iter'),get('--refine-stop-num-iter'),get('--floater-suppression'))==('1.03','2','1','mild'), args\n"
                 "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); splats=os.path.join(root,name); ckpt=os.path.join(splats,f'step-{n:09d}.ckpt'); os.makedirs(ckpt,exist_ok=True)\n"
@@ -188,7 +189,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f'SPIRULA_BIN="{spirula}"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
                 'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_CAP_MAX="1000"\n'
-                'TRAIN_PRESET="3dgs"\nTRAIN_QUALITY="high"\nSFM_MAX_IMAGE_SIZE="1600"\n'
+                'TRAIN_PRESET="3dgs"\nTRAIN_QUALITY="high"\nTRAIN_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
                 'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
                 'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'

@@ -20,6 +20,7 @@ export_script="${EXPORT_SCRIPT:-$script_dir/../tools/postprocess/export_ply.py}"
 export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
 
 quality="${TRAIN_QUALITY:-}"
+distraction_robustness="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
 cap_max="${TRAIN_CAP_MAX:-}"
 densify_loss_map_mode="${DENSIFY_LOSS_MAP_MODE:-}"
 densify_score_mode="${DENSIFY_SCORE_MODE:-}"
@@ -62,6 +63,7 @@ Options:
   --output-dir PATH
   --train-preset NAME
   --quality LEVEL           low, medium, high, ultra; explicit budgets take priority
+  --distraction-robustness M off (default), mild, strong
   --cap-max N
   --densify-loss-map-mode MODE
   --densify-score-mode MODE
@@ -118,6 +120,7 @@ while [[ $# -gt 0 ]]; do
     --output-dir) need_arg "$@"; output_dir="$2"; shift 2 ;;
     --train-preset) need_arg "$@"; train_preset="$2"; shift 2 ;;
     --quality) need_arg "$@"; quality="$2"; shift 2 ;;
+    --distraction-robustness) need_arg "$@"; distraction_robustness="$2"; shift 2 ;;
     --cap-max) need_arg "$@"; cap_max="$2"; shift 2 ;;
     --densify-loss-map-mode) need_arg "$@"; densify_loss_map_mode="$2"; shift 2 ;;
     --densify-score-mode) need_arg "$@"; densify_score_mode="$2"; shift 2 ;;
@@ -170,6 +173,10 @@ esac
 case "$quality" in
   ""|low|medium|high|ultra) ;;
   *) die "--quality doit être low, medium, high ou ultra." ;;
+esac
+case "$distraction_robustness" in
+  off|mild|strong) ;;
+  *) die "--distraction-robustness doit être off, mild ou strong." ;;
 esac
 
 is_positive_integer "$num_iterations" ||
@@ -423,6 +430,7 @@ cmd=(
 )
 
 [[ -z "$quality" ]] || cmd+=(--quality "$quality")
+cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$cap_max" ]] || cmd+=(--cap-max "$cap_max")
 [[ -z "$densify_loss_map_mode" ]] || cmd+=(--densify-loss-map-mode "$densify_loss_map_mode")
 [[ -z "$densify_score_mode" ]] || cmd+=(--densify-score-mode "$densify_score_mode")

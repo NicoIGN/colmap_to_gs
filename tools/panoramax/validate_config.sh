@@ -70,6 +70,7 @@ validate_config() {
     '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
   [[ -z "${TRAIN_QUALITY:-}" ]] ||
     config_choice TRAIN_QUALITY "$TRAIN_QUALITY" 'low|medium|high|ultra'
+  config_choice TRAIN_DISTRACTION_ROBUSTNESS "${TRAIN_DISTRACTION_ROBUSTNESS:-off}" 'off|mild|strong'
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'

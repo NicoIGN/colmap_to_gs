@@ -21,6 +21,7 @@ TRAIN_REFINE_STOP_NUM_ITER="${TRAIN_REFINE_STOP_NUM_ITER:-}"
 TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
 TRAIN_QUALITY="${TRAIN_QUALITY:-}"
+TRAIN_DISTRACTION_ROBUSTNESS="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_PAIRS="${SFM_PAIRS:-prefilter}"
@@ -79,6 +80,7 @@ Variables:
   TRAIN_PRESET              Spirula training preset (3dgs)
   TRAIN_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
+  TRAIN_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
   SFM_PAIRS                 Spirula pair selection (prefilter)
@@ -167,6 +169,10 @@ esac
 case "$TRAIN_QUALITY" in
   ""|low|medium|high|ultra) ;;
   *) die "TRAIN_QUALITY doit être vide, low, medium, high ou ultra." ;;
+esac
+case "$TRAIN_DISTRACTION_ROBUSTNESS" in
+  off|mild|strong) ;;
+  *) die "TRAIN_DISTRACTION_ROBUSTNESS doit être off, mild ou strong." ;;
 esac
 [[ -z "$block_index" || "$block_index" -lt "$SPLIT_NUM_BLOCKS" ]] ||
   die "Indice de bloc $block_index hors de [0,$((SPLIT_NUM_BLOCKS - 1))]."
@@ -430,6 +436,7 @@ for ((index = first_index; index < last_index; index++)); do
     --export-filter-mode off
   )
   [[ -z "$TRAIN_QUALITY" ]] || block_args+=(--quality "$TRAIN_QUALITY")
+  block_args+=(--distraction-robustness "$TRAIN_DISTRACTION_ROBUSTNESS")
   [[ -z "$TRAIN_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_GROWTH_FACTOR")
   [[ -z "$TRAIN_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_FLOATER_SUPPRESSION")
   [[ -z "$TRAIN_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_REFINE_STOP_ITER")

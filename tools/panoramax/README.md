@@ -217,6 +217,13 @@ limites : [tools/segmentation_masks](../segmentation_masks/README.md).
 
 ### Qualité d'entraînement
 
+`TRAIN_DISTRACTION_ROBUSTNESS="off"` transmet `--distraction-robustness`
+à Spirula, en local et sous Slurm. `mild` et `strong` modifient les scores
+de densification pour limiter l'influence des incohérences entre photos.
+Commencer par `mild` ; `strong` peut aussi atténuer des détails peu observés.
+Ce réglage ne remplace ni les masques ni `TRAIN_FLOATER_SUPPRESSION`.
+Il faut réentraîner avec `TRAIN_CLEAN=true` pour l'appliquer à un bloc terminé.
+
 Le paramètre optionnel `TRAIN_QUALITY=""` transmet `--quality` à
 `spirula train` lorsqu'il vaut `low`, `medium`, `high` ou `ultra`, en local
 comme sous Slurm. Vide conserve le comportement précédent. Dans Spirula,
