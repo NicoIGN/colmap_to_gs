@@ -6,8 +6,8 @@
 #
 # Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
 # "" signifie une option non forcee ; le commentaire indique alors le repli.
-# OUTPUT_DIR et BBOX_LAMBERT93 n'ont aucun defaut : valeurs d'exemple a remplacer.
-# NUM_BLOCKS, NUM_ITER, CAP_MAX et TRAIN_PRESET sont obligatoires dans une config ;
+# OUTPUT_DIR et PANORAMAX_BBOX_LAMBERT93 n'ont aucun defaut : valeurs d'exemple a remplacer.
+# SPLIT_NUM_BLOCKS, TRAIN_NUM_ITER, TRAIN_CAP_MAX et TRAIN_PRESET sont obligatoires dans une config ;
 # leurs valeurs ci-dessous reprennent les defauts du lanceur de blocs.
 # Ce fichier couvre les options exposees par le pipeline et son lanceur Slurm,
 # pas toutes les options CLI des outils utilisables independamment.
@@ -40,7 +40,7 @@ export MVK_CONFIG_LOG_LEVEL="1"
 
 # Obligatoire, aucun defaut. Exemple a remplacer : emprise EPSG:2154 (metres),
 # ordre xmin,ymin,xmax,ymax ; quatre nombres finis, xmin<xmax et ymin<ymax.
-BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
+PANORAMAX_BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
 
 # Defaut : https://explore.panoramax.fr/api.
 # URL HTTP(S) racine de l'API STAC, sans /search ni espaces.
@@ -130,7 +130,7 @@ TRAIN_MASKS_SPIRULA_DEVICE="auto"
 # Defaut : false. Mettre true uniquement apres lecture et acceptation des
 # conditions SAM 3 Meta : transmet --accept-license sam3=yes pour chaque
 # calcul natif SfM ou 3DGS, y compris les jobs Slurm non interactifs.
-SAM_ACCEPT_LICENSE="false"
+MASKS_ACCEPT_LICENSE="false"
 
 # Defaut : sky. Liste non vide, separee par des virgules.
 # segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
@@ -210,11 +210,11 @@ SFM_MASKS_DEVICE=""
 
 # Valeur initiale : 4 (defaut du lanceur de blocs). Entier >= 1 ;
 # champ obligatoire du pipeline : nombre de modeles COLMAP/3DGS.
-NUM_BLOCKS="4"
+SPLIT_NUM_BLOCKS="4"
 
 # Defaut : 0.05. Nombre dans [0,1] : fraction maximale d'images supplementaires
 # par bloc pour le recouvrement. 0 = aucun recouvrement.
-OVERLAP_MAX_FRACTION="0.05"
+SPLIT_OVERLAP_MAX_FRACTION="0.05"
 
 # ============================================================================
 # 5. Entrainement 3DGS de chaque bloc
@@ -226,45 +226,45 @@ TRAIN_PRESET="3dgs"
 
 # Defaut : "". Vide = ne pas transmettre --quality (Spirula : medium).
 # Valeurs : low|medium|high|ultra. Macro de budget et duree, pas de resolution.
-# Le pipeline force CAP_MAX et NUM_ITER : ils restent prioritaires sur la macro.
+# Le pipeline force TRAIN_CAP_MAX et TRAIN_NUM_ITER : ils restent prioritaires sur la macro.
 TRAIN_QUALITY=""
 
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
-# Iterations par bloc ; sert aussi de suffixe sfm-NUM_ITER et gs-NUM_ITER.
-NUM_ITER="30000"
+# Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.
+TRAIN_NUM_ITER="30000"
 
 # Valeur initiale : 1500000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
-# Plafond de splats par bloc ; total maximal theorique NUM_BLOCKS * CAP_MAX.
-CAP_MAX="1500000"
+# Plafond de splats par bloc ; total maximal theorique SPLIT_NUM_BLOCKS * TRAIN_CAP_MAX.
+TRAIN_CAP_MAX="1500000"
 
-# Defaut : "". Vide = budget CAP_MAX ; sinon entier > 0 :
-# budget du bloc = min(CAP_MAX, nombre d'images du bloc * SPLATS_PER_IMAGE).
-SPLATS_PER_IMAGE=""
+# Defaut : "". Vide = budget TRAIN_CAP_MAX ; sinon entier > 0 :
+# budget du bloc = min(TRAIN_CAP_MAX, nombre d'images du bloc * TRAIN_SPLATS_PER_IMAGE).
+TRAIN_SPLATS_PER_IMAGE=""
 
 # Defaut : "". Vide = defaut Spirula (1.05) ; sinon nombre > 1.
 # Multiplicateur de croissance du nombre de splats par cycle de raffinement.
-GROWTH_FACTOR=""
+TRAIN_GROWTH_FACTOR=""
 
 # Defaut : "". Vide = defaut Spirula (14000) ; sinon entier >= 0.
 # Pas minimal d'arret de croissance : arret effectif au maximum de
-# REFINE_STOP_ITER et NUM_ITER - REFINE_STOP_NUM_ITER.
-REFINE_STOP_ITER=""
+# TRAIN_REFINE_STOP_ITER et TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER.
+TRAIN_REFINE_STOP_ITER=""
 
 # Defaut : "". Vide = defaut Spirula (2500) ; sinon entier >= 0.
 # Nombre de pas reserves a l'affinage seul en fin de calcul, sous reserve
-# du minimum REFINE_STOP_ITER. Si l'arret effectif >= NUM_ITER, avertissement.
-REFINE_STOP_NUM_ITER=""
+# du minimum TRAIN_REFINE_STOP_ITER. Si l'arret effectif >= TRAIN_NUM_ITER, avertissement.
+TRAIN_REFINE_STOP_NUM_ITER=""
 
 # Defaut : off. Valeurs : off|mild|strong.
 # Suppression native des flotteurs ; mild/strong limitent aussi leur taille
 # a l'ecran. Comparer sur un bloc avant de generaliser.
-FLOATER_SUPPRESSION="off"
+TRAIN_FLOATER_SUPPRESSION="off"
 
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # true = supprime uniquement les sorties GS des blocs et les reentraine.
 # Ne supprime ni photos, ni SfM, ni decoupage. Necessaire pour appliquer de
 # nouveaux masques a des blocs deja entraines (sinon reutilisation avertie).
-CLEAN_GS="false"
+TRAIN_CLEAN="false"
 
 # ============================================================================
 # 6. Fusion, nettoyage final et export georeference
@@ -272,48 +272,48 @@ CLEAN_GS="false"
 
 # Defaut : panoramax.splat. Nom simple non vide, sans "/", termine par .splat.
 # Le fichier fusionne original reste dans <nom>.unfiltered.splat.
-SPLAT_NAME="panoramax.splat"
+EXPORT_SPLAT_NAME="panoramax.splat"
 
 # Defaut : 1.0. Nombre fini > 0 : force relative des voxels de fusion.
 # Plus petit = deduplication prudente ; plus grand = deduplication accrue.
-SPLAT_MERGE_STRENGTH="1.0"
+MERGE_STRENGTH="1.0"
 
 # Defaut : contextual. Valeurs : contextual|cleangs.
 # contextual = filtres geometriques ci-dessous ; cleangs = nettoyage ciel
 # multivues via segmentation (CUDA, modele et venv propres a Clean-GS).
-SPLAT_CLEANER="contextual"
+POSTPROCESS_CLEANER="contextual"
 
-# --- Nettoyage contextual (ignore si SPLAT_CLEANER=cleangs) ---
+# --- Nettoyage contextual (ignore si POSTPROCESS_CLEANER=cleangs) ---
 
 # Defaut : diagnostic. Valeurs : diagnostic|apply|off.
 # diagnostic = garde tout et exporte les candidats dans <nom>.rejected.splat ;
 # apply = retire les candidats ; off = desactive le test contextuel.
 # Le recadrage sparse ci-dessous est independant et peut rester actif.
-SPLAT_FILTER_MODE="diagnostic"
+POSTPROCESS_FILTER_MODE="diagnostic"
 
 # Defaut : 10. Nombre fini > 1, sans unite.
 # Grand axe / mediane des grands axes voisins ; le depassement seul ne retire
 # rien : il faut aussi une position peripherique et un faible support.
-SPLAT_FILTER_SIZE_FACTOR="10"
+POSTPROCESS_FILTER_SIZE_FACTOR="10"
 
 # Defaut : apply. Valeurs : apply|diagnostic|off.
 # Bbox orientee des points sparse aux quantiles 0.5 % / 99.5 % :
 # apply = retire les centres hors bbox ; diagnostic = signale ; off = desactive.
 # Pas de decoupe aux frontieres internes des blocs ; seul le centre est teste.
-SPLAT_SPARSE_BBOX_MODE="apply"
+POSTPROCESS_SPARSE_BBOX_MODE="apply"
 
 # Defaut : 0.05. Nombre >= 0, sans unite.
 # Marge de bbox = fraction du plus grand cote ; 0 = aucune marge.
-SPLAT_SPARSE_BBOX_MARGIN="0.05"
+POSTPROCESS_SPARSE_BBOX_MARGIN="0.05"
 
-# --- Nettoyage cleangs (ignore si SPLAT_CLEANER=contextual) ---
+# --- Nettoyage cleangs (ignore si POSTPROCESS_CLEANER=contextual) ---
 
 # Defaut : "" (repli PYTHON_BIN). Commande/chemin du Python du venv Clean-GS,
 # affiche par bash tools/clean_gs/install.sh.
 CLEANGS_PYTHON=""
 
 # Defaut : "". Dossier local du modele de segmentation obligatoire si
-# SPLAT_CLEANER=cleangs ; affiche par l'installateur Clean-GS.
+# POSTPROCESS_CLEANER=cleangs ; affiche par l'installateur Clean-GS.
 CLEANGS_MODEL=""
 
 # Defaut : diagnostic. Valeurs : diagnostic|apply.
@@ -356,8 +356,8 @@ SLURM_TIME_LIMIT="48:00:00"
 # lettres/chiffres/"_"/"-" uniquement (ex. a100), sans ":".
 SLURM_GPU_TYPE=""
 
-# Defaut : "" (repli NUM_BLOCKS). Sinon entier > 0 : blocs simultanes au plus.
-# 1 = sequentiel ; une valeur > NUM_BLOCKS n'ajoute aucun bloc.
+# Defaut : "" (repli SPLIT_NUM_BLOCKS). Sinon entier > 0 : blocs simultanes au plus.
+# 1 = sequentiel ; une valeur > SPLIT_NUM_BLOCKS n'ajoute aucun bloc.
 # Le cluster peut reduire le parallelisme effectif.
 SLURM_BLOCK_PARALLELISM=""
 

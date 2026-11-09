@@ -26,8 +26,8 @@ class SlurmLaunchTest(unittest.TestCase):
         self.config = self.root / "dataset config.sh"
         self.config.write_text(
             f'OUTPUT_DIR="{self.output}"\n'
-            'BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
-            'NUM_BLOCKS=2\nNUM_ITER=3\nCAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+            'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+            'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
             'PYTHON_BIN=job-python\n'
         )
         (self.pipeline_dir / "run_pipeline.sh").write_text(
@@ -214,7 +214,7 @@ if "--wait" in args:
 
     def test_cleangs_merge_allocates_gpu(self):
         with self.config.open("a") as stream:
-            stream.write('SPLAT_CLEANER=cleangs\nCLEANGS_MODEL="/local/model"\n')
+            stream.write('POSTPROCESS_CLEANER=cleangs\nCLEANGS_MODEL="/local/model"\n')
         result = self.launch("--wait")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("--gres=gpu:1", self.jobs()[2])

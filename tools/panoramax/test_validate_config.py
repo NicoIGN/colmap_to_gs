@@ -17,8 +17,8 @@ class ValidateConfigTest(unittest.TestCase):
         config = root / "config.sh"
         config.write_text(
             f'OUTPUT_DIR="{root / "output"}"\n'
-            'BBOX_LAMBERT93="652600,6863300,652900,6863500"\n'
-            'NUM_BLOCKS=3\nNUM_ITER=15000\nCAP_MAX=4000000\nTRAIN_PRESET=3dgs\n'
+            'PANORAMAX_BBOX_LAMBERT93="652600,6863300,652900,6863500"\n'
+            'SPLIT_NUM_BLOCKS=3\nTRAIN_NUM_ITER=15000\nTRAIN_CAP_MAX=4000000\nTRAIN_PRESET=3dgs\n'
             + extra
         )
         command = ["bash", str(ROOT / script), str(config)]
@@ -44,37 +44,37 @@ SFM_MATCHER=lightblue
 SFM_FEATURES=alikedd
 SFM_PAIRS=prefliter
 TRAIN_PRESET=3dgz
-NUM_BLOCKS=0
-NUM_ITER=-1
-CAP_MAX=1.5
+SPLIT_NUM_BLOCKS=0
+TRAIN_NUM_ITER=-1
+TRAIN_CAP_MAX=1.5
 SFM_THREADS=4.5
 SFM_PAIR_MAX_DISTANCE=nan
-OVERLAP_MAX_FRACTION=1.1
-CLEAN_GS=flase
+SPLIT_OVERLAP_MAX_FRACTION=1.1
+TRAIN_CLEAN=flase
 PANORAMAX_REPLACE_REQUEST=oui
 PANORAMAX_QUALITY=HD
-BBOX_LAMBERT93="4,3,2,1"
+PANORAMAX_BBOX_LAMBERT93="4,3,2,1"
 PANORAMAX_API_URL=example.test
-SPLAT_NAME=bad.ply
-SPLAT_MERGE_STRENGTH=0
-SPLAT_FILTER_MODE=aply
-SPLAT_CLEANER=bad
+EXPORT_SPLAT_NAME=bad.ply
+MERGE_STRENGTH=0
+POSTPROCESS_FILTER_MODE=aply
+POSTPROCESS_CLEANER=bad
 CLEANGS_MODE=bad
 CLEANGS_MIN_VIEWS=0
 CLEANGS_SKY_CONFIDENCE=0.1
 CLEANGS_MAX_REMOVAL_FRACTION=1
-SPLAT_FILTER_SIZE_FACTOR=1
-SPLAT_SPARSE_BBOX_MODE=yes
-SPLAT_SPARSE_BBOX_MARGIN=-0.1
-SPLATS_PER_IMAGE=0
-GROWTH_FACTOR=1
-REFINE_STOP_ITER=1.5
-REFINE_STOP_NUM_ITER=-1
-FLOATER_SUPPRESSION=medium
+POSTPROCESS_FILTER_SIZE_FACTOR=1
+POSTPROCESS_SPARSE_BBOX_MODE=yes
+POSTPROCESS_SPARSE_BBOX_MARGIN=-0.1
+TRAIN_SPLATS_PER_IMAGE=0
+TRAIN_GROWTH_FACTOR=1
+TRAIN_REFINE_STOP_ITER=1.5
+TRAIN_REFINE_STOP_NUM_ITER=-1
+TRAIN_FLOATER_SUPPRESSION=medium
 TRAIN_MASKS=maybe
 TRAIN_MASKS_BACKEND=bad
 TRAIN_MASKS_MODE=hide
-SAM_ACCEPT_LICENSE=maybe
+MASKS_ACCEPT_LICENSE=maybe
 TRAIN_MASKS_CONFIDENCE=-1
 TRAIN_MASKS_DILATE=0.5
 TRAIN_MASKS_MAX_FRACTION=2
@@ -86,16 +86,16 @@ SLURM_TIME_LIMIT=48:99:00
 """, "slurm")
         self.assertEqual(result.returncode, 1)
         for name in ("SFM_MATCHER", "SFM_FEATURES", "SFM_PAIRS", "TRAIN_PRESET",
-                     "NUM_BLOCKS", "NUM_ITER", "CAP_MAX", "SFM_THREADS",
-                     "SFM_PAIR_MAX_DISTANCE", "OVERLAP_MAX_FRACTION", "CLEAN_GS", "PANORAMAX_REPLACE_REQUEST",
-                     "PANORAMAX_QUALITY", "BBOX_LAMBERT93", "PANORAMAX_API_URL",
-                     "SPLAT_NAME", "SPLAT_MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
-                     "SPLAT_FILTER_MODE", "SPLAT_FILTER_SIZE_FACTOR",
-                     "SPLAT_CLEANER", "CLEANGS_MODE", "CLEANGS_MIN_VIEWS",
+                     "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "SFM_THREADS",
+                     "SFM_PAIR_MAX_DISTANCE", "SPLIT_OVERLAP_MAX_FRACTION", "TRAIN_CLEAN", "PANORAMAX_REPLACE_REQUEST",
+                     "PANORAMAX_QUALITY", "PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_API_URL",
+                     "EXPORT_SPLAT_NAME", "MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
+                     "POSTPROCESS_FILTER_MODE", "POSTPROCESS_FILTER_SIZE_FACTOR",
+                     "POSTPROCESS_CLEANER", "CLEANGS_MODE", "CLEANGS_MIN_VIEWS",
                      "CLEANGS_SKY_CONFIDENCE", "CLEANGS_MAX_REMOVAL_FRACTION",
-                     "SPLAT_SPARSE_BBOX_MODE", "SPLAT_SPARSE_BBOX_MARGIN",
-                     "SPLATS_PER_IMAGE", "GROWTH_FACTOR", "REFINE_STOP_ITER", "REFINE_STOP_NUM_ITER",
-                     "FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
+                     "POSTPROCESS_SPARSE_BBOX_MODE", "POSTPROCESS_SPARSE_BBOX_MARGIN",
+                     "TRAIN_SPLATS_PER_IMAGE", "TRAIN_GROWTH_FACTOR", "TRAIN_REFINE_STOP_ITER", "TRAIN_REFINE_STOP_NUM_ITER",
+                     "TRAIN_FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
                      "TRAIN_MASKS_CONFIDENCE", "TRAIN_MASKS_DILATE", "TRAIN_MASKS_MAX_FRACTION",
                      "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
@@ -110,10 +110,10 @@ SFM_THREADS=""
 PANORAMAX_IMAGE_MAX=""
 SLURM_BLOCK_PARALLELISM=""
 SFM_MATCHER=bruteforce
-SPLATS_PER_IMAGE=""
-GROWTH_FACTOR=""
-REFINE_STOP_ITER=""
-REFINE_STOP_NUM_ITER=""
+TRAIN_SPLATS_PER_IMAGE=""
+TRAIN_GROWTH_FACTOR=""
+TRAIN_REFINE_STOP_ITER=""
+TRAIN_REFINE_STOP_NUM_ITER=""
 """, mode)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Paramètres valides", result.stdout)
@@ -132,8 +132,8 @@ REFINE_STOP_NUM_ITER=""
                                  example, re.MULTILINE)
         values = dict(assignments)
         self.assertEqual(len(values), len(assignments), "Duplicate config parameters")
-        required = {"OUTPUT_DIR", "BBOX_LAMBERT93", "NUM_BLOCKS", "NUM_ITER",
-                    "CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
+        required = {"OUTPUT_DIR", "PANORAMAX_BBOX_LAMBERT93", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
+                    "TRAIN_CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
         for script in ("run_pipeline.sh", "launch.sh"):
             defaults = re.findall(
@@ -148,7 +148,7 @@ REFINE_STOP_NUM_ITER=""
             r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
             (ROOT.parents[1] / "scripts" / "run_spirula_blocks.sh").read_text(),
             re.MULTILINE))
-        for name in ("NUM_BLOCKS", "NUM_ITER", "CAP_MAX", "TRAIN_PRESET"):
+        for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "TRAIN_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
         self.assertIn('SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"',
                       (ROOT / "run_pipeline.sh").read_text())
@@ -183,9 +183,9 @@ TRAIN_MASKS_LABELS="sky,person"
     def test_nonfinite_and_malformed_bbox_rejected(self):
         for bbox in ("nan,0,1,1", "0,0,inf,1", "0,0,1e9999,1",
                      "0,0,1", "0,0,1,1,2", "0,0,0,1"):
-            result, _ = self.execute("validate_config.sh", f'BBOX_LAMBERT93="{bbox}"\n')
+            result, _ = self.execute("validate_config.sh", f'PANORAMAX_BBOX_LAMBERT93="{bbox}"\n')
             self.assertEqual(result.returncode, 1, bbox)
-            self.assertIn("BBOX_LAMBERT93", result.stderr)
+            self.assertIn("PANORAMAX_BBOX_LAMBERT93", result.stderr)
 
     def test_sfm_masks_inheritance_and_validation(self):
         result, _ = self.execute("validate_config.sh", """
@@ -208,11 +208,11 @@ SFM_MASKS_MAX_FRACTION=0
 
     def test_sam_license_acceptance_is_explicit(self):
         for value in ("true", "false"):
-            result, _ = self.execute("validate_config.sh", f"SAM_ACCEPT_LICENSE={value}\n")
+            result, _ = self.execute("validate_config.sh", f"MASKS_ACCEPT_LICENSE={value}\n")
             self.assertEqual(result.returncode, 0, result.stderr)
-        result, _ = self.execute("validate_config.sh", "SAM_ACCEPT_LICENSE=maybe\n")
+        result, _ = self.execute("validate_config.sh", "MASKS_ACCEPT_LICENSE=maybe\n")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("SAM_ACCEPT_LICENSE", result.stderr)
+        self.assertIn("MASKS_ACCEPT_LICENSE", result.stderr)
 
     def test_training_quality_choices(self):
         for value in ("", "low", "medium", "high", "ultra"):
@@ -223,6 +223,29 @@ SFM_MASKS_MAX_FRACTION=0
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_QUALITY", result.stderr)
             self.assertFalse((root / "output").exists())
+
+    def test_legacy_names_are_rejected_even_when_empty_or_new_name_exists(self):
+        for old, new in (
+                ("CAP_MAX", "TRAIN_CAP_MAX"), ("NUM_ITER", "TRAIN_NUM_ITER"),
+                ("NUM_BLOCKS", "SPLIT_NUM_BLOCKS"), ("CLEAN_GS", "TRAIN_CLEAN"),
+                ("BBOX_LAMBERT93", "PANORAMAX_BBOX_LAMBERT93"),
+                ("GROWTH_FACTOR", "TRAIN_GROWTH_FACTOR"),
+                ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
+            for script in ("validate_config.sh", "run_pipeline.sh", "launch.sh"):
+                result, root = self.execute(script, f'{old}=""\n')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f"ancien paramètre {old} interdit", result.stderr)
+                self.assertIn(f"utiliser {new}", result.stderr)
+                self.assertFalse((root / "output").exists())
+
+    def test_example_parameters_have_stage_prefixes_or_are_shared(self):
+        names = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)=',
+                           (ROOT / "config.sh.example").read_text(), re.MULTILINE)
+        shared = {"OUTPUT_DIR", "SPIRULA_BIN", "PYTHON_BIN", "MVK_CONFIG_LOG_LEVEL"}
+        prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
+                    "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_")
+        for name in names:
+            self.assertTrue(name in shared or name.startswith(prefixes), name)
 
 
 if __name__ == "__main__":

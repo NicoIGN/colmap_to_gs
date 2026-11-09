@@ -112,8 +112,8 @@ Le JSON contient un compteur distinct `sparse_support.unsupported`.
 Dans le pipeline Panoramax, **les blocs sont exportés sans filtre géométrique**
 et le nouveau filtre est évalué après fusion, sur l'ensemble de la scène :
 les frontières internes des blocs ne sont pas traitées comme des bords de
-chantier. Configurer `SPLAT_FILTER_MODE="diagnostic"` (défaut), `"apply"` ou
-`"off"` et `SPLAT_FILTER_SIZE_FACTOR="10"`. La fusion avant filtre est conservée
+chantier. Configurer `POSTPROCESS_FILTER_MODE="diagnostic"` (défaut), `"apply"` ou
+`"off"` et `POSTPROCESS_FILTER_SIZE_FACTOR="10"`. La fusion avant filtre est conservée
 dans `NOM.unfiltered.splat`, les candidats dans `NOM.rejected.splat`, et le
 résumé dans `NOM.filter.json`. En diagnostic, `NOM.splat` est identique à la
 fusion non filtrée. La fusion conserve ses propres règles de déduplication.

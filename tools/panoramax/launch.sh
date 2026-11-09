@@ -35,10 +35,10 @@ source "$script_dir/validate_config.sh"
 validate_config slurm || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
-: "${BBOX_LAMBERT93:?BBOX_LAMBERT93 doit être défini dans la configuration}"
-: "${NUM_BLOCKS:?NUM_BLOCKS doit être défini dans la configuration}"
-: "${NUM_ITER:?NUM_ITER doit être défini dans la configuration}"
-: "${CAP_MAX:?CAP_MAX doit être défini dans la configuration}"
+: "${PANORAMAX_BBOX_LAMBERT93:?PANORAMAX_BBOX_LAMBERT93 doit être défini dans la configuration}"
+: "${SPLIT_NUM_BLOCKS:?SPLIT_NUM_BLOCKS doit être défini dans la configuration}"
+: "${TRAIN_NUM_ITER:?TRAIN_NUM_ITER doit être défini dans la configuration}"
+: "${TRAIN_CAP_MAX:?TRAIN_CAP_MAX doit être défini dans la configuration}"
 : "${TRAIN_PRESET:?TRAIN_PRESET doit être défini dans la configuration}"
 SLURM_PARTITION="${SLURM_PARTITION:-jean-zellou}"
 SLURM_CPUS_PER_TASK="${SLURM_CPUS_PER_TASK:-16}"
@@ -47,8 +47,8 @@ SLURM_TIME_LIMIT="${SLURM_TIME_LIMIT:-48:00:00}"
 SLURM_GPU_TYPE="${SLURM_GPU_TYPE:-}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-}"
 SLURM_QOS="${SLURM_QOS:-}"
-SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-$NUM_BLOCKS}"
-[[ "$NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "NUM_BLOCKS doit être un entier positif."
+SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-$SPLIT_NUM_BLOCKS}"
+[[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
 [[ "$SLURM_BLOCK_PARALLELISM" =~ ^[1-9][0-9]*$ ]] ||
   die "SLURM_BLOCK_PARALLELISM doit être un entier positif."
 [[ "$SLURM_CPUS_PER_TASK" =~ ^[1-9][0-9]*$ ]] ||
@@ -114,7 +114,7 @@ submit_job prepare --job-name=panoramax-prepare "--gres=$gres" \
   "--error=$log_dir/panoramax-prepare-%j.err"
 prepare_job="$job_id"
 submit_job train-block --job-name=panoramax-block "--gres=$gres" \
-  "--array=0-$((NUM_BLOCKS - 1))%$SLURM_BLOCK_PARALLELISM" \
+  "--array=0-$((SPLIT_NUM_BLOCKS - 1))%$SLURM_BLOCK_PARALLELISM" \
   "--dependency=afterok:$prepare_job" --kill-on-invalid-dep=yes \
   "--output=$log_dir/panoramax-block-%A_%a.out" \
   "--error=$log_dir/panoramax-block-%A_%a.err"
@@ -124,7 +124,7 @@ printf '[slurm] Journaux blocs : %s/panoramax-block-%s_INDICE.{out,err}\n' "$log
 merge_args=()
 [[ "${2:-}" != --wait ]] || merge_args+=(--wait)
 merge_gres=none
-[[ "${SPLAT_CLEANER:-contextual}" != cleangs ]] || merge_gres="$gres"
+[[ "${POSTPROCESS_CLEANER:-contextual}" != cleangs ]] || merge_gres="$gres"
 submit_job merge --job-name=panoramax-merge "--gres=$merge_gres" \
   "--dependency=afterok:$blocks_job" --kill-on-invalid-dep=yes \
   "--output=$log_dir/panoramax-merge-%j.out" \

@@ -88,9 +88,9 @@ class BlockPipelineTest(unittest.TestCase):
                 PATH=f"{fake_bin}:{os.environ['PATH']}",
                 REAL_PYTHON=REAL_PYTHON,
                 COMMAND_LOG=str(log),
-                NUM_ITER="3",
-                NUM_BLOCKS="2",
-                CAP_MAX="1000",
+                TRAIN_NUM_ITER="3",
+                SPLIT_NUM_BLOCKS="2",
+                TRAIN_CAP_MAX="1000",
             )
 
             def execute(*args):
@@ -147,7 +147,7 @@ class BlockPipelineTest(unittest.TestCase):
             model = root / "model"
             model.mkdir()
             env.update(TRAIN_MASKS="on", TRAIN_MASKS_MODEL=str(model),
-                       TRAIN_MASKS_LABELS="sky", NUM_BLOCKS="1")
+                       TRAIN_MASKS_LABELS="sky", SPLIT_NUM_BLOCKS="1")
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -178,7 +178,7 @@ class BlockPipelineTest(unittest.TestCase):
             off = execute()
             self.assertEqual(off.returncode, 0, off.stderr)
             self.assertIn("autres masques", off.stderr)
-            env.update(CLEAN_GS="true")
+            env.update(TRAIN_CLEAN="true")
             clean = execute()
             self.assertEqual(clean.returncode, 0, clean.stderr)
             self.assertFalse((block / "masks").exists() or (block / "masks").is_symlink())
@@ -206,8 +206,8 @@ class BlockPipelineTest(unittest.TestCase):
             model.write_bytes(b"sam")
             env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
                        TRAIN_MASKS_LABELS="sky,person,car", TRAIN_MASKS_MODE="ignore",
-                       TRAIN_MASKS_SPIRULA_MODEL=str(model), NUM_BLOCKS="1",
-                       SAM_ACCEPT_LICENSE="true")
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model), SPLIT_NUM_BLOCKS="1",
+                       MASKS_ACCEPT_LICENSE="true")
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -231,7 +231,7 @@ class BlockPipelineTest(unittest.TestCase):
             env["SFM_MASKS_LABELS"] = "sky"
             changed = execute("--prepare-only")
             self.assertNotEqual(changed.returncode, 0)
-            self.assertIn("CLEAN_GS", changed.stderr)
+            self.assertIn("TRAIN_CLEAN", changed.stderr)
             env["SFM_MASKS"] = "off"
             disabled = execute("--prepare-only")
             self.assertNotEqual(disabled.returncode, 0)
@@ -246,7 +246,7 @@ class BlockPipelineTest(unittest.TestCase):
                        TRAIN_MASKS_SPIRULA_MODEL=str(model),
                        TRAIN_MASKS_SPIRULA_DEVICE="0",
                        TRAIN_MASKS_MODEL="", TRAIN_MASKS_PYTHON="/missing/python",
-                       NUM_BLOCKS="1", SAM_ACCEPT_LICENSE="true")
+                       SPLIT_NUM_BLOCKS="1", MASKS_ACCEPT_LICENSE="true")
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]

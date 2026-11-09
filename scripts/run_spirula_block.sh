@@ -4,30 +4,32 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
+source "$script_dir/../tools/panoramax/validate_config.sh"
+reject_legacy_config || exit 1
 
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 sparse_dir="${SPARSE_DIR:-}"
 images_dir="${IMAGES_DIR:-}"
 output_dir="${OUTPUT_DIR:-}"
 train_preset="${TRAIN_PRESET:-3dgs}"
-clean="${CLEAN:-false}"
+clean="${TRAIN_CLEAN:-false}"
 export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../tools/postprocess/export_ply.py}"
-export_filter_mode="${SPLAT_FILTER_MODE:-diagnostic}"
+export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
 
-quality="${QUALITY:-}"
-cap_max="${CAP_MAX:-}"
+quality="${TRAIN_QUALITY:-}"
+cap_max="${TRAIN_CAP_MAX:-}"
 densify_loss_map_mode="${DENSIFY_LOSS_MAP_MODE:-}"
 densify_score_mode="${DENSIFY_SCORE_MODE:-}"
 min_init_fraction="${MIN_INIT_FRACTION:-}"
-num_iterations="${NUM_ITERATIONS:-50000}"
+num_iterations="${TRAIN_NUM_ITER:-50000}"
 train_resolution_divisor="${TRAIN_RESOLUTION_DIVISOR:-}"
-growth_factor="${GROWTH_FACTOR:-}"
-refine_stop_iter="${REFINE_STOP_ITER:-}"
-refine_stop_num_iter="${REFINE_STOP_NUM_ITER:-}"
-floater_suppression="${FLOATER_SUPPRESSION:-}"
+growth_factor="${TRAIN_GROWTH_FACTOR:-}"
+refine_stop_iter="${TRAIN_REFINE_STOP_ITER:-}"
+refine_stop_num_iter="${TRAIN_REFINE_STOP_NUM_ITER:-}"
+floater_suppression="${TRAIN_FLOATER_SUPPRESSION:-}"
 masks_dir="${MASKS_DIR:-}"
 mask_mode="${MASK_MODE:-ignore}"
 
@@ -163,7 +165,7 @@ done
 case "$clean" in
   true|1|yes|on) clean=true ;;
   false|0|no|off) clean=false ;;
-  *) die "CLEAN invalide : $clean" ;;
+  *) die "TRAIN_CLEAN invalide : $clean" ;;
 esac
 case "$quality" in
   ""|low|medium|high|ultra) ;;

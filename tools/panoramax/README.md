@@ -143,17 +143,17 @@ un fichier de configuration Bash (fichier de code de confiance) ; chaque
 variable, ses valeurs possibles et son défaut sont commentés dans
 `tools/panoramax/config.sh.example`, organisé par étape du pipeline.
 Le modèle reprend les défauts, sans préréglage de croissance sobre ; seuls
-`OUTPUT_DIR` et `BBOX_LAMBERT93` sont des exemples obligatoires à remplacer.
+`OUTPUT_DIR` et `PANORAMAX_BBOX_LAMBERT93` sont des exemples obligatoires à remplacer.
 
 Le découpage privilégie les séparations de faible covisibilité et vise des
-blocs d'environ `N / NUM_BLOCKS` images principales (tolérance de 20 %,
+blocs d'environ `N / SPLIT_NUM_BLOCKS` images principales (tolérance de 20 %,
 arrondie à l'entier). La connexité prime : des tailles plus inégales sont
 acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
 cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
-# Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, CAP_MAX, etc.
+# Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, TRAIN_CAP_MAX, etc.
 bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
 ```
 
@@ -177,7 +177,7 @@ la compatibilité de la version installée. Le fichier Bash reste du code
 de confiance et est sourcé, même en validation seule.
 
 Les intermédiaires sont rangés sous `OUTPUT_DIR/panoramax/`. Le résultat est
-`OUTPUT_DIR/SPLAT_NAME`; son dossier adjacent `SPLAT_NAME` sans extension suivi
+`OUTPUT_DIR/EXPORT_SPLAT_NAME`; son dossier adjacent `EXPORT_SPLAT_NAME` sans extension suivi
 de `.georef/` contient `georeference.json`, les métadonnées Panoramax, le
 modèle COLMAP métrique, le manifeste de blocs et les transformations
 d'entraînement. Le `.splat` est en coordonnées du repère métrique local de
@@ -186,16 +186,16 @@ directes. Ces éléments latéraux conservent les références nécessaires pour
 retrouver/interpréter ce repère.
 
 Le filtre géométrique est maintenant **global, après fusion**, sans seuil en
-mètres. Par défaut `SPLAT_FILTER_MODE="diagnostic"` conserve la scène et exporte
+mètres. Par défaut `POSTPROCESS_FILTER_MODE="diagnostic"` conserve la scène et exporte
 les grands splats périphériques sans support de surface dans
 `NOM.rejected.splat`. `NOM.unfiltered.splat` conserve la fusion d'origine et
 `NOM.filter.json` donne les compteurs. Après examen, `"apply"` retire les
 candidats ; `"off"` désactive le test. Le rapport de taille local se règle par
-`SPLAT_FILTER_SIZE_FACTOR` (défaut 10).
+`POSTPROCESS_FILTER_SIZE_FACTOR` (défaut 10).
 Voir [la description et les limites du filtre](../postprocess/README.md).
 
 Pour remplacer ce filtre par le nettoyage expérimental du ciel multivues,
-définir `SPLAT_CLEANER="cleangs"` et `CLEANGS_MODEL` (dossier local de
+définir `POSTPROCESS_CLEANER="cleangs"` et `CLEANGS_MODEL` (dossier local de
 segmentation). `CLEANGS_MODE="diagnostic"` conserve les splats et exporte les
 rejets ; `apply` les retire. La fusion Slurm demande alors un GPU NVIDIA.
 Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel :
@@ -221,8 +221,8 @@ Le paramètre optionnel `TRAIN_QUALITY=""` transmet `--quality` à
 `spirula train` lorsqu'il vaut `low`, `medium`, `high` ou `ultra`, en local
 comme sous Slurm. Vide conserve le comportement précédent. Dans Spirula,
 cette macro propose un budget de splats et une durée ; ce n'est pas un
-réglage de résolution. Les valeurs explicites `CAP_MAX` (éventuellement
-limité par `SPLATS_PER_IMAGE`) et `NUM_ITER` du pipeline restent prioritaires :
+réglage de résolution. Les valeurs explicites `TRAIN_CAP_MAX` (éventuellement
+limité par `TRAIN_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires :
 changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
 
 ### Masques avant SfM et partage avec l'entraînement
@@ -241,7 +241,7 @@ Les paramètres `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`,
 Ils peuvent tous être réglés indépendamment. Le mode de perte
 `TRAIN_MASKS_MODE` reste propre au 3DGS.
 
-Pour les appels SAM 3 non interactifs, `SAM_ACCEPT_LICENSE="true"` transmet
+Pour les appels SAM 3 non interactifs, `MASKS_ACCEPT_LICENSE="true"` transmet
 explicitement `--accept-license sam3=yes` pour les deux calculs. Ne l'activer
 qu'après lecture et acceptation des conditions Meta ; défaut `false`.
 
@@ -255,7 +255,7 @@ les mêmes PNG. Mettre `TRAIN_MASKS=off` permet aussi de masquer uniquement le S
 La politique SfM est enregistrée dans `sfm_mask_policy.json`. Un SfM ou des
 caractéristiques déjà présents sans signature compatible sont refusés :
 choisir un nouvel `OUTPUT_DIR` ou déplacer le workspace en sauvegarde.
-`CLEAN_GS=true` ne recalcule **pas** le SfM. Ne pas modifier les fichiers
+`TRAIN_CLEAN=true` ne recalcule **pas** le SfM. Ne pas modifier les fichiers
 de masques manuellement pendant les calculs.
 Si `feature_masks` est déjà un dossier réel et qu'un nouveau réglage demande
 un partage, le pipeline refuse de le remplacer par un lien : utiliser un
@@ -266,31 +266,31 @@ Pour les nuages, `SFM_MASKS_LABELS="sky"` peut réduire les correspondances
 parasites. Ajouter `person,car` retire également des points sur les voitures
 stationnées et peut réduire le nombre de vues enregistrées. Les résultats
 avec SAM/Spirula réels restent à contrôler sur votre matériel.
-Les blocs déjà entraînés ne sont pas recalculés : utiliser `CLEAN_GS=true`.
+Les blocs déjà entraînés ne sont pas recalculés : utiliser `TRAIN_CLEAN=true`.
 
 Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D
 sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
-(`SPLAT_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte
+(`POSTPROCESS_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte
 est orientée sur les axes principaux des points, bornée aux quantiles
-0,5 %/99,5 %, et élargie de `SPLAT_SPARSE_BBOX_MARGIN` × son plus grand côté
+0,5 %/99,5 %, et élargie de `POSTPROCESS_SPARSE_BBOX_MARGIN` × son plus grand côté
 (défaut 0.05, sans unité). Le filtre contextuel n'est ensuite évalué que sur les
 splats restants. La limite de 20 % de rejets appliqués reste active.
 
 Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
-`cap_max`, donc atteindre le plafond est attendu. `CAP_MAX` est un plafond dur
-**par bloc** (valeur initiale 1500000). Par défaut `SPLATS_PER_IMAGE`,
-`GROWTH_FACTOR`, `REFINE_STOP_ITER` et `REFINE_STOP_NUM_ITER` restent vides :
-budget `CAP_MAX`, croissance Spirula 1.05 et paramètres d'arrêt 14000/2500.
-Pour un réglage plus sobre, définir par exemple `SPLATS_PER_IMAGE="2000"`
-(budget `min(CAP_MAX, images × SPLATS_PER_IMAGE)`), `GROWTH_FACTOR="1.03"`,
-`REFINE_STOP_ITER="18000"` et `REFINE_STOP_NUM_ITER="12000"` : avec 30000
+`cap_max`, donc atteindre le plafond est attendu. `TRAIN_CAP_MAX` est un plafond dur
+**par bloc** (valeur initiale 1500000). Par défaut `TRAIN_SPLATS_PER_IMAGE`,
+`TRAIN_GROWTH_FACTOR`, `TRAIN_REFINE_STOP_ITER` et `TRAIN_REFINE_STOP_NUM_ITER` restent vides :
+budget `TRAIN_CAP_MAX`, croissance Spirula 1.05 et paramètres d'arrêt 14000/2500.
+Pour un réglage plus sobre, définir par exemple `TRAIN_SPLATS_PER_IMAGE="2000"`
+(budget `min(TRAIN_CAP_MAX, images × TRAIN_SPLATS_PER_IMAGE)`), `TRAIN_GROWTH_FACTOR="1.03"`,
+`TRAIN_REFINE_STOP_ITER="18000"` et `TRAIN_REFINE_STOP_NUM_ITER="12000"` : avec 30000
 itérations, la croissance s'arrête à 60 % du calcul. L'arrêt effectif est
-`max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)`.
+`max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)`.
 Calibrer
-`SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
+`TRAIN_SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
 étape isolée.
 Les blocs sont réexportés sans filtre de BBOX/taille lors de leur relance,
-sans réentraîner si le checkpoint final existe et `CLEAN_GS=false` ; c'est
+sans réentraîner si le checkpoint final existe et `TRAIN_CLEAN=false` ; c'est
 nécessaire pour récupérer les splats supprimés par un ancien export.
 
 Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
@@ -323,7 +323,7 @@ candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
 réduit donc pas son coût et ne corrige pas un plantage LightGlue. En cas de
 plantage connu, configurer séparément `SFM_MATCHER="bruteforce"`.
 
-Le workspace `panoramax/sfm-NUM_ITER/` conserve `matches.bin` original,
+Le workspace `panoramax/sfm-TRAIN_NUM_ITER/` conserve `matches.bin` original,
 `matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
 retirées et sans GPS). Le résumé est aussi copié dans le dossier final
 `.georef/`. Les formats VKMT v2, v3 et v4 sont reconnus ; un format inconnu
@@ -332,8 +332,8 @@ Si aucune paire ne subsiste, la reconstruction ne démarre pas.
 
 Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final :
 il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
-calcul existant, déplacer le workspace `panoramax/sfm-NUM_ITER/` **et**
-les entraînements `panoramax/gs-NUM_ITER-blocks-NUM_BLOCKS/` en sauvegarde,
+calcul existant, déplacer le workspace `panoramax/sfm-TRAIN_NUM_ITER/` **et**
+les entraînements `panoramax/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/` en sauvegarde,
 puis relancer la préparation et les blocs ; garder `images/` et `metadata/`
 pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
 la signature ne correspond pas au rayon, aux paramètres et aux entrées.
@@ -352,7 +352,7 @@ Les ressources sont définies par les variables `SLURM_*` commentées dans
 `config.sh.example` : partition, CPU, RAM, durée, type GPU, compte et QoS.
 Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
 CPU, RAM et durée sont demandés **par job/tâche**, pas pour l'ensemble.
-`SLURM_BLOCK_PARALLELISM` limite les blocs simultanés (défaut : `NUM_BLOCKS`,
+`SLURM_BLOCK_PARALLELISM` limite les blocs simultanés (défaut : `SPLIT_NUM_BLOCKS`,
 `1` pour les entraîner successivement). Quatre blocs simultanés réservent
 jusqu'à quatre GPU et quatre fois les CPU/RAM configurés.
 La partition choisie doit aussi autoriser le job de fusion sans GPU.
@@ -444,3 +444,39 @@ seul :
 python3 tools/panoramax/prepare_sfm.py --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm --dry-run
 ```
+
+### Noms des paramètres par étape
+
+Les configurations locales et Slurm utilisent les mêmes noms préfixés.
+Les chemins et outils communs (`OUTPUT_DIR`, `GIT_ROOT`, `SPIRULA_BIN`,
+`PYTHON_BIN`) ainsi que les variables natives d'environnement restent inchangés.
+Les anciens noms ci-dessous sont **refusés**, même vides ou accompagnés du
+nouveau nom ; mettre à jour le fichier de configuration avant de relancer.
+Les options CLI Spirula et les noms des dossiers de calcul ne changent pas.
+
+| Ancien nom | Nouveau nom |
+|---|---|
+| `BBOX_LAMBERT93` | `PANORAMAX_BBOX_LAMBERT93` |
+| `NUM_BLOCKS` | `SPLIT_NUM_BLOCKS` |
+| `OVERLAP_MAX_FRACTION` | `SPLIT_OVERLAP_MAX_FRACTION` |
+| `NUM_ITER` | `TRAIN_NUM_ITER` |
+| `CAP_MAX` | `TRAIN_CAP_MAX` |
+| `SPLATS_PER_IMAGE` | `TRAIN_SPLATS_PER_IMAGE` |
+| `GROWTH_FACTOR` | `TRAIN_GROWTH_FACTOR` |
+| `REFINE_STOP_ITER` | `TRAIN_REFINE_STOP_ITER` |
+| `REFINE_STOP_NUM_ITER` | `TRAIN_REFINE_STOP_NUM_ITER` |
+| `FLOATER_SUPPRESSION` | `TRAIN_FLOATER_SUPPRESSION` |
+| `CLEAN_GS` | `TRAIN_CLEAN` |
+| `SAM_ACCEPT_LICENSE` | `MASKS_ACCEPT_LICENSE` |
+| `SPLAT_NAME` | `EXPORT_SPLAT_NAME` |
+| `SPLAT_MERGE_STRENGTH` | `MERGE_STRENGTH` |
+| `SPLAT_CLEANER` | `POSTPROCESS_CLEANER` |
+| `SPLAT_FILTER_MODE` | `POSTPROCESS_FILTER_MODE` |
+| `SPLAT_FILTER_SIZE_FACTOR` | `POSTPROCESS_FILTER_SIZE_FACTOR` |
+| `SPLAT_SPARSE_BBOX_MODE` | `POSTPROCESS_SPARSE_BBOX_MODE` |
+| `SPLAT_SPARSE_BBOX_MARGIN` | `POSTPROCESS_SPARSE_BBOX_MARGIN` |
+
+Pour le worker `scripts/run_spirula_block.sh`, les anciennes variables
+`QUALITY`, `NUM_ITERATIONS` et `CLEAN` sont également refusées : utiliser
+`TRAIN_QUALITY`, `TRAIN_NUM_ITER` et `TRAIN_CLEAN`. Les arguments CLI du
+worker (`--quality`, `--num-iterations`, `--clean`) restent disponibles.

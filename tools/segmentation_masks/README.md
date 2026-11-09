@@ -66,7 +66,7 @@ TRAIN_MASKS_MODE="auto"
 
 Il faut un Spirula compilé avec `SS_BUILD_SAM=ON` (backend Vulkan) et un checkpoint **SAM 3 GGML**, pas les poids Transformers de l'installateur.
 
-Lire les conditions de la licence SAM 3 Meta avant de l'accepter. Pour un lancement non interactif, après acceptation explicite par l'utilisateur, définir `SAM_ACCEPT_LICENSE="true"` dans la configuration : chaque appel natif reçoit `--accept-license sam3=yes`, aussi bien pour le SfM que pour le 3DGS. Cette option vaut `false` par défaut. Pour le générateur autonome, l'équivalent est `--accept-spirula-license`.
+Lire les conditions de la licence SAM 3 Meta avant de l'accepter. Pour un lancement non interactif, après acceptation explicite par l'utilisateur, définir `MASKS_ACCEPT_LICENSE="true"` dans la configuration : chaque appel natif reçoit `--accept-license sam3=yes`, aussi bien pour le SfM que pour le 3DGS. Cette option vaut `false` par défaut. Pour le générateur autonome, l'équivalent est `--accept-spirula-license`.
 
 On peut aussi accepter sur un terminal avec `"$SPIRULA_BIN" sam devices --accept-license sam3`, avec le même compte et le même `HOME` que les jobs. Les messages et erreurs de Spirula sont transmis aux journaux, même sans `--verbose`.
 
@@ -83,7 +83,7 @@ Les labels deviennent des **prompts anglais libres**, unis par SAM : `"sky,perso
 
 Pour SAM, `TRAIN_MASKS_CONFIDENCE` règle le **score de détection SAM** transmis à Spirula (`--threshold`), pas une probabilité sémantique par pixel. La dilatation reste une fraction de la diagonale de l'image, appliquée après SAM ; l'élargissement natif par objet est désactivé. Le garde-fou `TRAIN_MASKS_MAX_FRACTION` reste actif.
 
-Un changement de moteur ou de paramètres de génération invalide les masques existants. `CLEAN_GS=true` est nécessaire pour réentraîner des blocs déjà terminés.
+Un changement de moteur ou de paramètres de génération invalide les masques existants. `TRAIN_CLEAN=true` est nécessaire pour réentraîner des blocs déjà terminés.
 
 ## Segmenteurs Transformers
 
@@ -203,7 +203,7 @@ Pour Mapillary sur le Mac testé dans ce projet, le traitement CPU a reconnu 4 %
 - **Mode verbose** : `tmp_labels/` est recréé et les images sont recalculées pour produire les diagnostics, même si des masques existaient déjà.
 - **Garde-fou** : si une image dépasse `--max-masked-fraction`, son masque de sortie est entièrement blanc (aucun pixel masqué) et son statut est `overmasked_kept`. Cela évite qu'une erreur de segmentation supprime une vue entière.
 - **Sous-dossiers** : les chemins relatifs des images sont conservés dans les dossiers de sortie, y compris pour les diagnostics.
-- **Intégration pipeline** : chaque bloc enregistre les masques utilisés dans `train_masks.txt`. Un bloc déjà entraîné est réutilisé, avec un avertissement si ses masques diffèrent ; `CLEAN_GS=true` force le réentraînement.
+- **Intégration pipeline** : chaque bloc enregistre les masques utilisés dans `train_masks.txt`. Un bloc déjà entraîné est réutilisé, avec un avertissement si ses masques diffèrent ; `TRAIN_CLEAN=true` force le réentraînement.
 
 ### Diagnostics `--verbose`
 

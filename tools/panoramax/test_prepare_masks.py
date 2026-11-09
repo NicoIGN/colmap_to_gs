@@ -77,12 +77,12 @@ class PrepareMasksTest(unittest.TestCase):
         self.run_prepare()
         before = len(self.calls)
         os.environ["SFM_MASKS_LABELS"] = "sky"
-        with self.assertRaisesRegex(ValueError, "CLEAN_GS"):
+        with self.assertRaisesRegex(ValueError, "TRAIN_CLEAN"):
             self.run_prepare()
         self.assertEqual(len(self.calls), before)
         os.environ["SFM_MASKS_LABELS"] = "sky,person,car"
         (self.data / "images/a.jpg").write_bytes(b"new-image")
-        with self.assertRaisesRegex(ValueError, "CLEAN_GS"):
+        with self.assertRaisesRegex(ValueError, "TRAIN_CLEAN"):
             self.run_prepare()
 
     def test_existing_unmasked_sfm_and_feature_directory_are_not_overwritten(self):

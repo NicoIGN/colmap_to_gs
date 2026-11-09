@@ -62,10 +62,10 @@ source "$script_dir/validate_config.sh"
 validate_config || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
-: "${BBOX_LAMBERT93:?BBOX_LAMBERT93 doit être défini dans la configuration}"
-: "${NUM_BLOCKS:?NUM_BLOCKS doit être défini dans la configuration}"
-: "${NUM_ITER:?NUM_ITER doit être défini dans la configuration}"
-: "${CAP_MAX:?CAP_MAX doit être défini dans la configuration}"
+: "${PANORAMAX_BBOX_LAMBERT93:?PANORAMAX_BBOX_LAMBERT93 doit être défini dans la configuration}"
+: "${SPLIT_NUM_BLOCKS:?SPLIT_NUM_BLOCKS doit être défini dans la configuration}"
+: "${TRAIN_NUM_ITER:?TRAIN_NUM_ITER doit être défini dans la configuration}"
+: "${TRAIN_CAP_MAX:?TRAIN_CAP_MAX doit être défini dans la configuration}"
 : "${TRAIN_PRESET:?TRAIN_PRESET doit être défini dans la configuration}"
 
 PANORAMAX_API_URL="${PANORAMAX_API_URL:-https://explore.panoramax.fr/api}"
@@ -82,32 +82,32 @@ SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"
 SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
-OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
-CLEAN_GS="${CLEAN_GS:-false}"
-SPLAT_NAME="${SPLAT_NAME:-panoramax.splat}"
-SPLAT_MERGE_STRENGTH="${SPLAT_MERGE_STRENGTH:-1.0}"
-SPLAT_FILTER_MODE="${SPLAT_FILTER_MODE:-diagnostic}"
-SPLAT_FILTER_SIZE_FACTOR="${SPLAT_FILTER_SIZE_FACTOR:-10}"
-SPLAT_CLEANER="${SPLAT_CLEANER:-contextual}"
+SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
+TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
+EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-panoramax.splat}"
+MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
+POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+POSTPROCESS_FILTER_SIZE_FACTOR="${POSTPROCESS_FILTER_SIZE_FACTOR:-10}"
+POSTPROCESS_CLEANER="${POSTPROCESS_CLEANER:-contextual}"
 CLEANGS_PYTHON="${CLEANGS_PYTHON:-$PYTHON_BIN}"
 CLEANGS_MODEL="${CLEANGS_MODEL:-}"
 CLEANGS_MODE="${CLEANGS_MODE:-diagnostic}"
 CLEANGS_MIN_VIEWS="${CLEANGS_MIN_VIEWS:-2}"
 CLEANGS_SKY_CONFIDENCE="${CLEANGS_SKY_CONFIDENCE:-0.9}"
 CLEANGS_MAX_REMOVAL_FRACTION="${CLEANGS_MAX_REMOVAL_FRACTION:-0.2}"
-SPLAT_SPARSE_BBOX_MODE="${SPLAT_SPARSE_BBOX_MODE:-apply}"
-SPLAT_SPARSE_BBOX_MARGIN="${SPLAT_SPARSE_BBOX_MARGIN:-0.05}"
-SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
-GROWTH_FACTOR="${GROWTH_FACTOR:-}"
-REFINE_STOP_ITER="${REFINE_STOP_ITER:-}"
-REFINE_STOP_NUM_ITER="${REFINE_STOP_NUM_ITER:-}"
-FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-off}"
+POSTPROCESS_SPARSE_BBOX_MODE="${POSTPROCESS_SPARSE_BBOX_MODE:-apply}"
+POSTPROCESS_SPARSE_BBOX_MARGIN="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.05}"
+TRAIN_SPLATS_PER_IMAGE="${TRAIN_SPLATS_PER_IMAGE:-}"
+TRAIN_GROWTH_FACTOR="${TRAIN_GROWTH_FACTOR:-}"
+TRAIN_REFINE_STOP_ITER="${TRAIN_REFINE_STOP_ITER:-}"
+TRAIN_REFINE_STOP_NUM_ITER="${TRAIN_REFINE_STOP_NUM_ITER:-}"
+TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-off}"
 TRAIN_QUALITY="${TRAIN_QUALITY:-}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
 TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
-SAM_ACCEPT_LICENSE="${SAM_ACCEPT_LICENSE:-false}"
+MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
 TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
@@ -117,34 +117,34 @@ TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
 
-[[ "$NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "NUM_BLOCKS doit être un entier positif."
-[[ "$NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "NUM_ITER doit être un entier positif."
-[[ "$CAP_MAX" =~ ^[1-9][0-9]*$ ]] || die "CAP_MAX doit être un entier positif."
+[[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
+[[ "$TRAIN_NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "TRAIN_NUM_ITER doit être un entier positif."
+[[ "$TRAIN_CAP_MAX" =~ ^[1-9][0-9]*$ ]] || die "TRAIN_CAP_MAX doit être un entier positif."
 [[ "$SFM_MAX_IMAGE_SIZE" =~ ^[1-9][0-9]*$ ]] || die "SFM_MAX_IMAGE_SIZE doit être un entier positif."
 [[ "$SFM_ALIKED_MAX_FEATURES" =~ ^[1-9][0-9]*$ ]] || die "SFM_ALIKED_MAX_FEATURES doit être un entier positif."
 [[ -z "$PANORAMAX_IMAGE_MAX" || "$PANORAMAX_IMAGE_MAX" =~ ^[1-9][0-9]*$ ]] ||
   die "PANORAMAX_IMAGE_MAX doit être vide ou un entier positif."
 [[ "$PANORAMAX_QUALITY" == hd || "$PANORAMAX_QUALITY" == sd || "$PANORAMAX_QUALITY" == thumb ]] ||
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
-[[ "$SPLAT_NAME" == *.splat && "$SPLAT_NAME" != */* && "$SPLAT_NAME" != .splat ]] ||
-  die "SPLAT_NAME doit être un nom de fichier terminé par .splat."
-[[ "$SPLAT_MERGE_STRENGTH" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-  awk -v value="$SPLAT_MERGE_STRENGTH" 'BEGIN { exit !(value > 0) }' ||
-  die "SPLAT_MERGE_STRENGTH doit être un nombre positif."
+[[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* && "$EXPORT_SPLAT_NAME" != .splat ]] ||
+  die "EXPORT_SPLAT_NAME doit être un nom de fichier terminé par .splat."
+[[ "$MERGE_STRENGTH" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+  awk -v value="$MERGE_STRENGTH" 'BEGIN { exit !(value > 0) }' ||
+  die "MERGE_STRENGTH doit être un nombre positif."
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
 
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 DATASET_DIR="$OUTPUT_DIR/panoramax"
-SFM_DIR="$DATASET_DIR/sfm-$NUM_ITER"
-BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
-GS_ROOT="$DATASET_DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
+SFM_DIR="$DATASET_DIR/sfm-$TRAIN_NUM_ITER"
+BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
+GS_ROOT="$DATASET_DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 prepare_images() {
   local bbox_args request_status=0 archive
   if [[ -e "$DATASET_DIR/request.json" ]]; then
     "$PYTHON_BIN" - \
-    "$DATASET_DIR/request.json" "$BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
+    "$DATASET_DIR/request.json" "$PANORAMAX_BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
     "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY' || request_status=$?
 import json
 import sys
@@ -191,7 +191,7 @@ PY
     die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
   fi
 
-  bbox_args=(--bbox "$BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
+  bbox_args=(--bbox "$PANORAMAX_BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
@@ -250,14 +250,14 @@ if [[ "$phase" != merge ]]; then
   DIR="$DATASET_DIR" \
   SPIRULA_BIN="$SPIRULA_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
-  NUM_ITER="$NUM_ITER" \
-  NUM_BLOCKS="$NUM_BLOCKS" \
-  CAP_MAX="$CAP_MAX" \
-  SPLATS_PER_IMAGE="$SPLATS_PER_IMAGE" \
-  GROWTH_FACTOR="$GROWTH_FACTOR" \
-  REFINE_STOP_ITER="$REFINE_STOP_ITER" \
-  REFINE_STOP_NUM_ITER="$REFINE_STOP_NUM_ITER" \
-  FLOATER_SUPPRESSION="$FLOATER_SUPPRESSION" \
+  TRAIN_NUM_ITER="$TRAIN_NUM_ITER" \
+  SPLIT_NUM_BLOCKS="$SPLIT_NUM_BLOCKS" \
+  TRAIN_CAP_MAX="$TRAIN_CAP_MAX" \
+  TRAIN_SPLATS_PER_IMAGE="$TRAIN_SPLATS_PER_IMAGE" \
+  TRAIN_GROWTH_FACTOR="$TRAIN_GROWTH_FACTOR" \
+  TRAIN_REFINE_STOP_ITER="$TRAIN_REFINE_STOP_ITER" \
+  TRAIN_REFINE_STOP_NUM_ITER="$TRAIN_REFINE_STOP_NUM_ITER" \
+  TRAIN_FLOATER_SUPPRESSION="$TRAIN_FLOATER_SUPPRESSION" \
   TRAIN_PRESET="$TRAIN_PRESET" \
   TRAIN_QUALITY="$TRAIN_QUALITY" \
   SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
@@ -267,8 +267,8 @@ if [[ "$phase" != merge ]]; then
   SFM_MATCHER="$SFM_MATCHER" \
   SFM_THREADS="$SFM_THREADS" \
   SFM_PAIR_MAX_DISTANCE="$SFM_PAIR_MAX_DISTANCE" \
-  OVERLAP_MAX_FRACTION="$OVERLAP_MAX_FRACTION" \
-  CLEAN_GS="$CLEAN_GS" \
+  SPLIT_OVERLAP_MAX_FRACTION="$SPLIT_OVERLAP_MAX_FRACTION" \
+  TRAIN_CLEAN="$TRAIN_CLEAN" \
   SFM_MASKS="${SFM_MASKS:-off}" \
   SFM_MASKS_BACKEND="${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" \
   SFM_MASKS_PYTHON="${SFM_MASKS_PYTHON:-$TRAIN_MASKS_PYTHON}" \
@@ -284,7 +284,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_MASKS_BACKEND="$TRAIN_MASKS_BACKEND" \
   TRAIN_MASKS_SPIRULA_MODEL="$TRAIN_MASKS_SPIRULA_MODEL" \
   TRAIN_MASKS_SPIRULA_DEVICE="$TRAIN_MASKS_SPIRULA_DEVICE" \
-  SAM_ACCEPT_LICENSE="$SAM_ACCEPT_LICENSE" \
+  MASKS_ACCEPT_LICENSE="$MASKS_ACCEPT_LICENSE" \
   TRAIN_MASKS_PYTHON="$TRAIN_MASKS_PYTHON" \
   TRAIN_MASKS_MODEL="$TRAIN_MASKS_MODEL" \
   TRAIN_MASKS_LABELS="$TRAIN_MASKS_LABELS" \
@@ -302,21 +302,21 @@ fi
 
 pipeline_stage="vérification des splats avant fusion"
 MERGE_INPUTS=()
-for ((index = 0; index < NUM_BLOCKS; index++)); do
+for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
-  splat="$GS_ROOT/block_$block_id/splats/Paris-${NUM_ITER}-block-${block_id}.splat"
+  splat="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
   [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
   MERGE_INPUTS+=("$splat")
 done
 
-FINAL_SPLAT="$OUTPUT_DIR/$SPLAT_NAME"
-UNFILTERED_SPLAT="$OUTPUT_DIR/${SPLAT_NAME%.splat}.unfiltered.splat"
+FINAL_SPLAT="$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
+UNFILTERED_SPLAT="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.unfiltered.splat"
 printf '[pipeline] Fusion des blocs vers %s\n' "$UNFILTERED_SPLAT"
 pipeline_stage="fusion des splats des blocs"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
-  "${MERGE_INPUTS[@]}" --output "$UNFILTERED_SPLAT" --strength "$SPLAT_MERGE_STRENGTH"
+  "${MERGE_INPUTS[@]}" --output "$UNFILTERED_SPLAT" --strength "$MERGE_STRENGTH"
 [[ -s "$UNFILTERED_SPLAT" ]] || die "Splat fusionné absent ou vide : $UNFILTERED_SPLAT"
-if [[ "$SPLAT_CLEANER" == cleangs ]]; then
+if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
   pipeline_stage="filtre Clean-GS multivues"
   "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
@@ -327,15 +327,15 @@ else
   pipeline_stage="filtre contextuel global des splats"
   "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-    --mode "$SPLAT_FILTER_MODE" --size-factor "$SPLAT_FILTER_SIZE_FACTOR" \
+    --mode "$POSTPROCESS_FILTER_MODE" --size-factor "$POSTPROCESS_FILTER_SIZE_FACTOR" \
     --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
-    --sparse-bbox-mode "$SPLAT_SPARSE_BBOX_MODE" \
-    --sparse-bbox-margin "$SPLAT_SPARSE_BBOX_MARGIN" --overwrite
+    --sparse-bbox-mode "$POSTPROCESS_SPARSE_BBOX_MODE" \
+    --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
 fi
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
-GEOREF_DIR="$OUTPUT_DIR/${SPLAT_NAME%.splat}.georef"
+GEOREF_DIR="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.georef"
 pipeline_stage="copie des références de géoréférencement"
 mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
@@ -344,11 +344,11 @@ cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$SFM_DIR/sparse/0/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
-cp "$OUTPUT_DIR/${SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
+cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
 if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
   cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
 fi
-for ((index = 0; index < NUM_BLOCKS; index++)); do
+for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
   transform="$GS_ROOT/block_$block_id/splats/scene_transform.json"
   [[ -s "$transform" ]] || die "Transformation d'entraînement absente : $transform"
@@ -356,7 +356,7 @@ for ((index = 0; index < NUM_BLOCKS; index++)); do
   cp "$transform" "$GEOREF_DIR/scene_transforms/block_${block_id}.json"
 done
 "$PYTHON_BIN" - "$GEOREF_DIR/georeference.json" "$FINAL_SPLAT" \
-  "$SPLAT_NAME" "$NUM_BLOCKS" "$NUM_ITER" <<'PY'
+  "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS" "$TRAIN_NUM_ITER" <<'PY'
 import json
 import sys
 from pathlib import Path

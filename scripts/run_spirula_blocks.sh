@@ -5,18 +5,20 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
+source "$repo_root/tools/panoramax/validate_config.sh"
+reject_legacy_config || exit 1
 
 DIR="${DIR:-}"
 SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-NUM_ITER="${NUM_ITER:-30000}"
-NUM_BLOCKS="${NUM_BLOCKS:-4}"
-CAP_MAX="${CAP_MAX:-1500000}"
-SPLATS_PER_IMAGE="${SPLATS_PER_IMAGE:-}"
-GROWTH_FACTOR="${GROWTH_FACTOR:-}"
-REFINE_STOP_ITER="${REFINE_STOP_ITER:-}"
-REFINE_STOP_NUM_ITER="${REFINE_STOP_NUM_ITER:-}"
-FLOATER_SUPPRESSION="${FLOATER_SUPPRESSION:-}"
+TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
+SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
+TRAIN_CAP_MAX="${TRAIN_CAP_MAX:-1500000}"
+TRAIN_SPLATS_PER_IMAGE="${TRAIN_SPLATS_PER_IMAGE:-}"
+TRAIN_GROWTH_FACTOR="${TRAIN_GROWTH_FACTOR:-}"
+TRAIN_REFINE_STOP_ITER="${TRAIN_REFINE_STOP_ITER:-}"
+TRAIN_REFINE_STOP_NUM_ITER="${TRAIN_REFINE_STOP_NUM_ITER:-}"
+TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
 TRAIN_QUALITY="${TRAIN_QUALITY:-}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
@@ -26,13 +28,13 @@ SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
 SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
-OVERLAP_MAX_FRACTION="${OVERLAP_MAX_FRACTION:-0.05}"
-CLEAN_GS="${CLEAN_GS:-false}"
+SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
+TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
 TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
-SAM_ACCEPT_LICENSE="${SAM_ACCEPT_LICENSE:-false}"
+MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
 TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
@@ -55,7 +57,7 @@ block_index=""
 usage() {
   cat <<'EOF'
 Usage:
-  DIR=/path/to/panoramax [NUM_BLOCKS=4] bash run_spirula_blocks.sh [options]
+  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=4] bash run_spirula_blocks.sh [options]
 
 Options:
   --prepare-only            Run/reuse SfM and partition, without training
@@ -65,15 +67,15 @@ Variables:
   DIR                       Panoramax dataset; contains images/ and metadata/
   SPIRULA_BIN               Spirula executable (default: shared launcher logic)
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
-  NUM_ITER                  SfM workspace suffix and training iterations (30000)
-  NUM_BLOCKS                Number of COLMAP blocks (4)
-  CAP_MAX                   Maximum splats per block (1500000)
-  SPLATS_PER_IMAGE          Optional budget: block cap = min(CAP_MAX, images × value)
-  GROWTH_FACTOR             Optional Spirula growth per refine round (> 1)
-  REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
-  REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
-                            Growth stops at max(REFINE_STOP_ITER, NUM_ITER - REFINE_STOP_NUM_ITER)
-  FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
+  TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
+  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (4)
+  TRAIN_CAP_MAX                   Maximum splats per block (1500000)
+  TRAIN_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_CAP_MAX, images × value)
+  TRAIN_GROWTH_FACTOR             Optional Spirula growth per refine round (> 1)
+  TRAIN_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
+  TRAIN_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+                            Growth stops at max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)
+  TRAIN_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_PRESET              Spirula training preset (3dgs)
   TRAIN_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
@@ -84,13 +86,13 @@ Variables:
   SFM_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   SFM_THREADS               SfM CPU threads (empty: Spirula default)
   SFM_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
-  OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
-  CLEAN_GS=true             Re-train blocks from scratch (destructive to GS outputs)
+  SPLIT_OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
+  TRAIN_CLEAN=true             Re-train blocks from scratch (destructive to GS outputs)
   TRAIN_MASKS               off (default) or on: segmentation masks for training
   TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
   TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
   TRAIN_MASKS_SPIRULA_DEVICE Vulkan device: auto, index, name or uuid
-  SAM_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
+  MASKS_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
   TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
@@ -135,39 +137,39 @@ esac
 [[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
 [[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
 
-for value_name in NUM_ITER NUM_BLOCKS CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
+for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS TRAIN_CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
   value="${!value_name}"
   [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$value_name doit être un entier positif : $value"
 done
-[[ "$NUM_BLOCKS" -ge 1 ]] || die "NUM_BLOCKS doit être supérieur ou égal à 1."
-[[ "$CAP_MAX" -ge 1 ]] || die "CAP_MAX doit être supérieur ou égal à 1."
-[[ -z "$SPLATS_PER_IMAGE" || "$SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
-  die "SPLATS_PER_IMAGE doit être vide ou un entier positif."
-[[ -z "$GROWTH_FACTOR" ]] || {
-  [[ "$GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-    awk -v x="$GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
-} || die "GROWTH_FACTOR doit être vide ou un nombre > 1."
-for value_name in REFINE_STOP_ITER REFINE_STOP_NUM_ITER; do
+[[ "$SPLIT_NUM_BLOCKS" -ge 1 ]] || die "SPLIT_NUM_BLOCKS doit être supérieur ou égal à 1."
+[[ "$TRAIN_CAP_MAX" -ge 1 ]] || die "TRAIN_CAP_MAX doit être supérieur ou égal à 1."
+[[ -z "$TRAIN_SPLATS_PER_IMAGE" || "$TRAIN_SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
+  die "TRAIN_SPLATS_PER_IMAGE doit être vide ou un entier positif."
+[[ -z "$TRAIN_GROWTH_FACTOR" ]] || {
+  [[ "$TRAIN_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v x="$TRAIN_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
+} || die "TRAIN_GROWTH_FACTOR doit être vide ou un nombre > 1."
+for value_name in TRAIN_REFINE_STOP_ITER TRAIN_REFINE_STOP_NUM_ITER; do
   value="${!value_name}"
   [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
     die "$value_name doit être vide ou un entier >= 0 : $value"
 done
-growth_stop=$(( ${REFINE_STOP_ITER:-14000} > NUM_ITER - ${REFINE_STOP_NUM_ITER:-2500} ?
-                ${REFINE_STOP_ITER:-14000} : NUM_ITER - ${REFINE_STOP_NUM_ITER:-2500} ))
-if ((growth_stop >= NUM_ITER)); then
-  printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
-    "$growth_stop" "$NUM_ITER" >&2
+growth_stop=$(( ${TRAIN_REFINE_STOP_ITER:-14000} > TRAIN_NUM_ITER - ${TRAIN_REFINE_STOP_NUM_ITER:-2500} ?
+                ${TRAIN_REFINE_STOP_ITER:-14000} : TRAIN_NUM_ITER - ${TRAIN_REFINE_STOP_NUM_ITER:-2500} ))
+if ((growth_stop >= TRAIN_NUM_ITER)); then
+  printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= TRAIN_NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
+    "$growth_stop" "$TRAIN_NUM_ITER" >&2
 fi
-case "$FLOATER_SUPPRESSION" in
+case "$TRAIN_FLOATER_SUPPRESSION" in
   ""|off|mild|strong) ;;
-  *) die "FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
+  *) die "TRAIN_FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
 esac
 case "$TRAIN_QUALITY" in
   ""|low|medium|high|ultra) ;;
   *) die "TRAIN_QUALITY doit être vide, low, medium, high ou ultra." ;;
 esac
-[[ -z "$block_index" || "$block_index" -lt "$NUM_BLOCKS" ]] ||
-  die "Indice de bloc $block_index hors de [0,$((NUM_BLOCKS - 1))]."
+[[ -z "$block_index" || "$block_index" -lt "$SPLIT_NUM_BLOCKS" ]] ||
+  die "Indice de bloc $block_index hors de [0,$((SPLIT_NUM_BLOCKS - 1))]."
 [[ -z "$SFM_THREADS" || "$SFM_THREADS" =~ ^[1-9][0-9]*$ ]] ||
   die "SFM_THREADS doit être vide ou un entier positif."
 if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
@@ -175,12 +177,12 @@ if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
     awk -v radius="$SFM_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
     die "SFM_PAIR_MAX_DISTANCE doit être vide ou un nombre positif."
 fi
-[[ "$OVERLAP_MAX_FRACTION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] ||
-  die "OVERLAP_MAX_FRACTION doit être dans [0,1] : $OVERLAP_MAX_FRACTION"
-case "$CLEAN_GS" in
-  true|1|yes|on) CLEAN_GS=true ;;
-  false|0|no|off) CLEAN_GS=false ;;
-  *) die "CLEAN_GS invalide : $CLEAN_GS" ;;
+[[ "$SPLIT_OVERLAP_MAX_FRACTION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] ||
+  die "SPLIT_OVERLAP_MAX_FRACTION doit être dans [0,1] : $SPLIT_OVERLAP_MAX_FRACTION"
+case "$TRAIN_CLEAN" in
+  true|1|yes|on) TRAIN_CLEAN=true ;;
+  false|0|no|off) TRAIN_CLEAN=false ;;
+  *) die "TRAIN_CLEAN invalide : $TRAIN_CLEAN" ;;
 esac
 
 case "$TRAIN_MASKS" in
@@ -193,10 +195,10 @@ case "$SFM_MASKS" in
   off|false|0|no) SFM_MASKS=off ;;
   *) die "SFM_MASKS doit être on ou off." ;;
 esac
-case "$SAM_ACCEPT_LICENSE" in
-  true|1|yes|on) SAM_ACCEPT_LICENSE=true ;;
-  false|0|no|off) SAM_ACCEPT_LICENSE=false ;;
-  *) die "SAM_ACCEPT_LICENSE doit être true ou false." ;;
+case "$MASKS_ACCEPT_LICENSE" in
+  true|1|yes|on) MASKS_ACCEPT_LICENSE=true ;;
+  false|0|no|off) MASKS_ACCEPT_LICENSE=false ;;
+  *) die "MASKS_ACCEPT_LICENSE doit être true ou false." ;;
 esac
 if [[ "$TRAIN_MASKS" == on ]]; then
   case "$TRAIN_MASKS_BACKEND" in
@@ -241,16 +243,16 @@ else
 fi
 
 DIR="$(cd -- "$DIR" && pwd)"
-SFM_DIR="$DIR/sfm-$NUM_ITER"
+SFM_DIR="$DIR/sfm-$TRAIN_NUM_ITER"
 SPARSE_DIR="$SFM_DIR/sparse/0"
-BLOCKS_DIR="$SFM_DIR/blocks-$NUM_BLOCKS"
+BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 MASKS_DIR="$SFM_DIR/train_masks"
-GS_ROOT="$DIR/gs-${NUM_ITER}-blocks-${NUM_BLOCKS}"
+GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
-  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE SAM_ACCEPT_LICENSE
+  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
   for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
     export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
   done
@@ -316,7 +318,7 @@ prepare_blocks() {
     local mask_model="$TRAIN_MASKS_MODEL"
     local license_args=()
     [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
-    [[ "$TRAIN_MASKS_BACKEND" != spirula || "$SAM_ACCEPT_LICENSE" != true ]] ||
+    [[ "$TRAIN_MASKS_BACKEND" != spirula || "$MASKS_ACCEPT_LICENSE" != true ]] ||
       license_args+=(--accept-spirula-license)
     printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
       "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
@@ -341,9 +343,9 @@ with open(sys.argv[1], encoding="utf-8") as manifest:
 print(len(data.get("blocks", [])))
 PY
 )" || die "Manifest de blocs invalide : $BLOCKS_DIR/manifest.json"
-    [[ "$block_count" == "$NUM_BLOCKS" ]] ||
-      die "$BLOCKS_DIR contient $block_count blocs, mais NUM_BLOCKS=$NUM_BLOCKS. Choisir un autre nombre ou un autre workspace."
-    for ((index = 0; index < NUM_BLOCKS; index++)); do
+    [[ "$block_count" == "$SPLIT_NUM_BLOCKS" ]] ||
+      die "$BLOCKS_DIR contient $block_count blocs, mais SPLIT_NUM_BLOCKS=$SPLIT_NUM_BLOCKS. Choisir un autre nombre ou un autre workspace."
+    for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
       block_id="$(printf '%03d' "$index")"
       block_sparse="$BLOCKS_DIR/block_$block_id"
       for file in cameras.bin images.bin points3D.bin; do
@@ -351,18 +353,18 @@ PY
           die "Découpage existant incomplet : $block_sparse/$file. Il n'a pas été modifié."
       done
     done
-    printf '[pipeline] Découpage existant : %s (%s blocs).\n' "$BLOCKS_DIR" "$NUM_BLOCKS"
+    printf '[pipeline] Découpage existant : %s (%s blocs).\n' "$BLOCKS_DIR" "$SPLIT_NUM_BLOCKS"
   else
     if [[ -e "$BLOCKS_DIR" ]] && [[ -n "$(ls -A "$BLOCKS_DIR" 2>/dev/null)" ]]; then
       die "Sortie de découpage non vide sans manifest valide : $BLOCKS_DIR. Déplacer ou renommer ce dossier avant de relancer."
     fi
-    printf '[pipeline] Découpage de %s en %s blocs.\n' "$SPARSE_DIR" "$NUM_BLOCKS"
+    printf '[pipeline] Découpage de %s en %s blocs.\n' "$SPARSE_DIR" "$SPLIT_NUM_BLOCKS"
     "$PYTHON_BIN" "$SPLITTER" \
       --input "$SPARSE_DIR" \
       --output "$BLOCKS_DIR" \
-      --num-blocks "$NUM_BLOCKS" \
+      --num-blocks "$SPLIT_NUM_BLOCKS" \
       --export-binary \
-      --overlap-max-fraction "$OVERLAP_MAX_FRACTION"
+      --overlap-max-fraction "$SPLIT_OVERLAP_MAX_FRACTION"
     [[ -s "$BLOCKS_DIR/manifest.json" ]] || die "Le découpeur n'a pas produit manifest.json."
   fi
 }
@@ -396,24 +398,24 @@ fi
 
 mkdir -p "$GS_ROOT"
 first_index="${block_index:-0}"
-last_index="$NUM_BLOCKS"
+last_index="$SPLIT_NUM_BLOCKS"
 [[ "$mode" != block ]] || last_index=$((block_index + 1))
 for ((index = first_index; index < last_index; index++)); do
   block_id="$(printf '%03d' "$index")"
   block_sparse="$BLOCKS_DIR/block_$block_id"
   block_output="$GS_ROOT/block_$block_id"
-  splat_name="Paris-${NUM_ITER}-block-${block_id}.splat"
-  printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$NUM_BLOCKS"
+  splat_name="Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
+  printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$SPLIT_NUM_BLOCKS"
 
-  block_cap="$CAP_MAX"
-  if [[ -n "$SPLATS_PER_IMAGE" ]]; then
+  block_cap="$TRAIN_CAP_MAX"
+  if [[ -n "$TRAIN_SPLATS_PER_IMAGE" ]]; then
     block_images="$(od -An -t u8 -N 8 "$block_sparse/images.bin" | tr -d '[:space:]')"
     [[ "$block_images" =~ ^[1-9][0-9]*$ ]] ||
       die "Nombre d'images illisible : $block_sparse/images.bin"
-    block_cap=$((block_images * SPLATS_PER_IMAGE))
-    ((block_cap <= CAP_MAX)) || block_cap="$CAP_MAX"
+    block_cap=$((block_images * TRAIN_SPLATS_PER_IMAGE))
+    ((block_cap <= TRAIN_CAP_MAX)) || block_cap="$TRAIN_CAP_MAX"
     printf '[pipeline] Budget du bloc : %s images × %s = %s splats (plafond %s).\n' \
-      "$block_images" "$SPLATS_PER_IMAGE" "$block_cap" "$CAP_MAX"
+      "$block_images" "$TRAIN_SPLATS_PER_IMAGE" "$block_cap" "$TRAIN_CAP_MAX"
   fi
   block_args=(
     --spirula-bin "$SPIRULA_BIN"
@@ -422,19 +424,19 @@ for ((index = first_index; index < last_index; index++)); do
     --output-dir "$block_output"
     --train-preset "$TRAIN_PRESET"
     --cap-max "$block_cap"
-    --num-iterations "$NUM_ITER"
+    --num-iterations "$TRAIN_NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
     --export-filter-mode off
   )
   [[ -z "$TRAIN_QUALITY" ]] || block_args+=(--quality "$TRAIN_QUALITY")
-  [[ -z "$GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$GROWTH_FACTOR")
-  [[ -z "$FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$FLOATER_SUPPRESSION")
-  [[ -z "$REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$REFINE_STOP_ITER")
-  [[ -z "$REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$REFINE_STOP_NUM_ITER")
-  printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < NUM_ITER ? growth_stop : NUM_ITER))" "$NUM_ITER"
+  [[ -z "$TRAIN_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_GROWTH_FACTOR")
+  [[ -z "$TRAIN_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_FLOATER_SUPPRESSION")
+  [[ -z "$TRAIN_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_REFINE_STOP_ITER")
+  [[ -z "$TRAIN_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_REFINE_STOP_NUM_ITER")
+  printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
-  [[ "$CLEAN_GS" != true ]] || block_args+=(--clean)
+  [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"
 done
 

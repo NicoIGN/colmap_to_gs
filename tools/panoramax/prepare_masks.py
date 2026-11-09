@@ -70,7 +70,7 @@ def generate(settings, images, output):
         "--spirula-device", settings["device"] if settings["backend"] == "spirula" else "auto",
         "--device", settings["device"] if settings["backend"] != "spirula" else "auto",
     ]
-    if settings["backend"] == "spirula" and enabled(os.environ.get("SAM_ACCEPT_LICENSE", "false")):
+    if settings["backend"] == "spirula" and enabled(os.environ.get("MASKS_ACCEPT_LICENSE", "false")):
         command.append("--accept-spirula-license")
     print(f"[masques] {output.name} : {settings['backend']}, {settings['labels']}", flush=True)
     subprocess.run(command, check=True)
@@ -120,7 +120,7 @@ def prepare(dataset, workspace, check_only=False):
         raise ValueError(
             "SfM existant/partiel avec une autre politique de masques (ou sans signature). "
             f"Déplacer {workspace} en sauvegarde ou choisir un nouvel OUTPUT_DIR. "
-            "CLEAN_GS ne recalcule pas le SfM.")
+            "TRAIN_CLEAN ne recalcule pas le SfM.")
     images = workspace / "images"
     training = workspace / "train_masks"
     features = workspace / "feature_masks"

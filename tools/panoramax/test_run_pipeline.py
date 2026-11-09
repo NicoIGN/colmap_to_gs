@@ -21,8 +21,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "config.sh"
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
-                'BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
-                'NUM_BLOCKS=2\nNUM_ITER=3\nCAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
             result = subprocess.run(
@@ -58,8 +58,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "config.sh"
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
-                'BBOX_LAMBERT93="652600,6863400,652800,6863500"\n'
-                'NUM_BLOCKS=2\nNUM_ITER=3\nCAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                'PANORAMAX_BBOX_LAMBERT93="652600,6863400,652800,6863500"\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
             run = lambda: subprocess.run(["bash", str(SCRIPT), str(config), "prepare"],
@@ -124,7 +124,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'complete':True},open(os.path.join(root,'gps_filter_run.json'),'w'))\n"
                 "elif args and args[0].endswith('prepare_masks.py'):\n"
                 "  root=args[2]\n"
-                "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='SAM_ACCEPT_LICENSE'},"
+                "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='MASKS_ACCEPT_LICENSE'},"
                 "    open(os.path.join(root,'mask_env.json'),'w'))\n"
                 "elif args and args[0].endswith('colmap_split_blocks.py'):\n"
                 "  out=args[args.index('--output')+1]; n=int(args[args.index('--num-blocks')+1]); os.makedirs(out,exist_ok=True); blocks=[]\n"
@@ -181,22 +181,22 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "dataset.sh"
             config.write_text(
                 f'OUTPUT_DIR="{output}"\n'
-                'BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
                 'PANORAMAX_API_URL="https://example.test/api"\n'
                 'PANORAMAX_QUALITY="hd"\n'
                 'PANORAMAX_IMAGE_MAX="5"\n'
                 f'SPIRULA_BIN="{spirula}"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
-                'NUM_BLOCKS="2"\nNUM_ITER="3"\nCAP_MAX="1000"\n'
+                'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_CAP_MAX="1000"\n'
                 'TRAIN_PRESET="3dgs"\nTRAIN_QUALITY="high"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
                 'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
-                'OVERLAP_MAX_FRACTION="0.05"\nCLEAN_GS="false"\n'
-                'SPLAT_NAME="test.splat"\nSPLAT_MERGE_STRENGTH="1.0"\n'
-                'SPLAT_FILTER_MODE="apply"\nSPLAT_FILTER_SIZE_FACTOR="12"\n'
-                'SPLAT_SPARSE_BBOX_MODE="diagnostic"\nSPLAT_SPARSE_BBOX_MARGIN="0.1"\n'
-                'SPLATS_PER_IMAGE="200"\nGROWTH_FACTOR="1.03"\n'
-                'REFINE_STOP_ITER="2"\nREFINE_STOP_NUM_ITER="1"\nFLOATER_SUPPRESSION="mild"\n'
+                'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'
+                'EXPORT_SPLAT_NAME="test.splat"\nMERGE_STRENGTH="1.0"\n'
+                'POSTPROCESS_FILTER_MODE="apply"\nPOSTPROCESS_FILTER_SIZE_FACTOR="12"\n'
+                'POSTPROCESS_SPARSE_BBOX_MODE="diagnostic"\nPOSTPROCESS_SPARSE_BBOX_MARGIN="0.1"\n'
+                'TRAIN_SPLATS_PER_IMAGE="200"\nTRAIN_GROWTH_FACTOR="1.03"\n'
+                'TRAIN_REFINE_STOP_ITER="2"\nTRAIN_REFINE_STOP_NUM_ITER="1"\nTRAIN_FLOATER_SUPPRESSION="mild"\n'
             )
             log = root / "commands.log"
 
@@ -224,7 +224,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS=on\nSFM_MASKS_BACKEND=spirula\n'
                     'SFM_MASKS_SPIRULA_MODEL=/models/sam3.ggml\n'
                     'SFM_MASKS_LABELS=sky,car,person\nSFM_MASKS_CONFIDENCE=0.6\n'
-                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nSAM_ACCEPT_LICENSE=true\n')
+                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n')
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             mask_env = json.loads((dataset / "sfm-3/mask_env.json").read_text())
@@ -232,7 +232,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(mask_env["SFM_MASKS_BACKEND"], "spirula")
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
             self.assertEqual(mask_env["SFM_MASKS_DILATE"], "0.003")
-            self.assertEqual(mask_env["SAM_ACCEPT_LICENSE"], "true")
+            self.assertEqual(mask_env["MASKS_ACCEPT_LICENSE"], "true")
             gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
             self.assertEqual(gps_args[gps_args.index("--feature-masks") + 1],
                              str(dataset / "sfm-3/feature_masks"))
@@ -265,12 +265,12 @@ class PanoramaxPipelineTest(unittest.TestCase):
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
             with config.open("a") as stream:
-                stream.write('SPLAT_CLEANER="cleangs"\nCLEANGS_MODEL="/local/model"\n')
+                stream.write('POSTPROCESS_CLEANER="cleangs"\nCLEANGS_MODEL="/local/model"\n')
             result = execute("merge")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(json.loads((georef / "splat_filter_summary.json").read_text())["algorithm"], "cleangs")
             with config.open("a") as stream:
-                stream.write('SPLAT_CLEANER="contextual"\n')
+                stream.write('POSTPROCESS_CLEANER="contextual"\n')
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((georef / "sparse/0").exists())
