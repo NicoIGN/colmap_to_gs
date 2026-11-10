@@ -21,6 +21,23 @@ const MODEL_NAMES = {
   10: "THIN_PRISM_FISHEYE",
 };
 
+export function colmapBounds(positionSets, flip = false) {
+  const min = [Infinity, Infinity, Infinity];
+  const max = [-Infinity, -Infinity, -Infinity];
+  for (const positions of positionSets) {
+    for (let i = 0; i + 2 < positions.length; i += 3) {
+      const point = [positions[i], positions[i + 1], positions[i + 2]];
+      if (!point.every(Number.isFinite)) continue;
+      for (let axis = 0; axis < 3; axis++) {
+        const value = flip && axis > 0 ? -point[axis] : point[axis];
+        min[axis] = Math.min(min[axis], value);
+        max[axis] = Math.max(max[axis], value);
+      }
+    }
+  }
+  return Number.isFinite(min[0]) ? { min, max } : null;
+}
+
 export function cameraFrustumDepth(centers, fallbackRadius) {
   const spans = [0, 1, 2].map((axis) => {
     const values = [];
@@ -460,6 +477,7 @@ export function createColmapLayer({
   getSceneRadius,
   getFlipUp,
   registerLayer,
+  onBoundsChanged,
 }) {
   const sceneColmapInfo = document.getElementById("sceneColmapInfo");
   const input = document.getElementById("colmapFolderInput");
@@ -479,6 +497,7 @@ export function createColmapLayer({
   let frustumsResource = null;
 
   let loaded = null;
+  let bounds = null;
   const unregisterLayers = [];
 
   const removers = [];
@@ -558,6 +577,8 @@ export function createColmapLayer({
     rootEntity = null;
 
     loaded = null;
+    bounds = null;
+    onBoundsChanged?.(null);
 
     refreshUI();
     refreshInfo();
@@ -756,6 +777,8 @@ export function createColmapLayer({
         });
 
         const cameraCenters = buildCameraCenters(images);
+        const modelBounds = colmapBounds([points.positions, cameraCenters]);
+        if (!modelBounds) throw new Error("Le modèle COLMAP ne contient aucune position valide.");
         const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
         console.log("10) build frustums/centers, depth=", depth);
         const frustums = buildFrustumLines(images, cameras, depth);
@@ -813,6 +836,7 @@ export function createColmapLayer({
           frustumsTotal: frustums.total,
           frustumsShown: frustums.shown,
         };
+        bounds = modelBounds;
 
         console.log("13) refresh UI + info", loaded);
 
@@ -836,6 +860,7 @@ export function createColmapLayer({
 
         refreshUI();
         refreshInfo();
+        onBoundsChanged?.(colmapBounds([bounds.min, bounds.max], Boolean(getFlipUp?.())), true);
 
         setStatus(
           `COLMAP chargé : ${loaded.images.toLocaleString("fr-FR")} caméras, ` +
@@ -894,6 +919,7 @@ export function createColmapLayer({
 
     setFlipUp(flip) {
       applyFlipUp(Boolean(flip));
+      if (bounds) onBoundsChanged?.(colmapBounds([bounds.min, bounds.max], Boolean(flip)), false);
     },
 
       dispose() {

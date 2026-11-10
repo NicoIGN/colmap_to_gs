@@ -1,5 +1,23 @@
 import * as THREE from "three";
 
+export function selectionZoom(start, end, viewport) {
+  const x0 = Math.max(0, Math.min(viewport.width, start.x - viewport.left));
+  const y0 = Math.max(0, Math.min(viewport.height, start.y - viewport.top));
+  const x1 = Math.max(0, Math.min(viewport.width, end.x - viewport.left));
+  const y1 = Math.max(0, Math.min(viewport.height, end.y - viewport.top));
+  if (viewport.width <= 0 || viewport.height <= 0 ||
+      Math.abs(x1 - x0) < 5 || Math.abs(y1 - y0) < 5) return null;
+  return {
+    x: (x0 + x1) / viewport.width - 1,
+    y: 1 - (y0 + y1) / viewport.height,
+    scale: Math.max(Math.abs(x1 - x0) / viewport.width, Math.abs(y1 - y0) / viewport.height),
+    left: viewport.left + Math.min(x0, x1),
+    top: viewport.top + Math.min(y0, y1),
+    width: Math.abs(x1 - x0),
+    height: Math.abs(y1 - y0),
+  };
+}
+
 export function createNavigationSystem({
   canvas,
   camera,
@@ -7,6 +25,7 @@ export function createNavigationSystem({
   inputBindings = {},
   getSceneRadius,
   getSceneCenter,
+  getSceneBox,
   getCanNavigate,
   getPrincipalAxis,
   getPrincipalAxisName,
@@ -23,8 +42,8 @@ export function createNavigationSystem({
   const heldButtons = new Map();
 
   const lookBinding = {
-    button: 0,
-    modifier: "ctrlKey",
+    button: 2,
+    modifier: null,
     ...inputBindings.look,
   };
 
@@ -83,7 +102,7 @@ export function createNavigationSystem({
       );
   }
 
-  function finishMouseDrag() {
+  function finishMouseDrag({ commitZoom = false } = {}) {
     const drag = mouseDrag;
 
     if (!drag) return;
@@ -91,6 +110,22 @@ export function createNavigationSystem({
     // Effacer avant releasePointerCapture(), qui peut déclencher
     // lostpointercapture.
     mouseDrag = null;
+    drag.overlay?.remove();
+
+    if (commitZoom && drag.mode === "zoom" && getCanNavigate()) {
+      const box = selectionZoom(drag.start, drag, canvas.getBoundingClientRect());
+      if (box) {
+        const distance = camera.position.distanceTo(target);
+        const halfHeight = distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / camera.zoom;
+        const delta = new THREE.Vector3(box.x * halfHeight * camera.aspect, box.y * halfHeight, 0)
+          .applyQuaternion(camera.quaternion);
+        target.add(delta);
+        camera.position.add(delta);
+        camera.position.sub(target).multiplyScalar(box.scale).add(target);
+        syncCamera();
+        requestGifCapture();
+      }
+    }
 
     if (canvas.hasPointerCapture(drag.id)) {
       canvas.releasePointerCapture(drag.id);
@@ -463,9 +498,11 @@ export function createNavigationSystem({
 
       let mode = null;
 
-      if (
+      if (event.button === 0 && event.ctrlKey) {
+        mode = "zoom";
+      } else if (
         event.button === lookBinding.button &&
-        event[lookBinding.modifier]
+        (!lookBinding.modifier || event[lookBinding.modifier])
       ) {
         mode = "look";
       } else if (event.button === 1 || event.button === 2) {
@@ -490,6 +527,15 @@ export function createNavigationSystem({
         y: event.clientY,
         moved: false,
       };
+      if (mode === "zoom") {
+        mouseDrag.start = { x: event.clientX, y: event.clientY };
+        const overlay = document.createElement("div");
+        overlay.className = "zoom-selection";
+        overlay.style.left = `${event.clientX}px`;
+        overlay.style.top = `${event.clientY}px`;
+        document.body.appendChild(overlay);
+        mouseDrag.overlay = overlay;
+      }
 
       canvas.setPointerCapture(event.pointerId);
     });
@@ -516,6 +562,7 @@ export function createNavigationSystem({
         event.metaKey ||
         (
           drag.mode === "look" &&
+          lookBinding.modifier &&
           !event[lookBinding.modifier]
         )
       ) {
@@ -535,7 +582,16 @@ export function createNavigationSystem({
 
       drag.moved = true;
 
-      if (drag.mode === "look") {
+      if (drag.mode === "zoom") {
+        const box = selectionZoom(drag.start, drag, canvas.getBoundingClientRect());
+        Object.assign(drag.overlay.style, {
+          left: `${box?.left ?? drag.start.x}px`,
+          top: `${box?.top ?? drag.start.y}px`,
+          width: `${box?.width ?? 0}px`,
+          height: `${box?.height ?? 0}px`,
+        });
+        return;
+      } else if (drag.mode === "look") {
         // Radians par pixel CSS.
         // Rotation seule : aucune translation ni sélection de pivot.
         const sensitivity = 0.005;
@@ -556,7 +612,11 @@ export function createNavigationSystem({
 
     const release = (event) => {
       if (mouseDrag?.id !== event.pointerId) return;
-      finishMouseDrag();
+      if (mouseDrag.mode === "zoom" && event.type === "pointerup") {
+        mouseDrag.x = event.clientX;
+        mouseDrag.y = event.clientY;
+      }
+      finishMouseDrag({ commitZoom: event.type === "pointerup" });
     };
 
     [
@@ -732,9 +792,10 @@ export function createNavigationSystem({
       if (key === "r") {
         event.preventDefault();
 
-        if (!event.repeat && lastSceneBox) {
+        const box = getSceneBox?.() ?? lastSceneBox;
+        if (!event.repeat && box && !box.isEmpty()) {
           clearNavigation();
-          fitToView(lastSceneBox);
+          fitToView(box);
         }
 
         return;
@@ -754,10 +815,11 @@ export function createNavigationSystem({
 
       pressedKeys.delete(key);
 
-      // Arrêter le geste dès le relâchement de Ctrl,
+      // Arrêter le geste dès le relâchement du modificateur éventuel,
       // même si la souris ne bouge pas ensuite.
       if (
         mouseDrag?.mode === "look" &&
+        lookBinding.modifier &&
         !event[lookBinding.modifier]
       ) {
         finishMouseDrag();

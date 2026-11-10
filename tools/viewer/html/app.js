@@ -38,7 +38,7 @@ const COLLISION_CONTROL_IDS = [
 ];
 
 const NAVIGATION_INPUT_BINDINGS = {
-  look: { button: 0, modifier: "ctrlKey" },
+  look: { button: 2, modifier: null },
   arrows: {
     ArrowUp: "forward",
     ArrowDown: "backward",
@@ -48,6 +48,7 @@ const NAVIGATION_INPUT_BINDINGS = {
 };
 
 const sceneBox = new THREE.Box3();
+const colmapBox = new THREE.Box3();
 const sceneCenter = new THREE.Vector3();
 
 const principalAxes = {
@@ -119,7 +120,7 @@ function uiIsBlocked() {
 const canNavigate = () =>
   !!app &&
   !disposed &&
-  sceneReady &&
+  (sceneReady || !colmapBox.isEmpty()) &&
   !uiIsBlocked() &&
   !picking &&
   !measurement?.isActive();
@@ -189,9 +190,10 @@ function updateKeyboardHelp() {
 
   if ($("help")) {
     $("help").textContent =
-      "Ctrl + clic gauche-glisser : tourner le regard sur place · " +
+      "Clic droit-glisser : tourner le regard sur place · " +
       "Flèches ou ZQSD/WASD : se déplacer · " +
-      "Clic droit-glisser : déplacement latéral · " +
+      "Clic milieu-glisser : déplacement latéral · " +
+      "Ctrl + clic gauche-glisser : zoom sur une zone · " +
       "Molette : avancer/reculer · Maj + clic : mesurer · R : cadrer";
   }
 }
@@ -482,7 +484,9 @@ function computeSceneBounds() {
   }
 
   const valid = coordinates[0].length;
-  if (!valid) {
+  if (!splatLayers.length && !colmapBox.isEmpty()) {
+    sceneBox.copy(colmapBox);
+  } else if (!valid) {
     sceneBox.set(
       new THREE.Vector3(-1, -1, -1),
       new THREE.Vector3(1, 1, 1)
@@ -1361,6 +1365,7 @@ async function initialize() {
       inputBindings: NAVIGATION_INPUT_BINDINGS,
       getSceneRadius: () => sceneRadius,
       getSceneCenter: () => sceneCenter,
+      getSceneBox: () => sceneBox,
       getCanNavigate: canNavigate,
       getPrincipalAxis,
       getPrincipalAxisName,
@@ -1465,6 +1470,27 @@ async function initialize() {
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
         registerLayer: (layer) => layerManager.add(layer),
+        onBoundsChanged: (bounds, frame) => {
+          colmapBox.makeEmpty();
+          if (bounds) {
+            colmapBox.set(
+              new THREE.Vector3(...bounds.min),
+              new THREE.Vector3(...bounds.max)
+            );
+          }
+          if (!splatLayers.length) {
+            navigation.clearNavigation();
+            if (bounds) {
+              computeSceneBounds();
+              if (frame) navigation.fitToView(sceneBox);
+            } else {
+              sceneBox.makeEmpty();
+              sceneCenter.set(0, 0, 0);
+              sceneRadius = 1;
+            }
+          }
+          refreshUI();
+        },
       });
 
       console.info("[APP] COLMAP initialisé.");

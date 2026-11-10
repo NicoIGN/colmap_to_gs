@@ -346,3 +346,11 @@ textarea {
     display: none;
   }
 }
+.zoom-selection {
+  position: fixed;
+  z-index: 15;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 1px solid #8cc8ff;
+  background: rgba(100, 170, 255, 0.15);
+}
