@@ -8,14 +8,16 @@ import os
 from pathlib import Path
 import sys
 
+from mask_policies import policies
+
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 
 
 def prepare(check=False):
-    source = Path(os.environ["INPUT_IMAGES_DIR"]).resolve()
+    source = Path(os.environ["SFM_IMAGES_DIR"]).resolve()
     output = Path(os.environ["OUTPUT_DIR"]).resolve()
-    recursive = os.environ["INPUT_RECURSIVE"] == "true"
+    recursive = os.environ["SFM_IMAGES_RECURSIVE"] == "true"
     images = []
     for folder, dirs, files in os.walk(source, followlinks=False):
         dirs.sort()
@@ -30,15 +32,16 @@ def prepare(check=False):
     if not images:
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
     settings = {key: value for key, value in os.environ.items()
-                if key.startswith(("SFM_", "MASKS_", "SPLIT_"))
-                and key not in ("MASKS_ACCEPT_LICENSE",)}
-    settings["TRAIN_MASKS"] = os.environ["TRAIN_MASKS"]
-    settings["INPUT_RECURSIVE"] = str(recursive)
-    if os.environ.get("MASKS_SPIRULA_MODEL"):
-        model = Path(os.environ["MASKS_SPIRULA_MODEL"])
-        if model.is_file():
-            stat = model.stat()
-            settings["mask_model_stamp"] = [str(model.resolve()), stat.st_size, stat.st_mtime_ns]
+                if key.startswith(("SFM_", "TRAIN_MASKS", "SPLIT_"))}
+    settings["mask_policies"] = policies()
+    for prefix, mask in settings["mask_policies"].items():
+        if mask is None:
+            continue
+        model = Path(mask["model"])
+        files = [model] if model.is_file() else sorted(p for p in model.rglob("*") if p.is_file())
+        settings[f"{prefix}_model_stamp"] = [
+            [str(path), path.stat().st_size, path.stat().st_mtime_ns] for path in files
+        ]
     record = {"source": str(source), "images": images, "settings": settings}
     if os.environ.get("GEOREF_GPX_FILE"):
         gpx = Path(os.environ["GEOREF_GPX_FILE"]).resolve()
@@ -55,7 +58,8 @@ def prepare(check=False):
                              "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM.")
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
-    elif any((output / name).exists() for name in ("images", "sfm", "masks", "blocks", "gs")):
+    elif any((output / name).exists() for name in
+             ("images", "sfm", "masks", "feature_masks", "train_masks", "blocks", "gs")):
         raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
     if check:
         if not (output / ".prepare_done").is_file():

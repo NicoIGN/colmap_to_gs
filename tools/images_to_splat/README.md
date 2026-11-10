@@ -10,7 +10,8 @@ Copier `config.sh.example` vers un fichier personnel, régler les chemins et
 les ressources. Pour SAM 3, accepter ses conditions explicitement avec
 `MASKS_ACCEPT_LICENSE=true`, après les avoir lues.
 Activer l'environnement Python habituel (par exemple `mamba activate gsplat`).
-Spirula doit disposer du SfM, de l'entraînement et de SAM/Vulkan.
+Spirula doit disposer du SfM et de l'entraînement ; SAM/Vulkan est nécessaire
+si un backend de masques `spirula` est activé.
 Les outils réutilisés nécessitent notamment numpy, scipy, tqdm, Pillow et plyfile.
 
 Depuis la racine du dépôt, **même configuration pour les deux modes** :
@@ -27,7 +28,8 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 ```
 
 Le dossier d'images peut être indiqué dans la configuration ou remplacé pour
-les deux modes par `--images /chemin/absolu/images`. `INPUT_RECURSIVE=true`
+les deux modes par `--images /chemin/absolu/images`. `SFM_IMAGES_DIR` définit
+la source et `SFM_IMAGES_RECURSIVE=true`
 parcourt les sous-dossiers ordinaires. Les liens vers des fichiers sont acceptés,
 mais pas le parcours des dossiers symboliques. Les noms relatifs sont préservés :
 `h00_y0/photo.jpg` et `h01_y45/photo.jpg` restent distincts.
@@ -44,11 +46,17 @@ Les journaux sont dans `OUTPUT_DIR/logs/`.
 
 ## Masques, budgets et repères
 
-`MASKS_*` configure une seule politique SAM, utilisée si `SFM_MASKS=on` et/ou
-`TRAIN_MASKS=on`. Les deux étapes reçoivent explicitement le même dossier ;
-les masques suivent le chemin relatif des images, avec le suffixe `.png`.
-Pour des politiques SfM/train différentes, utiliser le pipeline Panoramax ou un
-workflow spécifique : cet outil ne calcule pas deux politiques indépendantes.
+Les variables sont celles de `tools/panoramax` : `SFM_MASKS_*` pour l'extraction
+et `TRAIN_MASKS_*` pour l'entraînement. Une valeur SfM vide hérite de la valeur
+train correspondante, sauf `SFM_MASKS_DILATE`, dont le défaut est `0.002`.
+Les politiques peuvent différer (labels, modèle, seuils, périphérique, backend).
+`spirula` utilise SAM 3 natif (défaut de ce pipeline) ; `segmentation` utilise
+le modèle Transformers local défini par `*_MODEL` et l'interpréteur `*_PYTHON`.
+Si les politiques effectives sont identiques, les masques sont calculés une seule
+fois dans `masks/`. Sinon chaque étape activée reçoit son propre dossier
+`feature_masks/` ou `train_masks/`. Les chemins relatifs des images sont conservés,
+avec le suffixe `.png`. `MASKS_ACCEPT_LICENSE` reste commun aux deux étapes,
+comme dans Panoramax.
 `sky,cloud` conserve les voitures et passants dans les images d'entraînement,
 sans garantir la reconstruction des objets mobiles.
 
@@ -59,6 +67,16 @@ en supposant une initialisation à 10 % du cap ; un nuage sparse plus fourni
 peut faire atteindre le cap plus tôt.
 L'arrêt 14000/4000 laisse 4000 pas sans croissance.
 `TRAIN_MASKS_MODE=empty` apprend le ciel comme vide ; `ignore` exclut sa perte.
+`auto` utilise la résolution du mode déjà implémentée par le worker Panoramax.
+
+Les anciennes clés `INPUT_IMAGES_DIR`, `INPUT_RECURSIVE` et les paramètres de
+politique `MASKS_*` non préfixés sont refusés explicitement : les remplacer par
+`SFM_IMAGES_DIR`, `SFM_IMAGES_RECURSIVE` et `SFM_MASKS_*`/`TRAIN_MASKS_*`.
+Pour conserver une politique commune, définir `TRAIN_MASKS_*` et laisser les
+valeurs `SFM_MASKS_*` correspondantes vides. Si seuls les paramètres SfM sont
+définis, renseigner également ceux du train lorsque `TRAIN_MASKS=on`.
+La signature de préparation inclut désormais les deux politiques : un ancien
+workspace exige un nouvel `OUTPUT_DIR` ; ne pas effacer son `inputs.json`.
 
 Le SfM utilise des photos individuelles, sans filtrage des paires GPS.
 Une caméra par sous-dossier est le défaut ; vérifier que les images d'un même

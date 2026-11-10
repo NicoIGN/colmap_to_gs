@@ -30,9 +30,9 @@ class ImagesPipelineTest(unittest.TestCase):
         self.model.write_bytes(b"model")
         self.config = self.root / "config with spaces.sh"
         self.config.write_text(
-            f'INPUT_IMAGES_DIR="{self.images}"\nOUTPUT_DIR="{self.output}"\n'
+            f'SFM_IMAGES_DIR="{self.images}"\nOUTPUT_DIR="{self.output}"\n'
             f'SPIRULA_BIN="{self.bin / "spirula"}"\nPYTHON_BIN="{self.bin / "python"}"\n'
-            f'MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
+            f'TRAIN_MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
             'SLURM_BLOCK_PARALLELISM=2\n'
         )
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
@@ -57,8 +57,20 @@ if os.environ.get("TEST_FAIL_TOOL") == name:
     sys.exit(7)
 if name == "generate_masks.py":
     source, output = Path(get("--images")), Path(get("--output"))
-    assert get("--labels") == "sky,cloud"
-    assert "--accept-spirula-license" in args
+    prefix = "SFM_MASKS" if output.name == "feature_masks" else "TRAIN_MASKS"
+    expected_labels = ",".join(sorted(os.environ[prefix + "_LABELS"].split(",")))
+    assert get("--labels") == expected_labels
+    assert get("--backend") == os.environ[prefix + "_BACKEND"]
+    assert float(get("--confidence")) == float(os.environ[prefix + "_CONFIDENCE"])
+    assert float(get("--max-masked-fraction")) == float(os.environ[prefix + "_MAX_FRACTION"])
+    if get("--backend") == "spirula":
+        assert "--accept-spirula-license" in args
+        assert get("--model") == os.environ[prefix + "_SPIRULA_MODEL"]
+        assert get("--spirula-device") == os.environ[prefix + "_SPIRULA_DEVICE"]
+    else:
+        assert "--accept-spirula-license" not in args
+        assert get("--model") == os.environ[prefix + "_MODEL"]
+        assert get("--device") == os.environ[prefix + "_DEVICE"]
     names = sorted(p.relative_to(source).as_posix() for p in source.rglob("*.jpg"))
     output.mkdir(parents=True, exist_ok=True)
     for relative in names:
@@ -66,7 +78,7 @@ if name == "generate_masks.py":
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"mask")
     (output / "masks.json").write_text(json.dumps({
-        "status": "complete", "settings": {"labels": "sky,cloud"}, "images": names}))
+        "status": "complete", "settings": {"labels": get("--labels")}, "images": names}))
 elif name == "georef_colmap_from_gpx.py":
     output = Path(get("--output-dir"))
     assert get("--sparse-dir").endswith("/sfm/sparse")
@@ -148,7 +160,8 @@ else:
     output = Path(get("--output-dir-prefix"))
     if os.environ["TRAIN_MASKS"] == "on":
         assert get("--apply-loss-for-mask") == "1"
-        assert (output / "masks").resolve() == Path(os.environ["OUTPUT_DIR"]) / "masks"
+        expected = "masks" if (Path(os.environ["OUTPUT_DIR"]) / "masks").is_dir() else "train_masks"
+        assert (output / "masks").resolve() == Path(os.environ["OUTPUT_DIR"]) / expected
     else:
         assert get("--load-masks") == "0"
         assert "--mask-dir" not in args
@@ -257,7 +270,7 @@ if "--wait" in args:
                          b"raw-splat")
 
     def test_nonrecursive_and_input_override(self):
-        self.append('INPUT_RECURSIVE=false\nINPUT_IMAGES_DIR="/does/not/exist"')
+        self.append('SFM_IMAGES_RECURSIVE=false\nSFM_IMAGES_DIR="/does/not/exist"')
         self.assert_ok(self.run_pipeline("--images", str(self.images), "--phase", "prepare"))
         names = [p.relative_to(self.output / "images").as_posix()
                  for p in (self.output / "images").rglob("*.jpg")]
@@ -280,7 +293,7 @@ if "--wait" in args:
 
     def test_mask_policy_changes_refuse_workspace_reuse(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
-        self.append('MASKS_LABELS="sky,person"')
+        self.append('TRAIN_MASKS_LABELS="sky,person"')
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
@@ -292,7 +305,77 @@ if "--wait" in args:
                 self.append(f'SFM_MASKS="{sfm}"\nTRAIN_MASKS="{train}"\nOUTPUT_DIR="{output}"')
                 self.assert_ok(self.run_pipeline())
                 self.assertTrue((output / "scene.splat").is_file())
-                self.assertEqual((output / "masks").exists(), sfm == "on" or train == "on")
+                self.assertEqual((output / "masks").exists(), sfm == train == "on")
+                self.assertEqual((output / "feature_masks").exists(), sfm == "on" and train == "off")
+                self.assertEqual((output / "train_masks").exists(), train == "on" and sfm == "off")
+
+    def test_prefixed_policies_are_independent_local_and_slurm(self):
+        self.append('SFM_MASKS_LABELS="sky"\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"\n'
+                    'SFM_MASKS_CONFIDENCE=0.7\nSFM_MASKS_MAX_FRACTION=0.9\n'
+                    'TRAIN_MASKS_LABELS="sky,cloud"')
+        for slurm in (False, True):
+            with self.subTest(slurm=slurm):
+                output = self.root / f"independent-{slurm}"
+                self.append(f'OUTPUT_DIR="{output}"')
+                before = len(self.commands()) if self.events.exists() else 0
+                self.assert_ok(self.run_pipeline(*(["--wait"] if slurm else []), slurm=slurm))
+                commands = self.commands()[before:]
+                generated = [cmd for cmd in commands if cmd[0] == "generate_masks.py"]
+                self.assertEqual(len(generated), 2)
+                self.assertTrue((output / "feature_masks/masks.json").exists())
+                self.assertTrue((output / "train_masks/masks.json").exists())
+                sfm = next(cmd for cmd in commands if cmd[:2] == ["spirula", "sfm"])
+                self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(output / "feature_masks"))
+                self.assertTrue((output / "scene.splat").is_file())
+
+    def test_identical_prefixed_policies_share_one_generation(self):
+        self.append('SFM_MASKS_SPIRULA_DEVICE=""\nSFM_MASKS_LABELS=""\n'
+                    'TRAIN_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
+        self.assertEqual(len(generated), 1)
+        self.assertTrue((self.output / "masks/masks.json").exists())
+
+    def test_segmentation_backend_reuses_panoramax_variables(self):
+        model = self.root / "transformers-model"
+        model.mkdir()
+        self.append(f'TRAIN_MASKS_BACKEND=segmentation\nTRAIN_MASKS_MODEL="{model}"\n'
+                    f'TRAIN_MASKS_PYTHON="{self.bin / "python"}"\nTRAIN_MASKS_DEVICE=cpu')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
+        self.assertEqual(len(generated), 1)
+        self.assertIn("segmentation", generated[0])
+
+    def test_legacy_unprefixed_config_is_rejected_before_submission(self):
+        self.append('MASKS_LABELS="sky"')
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_MASKS_LABELS / TRAIN_MASKS_LABELS", result.stderr)
+        self.assertFalse(self.jobs.exists())
+
+    def test_invalid_prefixed_policy_is_rejected_before_submission(self):
+        self.append('SFM_MASKS_CONFIDENCE=1.5')
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_MASKS_CONFIDENCE", result.stderr)
+        self.assertFalse(self.jobs.exists())
+
+    def test_sfm_only_policy_does_not_require_a_training_model(self):
+        self.append(f'TRAIN_MASKS=off\nTRAIN_MASKS_SPIRULA_MODEL=""\n'
+                    f'SFM_MASKS_SPIRULA_MODEL="{self.model}"\n'
+                    'SFM_MASKS_LABELS=sky\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
+        self.assertEqual(len(generated), 1)
+        self.assertTrue((self.output / "feature_masks/masks.json").exists())
+
+    def test_training_policy_change_refuses_reuse_with_independent_sfm(self):
+        self.append('SFM_MASKS_LABELS=sky')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.append('TRAIN_MASKS_CONFIDENCE=0.8')
+        result = self.run_pipeline("--phase", "merge")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
 
     def test_missing_block_prevents_fusion(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
@@ -328,7 +411,7 @@ if "--wait" in args:
 
     def test_empty_top_level_is_an_error(self):
         (self.images / "root.jpg").unlink()
-        self.append("INPUT_RECURSIVE=false")
+        self.append("SFM_IMAGES_RECURSIVE=false")
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Aucune image", result.stdout + result.stderr)

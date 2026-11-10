@@ -36,7 +36,7 @@ submit() {
   local phase="$1" reply status=0
   shift
   reply="$(sbatch "${args[@]}" "$@" "$script_dir/launch.slurm" \
-    "$repo_root" "$config" "$phase" "$INPUT_IMAGES_DIR")" || status=$?
+    "$repo_root" "$config" "$phase" "$SFM_IMAGES_DIR")" || status=$?
   job="${reply%%;*}"
   if [[ "$job" =~ ^[0-9]+$ ]]; then
     submitted+=("$job")

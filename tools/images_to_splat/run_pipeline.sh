@@ -41,7 +41,8 @@ trap 'status=$?; echo "[ERREUR] Étape $stage, code $status, ligne $LINENO" >&2;
 exec > >(tee -a "$OUTPUT_DIR/logs/${phase}-${block:-all}.log") 2>&1
 export PYTHONUNBUFFERED=1
 sfm="$OUTPUT_DIR/sfm"
-masks="$OUTPUT_DIR/masks"
+sfm_masks="$OUTPUT_DIR/feature_masks"
+train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 selected="$OUTPUT_DIR/images"
 sparse="$sfm/sparse/0"
@@ -55,16 +56,13 @@ prepare() {
   rm -f -- "$OUTPUT_DIR/.prepare_done"
   feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
-    stage="masques partagés SfM / entraînement"
-    license_args=()
-    [[ "$MASKS_ACCEPT_LICENSE" != true ]] || license_args+=(--accept-spirula-license)
-    "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/generate_masks.py" \
-      --images "$selected" --output "$masks" --backend spirula \
-      --spirula-bin "$SPIRULA_BIN" --model "$MASKS_SPIRULA_MODEL" \
-      --spirula-device "$MASKS_SPIRULA_DEVICE" --labels "$MASKS_LABELS" \
-      --confidence "$MASKS_CONFIDENCE" --dilate-fraction "$MASKS_DILATE" \
-      --max-masked-fraction "$MASKS_MAX_FRACTION" "${license_args[@]}"
-    [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$masks")
+    stage="masques SfM / entraînement"
+    "$PYTHON_BIN" "$script_dir/mask_policies.py"
+    if [[ -d "$OUTPUT_DIR/masks" ]]; then
+      sfm_masks="$OUTPUT_DIR/masks"
+      train_masks="$OUTPUT_DIR/masks"
+    fi
+    [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
   if [[ ! -s "$sfm/sparse/0/cameras.bin" || ! -s "$sfm/sparse/0/images.bin" ||
         ! -s "$sfm/sparse/0/points3D.bin" ]]; then
@@ -115,6 +113,9 @@ else
   fi
 fi
 [[ "$phase" != prepare ]] || exit 0
+if [[ -d "$OUTPUT_DIR/masks" ]]; then
+  train_masks="$OUTPUT_DIR/masks"
+fi
 
 if [[ "$phase" == all || "$phase" == train-block ]]; then
   first="${block:-0}"; last="$SPLIT_NUM_BLOCKS"
@@ -125,7 +126,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$OUTPUT_DIR/gs/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
           --export-filter-mode off --name "$id.splat")
-    [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$masks" --mask-mode "$TRAIN_MASKS_MODE")
+    [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
     bash "$repo_root/scripts/run_spirula_block.sh" "${args[@]}"
   done
 fi

@@ -8,13 +8,13 @@
 # ============================================================================
 # Dossier contenant les images, sans telechargement Panoramax.
 # --images /chemin peut remplacer cette valeur pour les deux lanceurs.
-INPUT_IMAGES_DIR="/shared/home/NBellaiche/data/Paris9/images"
+SFM_IMAGES_DIR="/shared/home/NBellaiche/data/Paris9/images"
 
 # true : scanner aussi les sous-dossiers ; false : fichiers de premier niveau.
 # Les chemins relatifs sont conserves (pas d'aplatissement ni de collision de noms).
 # Les liens vers des fichiers sont acceptes ; les dossiers symboliques ne sont
 # pas parcourus pour eviter les boucles.
-INPUT_RECURSIVE="true"
+SFM_IMAGES_RECURSIVE="true"
 
 # Workspace distinct et EXTERIEUR au dossier d'images. Les images sont liees,
 # jamais deplacees. Choisir un nouveau workspace si images/SfM/masques changent.
@@ -23,24 +23,42 @@ SPIRULA_BIN="/shared/home/NBellaiche/sources/spirula-studio/build_vulkan/spirula
 PYTHON_BIN="python3"
 
 # ============================================================================
-# 1. Masques communs au SfM et au train (SAM 3 natif Spirula)
+# 1. Masques SfM / train : memes variables que tools/panoramax
 # ============================================================================
-# on|off pour chaque etape. Si les deux sont on, un seul calcul est reutilise.
+# on|off pour chaque etape. Politiques identiques : un seul calcul reutilise.
 SFM_MASKS="on"
 TRAIN_MASKS="on"
-MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
+TRAIN_MASKS_BACKEND="spirula" # spirula|segmentation ; defaut local : spirula
+TRAIN_MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
 # auto, indice Vulkan, nom du GPU (ex. NVIDIA A40), uuid:...
-MASKS_SPIRULA_DEVICE="auto"
+TRAIN_MASKS_SPIRULA_DEVICE="auto"
 # Prompts SAM en anglais ; conserver voitures et passants.
-MASKS_LABELS="sky,cloud"
-MASKS_CONFIDENCE="0.5"     # [0,1]
-MASKS_DILATE="0.002"      # [0,0.1[, fraction de la diagonale
+TRAIN_MASKS_LABELS="sky,cloud"
+TRAIN_MASKS_CONFIDENCE="0.5"     # [0,1]
+TRAIN_MASKS_DILATE="0.002"      # auto ou [0,0.1[, fraction de la diagonale
 # 1.0 permet les vues vers le haut presque entierement masquees.
 # En dessous, un masque depassant cette fraction est desactive pour cette image.
-MASKS_MAX_FRACTION="1.0"
+TRAIN_MASKS_MAX_FRACTION="1.0"
+# Backend segmentation : modele local Transformers et interpreteur associe.
+TRAIN_MASKS_MODEL=""
+TRAIN_MASKS_PYTHON="python3"
+TRAIN_MASKS_DEVICE="auto"
+# Vide : heriter du TRAIN_MASKS_* correspondant, comme dans Panoramax.
+# SFM_MASKS_DILATE a son propre defaut 0.002.
+SFM_MASKS_BACKEND=""
+SFM_MASKS_SPIRULA_MODEL=""
+SFM_MASKS_SPIRULA_DEVICE=""
+SFM_MASKS_LABELS=""
+SFM_MASKS_CONFIDENCE=""
+SFM_MASKS_DILATE="0.002"
+SFM_MASKS_MAX_FRACTION=""
+SFM_MASKS_MODEL=""
+SFM_MASKS_PYTHON=""
+SFM_MASKS_DEVICE=""
 # true UNIQUEMENT apres lecture et acceptation des conditions SAM 3 Meta.
 # false par defaut : aucune acceptation automatique implicite.
 MASKS_ACCEPT_LICENSE="false"
+# auto|empty|ignore : memes modes que Panoramax.
 # empty : apprendre le ciel comme vide ; ignore : exclure les pixels de la perte.
 TRAIN_MASKS_MODE="empty"
 
