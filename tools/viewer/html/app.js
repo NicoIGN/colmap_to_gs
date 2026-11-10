@@ -15,6 +15,7 @@ import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
 import { createColmapLayer } from "./viewer/colmap.js";
+import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 
 const $ = (id) => document.getElementById(id);
@@ -207,6 +208,8 @@ function refreshUI() {
         element.id === "colmapPointsVisible" ||
         element.id === "colmapCamerasVisible" ||
         element.id === "colmapFrustumsVisible" ||
+        element.id === "colmapPointSize" ||
+        element.id === "colmapCameraSize" ||
         element.id === "colmapRemove"
       ) {
         return;
@@ -692,13 +695,25 @@ async function loadFile(file) {
   await resetAndLoad(file, file.name);
 }
 
-async function handleDroppedFiles(fileList) {
-  if (!fileList?.length || !canStartLoad()) return;
+async function handleDroppedFiles(fileList, items) {
+  if ((!fileList?.length && !items?.length) || !canStartLoad()) return;
 
   try {
-    const files = Array.from(fileList);
+    const { files, hasDirectory } = await collectDroppedFiles(items, fileList);
+    if (!files.length) throw new Error("Le dossier déposé ne contient aucun fichier.");
+
+    if (hasColmapModel(files)) {
+      if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
+      await colmapLayer.loadFromFileList(files);
+      return;
+    }
 
     if (files.length !== 1) {
+      if (hasDirectory) {
+        throw new Error(
+          "Aucun triplet COLMAP cameras.bin, images.bin, points3D.bin trouvé dans le dossier déposé."
+        );
+      }
       throw new Error(
         "Dépose un fichier à la fois : scène, JSON, puis GPX."
       );
@@ -1194,7 +1209,7 @@ function installDnD() {
     event.preventDefault();
     depth = 0;
     $("drop").style.display = "none";
-    void handleDroppedFiles(event.dataTransfer?.files);
+    void handleDroppedFiles(event.dataTransfer?.files, event.dataTransfer?.items);
   });
 }
 

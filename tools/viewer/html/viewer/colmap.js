@@ -292,6 +292,34 @@ export function colmapPointPixels(size, pixelRatio = 1, maximum = 64) {
   return Math.min(maximum, Math.max(1, size * Math.min(pixelRatio, 2)));
 }
 
+export function thickenLineSegments(positions, thickness) {
+  const output = [];
+  for (let i = 0; i + 5 < positions.length; i += 6) {
+    const a = [positions[i], positions[i + 1], positions[i + 2]];
+    const b = [positions[i + 3], positions[i + 4], positions[i + 5]];
+    const direction = b.map((value, axis) => value - a[axis]);
+    const length = Math.hypot(...direction);
+    if (!Number.isFinite(length) || length === 0) continue;
+    for (let axis = 0; axis < 3; axis++) direction[axis] /= length;
+    const reference = Math.abs(direction[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0];
+    let side = [
+      direction[1] * reference[2] - direction[2] * reference[1],
+      direction[2] * reference[0] - direction[0] * reference[2],
+      direction[0] * reference[1] - direction[1] * reference[0],
+    ];
+    const sideLength = Math.hypot(...side);
+    side = side.map((value) => value * thickness / (2 * sideLength));
+    const corners = [
+      a.map((value, axis) => value + side[axis]),
+      a.map((value, axis) => value - side[axis]),
+      b.map((value, axis) => value + side[axis]),
+      b.map((value, axis) => value - side[axis]),
+    ];
+    for (const index of [0, 1, 2, 2, 1, 3]) output.push(...corners[index]);
+  }
+  return new Float32Array(output);
+}
+
 function setPointSize(app, material, size) {
   const gl = app.graphicsDevice.gl;
   const range = gl?.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
@@ -397,6 +425,16 @@ function makePointMesh(app, positions, colors, pointSize = 3) {
 }
 
 function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
+  const bounds = [[Infinity, -Infinity], [Infinity, -Infinity], [Infinity, -Infinity]];
+  for (let i = 0; i < positions.length; i += 3) {
+    for (let axis = 0; axis < 3; axis++) {
+      bounds[axis][0] = Math.min(bounds[axis][0], positions[i + axis]);
+      bounds[axis][1] = Math.max(bounds[axis][1], positions[i + axis]);
+    }
+  }
+  const sceneDiameter = Math.hypot(...bounds.map(([min, max]) => max - min));
+  const thickness = Math.max(Number.EPSILON, sceneDiameter * 0.00015);
+  positions = thickenLineSegments(positions, thickness);
   const count = positions.length / 3;
   const rgba = new Float32Array(count * 4);
 
@@ -481,6 +519,8 @@ export function createColmapLayer({
     if (cbPoints) cbPoints.disabled = !ready;
     if (cbCameras) cbCameras.disabled = !ready;
     if (cbFrustums) cbFrustums.disabled = !ready;
+    if (pointSize) pointSize.disabled = !ready;
+    if (cameraSize) cameraSize.disabled = !ready;
     if (removeBtn) removeBtn.disabled = !ready;
 
     if (pointsEntity && cbPoints) pointsEntity.enabled = cbPoints.checked;

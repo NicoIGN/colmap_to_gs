@@ -40,6 +40,11 @@ de taille écran, indépendants de l'échelle SfM et du GPX. Deux curseurs dans
 la section COLMAP permettent d'ajuster leur diamètre sans recharger le modèle.
 La densité de pixels de l'écran est prise en compte (facteur maximal 2).
 
+Un dossier COLMAP peut aussi être glissé directement dans la vue : le viewer
+parcourt le dossier, repère un même sous-dossier contenant `cameras.bin`,
+`images.bin` et `points3D.bin`, puis le charge avec le même importeur que le
+bouton. Les dépôts de scène, JSON et GPX gardent leur comportement existant.
+
 La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
 bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
 Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes

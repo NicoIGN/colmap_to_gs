@@ -4,9 +4,22 @@ import test from "node:test";
 
 const source = (await readFile(new URL("./html/viewer/colmap.js", import.meta.url), "utf8"))
   .replace('import * as pc from "playcanvas";', "");
-const { cameraFrustumDepth, colmapPointPixels } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
+
+test("frustum strokes become triangles with scale-relative thickness", () => {
+  const line = [0, 0, 0, 0, 0, 2];
+  const thick = thickenLineSegments(line, 0.02);
+  assert.equal(thick.length, 18);
+  const points = Array.from({ length: 6 }, (_, index) =>
+    Array.from(thick.slice(index * 3, index * 3 + 3)));
+  assert.equal(points[0][2], 0);
+  assert.equal(points[2][2], 2);
+  assert.equal(points[0][0], -points[1][0]);
+  assert.ok(Math.abs(Math.abs(points[0][0]) - 0.01) < 1e-8);
+  assert.equal(thickenLineSegments([0, 0, 0, 0, 0, 0], 1).length, 0);
+});
 
 test("point sizes are screen pixels, with DPI and hardware limits", () => {
   assert.equal(colmapPointPixels(2, 1), 2);
