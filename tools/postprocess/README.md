@@ -20,6 +20,19 @@ python3 tools/postprocess/export_ply.py --help
 bash tools/postprocess/clean_ply.sh --help
 ```
 
+### Fusion des blocs
+
+`merge_splats.py` fusionne des blocs déjà alignés sans modifier leurs coordonnées.
+`--strength` multiplie la taille médiane des grands demi-axes pour fixer la taille
+des voxels : 0.5 est prudent, 1 normal, 2 plus agressif. Dans chaque voxel,
+les splats du bloc au meilleur score moyen sont conservés.
+Les clés utilisent trois coordonnées int64, plutôt que 21 bits par axe :
+une scène étendue ou décalée de l'origine ne nécessite plus d'augmenter
+`--strength` pour contourner cette ancienne limite. Les clés prennent 24 octets
+par splat au lieu de 8, avec un coût mémoire/disque accru lors du tri.
+Les géométries non finies et les indices hors plage int64 restent refusés.
+Après mise à jour, relancer uniquement la fusion, sans réentraîner les blocs.
+
 `scripts/run.sh` appelle les lanceurs Nerfstudio ;
 `scripts/run_spirula_block.sh` utilise `export_ply.py` par défaut, tout en conservant
 la surcharge `--export-script` / `EXPORT_SCRIPT`.

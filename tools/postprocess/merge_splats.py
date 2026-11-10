@@ -22,9 +22,7 @@ from tqdm import tqdm
 CHUNK = 1_000_000
 SAMPLE = 100_000
 C0 = 0.28209479177387814
-BITS = 21
-OFFSET = 1 << (BITS - 1)          # cellules entre -1 048 576 et +1 048 575
-MASK = (1 << BITS) - 1
+VOXEL_DTYPE = np.dtype([(axis, "<i8") for axis in "xyz"])
 
 BASE_NAMES = (
     "x", "y", "z", "f_dc_0", "f_dc_1", "f_dc_2", "opacity",
@@ -197,13 +195,19 @@ def inspect(paths):
 
 
 def voxel_keys(xyz, voxel):
+    if not np.isfinite(voxel) or voxel <= 0:
+        raise ValueError("Taille de voxel non finie ou non positive")
     with np.errstate(over="ignore", invalid="ignore"):
         cells = np.floor(xyz / voxel)
-    if not np.isfinite(cells).all() or np.any(np.abs(cells) >= OFFSET):
+    if (not np.isfinite(cells).all() or
+            np.any(cells < -(2 ** 63)) or np.any(cells >= 2 ** 63)):
         raise ValueError(
-            "Scène trop étendue pour la taille de voxel : augmenter --strength")
-    c = cells.astype(np.int64) + OFFSET
-    return (c[:, 0] << (2 * BITS)) | (c[:, 1] << BITS) | c[:, 2]
+            "Coordonnées de voxel hors plage int64 : vérifier la géométrie "
+            "ou augmenter --strength")
+    keys = np.empty(len(cells), dtype=VOXEL_DTYPE)
+    for i, axis in enumerate("xyz"):
+        keys[axis] = cells[:, i].astype(np.int64)
+    return keys
 
 
 def index_scenes(meta, root, voxel, median_ls):
@@ -212,7 +216,7 @@ def index_scenes(meta, root, voxel, median_ls):
     with tqdm(total=total, desc="2/5 Indexation", unit="spl", unit_scale=True) as bar:
         for s, m in enumerate(meta):
             keys = np.lib.format.open_memmap(root / f"k{s}.npy", mode="w+",
-                                             dtype=np.int64, shape=(m["count"],))
+                                             dtype=VOXEL_DTYPE, shape=(m["count"],))
             scores = np.lib.format.open_memmap(root / f"s{s}.npy", mode="w+",
                                                dtype=np.float32, shape=(m["count"],))
             sc = Scene(m["path"])
@@ -266,7 +270,7 @@ def choose_winners(ukeys, means):
     del allk
     first = np.empty(len(sk), dtype=bool)
     first[0] = True
-    np.not_equal(sk[1:], sk[:-1], out=first[1:])
+    first[1:] = sk[1:] != sk[:-1]
     del sk
     keep = np.zeros(len(order), dtype=bool)
     keep[order[first]] = True
