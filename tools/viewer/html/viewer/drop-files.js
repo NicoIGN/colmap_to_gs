@@ -34,18 +34,28 @@ async function walkEntry(entry) {
 }
 
 export async function collectDroppedFiles(items, fileList) {
-  const files = [];
+  const droppedItems = [];
+  const directoryFiles = [];
   let hasDirectory = false;
   for (const item of Array.from(items ?? [])) {
     if (item.kind !== "file") continue;
     const entry = item.webkitGetAsEntry?.();
     if (entry) {
-      hasDirectory ||= Boolean(entry.isDirectory);
-      files.push(...await walkEntry(entry));
+      if (entry.isDirectory) {
+        hasDirectory = true;
+        directoryFiles.push(...await walkEntry(entry));
+      } else {
+        const file = item.getAsFile?.();
+        if (file) droppedItems.push(file);
+      }
     }
   }
-  if (!files.length) files.push(...Array.from(fileList ?? []));
-  return { files, hasDirectory };
+  if (hasDirectory) return { files: directoryFiles, hasDirectory };
+  const files = Array.from(fileList ?? []);
+  return {
+    files: files.length ? files : droppedItems,
+    hasDirectory: false,
+  };
 }
 
 export function hasColmapModel(files) {

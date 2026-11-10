@@ -67,10 +67,26 @@ test("incomplete or split COLMAP triplets are not mistaken for a model", async (
 });
 
 test("single files fall back to the dropped FileList", async () => {
-  const dropped = { name: "scene.splat", size: 2, arrayBuffer() {} };
+  const dropped = new Blob(["splat"]);
+  Object.defineProperty(dropped, "name", { value: "scene.splat" });
   const result = await collectDroppedFiles([], [dropped]);
   assert.deepEqual(result, { files: [dropped], hasDirectory: false });
+  assert.ok(result.files[0] instanceof Blob);
   assert.equal(hasColmapModel(result.files), false);
+});
+
+test("single-file drag keeps the native File instead of an entry wrapper", async () => {
+  const dropped = new Blob(["splat"]);
+  Object.defineProperty(dropped, "name", { value: "scene.splat" });
+  const result = await collectDroppedFiles([
+    {
+      kind: "file",
+      webkitGetAsEntry: () => fileEntry("scene.splat"),
+      getAsFile: () => dropped,
+    },
+  ], []);
+  assert.deepEqual(result.files, [dropped]);
+  assert.ok(result.files[0] instanceof Blob);
 });
 
 test("directory reader errors are surfaced", async () => {
