@@ -3,6 +3,7 @@
 
 import argparse
 import hashlib
+from itertools import islice
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,29 @@ from prepare_masks import policies
 
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+
+
+def record_differences(previous, current, path=""):
+    """Yield bounded, field-level diagnostics without changing reuse decisions."""
+    if (path == "images" and isinstance(previous, list) and isinstance(current, list)
+            and all(isinstance(image, list) and len(image) == 4
+                    and isinstance(image[0], str) for image in previous + current)):
+        fields = ("resolved", "size", "mtime_ns")
+        previous = {image[0]: dict(zip(fields, image[1:])) for image in previous}
+        current = {image[0]: dict(zip(fields, image[1:])) for image in current}
+    if isinstance(previous, dict) and isinstance(current, dict):
+        for key in sorted(previous.keys() | current.keys()):
+            name = f"{path}.{key}" if path else key
+            if key not in previous:
+                yield f"{name} : ajouté dans la signature actuelle"
+            elif key not in current:
+                yield f"{name} : absent de la signature actuelle"
+            else:
+                yield from record_differences(previous[key], current[key], name)
+    elif previous != current:
+        old = repr(previous)
+        new = repr(current)
+        yield f"{path} : enregistré={old[:200]} ; actuel={new[:200]}"
 
 
 def compatible_record(previous, current):
@@ -74,8 +98,16 @@ def prepare(check=False):
             raise ValueError(f"Signature de workspace invalide : {marker}")
         if previous != record:
             if not resume or check or not compatible_record(previous, record):
+                differences = list(islice(record_differences(previous, record), 13))
+                details = "\n".join(f"  - {item}" for item in differences[:12])
+                if len(differences) > 12:
+                    details += "\n  - Autres différences non affichées."
                 raise ValueError("Images ou paramètres SfM/masques/découpage/GPX modifiés : "
-                                 "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM.")
+                                 "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM."
+                                 f"\nSignature comparée : {marker}"
+                                 f"\nPIPELINE_RESUME={'true' if resume else 'false'}"
+                                 f" ; contrôle seul={'true' if check else 'false'}"
+                                 f"\nDifférences enregistrées / actuelles :\n{details}")
             adopted = True
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")

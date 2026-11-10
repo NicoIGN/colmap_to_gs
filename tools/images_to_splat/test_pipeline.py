@@ -378,6 +378,10 @@ if "--wait" in args:
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+        self.assertIn("PIPELINE_RESUME=true", result.stdout + result.stderr)
+        self.assertIn("settings.SFM_MIN_TRI_ANGLE : enregistré='3' ; actuel='4'",
+                      result.stdout + result.stderr)
+        self.assertIn(str(self.output / "inputs.json"), result.stdout + result.stderr)
 
     def test_resume_rejects_changed_images(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
@@ -386,6 +390,24 @@ if "--wait" in args:
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+        self.assertIn("images.root.jpg.size", result.stdout + result.stderr)
+        self.assertIn("images.root.jpg.mtime_ns", result.stdout + result.stderr)
+
+    def test_signature_diagnostics_report_added_and_removed_settings_without_adoption(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        marker = self.output / "inputs.json"
+        previous = json.loads(marker.read_text())
+        previous["settings"].pop("SFM_MIN_TRI_ANGLE")
+        previous["settings"]["SFM_OLD_SETTING"] = "old"
+        marker.write_text(json.dumps(previous))
+        original = marker.read_bytes()
+        self.append("PIPELINE_RESUME=true")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("settings.SFM_MIN_TRI_ANGLE : ajouté", result.stdout + result.stderr)
+        self.assertIn("settings.SFM_OLD_SETTING : absent", result.stdout + result.stderr)
+        self.assertEqual(marker.read_bytes(), original)
+        self.assertFalse((self.output / "inputs.before_resume.json").exists())
 
     def test_resume_checks_new_sparse_before_splitting(self):
         self.interrupted_workspace()

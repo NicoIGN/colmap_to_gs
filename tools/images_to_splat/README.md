@@ -224,6 +224,14 @@ de paramètres ou de GPX restent bloquants. Sans métadonnées, la présence de
 fichiers valides ne prouve pas leur provenance : conserver les mêmes images
 et réglages. Le mode normal (`false`) reste inchangé.
 
+En cas de différence de signature, l'erreur indique le chemin d'`inputs.json`,
+la valeur effective de `PIPELINE_RESUME` et jusqu'à 12 champs différents
+(valeurs enregistrées/actuelles, tailles/dates des images, ajouts ou retraits).
+Une configuration Bash inchangée ne garantit pas une signature identique :
+les valeurs par défaut du code, les variables d'environnement, les chemins
+résolus et les dates des fichiers entrent aussi dans la comparaison.
+Ne pas supprimer `inputs.json` pour contourner ce diagnostic.
+
 ```bash
 bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase prepare
 bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase train-block --block 0
