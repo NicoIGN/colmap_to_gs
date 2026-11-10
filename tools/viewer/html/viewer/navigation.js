@@ -42,7 +42,7 @@ export function createNavigationSystem({
   const heldButtons = new Map();
 
   const lookBinding = {
-    button: 2,
+    button: 0,
     modifier: null,
     ...inputBindings.look,
   };
@@ -286,6 +286,24 @@ export function createNavigationSystem({
     target.add(delta);
   }
 
+  function orbitScene(dx, dy) {
+    const sensitivity = 0.005;
+    const locked = isRotationLocked();
+    const yawAxis = locked
+      ? getPrincipalAxis().clone().normalize()
+      : camera.up.clone().normalize();
+    let yawAngle = -dx * sensitivity;
+    if (locked && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
+    rotateAroundAxis(yawAxis, yawAngle);
+    if (locked) return;
+
+    const direction = target.clone().sub(camera.position);
+    const right = new THREE.Vector3().crossVectors(direction, camera.up);
+    if (right.lengthSq() > 1e-12) {
+      rotateAroundAxis(right.normalize(), -dy * sensitivity);
+    }
+  }
+
   function translate(x, y, z, distance) {
     if (!x && !y && !z) return;
 
@@ -504,12 +522,14 @@ export function createNavigationSystem({
         event.button === lookBinding.button &&
         (!lookBinding.modifier || event[lookBinding.modifier])
       ) {
-        mode = "look";
-      } else if (event.button === 1 || event.button === 2) {
+        mode = "orbit";
+      } else if (
+        (event.button === 2 && event.ctrlKey) ||
+        event.button === 1
+      ) {
         mode = "pan";
       }
 
-      // Le clic gauche simple ne déclenche plus la navigation.
       if (!mode) return;
 
       event.preventDefault();
@@ -523,6 +543,7 @@ export function createNavigationSystem({
         id: event.pointerId,
         button: event.button,
         mode,
+        requiresControl: event.button === 2 && mode === "pan",
         x: event.clientX,
         y: event.clientY,
         moved: false,
@@ -560,8 +581,9 @@ export function createNavigationSystem({
         event.shiftKey ||
         event.altKey ||
         event.metaKey ||
+        (drag.requiresControl && !event.ctrlKey) ||
         (
-          drag.mode === "look" &&
+          drag.mode === "orbit" &&
           lookBinding.modifier &&
           !event[lookBinding.modifier]
         )
@@ -591,15 +613,8 @@ export function createNavigationSystem({
           height: `${box?.height ?? 0}px`,
         });
         return;
-      } else if (drag.mode === "look") {
-        // Radians par pixel CSS.
-        // Rotation seule : aucune translation ni sélection de pivot.
-        const sensitivity = 0.005;
-
-        orbitLook(
-          -dx * sensitivity,
-          -dy * sensitivity
-        );
+      } else if (drag.mode === "orbit") {
+        orbitScene(dx, dy);
       } else {
         navigateWithCollision(() => {
           panPixels(dx, dy, canvas.clientHeight);

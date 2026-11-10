@@ -477,6 +477,7 @@ export function createColmapLayer({
   getSceneRadius,
   getFlipUp,
   registerLayer,
+  registerGroup,
   onBoundsChanged,
 }) {
   const sceneColmapInfo = document.getElementById("sceneColmapInfo");
@@ -486,31 +487,21 @@ export function createColmapLayer({
   const removeBtn = document.getElementById("colmapRemove");
 
   let disposed = false;
-
-  let rootEntity = null;
-  let pointsEntity = null;
-  let cameraCentersEntity = null;
-  let frustumsEntity = null;
-
-  let pointsResource = null;
-  let cameraCentersResource = null;
-  let frustumsResource = null;
-
-  let loaded = null;
-  let bounds = null;
-  const unregisterLayers = [];
-
+  let nextModelId = 1;
+  const models = new Map();
   const removers = [];
-    console.log("[COLMAP] Nouvelle instance créée", { disposed });
 
   const refreshPointSizes = () => {
-    for (const [input, resource] of [
-      [pointSize, pointsResource], [cameraSize, cameraCentersResource],
-    ]) {
-      if (!input) continue;
-      const output = document.getElementById(`${input.id}Value`);
-      if (output) output.value = `${input.value} px`;
-      if (resource) setPointSize(app, resource.material, Number(input.value));
+    for (const model of models.values()) {
+      for (const [input, resource] of [
+        [pointSize, model.pointsResource],
+        [cameraSize, model.cameraCentersResource],
+      ]) {
+        if (!input) continue;
+        const output = document.getElementById(`${input.id}Value`);
+        if (output) output.value = `${input.value} px`;
+        if (resource) setPointSize(app, resource.material, Number(input.value));
+      }
     }
   };
 
@@ -524,13 +515,32 @@ export function createColmapLayer({
     if (sceneColmapInfo) sceneColmapInfo.textContent = text;
   }
 
+  function getTotals() {
+    return [...models.values()].reduce((totals, model) => {
+      totals.images += model.images;
+      totals.pointsTotal += model.pointsTotal;
+      totals.pointsShown += model.pointsShown;
+      totals.frustumsTotal += model.frustumsTotal;
+      totals.frustumsShown += model.frustumsShown;
+      return totals;
+    }, {
+      images: 0,
+      pointsTotal: 0,
+      pointsShown: 0,
+      frustumsTotal: 0,
+      frustumsShown: 0,
+    });
+  }
+
   function refreshInfo() {
-    if (!loaded) {
+    if (!models.size) {
       setInfo("Aucun modèle chargé");
       return;
     }
 
+    const loaded = getTotals();
     setInfo(
+      `Modèles: ${models.size.toLocaleString("fr-FR")} · ` +
       `Images: ${loaded.images.toLocaleString("fr-FR")} · ` +
       `Points: ${loaded.pointsShown.toLocaleString("fr-FR")} / ${loaded.pointsTotal.toLocaleString("fr-FR")} · ` +
       `Frustums: ${loaded.frustumsShown.toLocaleString("fr-FR")} / ${loaded.frustumsTotal.toLocaleString("fr-FR")}`
@@ -538,17 +548,17 @@ export function createColmapLayer({
   }
 
   function applyFlipUp(flip) {
-    if (!rootEntity) return;
-    rootEntity.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
+    for (const model of models.values()) {
+      model.rootEntity.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
+    }
   }
 
   function refreshUI() {
-    const ready = Boolean(loaded);
+    const ready = models.size > 0;
 
     if (pointSize) pointSize.disabled = !ready;
     if (cameraSize) cameraSize.disabled = !ready;
     if (removeBtn) removeBtn.disabled = !ready;
-
   }
 
   function destroyMeshEntity(entity, resource) {
@@ -558,28 +568,28 @@ export function createColmapLayer({
     resource?.material?.destroy?.();
   }
 
+  function destroyModel(model) {
+    model.unregister?.();
+    destroyMeshEntity(model.pointsEntity, model.pointsResource);
+    destroyMeshEntity(model.cameraCentersEntity, model.cameraCentersResource);
+    destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
+    if (model.rootEntity.parent) model.rootEntity.parent.removeChild(model.rootEntity);
+    model.rootEntity.destroy();
+  }
+
+  function getCombinedBounds(flip = Boolean(getFlipUp?.())) {
+    const bounds = [...models.values()].map((model) => model.bounds);
+    if (!bounds.length) return null;
+    return colmapBounds(
+      bounds.flatMap((bound) => [bound.min, bound.max]),
+      flip
+    );
+  }
+
   function clear() {
-    for (const unregister of unregisterLayers.splice(0)) unregister();
-    destroyMeshEntity(pointsEntity, pointsResource);
-    destroyMeshEntity(cameraCentersEntity, cameraCentersResource);
-    destroyMeshEntity(frustumsEntity, frustumsResource);
-
-    pointsEntity = null;
-    cameraCentersEntity = null;
-    frustumsEntity = null;
-
-    pointsResource = null;
-    cameraCentersResource = null;
-    frustumsResource = null;
-
-    if (rootEntity?.parent) rootEntity.parent.removeChild(rootEntity);
-    rootEntity?.destroy();
-    rootEntity = null;
-
-    loaded = null;
-    bounds = null;
+    for (const model of models.values()) destroyModel(model);
+    models.clear();
     onBoundsChanged?.(null);
-
     refreshUI();
     refreshInfo();
   }
@@ -665,218 +675,161 @@ export function createColmapLayer({
     };
   }
 
-    async function loadFromFileList(fileList) {
-      const tag = "[COLMAP]";
-      console.group(`${tag} loadFromFileList`);
+  async function loadCandidate(candidate) {
+    const [cameraBuffer, imagesBuffer, pointsBuffer] = await Promise.all([
+      candidate.cameras.arrayBuffer(),
+      candidate.images.arrayBuffer(),
+      candidate.points.arrayBuffer(),
+    ]);
+    if (disposed) return null;
 
-      try {
-        console.log("1) entrée fonction", {
-          disposed,
-          hasFileList: Boolean(fileList),
-          length: fileList?.length ?? 0,
-        });
-
-        if (disposed || !fileList?.length) {
-          console.warn("STOP: disposed ou fileList vide");
-          return;
-        }
-
-        const files = Array.from(fileList);
-        console.log("2) fichiers reçus:", files.length);
-
-        console.table(
-          files.map((f, i) => ({
-            i,
-            name: f.name,
-            rel: (f.webkitRelativePath || f.name).replace(/\\/g, "/"),
-            size: f.size,
-          }))
-        );
-
-        // Groupement par dossier relatif
-        const groups = new Map();
-        for (const file of files) {
-          const rel = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
-          const idx = rel.lastIndexOf("/");
-          const dir = idx >= 0 ? rel.slice(0, idx) : "";
-          const base = idx >= 0 ? rel.slice(idx + 1) : rel;
-
-          if (!groups.has(dir)) groups.set(dir, {});
-          const g = groups.get(dir);
-
-          if (base === "cameras.bin") g.cameras = file;
-          if (base === "images.bin") g.images = file;
-          if (base === "points3D.bin") g.points = file;
-        }
-
-        const candidates = [];
-        for (const [dir, g] of groups.entries()) {
-          if (g.cameras && g.images && g.points) candidates.push({ dir, ...g });
-        }
-
-        console.log("3) dossiers candidats:", candidates.length);
-        if (candidates.length) {
-          console.table(
-            candidates.map((c) => ({
-              dir: c.dir || "(racine)",
-              cameras: c.cameras.webkitRelativePath || c.cameras.name,
-              images: c.images.webkitRelativePath || c.images.name,
-              points: c.points.webkitRelativePath || c.points.name,
-            }))
-          );
-        }
-
-        if (!candidates.length) {
-          console.error("STOP: aucun triplet cameras/images/points trouvé");
-          setStatus(
-            "Aucun sous-dossier valide trouvé (cameras.bin + images.bin + points3D.bin).",
-            true
-          );
-          return;
-        }
-
-        candidates.sort(
-          (a, b) => b.dir.split("/").length - a.dir.split("/").length
-        );
-        const selected = candidates[0];
-
-        console.log("4) dossier sélectionné:", selected.dir || "(racine)");
-        setStatus(`Chargement COLMAP depuis: ${selected.dir || "(racine)"}`);
-
-        console.log("5) lecture arrayBuffer...");
-        const [cameraBuffer, imagesBuffer, pointsBuffer] = await Promise.all([
-          selected.cameras.arrayBuffer(),
-          selected.images.arrayBuffer(),
-          selected.points.arrayBuffer(),
-        ]);
-
-        console.log("6) buffers lus", {
-          cameras: cameraBuffer.byteLength,
-          images: imagesBuffer.byteLength,
-          points3D: pointsBuffer.byteLength,
-        });
-
-        if (disposed) {
-          console.warn("STOP: disposed après lecture buffers");
-          return;
-        }
-
-        console.log("7) parsing cameras.bin...");
-        const cameras = parseCamerasBin(cameraBuffer);
-        console.log("   cameras:", cameras.size);
-
-        console.log("8) parsing images.bin...");
-        const images = parseImagesBin(imagesBuffer);
-        console.log("   images:", images.length);
-
-        console.log("9) parsing points3D.bin...");
-        const points = parsePoints3DBin(pointsBuffer, 300000);
-        console.log("   points:", {
-          original: points.originalCount,
-          shown: points.shownCount,
-        });
-
-        const cameraCenters = buildCameraCenters(images);
-        const modelBounds = colmapBounds([points.positions, cameraCenters]);
-        if (!modelBounds) throw new Error("Le modèle COLMAP ne contient aucune position valide.");
-        const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
-        console.log("10) build frustums/centers, depth=", depth);
-        const frustums = buildFrustumLines(images, cameras, depth);
-
-        console.log("   frustums:", {
-          total: frustums.total,
-          shown: frustums.shown,
-          vertices: frustums.positions.length / 3,
-        });
-
-        console.log("11) clear ancien modèle");
-        clear();
-
-        console.log("12) création entités PlayCanvas");
-        rootEntity = new pc.Entity("COLMAP sparse");
-        app.root.addChild(rootEntity);
-
-        pointsResource = makePointMesh(app, points.positions, points.colors, Number(pointSize?.value ?? 2));
-        pointsEntity = new pc.Entity("COLMAP points");
-        pointsEntity.addComponent("render", {
-          type: "asset",
-          meshInstances: [pointsResource.meshInstance],
-        });
-        rootEntity.addChild(pointsEntity);
-
-        const centerColors = new Float32Array(cameraCenters.length);
-        for (let i = 0; i < cameraCenters.length / 3; i++) {
-          centerColors[i * 3 + 0] = 1;
-          centerColors[i * 3 + 1] = 0;
-          centerColors[i * 3 + 2] = 0;
-        }
-
-        cameraCentersResource = makePointMesh(app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4));
-        cameraCentersEntity = new pc.Entity("COLMAP camera centers");
-        cameraCentersEntity.addComponent("render", {
-          type: "asset",
-          meshInstances: [cameraCentersResource.meshInstance],
-        });
-        rootEntity.addChild(cameraCentersEntity);
-
-        frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
-        frustumsEntity = new pc.Entity("COLMAP frustums");
-        frustumsEntity.addComponent("render", {
-          type: "asset",
-          meshInstances: [frustumsResource.meshInstance],
-        });
-        rootEntity.addChild(frustumsEntity);
-
-        applyFlipUp(Boolean(getFlipUp?.()));
-
-        loaded = {
-          images: images.length,
-          pointsTotal: points.originalCount,
-          pointsShown: points.shownCount,
-          frustumsTotal: frustums.total,
-          frustumsShown: frustums.shown,
-        };
-        bounds = modelBounds;
-
-        console.log("13) refresh UI + info", loaded);
-
-        unregisterLayers.push(...[
-          registerLayer?.({
-            id: "colmap-points",
-            name: "Points 3D sparse",
-            setVisible(visible) { if (pointsEntity) pointsEntity.enabled = visible; },
-          }),
-          registerLayer?.({
-            id: "colmap-cameras",
-            name: "Centres caméra COLMAP",
-            setVisible(visible) { if (cameraCentersEntity) cameraCentersEntity.enabled = visible; },
-          }),
-          registerLayer?.({
-            id: "colmap-frustums",
-            name: "Frustums COLMAP",
-            setVisible(visible) { if (frustumsEntity) frustumsEntity.enabled = visible; },
-          }),
-        ].filter(Boolean));
-
-        refreshUI();
-        refreshInfo();
-        onBoundsChanged?.(colmapBounds([bounds.min, bounds.max], Boolean(getFlipUp?.())), true);
-
-        setStatus(
-          `COLMAP chargé : ${loaded.images.toLocaleString("fr-FR")} caméras, ` +
-          `${loaded.pointsShown.toLocaleString("fr-FR")} points affichés ` +
-          `(sur ${loaded.pointsTotal.toLocaleString("fr-FR")}).`,
-          "success"
-        );
-
-        console.log("14) DONE");
-      } catch (error) {
-        console.error("[COLMAP] ERREUR FATALE:", error);
-        setStatus(`Import COLMAP impossible : ${error?.message || error}`, true);
-      } finally {
-        console.groupEnd();
-      }
+    const cameras = parseCamerasBin(cameraBuffer);
+    const images = parseImagesBin(imagesBuffer);
+    const points = parsePoints3DBin(pointsBuffer, 300000);
+    const cameraCenters = buildCameraCenters(images);
+    const modelBounds = colmapBounds([points.positions, cameraCenters]);
+    if (!modelBounds) {
+      throw new Error(`Le modèle COLMAP ${candidate.dir || "(racine)"} ne contient aucune position valide.`);
     }
+    const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
+    const frustums = buildFrustumLines(images, cameras, depth);
+    const id = `colmap-${nextModelId++}`;
+    const rootEntity = new pc.Entity(`COLMAP sparse ${candidate.dir || id}`);
+    const model = {
+      id,
+      bounds: modelBounds,
+      images: images.length,
+      pointsTotal: points.originalCount,
+      pointsShown: points.shownCount,
+      frustumsTotal: frustums.total,
+      frustumsShown: frustums.shown,
+      rootEntity,
+    };
+    app.root.addChild(rootEntity);
+    try {
+      model.pointsResource = makePointMesh(
+        app, points.positions, points.colors, Number(pointSize?.value ?? 2)
+      );
+      model.pointsEntity = new pc.Entity("COLMAP points");
+      model.pointsEntity.addComponent("render", {
+        type: "asset",
+        meshInstances: [model.pointsResource.meshInstance],
+      });
+      rootEntity.addChild(model.pointsEntity);
+
+      const centerColors = new Float32Array(cameraCenters.length);
+      for (let i = 0; i < cameraCenters.length / 3; i++) {
+        centerColors[i * 3] = 1;
+      }
+      model.cameraCentersResource = makePointMesh(
+        app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4)
+      );
+      model.cameraCentersEntity = new pc.Entity("COLMAP camera centers");
+      model.cameraCentersEntity.addComponent("render", {
+        type: "asset",
+        meshInstances: [model.cameraCentersResource.meshInstance],
+      });
+      rootEntity.addChild(model.cameraCentersEntity);
+
+      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+      model.frustumsEntity = new pc.Entity("COLMAP frustums");
+      model.frustumsEntity.addComponent("render", {
+        type: "asset",
+        meshInstances: [model.frustumsResource.meshInstance],
+      });
+      rootEntity.addChild(model.frustumsEntity);
+      rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
+
+      const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
+      const children = [
+        {
+          name: "Points 3D",
+          setVisible(visible) { model.pointsEntity.enabled = visible; },
+        },
+        {
+          name: "Centres caméra",
+          setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
+        },
+        {
+          name: "Frustums",
+          setVisible(visible) { model.frustumsEntity.enabled = visible; },
+        },
+      ];
+      if (registerGroup) {
+        model.unregister = registerGroup({
+          id,
+          name: `COLMAP · ${label}`,
+          children,
+        });
+      } else {
+        const unregister = children.map((child) => registerLayer?.({
+          id: `${id}-${child.name.toLowerCase().replaceAll(" ", "-")}`,
+          name: `${child.name} · ${label}`,
+          setVisible: child.setVisible,
+        })).filter(Boolean);
+        model.unregister = () => unregister.forEach((remove) => remove());
+      }
+
+      models.set(id, model);
+      return model;
+    } catch (error) {
+      destroyModel(model);
+      throw error;
+    }
+  }
+
+  async function loadFromFileList(fileList) {
+    if (disposed || !fileList?.length) return;
+    const groups = new Map();
+    for (const file of Array.from(fileList)) {
+      const rel = (file.webkitRelativePath || file.name).replace(/\\/g, "/");
+      const idx = rel.lastIndexOf("/");
+      const dir = idx >= 0 ? rel.slice(0, idx) : "";
+      const base = idx >= 0 ? rel.slice(idx + 1) : rel;
+      if (!groups.has(dir)) groups.set(dir, {});
+      const group = groups.get(dir);
+      if (base === "cameras.bin") group.cameras = file;
+      if (base === "images.bin") group.images = file;
+      if (base === "points3D.bin") group.points = file;
+    }
+    const candidates = [...groups.entries()]
+      .filter(([, group]) => group.cameras && group.images && group.points)
+      .map(([dir, group]) => ({ dir, ...group }))
+      .sort((a, b) => a.dir.localeCompare(b.dir));
+
+    if (!candidates.length) {
+      setStatus(
+        "Aucun sous-dossier valide trouvé (cameras.bin + images.bin + points3D.bin).",
+        true
+      );
+      return;
+    }
+
+    const shouldFrame = models.size === 0;
+    let added = 0;
+    try {
+      for (const candidate of candidates) {
+        setStatus(`Chargement COLMAP : ${candidate.dir || "(racine)"}`);
+        if (await loadCandidate(candidate)) added++;
+      }
+      if (!added) return;
+      refreshUI();
+      refreshInfo();
+      onBoundsChanged?.(getCombinedBounds(), shouldFrame);
+      const loaded = getTotals();
+      setStatus(
+        `${added} modèle(s) COLMAP ajouté(s) : ${loaded.images.toLocaleString("fr-FR")} caméras, ` +
+        `${loaded.pointsShown.toLocaleString("fr-FR")} points affichés.`,
+        "success"
+      );
+    } catch (error) {
+      console.error("[COLMAP] Erreur d’import :", error);
+      refreshUI();
+      refreshInfo();
+      onBoundsChanged?.(getCombinedBounds(), false);
+      setStatus(`Import COLMAP impossible : ${error?.message || error}`, true);
+    }
+  }
 
     if (!input) {
       throw new Error("[COLMAP] #colmapFolderInput introuvable.");
@@ -906,7 +859,7 @@ export function createColmapLayer({
 
   listen(removeBtn, "click", () => {
     clear();
-    setStatus("Modèle COLMAP retiré.");
+    setStatus("Modèles COLMAP retirés.");
   });
 
   refreshUI();
@@ -919,19 +872,15 @@ export function createColmapLayer({
 
     setFlipUp(flip) {
       applyFlipUp(Boolean(flip));
-      if (bounds) onBoundsChanged?.(colmapBounds([bounds.min, bounds.max], Boolean(flip)), false);
+      if (models.size) onBoundsChanged?.(getCombinedBounds(Boolean(flip)), false);
     },
 
-      dispose() {
-        console.trace("[COLMAP] dispose() appelé depuis");
-
-        if (disposed) return;
-        disposed = true;
-
-        for (const remove of removers) remove();
-        removers.length = 0;
-
-        clear();
-      },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      for (const remove of removers) remove();
+      removers.length = 0;
+      clear();
+    },
   };
 }

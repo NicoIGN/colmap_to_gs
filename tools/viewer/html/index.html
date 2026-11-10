@@ -594,8 +594,8 @@
         <p id="colmapImportHelp" class="hint">
           Sélectionner le dossier contenant cameras.bin,
           images.bin et points3D.bin, par exemple sparse/0.
-          Si plusieurs modèles sont présents, sélectionner
-          uniquement le sous-dossier du modèle souhaité.
+          Les modèles sparse trouvés dans les sous-dossiers sont tous ajoutés
+          à la vue et peuvent être masqués séparément.
         </p>
 
         <label class="slider" for="colmapPointSize">
@@ -622,7 +622,7 @@
             id="colmapRemove"
             class="wide"
             disabled
-          >Retirer le modèle COLMAP</button>
+          >Retirer tous les modèles COLMAP</button>
         </div>
       </details>
 
@@ -751,7 +751,8 @@
   </aside>
 
   <div id="help">
-    Clic droit-glisser : orienter la visée ·
+    Clic gauche-glisser : tourner autour de la cible ·
+    Ctrl + clic droit-glisser : déplacer latéralement ·
     Clic milieu-glisser : déplacer latéralement ·
     Ctrl + clic gauche-glisser : zoom sur une zone ·
     Molette : avancer/reculer ·

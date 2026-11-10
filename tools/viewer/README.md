@@ -41,15 +41,19 @@ la section COLMAP permettent d'ajuster leur diamètre sans recharger le modèle.
 La densité de pixels de l'écran est prise en compte (facteur maximal 2).
 
 Un dossier COLMAP peut aussi être glissé directement dans la vue : le viewer
-parcourt le dossier, repère un même sous-dossier contenant `cameras.bin`,
-`images.bin` et `points3D.bin`, puis le charge avec le même importeur que le
-bouton. Les dépôts de scène, JSON et GPX gardent leur comportement existant.
+parcourt le dossier et charge tous les sous-dossiers contenant
+`cameras.bin`, `images.bin` et `points3D.bin`. Les imports successifs
+s'ajoutent à la vue. Chaque modèle apparaît comme un groupe de couches avec
+des cases de masquage en ligne pour les points 3D, les centres caméra et les
+frustums ; la case du groupe masque ou réaffiche toutes ses couches.
+Les dépôts de scène, JSON et GPX gardent leur comportement existant.
 Dans une vue vide, le modèle COLMAP est automatiquement cadré et permet la
 navigation sans charger de splat. Le bouton de cadrage et la touche `R`
 permettent de retrouver sa vue d'ensemble. Ajouter un COLMAP à une scène splat
 existante ne déplace pas la caméra.
-Le clic droit-glisser oriente le regard sans touche Ctrl ; le clic
-milieu-glisser déplace latéralement. Maj + clic reste réservé aux mesures.
+Le clic gauche-glisser fait orbiter la vue autour de la cible. Ctrl + clic
+droit-glisser déplace latéralement ; le clic milieu-glisser reste une autre
+commande de translation. Maj + clic reste réservé aux mesures.
 Ctrl + clic gauche-glisser trace une zone : au relâchement du bouton,
 la caméra se rapproche et centre cette zone au plan de la cible, sans rotation.
 Le cadrage conserve les proportions de la vue et inclut tout le rectangle.
@@ -57,8 +61,8 @@ Le cadrage conserve les proportions de la vue et inclut tout le rectangle.
 Glisser un fichier `.splat` ou `.ply` dans la vue l'ajoute aux scènes déjà
 chargées sans recadrer ni déplacer la caméra. Le bouton d'ouverture conserve
 son comportement de remplacement. Le panneau d'informations regroupe les
-cases de visibilité des scènes splat, des points sparse, des centres et
-frustums COLMAP, ainsi que de la trajectoire GPS.
+cases de visibilité des scènes splat, des groupes COLMAP et de la trajectoire
+GPS.
 
 La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
 bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
