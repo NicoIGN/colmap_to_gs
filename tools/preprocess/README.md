@@ -27,8 +27,15 @@ Les composants internes de Nerfstudio `colmap_to_transforms.py` et
 ```bash
 python3 tools/preprocess/filter_sparse_density.py \
   --input /chemin/vers/sparse/0 \
-  --output /chemin/vers/sparse_density_filtered/0
+  --output /chemin/vers/sparse_density_filtered/0 \
+  --verbose
 ```
+
+Les barres de progression sont actives par défaut : lecture, analyse des vues
+et des points de chaque vue, écriture du sparse et des PLY. `--verbose` détaille
+les étapes, paramètres et nombres de points ; `--no-progress` désactive les
+barres (utile dans les logs de batch). Ces messages vont sur stderr, tandis que
+stdout reste le rapport JSON. Dépendances Python : `numpy`, `scipy`, `tqdm`.
 
 Le filtre analyse, pour chaque image, les profondeurs des points observés dans
 un cône angulaire (5° et jusqu'à 128 voisins par défaut). Une KDE gaussienne

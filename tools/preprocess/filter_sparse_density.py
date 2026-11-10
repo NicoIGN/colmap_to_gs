@@ -8,10 +8,12 @@ import os
 from pathlib import Path
 import shutil
 import struct
+import sys
 import tempfile
 
 import numpy as np
 from scipy.spatial import cKDTree
+from tqdm import tqdm
 
 
 POINT_HEADER = struct.Struct("<QdddBBBdQ")
@@ -26,13 +28,14 @@ def read_exact(stream, size, context):
     return data
 
 
-def read_points(path):
+def read_points(path, *, progress=False):
     positions = []
     colors = []
     point_ids = []
     with path.open("rb") as stream:
         count = struct.unpack("<Q", read_exact(stream, 8, "points3D.bin header"))[0]
-        for index in range(count):
+        for index in tqdm(range(count), desc="Lecture points 3D", unit="pt",
+                          disable=not progress):
             raw = read_exact(stream, POINT_HEADER.size, f"point {index}")
             fields = POINT_HEADER.unpack(raw)
             point_ids.append(fields[0])
@@ -69,11 +72,12 @@ def quaternion_to_rotation(qvec):
     ])
 
 
-def read_images(path, point_index):
+def read_images(path, point_index, *, progress=False):
     images = []
     with path.open("rb") as stream:
         count = struct.unpack("<Q", read_exact(stream, 8, "images.bin header"))[0]
-        for image_number in range(count):
+        for image_number in tqdm(range(count), desc="Lecture images", unit="vue",
+                                 disable=not progress):
             header = read_exact(stream, IMAGE_HEADER.size, f"image {image_number}")
             fields = IMAGE_HEADER.unpack(header)
             name = bytearray()
@@ -180,6 +184,8 @@ def density_votes(
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
+    progress=False,
+    verbose=False,
 ):
     """Return per-point suspicious and evaluable image-view vote counts."""
     if neighbors < 2 or min_neighbors < 2 or min_neighbors > neighbors:
@@ -195,9 +201,19 @@ def density_votes(
     evaluable_votes = np.zeros(len(positions), dtype=np.uint32)
     chord_limit = 2 * math.sin(math.radians(max_angle_deg) / 2)
 
-    for image in images:
+    for image_number, image in enumerate(tqdm(
+        images, desc="Analyse densité", unit="vue", disable=not progress,
+    ), start=1):
         observed = np.unique(image["indices"][image["indices"] >= 0])
+        if verbose:
+            tqdm.write(
+                f"[densité] Vue {image_number}/{len(images)} : "
+                f"{len(observed)} points observés ; construction du voisinage angulaire.",
+                file=sys.stderr,
+            )
         if len(observed) < min_neighbors:
+            if verbose:
+                tqdm.write("[densité] Vue ignorée : voisinage insuffisant.", file=sys.stderr)
             continue
         vectors = positions[observed] - image["center"]
         depths = np.linalg.norm(vectors, axis=1)
@@ -216,7 +232,10 @@ def density_votes(
             angular_distances = angular_distances[:, None]
             angular_indices = angular_indices[:, None]
 
-        for local_index, point_index in enumerate(observed):
+        for local_index, point_index in enumerate(tqdm(
+            observed, desc=f"Points vue {image_number}", unit="pt",
+            position=1, leave=False, disable=not progress,
+        )):
             selected = angular_indices[local_index][
                 angular_distances[local_index] <= chord_limit
             ]
@@ -262,6 +281,8 @@ def filter_sparse_model(
     low_density_fraction=0.2,
     min_views=2,
     vote_fraction=0.75,
+    progress=False,
+    verbose=False,
 ):
     input_dir = Path(input_dir).expanduser().resolve()
     output_dir = Path(output_dir).expanduser().resolve()
@@ -275,11 +296,20 @@ def filter_sparse_model(
         raise FileNotFoundError(
             f"Modèle COLMAP incomplet dans {input_dir} : {', '.join(missing)}"
         )
-    point_ids, positions, colors = read_points(input_dir / "points3D.bin")
+    if verbose:
+        tqdm.write(f"[sparse] Lecture : {input_dir}", file=sys.stderr)
+    point_ids, positions, colors = read_points(input_dir / "points3D.bin", progress=progress)
     if not len(point_ids):
         raise ValueError("Le modèle COLMAP ne contient aucun point 3D.")
     point_index = {int(pid): index for index, pid in enumerate(point_ids)}
-    images = read_images(input_dir / "images.bin", point_index)
+    images = read_images(input_dir / "images.bin", point_index, progress=progress)
+    if verbose:
+        tqdm.write(
+            f"[sparse] {len(point_ids)} points, {len(images)} vues ; "
+            f"{neighbors} voisins maximum, cône {max_angle_deg}°, "
+            f"rejet confirmé par {min_views} vues minimum et {vote_fraction:.0%} des votes.",
+            file=sys.stderr,
+        )
     suspicious, evaluable = density_votes(
         positions,
         images,
@@ -289,6 +319,8 @@ def filter_sparse_model(
         min_cluster_points=min_cluster_points,
         min_cluster_fraction=min_cluster_fraction,
         low_density_fraction=low_density_fraction,
+        progress=progress,
+        verbose=verbose,
     )
     rejected = (
         (evaluable >= min_views)
@@ -298,6 +330,12 @@ def filter_sparse_model(
     if rejected.all():
         raise ValueError("Le filtre proposerait de supprimer tous les points ; sortie annulée.")
 
+    if verbose:
+        tqdm.write(
+            f"[sparse] {int(rejected.sum())}/{len(point_ids)} points rejetés "
+            f"({rejected.mean():.2%}) ; écriture : {output_dir}",
+            file=sys.stderr,
+        )
     output_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".filter-sparse-", dir=output_dir) as temporary:
         temporary = Path(temporary)
@@ -309,7 +347,8 @@ def filter_sparse_model(
                 (temporary / "points3D.bin").open("wb") as target:
             count = struct.unpack("<Q", read_exact(source, 8, "points3D.bin header"))[0]
             target.write(struct.pack("<Q", int((~rejected).sum())))
-            for index in range(count):
+            for index in tqdm(range(count), desc="Écriture sparse : points", unit="pt",
+                              disable=not progress):
                 raw_header = read_exact(source, POINT_HEADER.size, f"point {index}")
                 track_size = POINT_HEADER.unpack(raw_header)[-1] * 8
                 raw_track = read_exact(source, track_size, f"track du point {index}")
@@ -319,7 +358,8 @@ def filter_sparse_model(
         kept_ids = set(map(int, point_ids[~rejected]))
         with (temporary / "images.bin").open("wb") as target:
             target.write(struct.pack("<Q", len(images)))
-            for image in images:
+            for image in tqdm(images, desc="Écriture sparse : images", unit="vue",
+                              disable=not progress):
                 target.write(image["header"])
                 target.write(image["name"] + b"\0")
                 target.write(struct.pack("<Q", len(image["point_ids"])))
@@ -375,8 +415,9 @@ def filter_sparse_model(
                     "property uchar red\nproperty uchar green\nproperty uchar blue\n"
                     "end_header\n"
                 )
-                for (x, y, z), (red, green, blue) in zip(
-                    positions[mask], colors[mask]
+                for (x, y, z), (red, green, blue) in tqdm(
+                    zip(positions[mask], colors[mask]), total=int(mask.sum()),
+                    desc=f"Écriture {name}", unit="pt", disable=not progress,
                 ):
                     ply.write(
                         f"{x:.17g} {y:.17g} {z:.17g} "
@@ -396,6 +437,9 @@ def filter_sparse_model(
         for optional in ("rigs.bin", "frames.bin"):
             if not (input_dir / optional).is_file():
                 (output_dir / optional).unlink(missing_ok=True)
+    if verbose:
+        tqdm.write(f"[sparse] Terminé ; rapport : {output_dir / 'density_report.json'}",
+                   file=sys.stderr)
     return report
 
 
@@ -423,6 +467,10 @@ def main():
                         help="Nombre de vues évaluables requis (défaut : 2).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
+    parser.add_argument("--verbose", action="store_true",
+                        help="Afficher les étapes, paramètres et détails par vue sur stderr.")
+    parser.add_argument("--no-progress", action="store_true",
+                        help="Désactiver les barres de progression sur stderr.")
     args = parser.parse_args()
     try:
         report = filter_sparse_model(
@@ -436,6 +484,8 @@ def main():
             low_density_fraction=args.low_density_fraction,
             min_views=args.min_views,
             vote_fraction=args.vote_fraction,
+            progress=not args.no_progress,
+            verbose=args.verbose,
         )
     except (OSError, ValueError) as error:
         parser.error(str(error))

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -80,6 +82,37 @@ def read_image_point_ids(path):
 
 
 class SparseDensityTest(unittest.TestCase):
+    def test_cli_progress_and_verbose_preserve_json_and_filtered_model(self):
+        positions = np.vstack((np.tile([0, 0, 10.0], (20, 1)), [[0, 0, 100]]))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "sparse"
+            write_model(source, positions)
+            results = []
+            for name, options in (("progress", ["--verbose"]),
+                                  ("quiet", ["--no-progress"])):
+                output = root / name
+                result = subprocess.run(
+                    [sys.executable, "-m", "tools.preprocess.filter_sparse_density",
+                     "--input", str(source), "--output", str(output), *options],
+                    capture_output=True, text=True, check=True,
+                )
+                report = json.loads(result.stdout)
+                self.assertEqual(report["points_removed"], 1)
+                if name == "progress":
+                    for message in ("Lecture points 3D", "Lecture images",
+                                    "Analyse densité", "Points vue", "Écriture sparse",
+                                    "points3D_kept.ply", "points3D_removed.ply",
+                                    "[sparse] Terminé"):
+                        self.assertIn(message, result.stderr)
+                else:
+                    self.assertEqual(result.stderr, "")
+                results.append(output)
+            for filename in ("cameras.bin", "images.bin", "points3D.bin",
+                             "points3D_kept.ply", "points3D_removed.ply"):
+                self.assertEqual((results[0] / filename).read_bytes(),
+                                 (results[1] / filename).read_bytes())
+
     def test_isolated_far_point_rejected_but_several_depth_packets_survive(self):
         rng = np.random.default_rng(42)
         angles = rng.uniform(-0.02, 0.02, (24, 2))
