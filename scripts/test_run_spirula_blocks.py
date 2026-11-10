@@ -231,6 +231,43 @@ class BlockPipelineTest(unittest.TestCase):
                 self.assertFalse(log.exists())
                 self.assertFalse((root / "unused").exists())
 
+    def test_automatic_growth_uses_locale_independent_decimal_separator(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            real_awk = shutil.which("awk")
+            wrapper = root / "bin/awk"
+            wrapper.write_text(
+                f"#!{sys.executable}\n"
+                "import os, subprocess, sys\n"
+                f"result = subprocess.run([{real_awk!r}, *sys.argv[1:]], "
+                "capture_output=True, text=True)\n"
+                "output = result.stdout\n"
+                # Model a locale-sensitive awk even on hosts with only C locales.
+                "if any('%.12f' in arg for arg in sys.argv) and "
+                "os.environ.get('LC_ALL') != 'C':\n"
+                "    output = output.replace('.', ',')\n"
+                "sys.stdout.write(output)\n"
+                "sys.stderr.write(result.stderr)\n"
+                "sys.exit(result.returncode)\n"
+            )
+            wrapper.chmod(0o755)
+            env.pop("LC_ALL", None)
+            env.update(TRAIN_GROWTH_FACTOR="", LC_NUMERIC="C",
+                       TRAIN_REFINE_STOP_ITER="12000", TRAIN_REFINE_STOP_NUM_ITER="3000")
+            result = subprocess.run(
+                ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                 "--output-dir", str(root / "worker"), "--num-iterations", "15000"],
+                env=env,
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            train = next(json.loads(line) for line in log.read_text().splitlines()
+                         if json.loads(line)[:2] == ["spirula", "train"])
+            factor = train[train.index("--growth-factor") + 1]
+            self.assertEqual(factor, "1.020403477086")
+            self.assertIn("114 cycles avant le pas 12000", result.stdout)
+
     def test_splits_once_and_trains_each_block(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)

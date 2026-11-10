@@ -82,6 +82,8 @@ Le réglage d'exemple vise 4 blocs × 2 millions de splats, à 20000 itérations
 garantis. Le facteur de croissance vide est estimé par le worker existant,
 en supposant une initialisation à 10 % du cap ; un nuage sparse plus fourni
 peut faire atteindre le cap plus tôt.
+Le calcul utilise la locale `C` pour transmettre un point décimal à Spirula,
+y compris sur un système configuré en français.
 L'arrêt 14000/4000 laisse 4000 pas sans croissance.
 `TRAIN_MASKS_MODE=empty` apprend le ciel comme vide ; `ignore` exclut sa perte.
 `auto` utilise la résolution du mode déjà implémentée par le worker Panoramax.

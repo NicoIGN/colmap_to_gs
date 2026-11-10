@@ -209,7 +209,7 @@ if [[ -n "$min_init_fraction" ]]; then
 fi
 if [[ -z "$growth_factor" ]]; then
   # Spirula grows at multiples of 100 strictly after 500 and before the stop.
-  growth_estimate="$(awk \
+  growth_estimate="$(LC_ALL=C awk \
     -v total="$num_iterations" \
     -v stop_iter="${refine_stop_iter:-14000}" \
     -v stop_tail="${refine_stop_num_iter:-2500}" \
