@@ -102,16 +102,18 @@ class SparseDensityTest(unittest.TestCase):
                 if name == "progress":
                     for message in ("Lecture points 3D", "Lecture images",
                                     "Analyse densité", "Points vue", "Écriture sparse",
-                                    "points3D_kept.ply", "points3D_removed.ply",
+                                    "progress_clean", "progress_rejected",
                                     "[sparse] Terminé"):
                         self.assertIn(message, result.stderr)
                 else:
                     self.assertEqual(result.stderr, "")
                 results.append(output)
-            for filename in ("cameras.bin", "images.bin", "points3D.bin",
-                             "points3D_kept.ply", "points3D_removed.ply"):
-                self.assertEqual((results[0] / filename).read_bytes(),
-                                 (results[1] / filename).read_bytes())
+            for suffix in ("_clean", "_rejected"):
+                for filename in ("cameras.bin", "images.bin", "points3D.bin"):
+                    self.assertEqual(
+                        (root / (results[0].name + suffix) / filename).read_bytes(),
+                        (root / (results[1].name + suffix) / filename).read_bytes())
+            self.assertFalse(list(root.rglob("*.ply")))
 
     def test_isolated_far_point_rejected_but_several_depth_packets_survive(self):
         rng = np.random.default_rng(42)
@@ -144,7 +146,11 @@ class SparseDensityTest(unittest.TestCase):
                 source, output, min_neighbors=12, min_cluster_points=5
             )
             self.assertEqual(report["points_removed"], 0)
-            self.assertEqual(len(read_output_point_ids(output / "points3D.bin")), 21)
+            self.assertEqual(len(read_output_point_ids(
+                root / "filtered_clean/points3D.bin")), 21)
+            self.assertEqual(read_output_point_ids(root / "filtered_rejected/points3D.bin"), [])
+            self.assertTrue(all(refs == [-1] * 21 for _, refs in
+                                read_image_point_ids(root / "filtered_rejected/images.bin")))
 
     def test_filter_writes_consistent_sparse_and_report(self):
         rng = np.random.default_rng(7)
@@ -160,6 +166,8 @@ class SparseDensityTest(unittest.TestCase):
             report = filter_sparse_model(
                 source, output, min_neighbors=12, min_cluster_points=5
             )
+            output = root / "filtered_clean"
+            rejected = root / "filtered_rejected"
             self.assertEqual(report["points_removed"], 1)
             self.assertEqual(read_output_point_ids(output / "points3D.bin"), list(range(1, 21)))
             image_refs = read_image_point_ids(output / "images.bin")
@@ -170,14 +178,37 @@ class SparseDensityTest(unittest.TestCase):
                 json.loads((output / "density_report.json").read_text())["points_kept"],
                 20,
             )
-            self.assertTrue((output / "points3D_kept.ply").is_file())
-            self.assertTrue((output / "points3D_removed.ply").is_file())
+            self.assertFalse(list(root.rglob("*.ply")))
+            self.assertEqual(read_output_point_ids(rejected / "points3D.bin"), [21])
+            self.assertTrue(all(refs == [-1] * 20 + [21] for _, refs in
+                                read_image_point_ids(rejected / "images.bin")))
+            self.assertEqual((rejected / "cameras.bin").read_bytes(),
+                             (source / "cameras.bin").read_bytes())
+            from tools.images_to_splat.resume import validate_sparse
+            validate_sparse(output)
+            validate_sparse(rejected)
             self.assertEqual((output / "rigs.bin").read_bytes(), b"rig metadata")
             self.assertEqual((output / "frames.bin").read_bytes(), b"frame metadata")
             self.assertEqual(
                 (source / "points3D.bin").stat().st_size,
                 (output / "points3D.bin").stat().st_size + POINT_HEADER.size + 16,
             )
+
+    def test_default_output_names_and_input_protection(self):
+        positions = np.tile([0, 0, 10.0], (20, 1))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "model"
+            write_model(source, positions)
+            original = (source / "points3D.bin").read_bytes()
+            report = filter_sparse_model(source)
+            self.assertEqual(report["output_clean"], str(root / "model_clean"))
+            self.assertEqual(report["output_rejected"], str(root / "model_rejected"))
+            self.assertEqual((source / "points3D.bin").read_bytes(), original)
+            protected = root / "protected_clean"
+            write_model(protected, positions)
+            with self.assertRaisesRegex(ValueError, "distincts"):
+                filter_sparse_model(protected, root / "protected")
 
 
 if __name__ == "__main__":

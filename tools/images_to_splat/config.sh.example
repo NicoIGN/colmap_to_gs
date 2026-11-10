@@ -91,7 +91,7 @@ SFM_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy
 SFM_CAMERA_MODE="folder"
 SFM_CAMERA_MODEL="opencv"
 # Filtre experimental des points isoles/lointains avant decoupage (CPU).
-# Sortie separee sparse_filtered/0 ; SfM brut et georef restent intacts.
+# Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.
 # Activer avant preparation ; changer apres decoupage exige un nouveau workspace.
 SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
 # Photos individuelles, sans sequence ni alignement GPS force.

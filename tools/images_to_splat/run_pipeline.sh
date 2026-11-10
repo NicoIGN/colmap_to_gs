@@ -52,7 +52,7 @@ if [[ -n "$GEOREF_GPX_FILE" ]]; then
 fi
 filter_input="$sparse"
 if [[ "$SFM_FILTER_DENSITY" == true ]]; then
-  sparse="$OUTPUT_DIR/sparse_filtered/0"
+  sparse="$OUTPUT_DIR/sparse_clean"
 fi
 
 check_filtered_sparse() {
@@ -89,7 +89,7 @@ prepare() {
   fi
   if ! sparse_ready; then
     if [[ "$PIPELINE_RESUME" == true ]]; then
-      for downstream in georef sparse_filtered blocks gs; do
+      for downstream in georef sparse_filtered sparse_clean sparse_rejected blocks gs; do
         [[ ! -e "$OUTPUT_DIR/$downstream" ]] ||
           die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
       done
@@ -123,7 +123,7 @@ prepare() {
       [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" ]] ||
         die "Filtrage absent mais blocs/train présents : choisir un nouvel OUTPUT_DIR."
       "$PYTHON_BIN" "$repo_root/tools/preprocess/filter_sparse_density.py" \
-        --input "$filter_input" --output "$sparse" --verbose --no-progress
+        --input "$filter_input" --output "$OUTPUT_DIR/sparse" --verbose --no-progress
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
       touch "$sparse/.density_done"
     else

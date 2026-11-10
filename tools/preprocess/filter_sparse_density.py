@@ -269,9 +269,52 @@ def density_votes(
     return suspicious_votes, evaluable_votes
 
 
+def write_partition(input_dir, output_dir, point_ids, images, mask, report, *, progress):
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".filter-sparse-", dir=output_dir) as temporary:
+        temporary = Path(temporary)
+        shutil.copyfile(input_dir / "cameras.bin", temporary / "cameras.bin")
+        for optional in ("rigs.bin", "frames.bin"):
+            if (input_dir / optional).is_file():
+                shutil.copyfile(input_dir / optional, temporary / optional)
+        with (input_dir / "points3D.bin").open("rb") as source, \
+                (temporary / "points3D.bin").open("wb") as target:
+            count = struct.unpack("<Q", read_exact(source, 8, "points3D.bin header"))[0]
+            target.write(struct.pack("<Q", int(mask.sum())))
+            for index in tqdm(range(count), desc=f"Écriture sparse {output_dir.name} : points",
+                              unit="pt", disable=not progress):
+                header = read_exact(source, POINT_HEADER.size, f"point {index}")
+                track = read_exact(source, POINT_HEADER.unpack(header)[-1] * 8,
+                                   f"track du point {index}")
+                if mask[index]:
+                    target.write(header)
+                    target.write(track)
+        selected_ids = set(map(int, point_ids[mask]))
+        with (temporary / "images.bin").open("wb") as target:
+            target.write(struct.pack("<Q", len(images)))
+            for image in tqdm(images, desc=f"Écriture sparse {output_dir.name} : images",
+                              unit="vue", disable=not progress):
+                target.write(image["header"])
+                target.write(image["name"] + b"\0")
+                target.write(struct.pack("<Q", len(image["point_ids"])))
+                for offset, raw_id in enumerate(image["point_ids"]):
+                    start = offset * OBSERVATION.size
+                    target.write(image["observations"][start:start + 16])
+                    point_id = int(raw_id)
+                    target.write(struct.pack("<q", point_id if point_id in selected_ids else -1))
+        (temporary / "density_report.json").write_text(
+            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+        )
+        for path in temporary.iterdir():
+            os.replace(path, output_dir / path.name)
+        for optional in ("rigs.bin", "frames.bin"):
+            if not (input_dir / optional).is_file():
+                (output_dir / optional).unlink(missing_ok=True)
+
+
 def filter_sparse_model(
     input_dir,
-    output_dir,
+    output_dir=None,
     *,
     neighbors=128,
     max_angle_deg=5.0,
@@ -285,11 +328,15 @@ def filter_sparse_model(
     verbose=False,
 ):
     input_dir = Path(input_dir).expanduser().resolve()
-    output_dir = Path(output_dir).expanduser().resolve()
+    output_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else input_dir
+    clean_dir = output_dir.with_name(output_dir.name + "_clean")
+    rejected_dir = output_dir.with_name(output_dir.name + "_rejected")
     if not 0 <= vote_fraction <= 1 or min_views < 1:
         raise ValueError("Le seuil de vues ou de votes est invalide.")
-    if input_dir == output_dir:
-        raise ValueError("Le dossier de sortie doit être différent du sparse d'entrée.")
+    if input_dir in (clean_dir, rejected_dir) or any(
+        destination in input_dir.parents for destination in (clean_dir, rejected_dir)
+    ):
+        raise ValueError("Les dossiers de sortie doivent être distincts du sparse d'entrée.")
     required = ("cameras.bin", "images.bin", "points3D.bin")
     missing = [name for name in required if not (input_dir / name).is_file()]
     if missing:
@@ -298,7 +345,7 @@ def filter_sparse_model(
         )
     if verbose:
         tqdm.write(f"[sparse] Lecture : {input_dir}", file=sys.stderr)
-    point_ids, positions, colors = read_points(input_dir / "points3D.bin", progress=progress)
+    point_ids, positions, _ = read_points(input_dir / "points3D.bin", progress=progress)
     if not len(point_ids):
         raise ValueError("Le modèle COLMAP ne contient aucun point 3D.")
     point_index = {int(pid): index for index, pid in enumerate(point_ids)}
@@ -333,112 +380,41 @@ def filter_sparse_model(
     if verbose:
         tqdm.write(
             f"[sparse] {int(rejected.sum())}/{len(point_ids)} points rejetés "
-            f"({rejected.mean():.2%}) ; écriture : {output_dir}",
+            f"({rejected.mean():.2%}) ; écriture : {clean_dir} et {rejected_dir}",
             file=sys.stderr,
         )
-    output_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=".filter-sparse-", dir=output_dir) as temporary:
-        temporary = Path(temporary)
-        shutil.copyfile(input_dir / "cameras.bin", temporary / "cameras.bin")
-        for optional in ("rigs.bin", "frames.bin"):
-            if (input_dir / optional).is_file():
-                shutil.copyfile(input_dir / optional, temporary / optional)
-        with (input_dir / "points3D.bin").open("rb") as source, \
-                (temporary / "points3D.bin").open("wb") as target:
-            count = struct.unpack("<Q", read_exact(source, 8, "points3D.bin header"))[0]
-            target.write(struct.pack("<Q", int((~rejected).sum())))
-            for index in tqdm(range(count), desc="Écriture sparse : points", unit="pt",
-                              disable=not progress):
-                raw_header = read_exact(source, POINT_HEADER.size, f"point {index}")
-                track_size = POINT_HEADER.unpack(raw_header)[-1] * 8
-                raw_track = read_exact(source, track_size, f"track du point {index}")
-                if not rejected[index]:
-                    target.write(raw_header)
-                    target.write(raw_track)
-        kept_ids = set(map(int, point_ids[~rejected]))
-        with (temporary / "images.bin").open("wb") as target:
-            target.write(struct.pack("<Q", len(images)))
-            for image in tqdm(images, desc="Écriture sparse : images", unit="vue",
-                              disable=not progress):
-                target.write(image["header"])
-                target.write(image["name"] + b"\0")
-                target.write(struct.pack("<Q", len(image["point_ids"])))
-                records = image["observations"]
-                for offset, raw_id in enumerate(image["point_ids"]):
-                    start = offset * OBSERVATION.size
-                    target.write(records[start:start + 16])
-                    point_id = int(raw_id)
-                    target.write(struct.pack(
-                        "<q", point_id if point_id in kept_ids else -1
-                    ))
-
-        report = {
-            "input": str(input_dir),
-            "output": str(output_dir),
-            "points_total": int(len(point_ids)),
-            "points_kept": int((~rejected).sum()),
-            "points_removed": int(rejected.sum()),
-            "points_with_enough_views": int((evaluable >= min_views).sum()),
-            "removed_points": [
-                {
-                    "point3D_id": int(point_ids[index]),
-                    "xyz": positions[index].tolist(),
-                    "evaluable_views": int(evaluable[index]),
-                    "suspicious_views": int(suspicious[index]),
-                }
-                for index in np.flatnonzero(rejected)
-            ],
-            "parameters": {
-                "neighbors": neighbors,
-                "max_angle_deg": max_angle_deg,
-                "min_neighbors": min_neighbors,
-                "min_cluster_points": min_cluster_points,
-                "min_cluster_fraction": min_cluster_fraction,
-                "low_density_fraction": low_density_fraction,
-                "min_views": min_views,
-                "vote_fraction": vote_fraction,
-            },
-        }
-        (temporary / "density_report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        for name, mask in (
-            ("points3D_kept.ply", ~rejected),
-            ("points3D_removed.ply", rejected),
-        ):
-            with (temporary / name).open("w", encoding="ascii") as ply:
-                ply.write(
-                    "ply\nformat ascii 1.0\n"
-                    f"element vertex {int(mask.sum())}\n"
-                    "property double x\nproperty double y\nproperty double z\n"
-                    "property uchar red\nproperty uchar green\nproperty uchar blue\n"
-                    "end_header\n"
-                )
-                for (x, y, z), (red, green, blue) in tqdm(
-                    zip(positions[mask], colors[mask]), total=int(mask.sum()),
-                    desc=f"Écriture {name}", unit="pt", disable=not progress,
-                ):
-                    ply.write(
-                        f"{x:.17g} {y:.17g} {z:.17g} "
-                        f"{red} {green} {blue}\n"
-                    )
-
-        filenames = [
-            "cameras.bin", "images.bin", "points3D.bin",
-            "density_report.json", "points3D_kept.ply", "points3D_removed.ply",
-        ]
-        filenames.extend(
-            name for name in ("rigs.bin", "frames.bin")
-            if (temporary / name).is_file()
-        )
-        for name in filenames:
-            os.replace(temporary / name, output_dir / name)
-        for optional in ("rigs.bin", "frames.bin"):
-            if not (input_dir / optional).is_file():
-                (output_dir / optional).unlink(missing_ok=True)
+    report = {
+        "input": str(input_dir),
+        "output_clean": str(clean_dir),
+        "output_rejected": str(rejected_dir),
+        "points_total": int(len(point_ids)),
+        "points_kept": int((~rejected).sum()),
+        "points_removed": int(rejected.sum()),
+        "points_with_enough_views": int((evaluable >= min_views).sum()),
+        "removed_points": [
+            {
+                "point3D_id": int(point_ids[index]),
+                "xyz": positions[index].tolist(),
+                "evaluable_views": int(evaluable[index]),
+                "suspicious_views": int(suspicious[index]),
+            }
+            for index in np.flatnonzero(rejected)
+        ],
+        "parameters": {
+            "neighbors": neighbors,
+            "max_angle_deg": max_angle_deg,
+            "min_neighbors": min_neighbors,
+            "min_cluster_points": min_cluster_points,
+            "min_cluster_fraction": min_cluster_fraction,
+            "low_density_fraction": low_density_fraction,
+            "min_views": min_views,
+            "vote_fraction": vote_fraction,
+        },
+    }
+    for destination, mask in ((clean_dir, ~rejected), (rejected_dir, rejected)):
+        write_partition(input_dir, destination, point_ids, images, mask, report, progress=progress)
     if verbose:
-        tqdm.write(f"[sparse] Terminé ; rapport : {output_dir / 'density_report.json'}",
+        tqdm.write(f"[sparse] Terminé ; rapport : {clean_dir / 'density_report.json'}",
                    file=sys.stderr)
     return report
 
@@ -449,8 +425,9 @@ def main():
     )
     parser.add_argument("--input", type=Path, required=True,
                         help="Sparse COLMAP d'entrée, contenant les trois fichiers .bin.")
-    parser.add_argument("--output", type=Path, required=True,
-                        help="Nouveau sparse COLMAP de sortie, sans modifier l'entrée.")
+    parser.add_argument("--output", type=Path,
+                        help="Préfixe XXX des dossiers XXX_clean et XXX_rejected "
+                             "(défaut : chemin d'entrée). Aucun PLY produit.")
     parser.add_argument("--neighbors", type=int, default=128,
                         help="Nombre maximal de voisins angulaires (défaut : 128).")
     parser.add_argument("--max-angle-deg", type=float, default=5.0,

@@ -116,12 +116,13 @@ def prepare(check=False):
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
              ("images", "sfm", "masks", "feature_masks", "train_masks",
-              "sparse_filtered", "blocks", "gs")):
+              "sparse_filtered", "sparse_clean", "sparse_rejected", "blocks", "gs")):
         if not resume:
             raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
         adopted = True
     if adopted and any((output / name).exists()
-                       for name in ("georef", "sparse_filtered", "blocks", "gs")):
+                       for name in ("georef", "sparse_filtered", "sparse_clean",
+                                    "sparse_rejected", "blocks", "gs")):
         raise ValueError(
             "Reprise sans signature actuelle refusée après recalage/découpage/entraînement "
             "ou filtrage sparse : "

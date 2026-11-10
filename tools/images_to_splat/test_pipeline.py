@@ -104,7 +104,7 @@ elif name == "georef_colmap_from_gpx.py":
 elif name == "colmap_split_blocks.py":
     expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"
     if os.environ.get("SFM_FILTER_DENSITY") == "true":
-        expected = "/sparse_filtered/0"
+        expected = "/sparse_clean"
     assert get("--input").endswith(expected)
     output = Path(get("--output"))
     count = int(get("--num-blocks"))
@@ -121,7 +121,7 @@ elif name == "filter_splats.py":
     assert get("--mode") == "off"
     expected = "/georef/0/points3D.bin" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0/points3D.bin"
     if os.environ.get("SFM_FILTER_DENSITY") == "true":
-        expected = "/sparse_filtered/0/points3D.bin"
+        expected = "/sparse_clean/points3D.bin"
     assert get("--sparse-points").endswith(expected)
     assert Path(get("--input")).read_bytes() == b"raw-splat"
     output = Path(get("--output"))
@@ -309,7 +309,7 @@ if "--wait" in args:
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
         self.append("SFM_FILTER_DENSITY=true")
         self.assert_ok(self.run_pipeline())
-        filtered = self.output / "sparse_filtered/0"
+        filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
         self.assertTrue((filtered / "density_report.json").is_file())
         self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"
@@ -330,7 +330,7 @@ if "--wait" in args:
         names = [cmd[0] for cmd in self.commands()]
         georef = names.index("georef_colmap_from_gpx.py")
         self.assertLess(georef, names.index("filter_sparse_density.py", georef))
-        self.assertTrue((self.output / "sparse_filtered/0/.density_done").is_file())
+        self.assertTrue((self.output / "sparse_clean/.density_done").is_file())
 
     def test_density_filter_failures_stop_before_split_and_marking_complete(self):
         self.append("SFM_FILTER_DENSITY=true")
@@ -338,7 +338,7 @@ if "--wait" in args:
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.output / "blocks").exists())
-        self.assertFalse((self.output / "sparse_filtered/0/.density_done").exists())
+        self.assertFalse((self.output / "sparse_clean/.density_done").exists())
         self.assertFalse((self.output / ".prepare_done").exists())
 
     def test_density_setting_changes_refuse_existing_blocks(self):
@@ -348,7 +348,7 @@ if "--wait" in args:
         self.append("SFM_FILTER_DENSITY=true\nPIPELINE_RESUME=true")
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
-        self.assertFalse((self.output / "sparse_filtered").exists())
+        self.assertFalse((self.output / "sparse_clean").exists())
 
     def test_invalid_density_flag_stops_before_submission(self):
         self.append("SFM_FILTER_DENSITY=yes")

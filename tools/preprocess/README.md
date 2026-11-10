@@ -27,12 +27,12 @@ Les composants internes de Nerfstudio `colmap_to_transforms.py` et
 ```bash
 python3 tools/preprocess/filter_sparse_density.py \
   --input /chemin/vers/sparse/0 \
-  --output /chemin/vers/sparse_density_filtered/0 \
+  --output /chemin/vers/essai \
   --verbose
 ```
 
 Les barres de progression sont actives par défaut : lecture, analyse des vues
-et des points de chaque vue, écriture du sparse et des PLY. `--verbose` détaille
+et des points de chaque vue, écriture des deux modèles binaires. `--verbose` détaille
 les étapes, paramètres et nombres de points ; `--no-progress` désactive les
 barres (utile dans les logs de batch). Ces messages vont sur stderr, tandis que
 stdout reste le rapport JSON. Dépendances Python : `numpy`, `scipy`, `tqdm`.
@@ -45,12 +45,19 @@ est derrière tous les paquets soutenus, en dehors de leur enveloppe à 3σ et �
 faible densité, avec confirmation par au moins 75 % de deux vues évaluables.
 Les voisinages insuffisants sont conservés.
 
-La sortie est un nouveau modèle COLMAP binaire : les références aux points
-retirés sont remplacées par `-1` dans `images.bin`. Le modèle d'entrée reste
-intact. `density_report.json` récapitule les paramètres, les points rejetés et
-leurs votes ; `points3D_kept.ply` et `points3D_removed.ply` permettent de
-comparer le résultat dans un viewer. Les éventuels `rigs.bin` et `frames.bin`
-sont également conservés. Il s'agit d'un filtre à valider visuellement :
+`--output` est un **préfixe**, pas un dossier de modèle : l'exemple produit
+`essai_clean` (points conservés) et `essai_rejected` (points retirés).
+Sans `--output`, le chemin d'entrée sert de préfixe : `sparse/0` donne
+`sparse/0_clean` et `sparse/0_rejected`.
+Chaque dossier contient `cameras.bin`, `images.bin`, `points3D.bin` et
+`density_report.json`. Aucun PLY n'est produit. Les identifiants, les tracks
+des points inclus et les indices des observations 2D sont conservés ; les
+références aux points exclus de chaque modèle deviennent `-1`.
+Le modèle d'entrée reste intact. Le modèle rejeté est vide si aucun point
+n'est supprimé (en-tête binaire à zéro point, caméras/images conservées).
+Les éventuels `rigs.bin` et `frames.bin` sont également conservés.
+Le rapport récapitule les paramètres, les points rejetés et leurs votes.
+Il s'agit d'un filtre à valider visuellement :
 tester le sparse original et sa sortie dans le viewer avant de l'utiliser pour
 l'entraînement.
 

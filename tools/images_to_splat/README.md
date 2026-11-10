@@ -183,8 +183,9 @@ SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
 
 Le filtre expérimental de `tools/preprocess/filter_sparse_density.py` s'exécute
 sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
-ses seuils par défaut et écrit `sparse_filtered/0`, son rapport et les PLY
-conservés/rejetés ; le SfM brut et le modèle géoréférencé restent intacts.
+ses seuils par défaut et écrit deux modèles COLMAP binaires : `sparse_clean`
+(points conservés) et `sparse_rejected` (points retirés), chacun avec son
+rapport. Aucun PLY n'est produit ; les originaux restent intacts.
 Les blocs et le recadrage bbox final utilisent tous deux ce sparse filtré.
 Les étapes sont journalisées en mode verbose, sans barres interactives en batch.
 Un résultat terminé et valide est réutilisé à la reprise.
