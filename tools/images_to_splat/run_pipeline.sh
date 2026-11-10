@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+source "$repo_root/scripts/pipeline_postprocess.sh"
 
 usage() {
   echo "Usage : bash tools/images_to_splat/run_pipeline.sh CONFIG [--images DIR] [--phase all|prepare|train-block|merge] [--block INDEX]"
@@ -57,7 +58,7 @@ prepare() {
   feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     stage="masques SfM / entraînement"
-    "$PYTHON_BIN" "$script_dir/mask_policies.py"
+    "$PYTHON_BIN" "$script_dir/prepare_masks.py"
     if [[ -d "$OUTPUT_DIR/masks" ]]; then
       sfm_masks="$OUTPUT_DIR/masks"
       train_masks="$OUTPUT_DIR/masks"
@@ -145,21 +146,16 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
   stage="recadrage COLMAP $id avant fusion"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off ]]; then
     cropped="$OUTPUT_DIR/gs/$id/splats/$id.bbox.splat"
-    "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
-      --input "$raw" --output "$cropped" --mode off \
-      --sparse-points "$sparse/points3D.bin" \
-      --sparse-bbox-mode "$POSTPROCESS_SPARSE_BBOX_MODE" \
-      --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
-      --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION" --overwrite
+    crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
+      "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
+      --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")
   else
     inputs+=("$raw")
   fi
 done
 stage="fusion des blocs"
-"$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" "${inputs[@]}" \
-  --output "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" --strength "$MERGE_STRENGTH"
-[[ -s "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" ]] || die "Splat final absent ou vide"
+merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   stage="export de la référence géographique du splat"
   "$PYTHON_BIN" "$script_dir/georeference.py" export

@@ -7,7 +7,7 @@ load_config() {
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
   source "$config"
-  source "$repo_root/tools/panoramax/validate_config.sh"
+  source "$repo_root/scripts/pipeline_config.sh"
   init_sfm_geometry_config
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
@@ -91,8 +91,6 @@ load_config() {
     die "OUTPUT_DIR doit être distinct et extérieur au dossier d'images."
   export SFM_IMAGES_DIR OUTPUT_DIR
 
-  # Reuse the repository's existing value validators, without Panoramax inputs.
-  source "$repo_root/tools/panoramax/validate_config.sh"
   reject_legacy_config || exit 1
   local config_errors=0
   validate_sfm_geometry_config

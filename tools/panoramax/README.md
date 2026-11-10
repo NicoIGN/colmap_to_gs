@@ -4,6 +4,21 @@ Ce lanceur recherche les photos du catalogue fédéré Panoramax via `/api/searc
 pagine jusqu'au dernier résultat et télécharge les images HD disponibles.
 Il n'a pas besoin de compte Panoramax.
 
+## Socle commun avec les images locales
+
+Les politiques et appels de génération des masques sont partagés dans
+`python/mask_policies.py`, la signature géométrique SfM dans
+`python/sfm_geometry_policy.py`. Les helpers `scripts/pipeline_config.sh`,
+`scripts/pipeline_postprocess.sh` et `scripts/pipeline_slurm.sh` regroupent
+respectivement validation commune, recadrage/fusion et soumission/annulation
+Slurm. Les workers SfM et entraînement restent dans `scripts/`.
+
+Ce dossier conserve le téléchargement, la préparation des images et métadonnées,
+les signatures liées à Panoramax, le filtrage des paires GPS et l'export de la
+référence géographique. Le pipeline local conserve son recalage GPX indépendant.
+Les commandes, configurations, dispositions de workspace et particularités de
+post-traitement restent inchangées.
+
 ## Installation
 
 Dans ton environnement Python actif (Python 3.10 ou plus récent) :

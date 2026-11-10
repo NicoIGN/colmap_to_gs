@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard reuse of Panoramax SfM geometry settings without modifying old models."""
+"""Guard reuse of SfM geometry settings without modifying old models."""
 
 import json
 from pathlib import Path

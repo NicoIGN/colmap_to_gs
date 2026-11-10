@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Use the Panoramax mask policies for local images, sharing identical masks."""
+"""Prepare local-image mask directories using shared segmentation policies."""
 
 import os
 from pathlib import Path
 import subprocess
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panoramax"))
-from prepare_masks import generate, policy
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+from mask_policies import generate, policy
 
 
 def policies():

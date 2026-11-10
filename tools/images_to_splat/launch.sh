@@ -2,6 +2,7 @@
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+source "$repo_root/scripts/pipeline_slurm.sh"
 usage() {
   echo "Usage : bash tools/images_to_splat/launch.sh CONFIG [--images DIR] [--wait]"
 }
@@ -31,26 +32,13 @@ args=(--parsable --nodes=1 --ntasks=1 --export=ALL
       "--mem=$SLURM_MEMORY" "--time=$SLURM_TIME_LIMIT" "--chdir=$PWD")
 [[ -z "${SLURM_ACCOUNT:-}" ]] || args+=("--account=$SLURM_ACCOUNT")
 [[ -z "${SLURM_QOS:-}" ]] || args+=("--qos=$SLURM_QOS")
-submitted=()
+PIPELINE_SUBMITTED_JOBS=()
 submit() {
-  local phase="$1" reply status=0
+  local phase="$1"
   shift
-  reply="$(sbatch "${args[@]}" "$@" "$script_dir/launch.slurm" \
-    "$repo_root" "$config" "$phase" "$SFM_IMAGES_DIR")" || status=$?
-  job="${reply%%;*}"
-  if [[ "$job" =~ ^[0-9]+$ ]]; then
-    submitted+=("$job")
-    echo "[slurm] $phase : $reply"
-  else
-    echo "[ERREUR] Réponse sbatch : $reply" >&2
-    ((status != 0)) || status=1
-  fi
-  if ((status != 0)); then
-    if ((${#submitted[@]})); then
-      scancel "${submitted[@]}" || echo "[AVERTISSEMENT] Vérifier les jobs restants avec squeue." >&2
-    fi
-    die "Échec de soumission/exécution Slurm : $phase (code $status)"
-  fi
+  pipeline_submit_job "$phase" "${args[@]}" "$@" "$script_dir/launch.slurm" \
+    "$repo_root" "$config" "$phase" "$SFM_IMAGES_DIR"
+  job="$PIPELINE_JOB_ID"
 }
 submit prepare --job-name=images-prepare "--gres=$gres" \
   "--output=$OUTPUT_DIR/logs/prepare-%j.out" "--error=$OUTPUT_DIR/logs/prepare-%j.err"

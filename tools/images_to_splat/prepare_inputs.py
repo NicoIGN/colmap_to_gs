@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import sys
 
-from mask_policies import policies
+from prepare_masks import policies
 
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}

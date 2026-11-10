@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
-source "$script_dir/../tools/panoramax/validate_config.sh"
+source "$script_dir/pipeline_config.sh"
 reject_legacy_config || exit 1
 
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"

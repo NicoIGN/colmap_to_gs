@@ -22,6 +22,10 @@ class SlurmLaunchTest(unittest.TestCase):
         self.pipeline_dir.mkdir(parents=True)
         for name in ("launch.sh", "launch.slurm", "validate_config.sh"):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
+        shared_scripts = self.pipeline_dir.parents[1] / "scripts"
+        shared_scripts.mkdir()
+        for name in ("pipeline_config.sh", "pipeline_slurm.sh"):
+            shutil.copyfile(SOURCE.parents[1] / "scripts" / name, shared_scripts / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"
         self.config.write_text(

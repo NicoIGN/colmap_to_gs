@@ -3,6 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+source "$repo_root/scripts/pipeline_slurm.sh"
 
 die() {
   printf '[ERREUR] %s\n' "$*" >&2
@@ -83,30 +84,13 @@ printf '[slurm] Configuration : %s\n' "$config_path"
 printf '[slurm] Partition=%s CPU/job=%s RAM/job=%s GPU/bloc=%s durée/job=%s parallélisme=%s\n' \
   "$SLURM_PARTITION" "$SLURM_CPUS_PER_TASK" "$SLURM_MEMORY" "$gres" \
   "$SLURM_TIME_LIMIT" "$SLURM_BLOCK_PARALLELISM"
-submitted_jobs=()
+PIPELINE_SUBMITTED_JOBS=()
 submit_job() {
-  local stage="$1" status=0 submission
+  local stage="$1"
   shift
-  submission="$(sbatch "${sbatch_args[@]}" "$@" "$script_dir/launch.slurm" \
-    "$repo_root" "$config_path" "$stage")" || status=$?
-  job_id="${submission%%;*}"
-  if [[ "$job_id" =~ ^[0-9]+$ ]]; then
-    submitted_jobs+=("$job_id")
-    printf '[slurm] %s : job %s\n' "$stage" "$submission"
-  elif [[ "$status" -eq 0 ]]; then
-    printf '[ERREUR] Réponse sbatch invalide : %s\n' "$submission" >&2
-    status=1
-  fi
-  if [[ "$status" -ne 0 ]]; then
-    printf '[ERREUR] Échec Slurm à l’étape %s (soumission ou exécution), code %s.\n' \
-      "$stage" "$status" >&2
-    if [[ ${#submitted_jobs[@]} -gt 0 ]]; then
-      printf '[slurm] Annulation des jobs restants de cette soumission : %s\n' "${submitted_jobs[*]}"
-      scancel "${submitted_jobs[@]}" ||
-        printf '[AVERTISSEMENT] Annulation incomplète ; vérifier squeue.\n' >&2
-    fi
-    exit "$status"
-  fi
+  pipeline_submit_job "$stage" "${sbatch_args[@]}" "$@" "$script_dir/launch.slurm" \
+    "$repo_root" "$config_path" "$stage"
+  job_id="$PIPELINE_JOB_ID"
 }
 
 submit_job prepare --job-name=panoramax-prepare "--gres=$gres" \

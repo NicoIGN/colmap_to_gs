@@ -3,6 +3,7 @@ set -Eeuo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+source "$repo_root/scripts/pipeline_postprocess.sh"
 
 usage() {
   cat <<'EOF'
@@ -317,12 +318,8 @@ for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
     pipeline_stage="recadrage bbox COLMAP du bloc $block_id avant fusion"
     cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
-    "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
-      --input "$splat" --output "$cropped" --mode off \
-      --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
-      --sparse-bbox-mode apply \
-      --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
-    [[ -s "$cropped" ]] || die "Splat recadré absent ou vide : $cropped"
+    crop_splat_to_sparse "$splat" "$cropped" "$SFM_DIR/sparse/0" \
+      apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
     splat="$cropped"
   fi
   MERGE_INPUTS+=("$splat")
@@ -332,9 +329,7 @@ FINAL_SPLAT="$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 UNFILTERED_SPLAT="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.unfiltered.splat"
 printf '[pipeline] Fusion des blocs vers %s\n' "$UNFILTERED_SPLAT"
 pipeline_stage="fusion des splats des blocs"
-"$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
-  "${MERGE_INPUTS[@]}" --output "$UNFILTERED_SPLAT" --strength "$MERGE_STRENGTH"
-[[ -s "$UNFILTERED_SPLAT" ]] || die "Splat fusionné absent ou vide : $UNFILTERED_SPLAT"
+merge_pipeline_splats "$UNFILTERED_SPLAT" "$MERGE_STRENGTH" "${MERGE_INPUTS[@]}"
 if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
   pipeline_stage="filtre Clean-GS multivues"
   "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \

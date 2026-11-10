@@ -5,7 +5,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
-source "$repo_root/tools/panoramax/validate_config.sh"
+source "$script_dir/pipeline_config.sh"
 reject_legacy_config || exit 1
 
 DIR="${DIR:-}"
@@ -265,7 +265,7 @@ MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
-"$PYTHON_BIN" "$repo_root/tools/panoramax/sfm_geometry_policy.py" "$SFM_DIR" \
+"$PYTHON_BIN" "$repo_root/python/sfm_geometry_policy.py" "$SFM_DIR" \
   "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
   "$SFM_BA_LOSS" "$SFM_BA_LOSS_PARAM"
 

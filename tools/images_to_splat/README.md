@@ -4,6 +4,23 @@ Pipeline Spirula sans téléchargement Panoramax :
 sélection d'images → masques partagés → SfM global → recalage GPX optionnel → blocs COLMAP →
 entraînement → recadrage bbox COLMAP **avant fusion** → `.splat`.
 
+## Socle commun
+
+Les deux pipelines utilisent `python/mask_policies.py` pour les politiques et
+l'appel du générateur de masques, ainsi que `scripts/pipeline_config.sh` pour les
+validations communes et les seuils SfM. `python/sfm_geometry_policy.py` protège
+la réutilisation des modèles du worker multi-blocs ; les images locales
+enregistrent ces paramètres dans leur signature `inputs.json`.
+`scripts/pipeline_postprocess.sh` partage le recadrage sparse et la fusion,
+et `scripts/pipeline_slurm.sh` la soumission, le contrôle des réponses et
+l'annulation des jobs en cas d'échec. Les workers Spirula restent dans `scripts/`.
+
+Ce dossier conserve la sélection des fichiers locaux, la disposition du
+workspace, ses signatures et le recalage GPX. Panoramax conserve l'acquisition,
+les métadonnées et le traitement GPS EXIF. Les commandes, configurations et
+chemins de sortie ne changent pas ; les options propres à chaque pipeline
+(repère, seuil de recadrage, nettoyage final) ne sont pas uniformisées.
+
 ## Utilisation
 
 Copier `config.sh.example` vers un fichier personnel, régler les chemins et
