@@ -51,6 +51,18 @@ if [[ -n "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/georef/0"
 fi
 
+sparse_ready() {
+  if [[ "$PIPELINE_RESUME" == true ]]; then
+    local status=0
+    "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0" || status=$?
+    ((status < 2)) || die "Impossible de valider le sparse ; aucun recalcul lancé."
+    return "$status"
+  else
+    [[ -s "$sfm/sparse/0/cameras.bin" && -s "$sfm/sparse/0/images.bin" &&
+       -s "$sfm/sparse/0/points3D.bin" ]]
+  fi
+}
+
 prepare() {
   stage="sélection des images"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
@@ -65,8 +77,13 @@ prepare() {
     fi
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
-  if [[ ! -s "$sfm/sparse/0/cameras.bin" || ! -s "$sfm/sparse/0/images.bin" ||
-        ! -s "$sfm/sparse/0/points3D.bin" ]]; then
+  if ! sparse_ready; then
+    if [[ "$PIPELINE_RESUME" == true ]]; then
+      for downstream in georef blocks gs; do
+        [[ ! -e "$OUTPUT_DIR/$downstream" ]] ||
+          die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
+      done
+    fi
     stage="reconstruction SfM"
     bash "$repo_root/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
@@ -79,6 +96,9 @@ prepare() {
       --reuse-matches redo \
       --camera-mode "$SFM_CAMERA_MODE" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps none --no-sensor-pairs --threads "$SFM_THREADS" "${feature_args[@]}"
+    if [[ "$PIPELINE_RESUME" == true ]]; then
+      "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
+    fi
   fi
   for name in cameras images points3D; do
     [[ -s "$sfm/sparse/0/$name.bin" ]] || die "SfM incomplet : $name.bin"

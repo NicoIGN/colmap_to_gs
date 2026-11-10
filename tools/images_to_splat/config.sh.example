@@ -21,6 +21,12 @@ SFM_IMAGES_RECURSIVE="true"
 OUTPUT_DIR="/shared/home/NBellaiche/data/Paris9/reconstruction-20k-8M-4blocs"
 SPIRULA_BIN="/shared/home/NBellaiche/sources/spirula-studio/build_vulkan/spirula"
 PYTHON_BIN="python3"
+# Reprise explicite apres interruption, sans supprimer les artefacts.
+# true : accepter une signature absente/ancienne avant blocs/train, verifier
+# chaque masque PNG existant et relancer le SfM si son sparse est incomplet.
+# Les changements connus d'images/parametres restent refuses.
+# Laisser false normalement ; meme variable pour le local et Slurm.
+PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
 
 # ============================================================================
 # 1. Masques SfM / train : memes variables que tools/panoramax

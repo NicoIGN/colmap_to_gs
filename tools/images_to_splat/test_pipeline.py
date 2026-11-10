@@ -153,13 +153,27 @@ if args[0] == "sfm":
         assert get(flag) == os.environ[variable]
     assert get("--reuse-matches") == "redo"
     if os.environ["SFM_MASKS"] == "on":
-        assert Path(get("--feature-masks"), "masks.json").is_file()
+        if os.environ.get("PIPELINE_RESUME") == "true":
+            assert Path(get("--feature-masks"), "root.jpg.png").is_file()
+        else:
+            assert Path(get("--feature-masks"), "masks.json").is_file()
     else:
         assert "--feature-masks" not in args
     sparse = Path(get("--output")) / "sparse/0"
-    sparse.mkdir(parents=True)
-    for name in ("cameras.bin", "images.bin", "points3D.bin"):
-        (sparse / name).write_bytes(b"colmap")
+    sparse.mkdir(parents=True, exist_ok=True)
+    import struct
+    (sparse / "cameras.bin").write_bytes(
+        struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
+    (sparse / "images.bin").write_bytes(
+        struct.pack("<QI7dI", 1, 1, 1, 0, 0, 0, 0, 0, 0, 1)
+        + b"root.jpg\0" + struct.pack("<Qddq", 1, 0.5, 0.5, 1))
+    (sparse / "points3D.bin").write_bytes(
+        struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+    if os.environ.get("TEST_INVALID_SPARSE") == "1":
+        (sparse / "points3D.bin").write_bytes(b"interrupted")
+    elif os.environ.get("TEST_INVALID_SPARSE") == "tracks":
+        path = sparse / "points3D.bin"
+        path.write_bytes(path.read_bytes()[:-4] + struct.pack("<I", 7))
 else:
     assert get("--cap-max") == "2000000"
     assert get("--num-iterations") == "20000"
@@ -290,6 +304,151 @@ if "--wait" in args:
         result = self.run_pipeline("--phase", "prepare")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def interrupted_workspace(self):
+        from PIL import Image
+
+        for path in self.images.rglob("*.jpg"):
+            Image.new("RGB", (2, 2)).save(path)
+        self.output.mkdir()
+        selected = self.output / "images"
+        masks = self.output / "masks"
+        for source in self.images.rglob("*.jpg"):
+            relative = source.relative_to(self.images)
+            target = selected / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.symlink_to(source)
+            mask = masks / (relative.as_posix() + ".png")
+            mask.parent.mkdir(parents=True, exist_ok=True)
+            Image.new("L", (2, 2), 255).save(mask)
+        sparse = self.output / "sfm/sparse/0"
+        sparse.mkdir(parents=True)
+        for name in ("cameras.bin", "images.bin", "points3D.bin"):
+            (sparse / name).write_bytes(b"interrupted")
+        return masks, sparse
+
+    def test_partial_workspace_remains_refused_by_default(self):
+        (self.output / "sfm").mkdir(parents=True)
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Workspace sans inputs.json", result.stdout + result.stderr)
+
+    def test_verified_resume_reuses_masks_and_restarts_incomplete_sfm_slurm(self):
+        self.interrupted_workspace()
+        self.append("PIPELINE_RESUME=true")
+        self.assert_ok(self.run_pipeline("--wait", slurm=True))
+        commands = self.commands()
+        self.assertFalse(any(cmd[0] == "generate_masks.py" for cmd in commands))
+        self.assertEqual(sum(cmd[:2] == ["spirula", "sfm"] for cmd in commands), 1)
+        self.assertTrue((self.output / "scene.splat").is_file())
+        self.assertTrue((self.output / "inputs.json").is_file())
+        adopted_masks = json.loads((self.output / "masks/masks.json").read_text())
+        self.assertEqual(adopted_masks["settings"]["provenance"], "unknown")
+        before = len(commands)
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(any(cmd[:2] == ["spirula", "sfm"]
+                             for cmd in self.commands()[before:]))
+
+    def test_resume_rejects_missing_or_invalid_masks_before_sfm(self):
+        from PIL import Image
+
+        masks, _ = self.interrupted_workspace()
+        self.append("PIPELINE_RESUME=true")
+        mask = masks / "root.jpg.png"
+        for data in ("missing", "corrupt", "size", "nonbinary", "color"):
+            with self.subTest(data=data):
+                if data == "missing":
+                    mask.unlink()
+                elif data == "corrupt":
+                    mask.write_bytes(b"invalid")
+                elif data == "size":
+                    Image.new("L", (3, 2), 255).save(mask)
+                elif data == "nonbinary":
+                    Image.new("L", (2, 2), 127).save(mask)
+                else:
+                    Image.new("RGB", (2, 2), (255, 255, 255)).save(mask)
+                result = self.run_pipeline("--phase", "prepare")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(self.events.exists())
+
+    def test_resume_does_not_override_known_image_or_policy_changes(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.append("PIPELINE_RESUME=true")
+        self.append("SFM_MIN_TRI_ANGLE=4")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_resume_rejects_changed_images(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.append("PIPELINE_RESUME=true")
+        (self.images / "root.jpg").write_bytes(b"changed")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_resume_checks_new_sparse_before_splitting(self):
+        self.interrupted_workspace()
+        self.append("PIPELINE_RESUME=true")
+        for kind in ("1", "tracks"):
+            with self.subTest(kind=kind):
+                self.env["TEST_INVALID_SPARSE"] = kind
+                result = self.run_pipeline("--phase", "prepare")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("Sparse absent ou incomplet", result.stdout + result.stderr)
+                self.assertFalse((self.output / ".prepare_done").exists())
+                self.assertFalse((self.output / "blocks").exists())
+
+    def test_resume_does_not_ignore_mask_policy_metadata(self):
+        masks, _ = self.interrupted_workspace()
+        (masks / "masks.json").write_text(json.dumps({
+            "status": "complete", "settings": {"labels": ["sky"]},
+        }))
+        self.append("PIPELINE_RESUME=true")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Labels de masques modifiés", result.stdout + result.stderr)
+        self.assertFalse(self.events.exists())
+
+    def test_resume_rejects_extra_workspace_images(self):
+        self.interrupted_workspace()
+        (self.output / "images/extra.jpg").symlink_to(self.images / "root.jpg")
+        self.append("PIPELINE_RESUME=true")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Images inattendues", result.stdout + result.stderr)
+        self.assertFalse((self.output / "inputs.json").exists())
+
+    def test_resume_migrates_additive_signature_before_downstream_steps(self):
+        self.interrupted_workspace()
+        self.append("PIPELINE_RESUME=true")
+        # Obtain the current signature without allowing the mocked SfM to finish.
+        self.env["TEST_FAIL_TOOL"] = "colmap_split_blocks.py"
+        self.assertNotEqual(self.run_pipeline("--phase", "prepare").returncode, 0)
+        self.env.pop("TEST_FAIL_TOOL")
+        marker = self.output / "inputs.json"
+        previous = json.loads(marker.read_text())
+        previous["settings"].pop("SFM_MIN_TRI_ANGLE")
+        marker.write_text(json.dumps(previous))
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(
+            json.loads((self.output / "inputs.before_resume.json").read_text()), previous)
+        self.assertIn("SFM_MIN_TRI_ANGLE", json.loads(marker.read_text())["settings"])
+
+    def test_resume_refuses_unknown_provenance_after_downstream_steps(self):
+        self.interrupted_workspace()
+        (self.output / "blocks").mkdir()
+        self.append("PIPELINE_RESUME=true")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("après recalage/découpage/entraînement", result.stdout + result.stderr)
+
+    def test_invalid_resume_value_stops_before_submission(self):
+        self.append("PIPELINE_RESUME=yes")
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PIPELINE_RESUME", result.stderr)
+        self.assertFalse(self.jobs.exists())
 
     def test_changed_sfm_refuses_even_merge_only(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

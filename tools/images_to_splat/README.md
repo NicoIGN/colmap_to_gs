@@ -94,8 +94,9 @@ politique `MASKS_*` non préfixés sont refusés explicitement : les remplacer p
 Pour conserver une politique commune, définir `TRAIN_MASKS_*` et laisser les
 valeurs `SFM_MASKS_*` correspondantes vides. Si seuls les paramètres SfM sont
 définis, renseigner également ceux du train lorsque `TRAIN_MASKS=on`.
-La signature de préparation inclut désormais les deux politiques : un ancien
-workspace exige un nouvel `OUTPUT_DIR` ; ne pas effacer son `inputs.json`.
+La signature de préparation inclut désormais les deux politiques : ne pas
+effacer son `inputs.json`. La reprise explicite ci-dessous permet d'adopter
+certaines signatures anciennes ; une politique connue incompatible reste refusée.
 
 Le SfM utilise des photos individuelles, sans filtrage des paires GPS.
 Une caméra par sous-dossier est le défaut ; vérifier que les images d'un même
@@ -182,6 +183,46 @@ Une préparation compatible reprend les masques et réutilise le SfM/découpage.
 Les entraînements terminés sont réutilisés par défaut ; `TRAIN_CLEAN=true`
 recalcule le 3DGS uniquement. Les sorties partielles du train nécessitent aussi
 ce réglage, après sauvegarde. L'exemple ne supprime jamais les images source.
+
+### Masques terminés, SfM interrompu
+
+Pour reprendre un workspace partiel, activer explicitement dans la configuration :
+
+```bash
+PIPELINE_RESUME=true
+```
+
+Puis relancer la même commande, après avoir arrêté les anciens jobs :
+
+```bash
+bash "$GIT_ROOT/tools/images_to_splat/launch.sh" \
+  /shared/home/NBellaiche/data/Paris9/config.sh
+```
+
+Ce mode ne désactive pas les validations : il vérifie pour **chaque image**
+le masque attendu (`<chemin relatif de l'image>.png`), son décodage PNG,
+ses dimensions brutes, son mode monochrome et ses valeurs 0/255. Un dossier
+existant incomplet/corrompu est refusé avec le chemin du fichier, sans lancer
+le SfM. Les masques complets sont réutilisés sans relancer SAM, même si leur
+rapport est absent/interrompu ; les paramètres présents dans ce rapport
+doivent rester compatibles. Si le rapport est absent, un `masks.json` de
+validation est créé pour les workers d'entraînement, avec une provenance
+explicitement inconnue (pas une attribution rétroactive au modèle configuré).
+
+Le sparse SfM est lu intégralement : caméras, images, points et références
+observations/tracks doivent être cohérents. Si le sparse est absent ou invalide,
+le pipeline relance `sfm auto` dans le même workspace (features en mode `auto`,
+matches en mode `redo`) et valide sa nouvelle sortie avant le découpage.
+Il ne reprend pas une optimisation SfM à l'itération interrompue.
+Les erreurs Spirula continuent d'arrêter le job.
+
+Une signature `inputs.json` absente peut être adoptée **avant** le recalage,
+le découpage et l'entraînement. Une signature ancienne peut être enrichie si
+tous ses paramètres enregistrés et ses images sont inchangés ; elle est
+sauvegardée dans `inputs.before_resume.json`. Les changements connus d'images,
+de paramètres ou de GPX restent bloquants. Sans métadonnées, la présence de
+fichiers valides ne prouve pas leur provenance : conserver les mêmes images
+et réglages. Le mode normal (`false`) reste inchangé.
 
 ```bash
 bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase prepare

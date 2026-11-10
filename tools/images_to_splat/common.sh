@@ -24,6 +24,7 @@ load_config() {
   SFM_IMAGES_RECURSIVE="${SFM_IMAGES_RECURSIVE:-true}"
   PYTHON_BIN="${PYTHON_BIN:-python3}"
   SPIRULA_BIN="${SPIRULA_BIN:-spirula}"
+  PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
   SFM_MATCHER="${SFM_MATCHER:-bruteforce}"
   SFM_PAIRS="${SFM_PAIRS:-prefilter}"
@@ -99,6 +100,7 @@ load_config() {
     config_positive_integer "$name" "${!name}"
   done
   config_choice SFM_IMAGES_RECURSIVE "$SFM_IMAGES_RECURSIVE" 'true|false'
+  config_choice PIPELINE_RESUME "$PIPELINE_RESUME" 'true|false'
   config_choice GEOREF_ALLOW_UNCERTAIN "$GEOREF_ALLOW_UNCERTAIN" 'true|false'
   config_positive_integer GEOREF_EPSG "$GEOREF_EPSG"
   if [[ -n "$GEOREF_GPX_FILE" ]]; then

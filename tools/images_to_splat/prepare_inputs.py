@@ -6,12 +6,26 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import sys
 
 from prepare_masks import policies
 
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+
+
+def compatible_record(previous, current):
+    if any(previous.get(key) != current.get(key)
+           for key in ("source", "images", "georeference")):
+        return False
+    old_settings = previous.get("settings")
+    if not isinstance(old_settings, dict):
+        return False
+    return all(
+        key in current["settings"] and current["settings"][key] == value
+        for key, value in old_settings.items()
+    )
 
 
 def prepare(check=False):
@@ -52,21 +66,42 @@ def prepare(check=False):
             "epsg": os.environ["GEOREF_EPSG"],
         }
     marker = output / "inputs.json"
+    resume = os.environ.get("PIPELINE_RESUME") == "true"
+    adopted = False
     if marker.is_file():
-        if json.loads(marker.read_text()) != record:
-            raise ValueError("Images ou paramètres SfM/masques/découpage/GPX modifiés : "
-                             "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM.")
+        previous = json.loads(marker.read_text())
+        if not isinstance(previous, dict):
+            raise ValueError(f"Signature de workspace invalide : {marker}")
+        if previous != record:
+            if not resume or check or not compatible_record(previous, record):
+                raise ValueError("Images ou paramètres SfM/masques/découpage/GPX modifiés : "
+                                 "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM.")
+            adopted = True
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
              ("images", "sfm", "masks", "feature_masks", "train_masks", "blocks", "gs")):
-        raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
+        if not resume:
+            raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
+        adopted = True
+    if adopted and any((output / name).exists() for name in ("georef", "blocks", "gs")):
+        raise ValueError(
+            "Reprise sans signature actuelle refusée après recalage/découpage/entraînement : "
+            "choisir un nouvel OUTPUT_DIR."
+        )
     if check:
         if not (output / ".prepare_done").is_file():
             raise ValueError("Préparation incomplète : relancer --phase prepare.")
-    else:
-        output.mkdir(parents=True, exist_ok=True)
-        marker.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+    if resume and (output / "images").is_dir():
+        expected = {relative for relative, _, _, _ in images}
+        unexpected = [
+            path.relative_to(output / "images").as_posix()
+            for path in (output / "images").rglob("*")
+            if not path.is_dir()
+            and path.relative_to(output / "images").as_posix() not in expected
+        ]
+        if unexpected:
+            raise ValueError(f"Images inattendues dans le workspace : {unexpected[:5]}")
     for relative, resolved, _, _ in images:
         target = output / "images" / relative
         if target.is_symlink():
@@ -79,6 +114,22 @@ def prepare(check=False):
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(resolved)
+    if not check:
+        output.mkdir(parents=True, exist_ok=True)
+        if adopted:
+            if marker.exists():
+                backup = output / "inputs.before_resume.json"
+                if backup.exists():
+                    raise ValueError(f"Sauvegarde de signature déjà présente : {backup}")
+                shutil.copyfile(marker, backup)
+            print(
+                "[AVERTISSEMENT] Reprise explicite d'une signature absente/ancienne ; "
+                "la provenance des artefacts sans métadonnées n'est pas vérifiable.",
+                flush=True,
+            )
+        temporary = output / ".inputs.json.tmp"
+        temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+        temporary.replace(marker)
     print(f"[images] {len(images)} images sélectionnées ; récursif={recursive}", flush=True)
 
 
