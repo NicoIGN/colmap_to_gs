@@ -21,6 +21,25 @@ const MODEL_NAMES = {
   10: "THIN_PRISM_FISHEYE",
 };
 
+export function cameraFrustumDepth(centers, fallbackRadius) {
+  const spans = [0, 1, 2].map((axis) => {
+    const values = [];
+    for (let i = axis; i < centers.length; i += 3) {
+      if (Number.isFinite(centers[i])) values.push(centers[i]);
+    }
+    values.sort((a, b) => a - b);
+    if (values.length < 2) return 0;
+    const trim = Math.floor(values.length * 0.02);
+    return values[values.length - 1 - trim] - values[trim];
+  });
+  const radius = Math.hypot(...spans) / 2;
+  const reference = radius > 0 ? radius : fallbackRadius;
+  if (!Number.isFinite(reference) || reference <= 0) {
+    throw new Error("Échelle COLMAP indéterminée pour les frustums.");
+  }
+  return reference * 0.01;
+}
+
 const MODEL_PARAM_COUNT = {
   SIMPLE_PINHOLE: 3,
   PINHOLE: 4,
@@ -520,8 +539,7 @@ export function createColmapLayer({
     return out;
   }
 
-  function buildFrustumLines(images, cameras, sceneRadius) {
-    const near = Math.max(sceneRadius * 0.01, 0.1);
+  function buildFrustumLines(images, cameras, near) {
     const maxFrustums = 2000;
     const step = Math.max(
       1,
@@ -700,11 +718,10 @@ export function createColmapLayer({
           shown: points.shownCount,
         });
 
-        const radius = Math.max(getSceneRadius?.() ?? 1, 1e-3);
-        console.log("10) build frustums/centers, radius=", radius);
-
-        const frustums = buildFrustumLines(images, cameras, radius);
         const cameraCenters = buildCameraCenters(images);
+        const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
+        console.log("10) build frustums/centers, depth=", depth);
+        const frustums = buildFrustumLines(images, cameras, depth);
 
         console.log("   frustums:", {
           total: frustums.total,

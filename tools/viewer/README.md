@@ -33,3 +33,10 @@ Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtile
 
 `python/server.py` et `python/html/` sont déplacés ici ; le lanceur Cesium
 `tools/splat_to_3dtiles/view.sh` est maintenant `tools/viewer/3dtiles/view.sh`.
+# Taille des frustums COLMAP
+
+La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
+bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
+Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes
+SfM sans GPX dont l'échelle est arbitraire. Si les centres sont confondus,
+le rayon de la scène sert de référence.
