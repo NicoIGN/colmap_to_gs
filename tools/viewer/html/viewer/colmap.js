@@ -459,12 +459,10 @@ export function createColmapLayer({
   setStatus,
   getSceneRadius,
   getFlipUp,
+  registerLayer,
 }) {
   const sceneColmapInfo = document.getElementById("sceneColmapInfo");
   const input = document.getElementById("colmapFolderInput");
-  const cbPoints = document.getElementById("colmapPointsVisible");
-  const cbCameras = document.getElementById("colmapCamerasVisible");
-  const cbFrustums = document.getElementById("colmapFrustumsVisible");
   const pointSize = document.getElementById("colmapPointSize");
   const cameraSize = document.getElementById("colmapCameraSize");
   const removeBtn = document.getElementById("colmapRemove");
@@ -481,9 +479,21 @@ export function createColmapLayer({
   let frustumsResource = null;
 
   let loaded = null;
+  const unregisterLayers = [];
 
   const removers = [];
     console.log("[COLMAP] Nouvelle instance créée", { disposed });
+
+  const refreshPointSizes = () => {
+    for (const [input, resource] of [
+      [pointSize, pointsResource], [cameraSize, cameraCentersResource],
+    ]) {
+      if (!input) continue;
+      const output = document.getElementById(`${input.id}Value`);
+      if (output) output.value = `${input.value} px`;
+      if (resource) setPointSize(app, resource.material, Number(input.value));
+    }
+  };
 
   function listen(element, type, handler) {
     if (!element) return;
@@ -516,31 +526,10 @@ export function createColmapLayer({
   function refreshUI() {
     const ready = Boolean(loaded);
 
-    if (cbPoints) cbPoints.disabled = !ready;
-    if (cbCameras) cbCameras.disabled = !ready;
-    if (cbFrustums) cbFrustums.disabled = !ready;
     if (pointSize) pointSize.disabled = !ready;
     if (cameraSize) cameraSize.disabled = !ready;
     if (removeBtn) removeBtn.disabled = !ready;
 
-    if (pointsEntity && cbPoints) pointsEntity.enabled = cbPoints.checked;
-    if (cameraCentersEntity && cbCameras) {
-      cameraCentersEntity.enabled = cbCameras.checked;
-    }
-
-    function refreshPointSizes() {
-      for (const [input, resource] of [
-        [pointSize, pointsResource], [cameraSize, cameraCentersResource],
-      ]) {
-        if (!input) continue;
-        const output = document.getElementById(`${input.id}Value`);
-        if (output) output.value = `${input.value} px`;
-        if (resource) setPointSize(app, resource.material, Number(input.value));
-      }
-    }
-    if (frustumsEntity && cbFrustums) {
-      frustumsEntity.enabled = cbFrustums.checked;
-    }
   }
 
   function destroyMeshEntity(entity, resource) {
@@ -551,6 +540,7 @@ export function createColmapLayer({
   }
 
   function clear() {
+    for (const unregister of unregisterLayers.splice(0)) unregister();
     destroyMeshEntity(pointsEntity, pointsResource);
     destroyMeshEntity(cameraCentersEntity, cameraCentersResource);
     destroyMeshEntity(frustumsEntity, frustumsResource);
@@ -568,10 +558,6 @@ export function createColmapLayer({
     rootEntity = null;
 
     loaded = null;
-
-    if (cbPoints) cbPoints.checked = false;
-    if (cbCameras) cbCameras.checked = false;
-    if (cbFrustums) cbFrustums.checked = false;
 
     refreshUI();
     refreshInfo();
@@ -830,9 +816,23 @@ export function createColmapLayer({
 
         console.log("13) refresh UI + info", loaded);
 
-        if (cbPoints) cbPoints.checked = true;
-        if (cbCameras) cbCameras.checked = true;
-        if (cbFrustums) cbFrustums.checked = true;
+        unregisterLayers.push(...[
+          registerLayer?.({
+            id: "colmap-points",
+            name: "Points 3D sparse",
+            setVisible(visible) { if (pointsEntity) pointsEntity.enabled = visible; },
+          }),
+          registerLayer?.({
+            id: "colmap-cameras",
+            name: "Centres caméra COLMAP",
+            setVisible(visible) { if (cameraCentersEntity) cameraCentersEntity.enabled = visible; },
+          }),
+          registerLayer?.({
+            id: "colmap-frustums",
+            name: "Frustums COLMAP",
+            setVisible(visible) { if (frustumsEntity) frustumsEntity.enabled = visible; },
+          }),
+        ].filter(Boolean));
 
         refreshUI();
         refreshInfo();
@@ -875,9 +875,6 @@ export function createColmapLayer({
       }
     });
 
-  listen(cbPoints, "change", refreshUI);
-  listen(cbCameras, "change", refreshUI);
-  listen(cbFrustums, "change", refreshUI);
   listen(pointSize, "input", refreshPointSizes);
   listen(cameraSize, "input", refreshPointSizes);
   refreshPointSizes();

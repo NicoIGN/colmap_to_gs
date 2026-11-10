@@ -137,6 +137,32 @@
       font-variant-numeric: tabular-nums;
     }
 
+    #sceneLayers {
+      display: grid;
+      gap: 7px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    #sceneLayers[hidden] {
+      display: none;
+    }
+
+    #sceneLayers h3 {
+      margin: 0;
+      color: #aebccc;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    #layerList {
+      display: grid;
+      gap: 7px;
+    }
+
     #sceneInfo .scene-messages {
       display: grid;
       gap: 8px;
@@ -268,6 +294,11 @@
         <dt>COLMAP</dt>
         <dd id="sceneColmapInfo">Aucun modèle chargé</dd>
       </dl>
+
+      <section id="sceneLayers" hidden aria-label="Visibilité des couches">
+        <h3>Couches visibles</h3>
+        <div id="layerList"></div>
+      </section>
 
       <div class="scene-messages">
         <div>
@@ -567,24 +598,6 @@
           uniquement le sous-dossier du modèle souhaité.
         </p>
 
-        <label class="check">
-          <input
-            type="checkbox"
-            id="colmapPointsVisible"
-            disabled
-          />
-          Afficher les points sparse
-        </label>
-
-        <label class="check">
-          <input
-            type="checkbox"
-            id="colmapCamerasVisible"
-            disabled
-          />
-          Afficher les positions des caméras
-        </label>
-
         <label class="slider" for="colmapPointSize">
           Taille des points sparse
           <input type="range" id="colmapPointSize" min="1" max="10" step="0.5" value="2" />
@@ -596,20 +609,6 @@
           <input type="range" id="colmapCameraSize" min="1" max="16" step="0.5" value="4" />
           <output id="colmapCameraSizeValue" for="colmapCameraSize">4 px</output>
         </label>
-
-        <label class="check">
-          <input
-            type="checkbox"
-            id="colmapFrustumsVisible"
-            disabled
-          />
-          Afficher les frustums caméras
-        </label>
-
-        <p class="hint">
-          Décocher une case masque uniquement l’élément correspondant,
-          sans retirer le modèle de la mémoire.
-        </p>
 
         <p class="hint">
           Le modèle COLMAP doit utiliser le même repère que les splats.
@@ -650,16 +649,6 @@
           <input type="checkbox" id="gpsAutoEnabled" disabled />
           Auto : début → fin
         </label>
-        <label class="check">
-          <input
-            type="checkbox"
-            id="gpsTrackVisible"
-            checked
-            disabled
-          />
-          Afficher la trajectoire GPS
-        </label>
-
         <label class="slider" for="gpsAutoSpeed">
           Vitesse auto
           <input

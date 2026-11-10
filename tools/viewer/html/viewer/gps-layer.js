@@ -7,8 +7,7 @@ const SPHERE_RADIUS_MIN = 0.06; // m
 const SPHERE_RADIUS_MAX = 0.22; // m
 const SPHERE_SCALE_BY_DISTANCE = 0.015; // m par m de distance caméra
 
-export function createGpsLayer({ app }) {
-  const checkbox = document.getElementById("gpsTrackVisible");
+export function createGpsLayer({ app, registerLayer }) {
 
   let rootEntity = null;
   let lineEntity = null;
@@ -19,11 +18,12 @@ export function createGpsLayer({ app }) {
 
   let currentTrack = null;
   let currentPoints = null;
+  let unregisterLayer = null;
+  let visible = true;
   let disposed = false;
 
-  function refreshUI(blocked = false) {
-    if (checkbox) checkbox.disabled = blocked || !rootEntity;
-    if (rootEntity) rootEntity.enabled = checkbox ? checkbox.checked : true;
+  function refreshUI() {
+    if (rootEntity) rootEntity.enabled = visible;
   }
 
   function destroySafe(obj) {
@@ -33,6 +33,8 @@ export function createGpsLayer({ app }) {
   }
 
   function clear() {
+    unregisterLayer?.();
+    unregisterLayer = null;
     destroySafe(rootEntity);
     rootEntity = null;
     lineEntity = null;
@@ -155,14 +157,18 @@ export function createGpsLayer({ app }) {
 
     currentTrack = track;
     currentPoints = points;
+    unregisterLayer = registerLayer?.({
+      id: "gps-track",
+      name: "Trajectoire GPS",
+      visible,
+      setVisible(value) {
+        visible = value;
+        refreshUI();
+      },
+    }) ?? null;
     refreshUI();
   }
 
-  function onVisibilityChange() {
-    refreshUI();
-  }
-
-  checkbox?.addEventListener("change", onVisibilityChange);
   refreshUI();
 
   return {
@@ -171,7 +177,6 @@ export function createGpsLayer({ app }) {
     refreshUI,
     dispose() {
       disposed = true;
-      checkbox?.removeEventListener("change", onVisibilityChange);
       clear();
     },
   };

@@ -45,6 +45,12 @@ parcourt le dossier, repère un même sous-dossier contenant `cameras.bin`,
 `images.bin` et `points3D.bin`, puis le charge avec le même importeur que le
 bouton. Les dépôts de scène, JSON et GPX gardent leur comportement existant.
 
+Glisser un fichier `.splat` ou `.ply` dans la vue l'ajoute aux scènes déjà
+chargées sans recadrer ni déplacer la caméra. Le bouton d'ouverture conserve
+son comportement de remplacement. Le panneau d'informations regroupe les
+cases de visibilité des scènes splat, des points sparse, des centres et
+frustums COLMAP, ainsi que de la trajectoire GPS.
+
 La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
 bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
 Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes

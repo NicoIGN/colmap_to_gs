@@ -16,6 +16,7 @@ import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
 import { createColmapLayer } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
+import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 
 const $ = (id) => document.getElementById(id);
@@ -65,8 +66,9 @@ let app = null;
 let cameraEntity = null;
 let splatEntity = null;
 let picker = null;
-let importer = null;
+let layerManager = null;
 let centers = null;
+const splatLayers = [];
 
 let loadedFileSource = null;
 let loadedFileName = null;
@@ -80,6 +82,7 @@ let disposed = false;
 let sceneRadius = 1;
 let sceneCount = 0;
 let collisionBlockedReason = "";
+let nextSplatLayerId = 0;
 
 let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
@@ -204,10 +207,8 @@ function refreshUI() {
       // Ces éléments sont gérés par colmapLayer.refreshUI()
       if (
         element.id === "togglePanel" ||
+        element.id === "fileInput" ||
         element.id === "colmapFolderInput" ||
-        element.id === "colmapPointsVisible" ||
-        element.id === "colmapCamerasVisible" ||
-        element.id === "colmapFrustumsVisible" ||
         element.id === "colmapPointSize" ||
         element.id === "colmapCameraSize" ||
         element.id === "colmapRemove"
@@ -218,6 +219,7 @@ function refreshUI() {
       element.disabled = blocked;
     });
 
+  $("fileInput").disabled = !app || disposed;
   for (const id of COLLISION_CONTROL_IDS) {
     const element = $(id);
     if (!element) continue;
@@ -417,11 +419,9 @@ function requestGifCapture() {
 }
 
 function applyUpFlip() {
-  splatEntity?.setLocalEulerAngles(
-    $("flipUp").checked ? 180 : 0,
-    0,
-    0
-  );
+  for (const layer of splatLayers) {
+    layer.entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
+  }
 }
 
 function releaseScene() {
@@ -429,6 +429,7 @@ function releaseScene() {
   sceneTools?.reset();
   colmapLayer?.clear();
   gpsLayer?.clear();
+  layerManager?.clear();
 
   pickSerial++;
   picking = false;
@@ -437,7 +438,11 @@ function releaseScene() {
   measurement?.reset();
   collision?.reset();
 
-  splatEntity?.destroy();
+  for (const layer of splatLayers.splice(0)) {
+    layer.unregister?.();
+    layer.entity.destroy();
+    layer.importer.dispose();
+  }
   splatEntity = null;
 
   centers = null;
@@ -447,7 +452,6 @@ function releaseScene() {
   sceneCenter.set(0, 0, 0);
   collisionBlockedReason = "";
 
-  importer?.release();
 }
 
 function canStartLoad() {
@@ -455,49 +459,36 @@ function canStartLoad() {
 }
 
 function computeSceneBounds() {
-  const count = centers.length / 3;
-  const stride = Math.max(1, Math.ceil(count / 100_000));
-  const capacity = Math.ceil(count / stride);
-
-  const coordinates = [
-    new Float32Array(capacity),
-    new Float32Array(capacity),
-    new Float32Array(capacity),
-  ];
-
-  const matrix = new THREE.Matrix4().fromArray(
-    splatEntity.getWorldTransform().data
-  );
-
+  const coordinates = [[], [], []];
   const point = new THREE.Vector3();
-  let valid = 0;
 
-  for (let i = 0; i < count; i += stride) {
-    point.set(
-      centers[i * 3],
-      centers[i * 3 + 1],
-      centers[i * 3 + 2]
-    ).applyMatrix4(matrix);
-
-    if (![point.x, point.y, point.z].every(Number.isFinite)) {
-      continue;
+  for (const layer of splatLayers) {
+    const count = layer.centers.length / 3;
+    const stride = Math.max(1, Math.ceil(count / 100_000));
+    const matrix = new THREE.Matrix4().fromArray(
+      layer.entity.getWorldTransform().data
+    );
+    for (let i = 0; i < count; i += stride) {
+      point.set(
+        layer.centers[i * 3],
+        layer.centers[i * 3 + 1],
+        layer.centers[i * 3 + 2]
+      ).applyMatrix4(matrix);
+      if (![point.x, point.y, point.z].every(Number.isFinite)) continue;
+      coordinates[0].push(point.x);
+      coordinates[1].push(point.y);
+      coordinates[2].push(point.z);
     }
-
-    coordinates[0][valid] = point.x;
-    coordinates[1][valid] = point.y;
-    coordinates[2][valid] = point.z;
-    valid++;
   }
 
+  const valid = coordinates[0].length;
   if (!valid) {
     sceneBox.set(
       new THREE.Vector3(-1, -1, -1),
       new THREE.Vector3(1, 1, 1)
     );
   } else {
-    const sorted = coordinates.map((values) =>
-      values.subarray(0, valid).sort()
-    );
+    const sorted = coordinates.map((values) => values.sort((a, b) => a - b));
 
     const percentile = (values, q) =>
       values[Math.min(valid - 1, Math.floor(valid * q))];
@@ -526,7 +517,7 @@ function computeSceneBounds() {
   );
 }
 
-async function loadSceneInternal(source, name) {
+async function loadSceneInternal(source, name, { append = false } = {}) {
   if (!canStartLoad()) return false;
 
   if (!isSupportedSceneName(name)) {
@@ -535,22 +526,32 @@ async function loadSceneInternal(source, name) {
   }
 
   isLoading = true;
-  navigation.clearNavigation();
+  if (!append) navigation.clearNavigation();
   gifRecorder.cancel(sceneReady);
 
   const startedAt = performance.now();
+  let newLayer = null;
+  const sceneImporter = createSceneImporter({
+    app,
+    setStatus,
+    onProgress(message, fraction, detail) {
+      if (!disposed) progress.update(message, fraction, detail);
+    },
+  });
 
   try {
-    releaseScene();
-    sceneTools?.setSceneInfo({ name });
+    if (!append) releaseScene();
     refreshUI();
 
     loadingStep(`Préparation de ${name}…`);
     await sleep(0);
 
-    const asset = await importer.load(source, name);
+    const asset = await sceneImporter.load(source, name);
 
-    if (disposed) return false;
+    if (disposed) {
+      sceneImporter.dispose();
+      return false;
+    }
 
     const resource = asset.resource;
 
@@ -558,30 +559,52 @@ async function loadSceneInternal(source, name) {
       throw new Error("PlayCanvas n’a pas créé la ressource GSplat.");
     }
 
-    centers = resource.centers;
+    const layerCenters = resource.centers;
 
-    if (!centers?.length || centers.length % 3 !== 0) {
+    if (!layerCenters?.length || layerCenters.length % 3 !== 0) {
       throw new Error("Centres des splats indisponibles pour le cadrage.");
     }
 
-    sceneCount = Math.max(
-      centers.length / 3,
+    const count = Math.max(
+      layerCenters.length / 3,
       Number(resource.numSplats) || 0
     );
 
-    sceneTools?.setSceneInfo({ name, count: sceneCount });
+    const entity = new pc.Entity(name);
+    entity.addComponent("gsplat", { asset, unified: true });
+    app.root.addChild(entity);
+    entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
+    newLayer = {
+      name, count, centers: layerCenters, entity, importer: sceneImporter,
+    };
+    newLayer.unregister = layerManager?.add({
+      id: `splat-${nextSplatLayerId++}`,
+      name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
+      setVisible(visible) { entity.enabled = visible; },
+    });
+    splatLayers.push(newLayer);
+    splatEntity ??= entity;
+    centers = new Float32Array(splatLayers.reduce(
+      (total, layer) => total + layer.centers.length, 0
+    ));
+    let offset = 0;
+    for (const layer of splatLayers) {
+      centers.set(layer.centers, offset);
+      offset += layer.centers.length;
+    }
+    sceneCount = splatLayers.reduce((total, layer) => total + layer.count, 0);
+    sceneTools?.setSceneInfo({
+      name: splatLayers.map((layer) => layer.name).join(", "),
+      count: sceneCount,
+    });
     enforceCollisionBudget();
     refreshUI();
 
-    splatEntity = new pc.Entity("Gaussian scene");
-    splatEntity.addComponent("gsplat", { asset, unified: true });
-    app.root.addChild(splatEntity);
-
-    camera.position.set(0, 0, 5);
-    camera.up.set(0, 1, 0);
-    target.set(0, 0, 0);
-
-    applyUpFlip();
+    if (!append) {
+      camera.position.set(0, 0, 5);
+      camera.up.set(0, 1, 0);
+      target.set(0, 0, 0);
+    }
 
     loadingStep("Calcul du cadrage…");
     await sleep(0);
@@ -589,11 +612,11 @@ async function loadSceneInternal(source, name) {
     if (disposed) return false;
 
     computeSceneBounds();
-    navigation.fitToView(sceneBox);
+    if (!append) navigation.fitToView(sceneBox);
 
     let cameraError = null;
 
-    if (pendingCamera !== null) {
+    if (!append && pendingCamera !== null) {
       try {
         applyCameraString(pendingCamera, pendingUp);
       } catch (error) {
@@ -611,7 +634,8 @@ async function loadSceneInternal(source, name) {
     if (disposed) return false;
 
     memoryWatchdog?.check("après premier rendu");
-    await prepareCollision();
+    if (append) collision.reset();
+    if (!append || collisionIsEnabled()) await prepareCollision();
 
     if (disposed) return false;
 
@@ -641,7 +665,36 @@ async function loadSceneInternal(source, name) {
     if (disposed) return false;
 
     console.error("Chargement :", error);
-    releaseScene();
+    if (append && newLayer) {
+      newLayer.unregister?.();
+      newLayer.entity.destroy();
+      newLayer.importer.dispose();
+      const index = splatLayers.indexOf(newLayer);
+      if (index >= 0) splatLayers.splice(index, 1);
+      splatEntity = splatLayers[0]?.entity ?? null;
+      centers = splatLayers.length
+        ? Float32Array.from(splatLayers.flatMap((layer) => Array.from(layer.centers)))
+        : null;
+      sceneCount = splatLayers.reduce((total, layer) => total + layer.count, 0);
+      collision.reset();
+      if (splatLayers.length) {
+        computeSceneBounds();
+        sceneTools?.setSceneInfo({
+          name: splatLayers.map((layer) => layer.name).join(", "),
+          count: sceneCount,
+        });
+        sceneReady = true;
+        if (collisionIsEnabled()) await prepareCollision();
+      } else {
+        sceneImporter.dispose();
+        releaseScene();
+      }
+    } else if (append) {
+      sceneImporter.dispose();
+    } else {
+      sceneImporter.dispose();
+      releaseScene();
+    }
     setStatus(`Erreur : ${error?.message || error}`, true);
     return false;
   } finally {
@@ -684,7 +737,12 @@ async function resetAndLoad(source, name) {
 }
 
 async function loadFile(file) {
-  if (!file || !canStartLoad()) return;
+  if (!file) return;
+  if (!canStartLoad()) {
+    setStatus("Impossible d’ouvrir un fichier pendant le chargement ou l’export.", true);
+    $("fileInput").value = "";
+    return;
+  }
 
   if (!isSupportedSceneName(file.name)) {
     setStatus("Formats acceptés : .sog, .ply, .splat ou .ksplat.", true);
@@ -693,6 +751,14 @@ async function loadFile(file) {
   }
 
   await resetAndLoad(file, file.name);
+}
+
+async function appendScene(source, name) {
+  if (!sceneReady) {
+    await resetAndLoad(source, name);
+    return;
+  }
+  await loadSceneInternal(source, name, { append: true });
 }
 
 async function handleDroppedFiles(fileList, items) {
@@ -723,6 +789,8 @@ async function handleDroppedFiles(fileList, items) {
 
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
+    } else if (/\.(splat|ply)$/i.test(file.name)) {
+      await appendScene(file, file.name);
     } else {
       await loadFile(file);
     }
@@ -1154,7 +1222,7 @@ function installUI() {
   }
 
   $("fileInput").addEventListener("change", (event) => {
-    void handleDroppedFiles(event.target.files);
+    void loadFile(event.target.files?.[0]);
   });
 
   $("gifStart").addEventListener("click", () => {
@@ -1245,14 +1313,7 @@ async function initialize() {
     );
 
     app.scene.gsplatCentersEnabled = true;
-
-    importer = createSceneImporter({
-      app,
-      setStatus,
-      onProgress(message, fraction, detail) {
-        if (!disposed) progress.update(message, fraction, detail);
-      },
-    });
+    layerManager = createLayerManager($("layerList"));
 
     cameraEntity = new pc.Entity("Camera");
     cameraEntity.addComponent("camera", {
@@ -1403,11 +1464,15 @@ async function initialize() {
         setStatus,
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
+        registerLayer: (layer) => layerManager.add(layer),
       });
 
       console.info("[APP] COLMAP initialisé.");
 
-      gpsLayer = createGpsLayer({ app });
+      gpsLayer = createGpsLayer({
+        app,
+        registerLayer: (layer) => layerManager.add(layer),
+      });
 
       installUI();
       installDnD();
@@ -1468,9 +1533,6 @@ async function initialize() {
       sceneTools?.dispose();
       sceneTools = null;
 
-      importer?.dispose();
-      importer = null;
-        
         colmapLayer?.dispose();
         colmapLayer = null;
 
