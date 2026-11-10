@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Configuration Bash de confiance : elle est sourcee, jamais interpretee comme
+# de simples donnees. Meme fichier pour run_pipeline.sh (local) et launch.sh (Slurm).
+# Tous les chemins de donnees/modeles doivent etre absolus et visibles des noeuds.
+
+# ============================================================================
+# 0. Entrees et outils
+# ============================================================================
+# Dossier contenant les images, sans telechargement Panoramax.
+# --images /chemin peut remplacer cette valeur pour les deux lanceurs.
+INPUT_IMAGES_DIR="/shared/home/NBellaiche/data/Paris9/images"
+
+# true : scanner aussi les sous-dossiers ; false : fichiers de premier niveau.
+# Les chemins relatifs sont conserves (pas d'aplatissement ni de collision de noms).
+# Les liens vers des fichiers sont acceptes ; les dossiers symboliques ne sont
+# pas parcourus pour eviter les boucles.
+INPUT_RECURSIVE="true"
+
+# Workspace distinct et EXTERIEUR au dossier d'images. Les images sont liees,
+# jamais deplacees. Choisir un nouveau workspace si images/SfM/masques changent.
+OUTPUT_DIR="/shared/home/NBellaiche/data/Paris9/reconstruction-20k-8M-4blocs"
+SPIRULA_BIN="/shared/home/NBellaiche/sources/spirula-studio/build_vulkan/spirula"
+PYTHON_BIN="python3"
+
+# ============================================================================
+# 1. Masques communs au SfM et au train (SAM 3 natif Spirula)
+# ============================================================================
+# on|off pour chaque etape. Si les deux sont on, un seul calcul est reutilise.
+SFM_MASKS="on"
+TRAIN_MASKS="on"
+MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
+# auto, indice Vulkan, nom du GPU (ex. NVIDIA A40), uuid:...
+MASKS_SPIRULA_DEVICE="auto"
+# Prompts SAM en anglais ; conserver voitures et passants.
+MASKS_LABELS="sky,cloud"
+MASKS_CONFIDENCE="0.5"     # [0,1]
+MASKS_DILATE="0.002"      # [0,0.1[, fraction de la diagonale
+# 1.0 permet les vues vers le haut presque entierement masquees.
+# En dessous, un masque depassant cette fraction est desactive pour cette image.
+MASKS_MAX_FRACTION="1.0"
+# true UNIQUEMENT apres lecture et acceptation des conditions SAM 3 Meta.
+# false par defaut : aucune acceptation automatique implicite.
+MASKS_ACCEPT_LICENSE="false"
+# empty : apprendre le ciel comme vide ; ignore : exclure les pixels de la perte.
+TRAIN_MASKS_MODE="empty"
+
+# ============================================================================
+# 2. Reconstruction SfM globale
+# ============================================================================
+SFM_FEATURES="aliked-n16rot"
+SFM_MATCHER="bruteforce"
+# prefilter|auto|exhaustive ; exhaustive couteux sur plusieurs milliers d'images.
+SFM_PAIRS="prefilter"
+SFM_MAX_IMAGE_SIZE="4096"
+SFM_ALIKED_MAX_FEATURES="8192"
+SFM_THREADS="16"
+# folder : intrinseques partages par sous-dossier ; single : une camera ;
+# image : intrinseques independants par image.
+SFM_CAMERA_MODE="folder"
+SFM_CAMERA_MODEL="opencv"
+# Photos individuelles, sans sequence ni alignement GPS force.
+# Pas de georeferencement garanti ; toutes les sorties partagent le repere SfM.
+
+# ============================================================================
+# 3. Decoupage
+# ============================================================================
+SPLIT_NUM_BLOCKS="4"
+SPLIT_OVERLAP_MAX_FRACTION="0.10"  # [0,1[, recouvrement entre blocs
+
+# ============================================================================
+# 4. Entrainement de chaque bloc
+# ============================================================================
+TRAIN_PRESET="3dgs"
+TRAIN_QUALITY="ultra"    # low|medium|high|ultra ; macro, pas une resolution
+# Ces budgets explicites priment sur TRAIN_QUALITY.
+TRAIN_NUM_ITER="20000"   # PAR BLOC, pas reparti entre les blocs
+TRAIN_CAP_MAX="2000000"  # PAR BLOC : 4 x 2 M = jusqu'a 8 M avant fusion
+# Vide/absent : estimation [1.001,1.05] pour atteindre le cap a l'arret.
+# Valeur explicite > 1 : prioritaire, non bornee automatiquement.
+TRAIN_GROWTH_FACTOR=""
+# Arret = max(14000, 20000-4000) = 16000, puis 4000 pas sans croissance.
+TRAIN_REFINE_STOP_ITER="14000"
+TRAIN_REFINE_STOP_NUM_ITER="4000"
+TRAIN_FLOATER_SUPPRESSION="mild"       # off|mild|strong
+TRAIN_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
+# false : reutiliser un checkpoint final ; une sortie partielle est refusee.
+# true : supprimer/recalculer les sorties 3DGS des blocs, PAS le SfM.
+# Sauvegarder les anciens entrainements avant de l'activer.
+TRAIN_CLEAN="false"
+
+# ============================================================================
+# 5. Recadrage AVANT fusion
+# ============================================================================
+# apply|diagnostic|off. apply retire les centres hors bbox COLMAP globale ;
+# diagnostic ecrit le diagnostic mais ne retire rien ; off ne calcule pas la bbox.
+# Bbox orientee robuste (quantiles 0.5/99.5 %), pas bbox de chaque sous-bloc.
+POSTPROCESS_SPARSE_BBOX_MODE="apply"
+POSTPROCESS_SPARSE_BBOX_MARGIN="0.05"  # fraction du plus grand cote
+# Securite PAR BLOC : refuser plus de 20 % de rejets.
+# Examiner les diagnostics avant d'augmenter cette limite [0,1].
+POSTPROCESS_MAX_REMOVAL_FRACTION="0.20"
+# Les bruts sont conserves. Pas de filtre contextuel additionnel dans cet outil.
+
+# ============================================================================
+# 6. Fusion et export
+# ============================================================================
+MERGE_STRENGTH="1.0"     # > 0 ; multiplicateur de taille des voxels
+EXPORT_SPLAT_NAME="Paris9-20000-8M.splat"
+# La fusion peut retirer des doublons : 8 M est un plafond, pas un nombre garanti.
+# Le .splat classique conserve les couleurs DC, pas les SH d'ordre superieur.
+
+# ============================================================================
+# 7. Slurm uniquement (ignores pour l'execution locale)
+# ============================================================================
+SLURM_PARTITION="jz"
+SLURM_CPUS_PER_TASK="16"
+SLURM_MEMORY="64G"
+SLURM_TIME_LIMIT="48:00:00"   # limite PAR job, pas duree garantie
+SLURM_GPU_TYPE=""           # vide : gpu:1 ; sinon type Slurm, ex. a40
+# Un GPU PAR bloc actif. 1 : successifs ; 4 : jusqu'a 4 GPU sur 4 taches.
+SLURM_BLOCK_PARALLELISM="1"
+SLURM_ACCOUNT=""
+SLURM_QOS=""
+# Script optionnel source sur chaque noeud (modules, activation mamba/conda).
+# Vide : environnement herite du terminal de soumission (--export=ALL).
+SLURM_ENV_SETUP=""

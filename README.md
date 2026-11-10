@@ -6,6 +6,8 @@ Ce dépôt entraîne un modèle **Gaussian Splatting** avec **Nerfstudio / Splat
 
 Télécharger des images géolocalisées : [extraction Panoramax par bbox Lambert-93](tools/panoramax/README.md).
 
+Partir d'images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](tools/images_to_splat/README.md).
+
 0. [Guide utilisateur](doc/guide_utilisateur.md)
 1. [Présentation du projet](#1-présentation-du-projet)
 2. [Installation et prérequis](#2-installation-et-prérequis)
@@ -61,6 +63,7 @@ Le pipeline se déroule en plusieurs étapes :
     │   ├── html/                  # interface et modules JavaScript
     │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
     ├── panoramax/                 # récupération d'images par bbox Lambert-93
+    ├── images_to_splat/           # images locales → splat, Bash et Slurm
     ├── spirula/                   # installation et compilation de Spirula Studio
     └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
 ```
