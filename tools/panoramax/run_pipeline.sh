@@ -308,6 +308,17 @@ for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
   splat="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
   [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
+  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
+    pipeline_stage="recadrage bbox COLMAP du bloc $block_id avant fusion"
+    cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
+    "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
+      --input "$splat" --output "$cropped" --mode off \
+      --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
+      --sparse-bbox-mode apply \
+      --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
+    [[ -s "$cropped" ]] || die "Splat recadré absent ou vide : $cropped"
+    splat="$cropped"
+  fi
   MERGE_INPUTS+=("$splat")
 done
 

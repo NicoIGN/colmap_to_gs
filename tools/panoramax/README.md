@@ -275,7 +275,15 @@ stationnées et peut réduire le nombre de vues enregistrées. Les résultats
 avec SAM/Spirula réels restent à contrôler sur votre matériel.
 Les blocs déjà entraînés ne sont pas recalculés : utiliser `TRAIN_CLEAN=true`.
 
-Avant ce filtre, les splats dont le **centre** sort de la bbox des points 3D
+Avant la fusion (si `POSTPROCESS_SPARSE_BBOX_MODE="apply"`), chaque bloc est
+recadré dans une copie `.bbox.splat`, sans modifier les splats bruts.
+La bbox provient du **modèle COLMAP global**, pas du sous-modèle du bloc,
+afin de préserver les recouvrements. Seules ces copies sont indexées en voxels.
+Le recadrage s'applique aussi avant une finition Clean-GS ; en mode `diagnostic`
+ou `off`, la fusion utilise les blocs bruts. Le filtre final conserve son
+diagnostic bbox global. Chaque recadrage garde la sécurité de 20 % de rejets.
+
+Avant le filtre contextuel, les splats dont le **centre** sort de la bbox des points 3D
 sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
 (`POSTPROCESS_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte
 est orientée sur les axes principaux des points, bornée aux quantiles

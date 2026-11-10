@@ -138,13 +138,16 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  assert args[args.index('--filter-mode')+1]=='off'\n"
                 "  out=args[args.index('--out-ply')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
                 "elif args and args[0].endswith('merge_splats.py'):\n"
+                "  if os.environ.get('TEST_PREMERGE_BBOX')=='1':\n"
+                "    assert all(x.endswith('.bbox.splat') for x in args[1:args.index('--output')]), args\n"
                 "  out=args[args.index('--output')+1]; open(out,'wb').write(b'merged-splat')\n"
                 "elif args and args[0].endswith('filter_splats.py'):\n"
                 "  import pathlib, shutil\n"
-                "  assert args[args.index('--mode')+1]=='apply'\n"
-                "  assert args[args.index('--size-factor')+1]=='12'\n"
+                "  premerge=args[args.index('--output')+1].endswith('.bbox.splat')\n"
+                "  assert args[args.index('--mode')+1]==('off' if premerge else 'apply')\n"
+                "  if not premerge: assert args[args.index('--size-factor')+1]=='12'\n"
                 "  assert args[args.index('--sparse-points')+1].endswith('sfm-3/sparse/0/points3D.bin')\n"
-                "  assert args[args.index('--sparse-bbox-mode')+1]=='diagnostic'\n"
+                "  assert args[args.index('--sparse-bbox-mode')+1]==('apply' if premerge or os.environ.get('TEST_PREMERGE_BBOX')=='1' else 'diagnostic')\n"
                 "  assert args[args.index('--sparse-bbox-margin')+1]=='0.1'\n"
                 "  out=pathlib.Path(args[args.index('--output')+1])\n"
                 "  shutil.copyfile(args[args.index('--input')+1],out)\n"
@@ -278,6 +281,23 @@ class PanoramaxPipelineTest(unittest.TestCase):
             result = execute("train-block", "2")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("hors de", result.stderr)
+            with config.open("a") as stream:
+                stream.write('POSTPROCESS_SPARSE_BBOX_MODE="apply"\n')
+            os.environ["TEST_PREMERGE_BBOX"] = "1"
+            try:
+                before = len(log.read_text().splitlines())
+                result = execute("merge")
+            finally:
+                os.environ.pop("TEST_PREMERGE_BBOX")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(log.read_text().splitlines()[before:], [
+                "filter_splats.py", "filter_splats.py",
+                "merge_splats.py", "filter_splats.py"])
+            for index in range(2):
+                splats = dataset / f"gs-3-blocks-2/block_{index:03d}/splats"
+                self.assertTrue((splats / f"Paris-3-block-{index:03d}.bbox.splat").is_file())
+                self.assertEqual((splats / f"Paris-3-block-{index:03d}.splat").read_bytes(),
+                                 b"splat")
             with config.open("a") as stream:
                 stream.write('SFM_PAIR_MAX_DISTANCE=""\n')
             result = execute("prepare")
