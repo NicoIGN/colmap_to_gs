@@ -14,6 +14,45 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
+    def test_strict_geometry_reaches_native_sfm_and_guards_reuse(self):
+        for overrides in ({}, {"SFM_MAX_ERROR": "1.5", "SFM_MIN_INLIERS": "50",
+                               "SFM_MIN_TRI_ANGLE": "4", "SFM_BA_LOSS": "cauchy",
+                               "SFM_BA_LOSS_PARAM": "1"}):
+            with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as temporary:
+                root, data, sparse, env, log, execute = self.fixture(temporary)
+                shutil.rmtree(data / "sfm-3")
+                (data / "sfm-3/images").mkdir(parents=True)
+                env.update(PREPARE="false", **overrides)
+                result = execute("--prepare-only")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                sfm = next(json.loads(line) for line in log.read_text().splitlines()
+                           if json.loads(line)[:2] == ["spirula", "sfm"])
+                for flag, key, default in (
+                    ("--max-error", "SFM_MAX_ERROR", "2"),
+                    ("--min-inliers", "SFM_MIN_INLIERS", "30"),
+                    ("--min-tri-angle", "SFM_MIN_TRI_ANGLE", "3"),
+                    ("--ba-loss", "SFM_BA_LOSS", "huber"),
+                    ("--ba-loss-param", "SFM_BA_LOSS_PARAM", "2"),
+                ):
+                    self.assertEqual(sfm[sfm.index(flag) + 1], overrides.get(key, default))
+                self.assertEqual(sfm[sfm.index("--reuse-matches") + 1], "redo")
+                self.assertTrue((data / "sfm-3/sfm_geometry_policy.json").is_file())
+                before = log.read_text()
+                env["SFM_MIN_TRI_ANGLE"] = "5"
+                for args in (("--prepare-only",), ("--block", "0")):
+                    refused = execute(*args)
+                    self.assertNotEqual(refused.returncode, 0)
+                    self.assertIn("Contrôles géométriques SfM modifiés", refused.stderr)
+                    self.assertEqual(log.read_text(), before)
+
+    def test_legacy_sfm_warns_that_new_thresholds_are_not_applied(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("les nouveaux seuils ne sont PAS appliqués", result.stderr)
+            self.assertFalse((data / "sfm-3/sfm_geometry_policy.json").exists())
+
     def fixture(self, temporary):
             root = Path(temporary)
             data = root / "dataset"

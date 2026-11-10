@@ -199,6 +199,11 @@ elif stage == "map":
             self.assertIn("--focal", commands[1])
             self.assertEqual(commands[0][commands[0].index("--feature-masks") + 1], str(masks))
             self.assertNotIn("--sensor-pairs", commands[1])
+            self.assertEqual(commands[1][commands[1].index("--max-error") + 1], "2")
+            self.assertEqual(commands[1][commands[1].index("--min-inliers") + 1], "30")
+            for flag, value in (("--max-error", "2"), ("--min-tri-angle", "3"),
+                                ("--ba-loss", "huber"), ("--ba-loss-param", "2")):
+                self.assertEqual(commands[2][commands[2].index(flag) + 1], value)
             self.assertEqual(commands[2][2], str(output / "matches-gps.bin"))
             # Rewriting identical metadata does not invalidate reuse.
             metadata(dataset / "metadata")
@@ -209,6 +214,10 @@ elif stage == "map":
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(len(log.read_text().splitlines()), 3)
+            changed_geometry = command + ["--min-tri-angle", "4"]
+            result = execute(changed_geometry)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("sauvegarde", result.stderr)
             (masks / "a.jpg.png").write_bytes(b"changed")
             result = execute()
             self.assertNotEqual(result.returncode, 0)

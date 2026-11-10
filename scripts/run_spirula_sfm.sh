@@ -23,7 +23,7 @@ option_names=(
   max-features peak-threshold edge-threshold
   aliked-max-features aliked-min-score lightglue-min-score
   prefilter-neighbors
-  max-error min-inliers
+  max-error min-inliers min-tri-angle ba-loss ba-loss-param
   camera-mode camera-model focal
   metric-gps sensor-pair-radius
   masks feature-masks image-exposure
@@ -87,8 +87,11 @@ Extraction et appariement :
   --prefilter-neighbors N    Voisins retenus par la sélection de paires GPU
 
 Vérification géométrique :
-  --max-error X              3 [défaut], en pixels d'extraction
-  --min-inliers N            15 [défaut], minimum par paire vérifiée
+  --max-error X              2 [défaut], en pixels d'extraction
+  --min-inliers N            30 [défaut], minimum par paire vérifiée
+  --min-tri-angle X          3 [défaut], degrés, parallaxe minimale
+  --ba-loss LOSS             huber [défaut] | cauchy | trivial
+  --ba-loss-param X          2 [défaut], échelle de perte, pixels d'extraction
 
 Caméras :
   --camera-mode MODE         folder [défaut] | single | image
@@ -148,8 +151,11 @@ for name in "${option_names[@]}"; do
     aliked-max-features) value=2048 ;;
     aliked-min-score) value=0.2 ;;
     lightglue-min-score) value=0.1 ;;
-    max-error) value=3 ;;
-    min-inliers) value=15 ;;
+    max-error) value=2 ;;
+    min-inliers) value=30 ;;
+    min-tri-angle) value=3 ;;
+    ba-loss) value=huber ;;
+    ba-loss-param) value=2 ;;
     camera-mode) value=folder ;;
     camera-model) value=opencv ;;
     metric-gps) value=auto ;;

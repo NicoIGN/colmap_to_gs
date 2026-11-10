@@ -7,6 +7,8 @@ load_config() {
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
   source "$config"
+  source "$repo_root/tools/panoramax/validate_config.sh"
+  init_sfm_geometry_config
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
     if [[ -v "$name" ]]; then
@@ -93,6 +95,7 @@ load_config() {
   source "$repo_root/tools/panoramax/validate_config.sh"
   reject_legacy_config || exit 1
   local config_errors=0
+  validate_sfm_geometry_config
   for name in SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES SFM_THREADS \
     SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX SLURM_CPUS_PER_TASK SLURM_BLOCK_PARALLELISM; do
     config_positive_integer "$name" "${!name}"

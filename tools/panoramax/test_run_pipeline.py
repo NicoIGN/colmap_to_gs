@@ -195,6 +195,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'TRAIN_PRESET="3dgs"\nTRAIN_QUALITY="high"\nTRAIN_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
                 'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
+                'SFM_MAX_ERROR="1.5"\nSFM_MIN_INLIERS="40"\nSFM_MIN_TRI_ANGLE="4"\n'
+                'SFM_BA_LOSS="cauchy"\nSFM_BA_LOSS_PARAM="1"\n'
                 'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'
                 'EXPORT_SPLAT_NAME="test.splat"\nMERGE_STRENGTH="1.0"\n'
                 'POSTPROCESS_FILTER_MODE="apply"\nPOSTPROCESS_FILTER_SIZE_FACTOR="12"\n'
@@ -219,7 +221,10 @@ class PanoramaxPipelineTest(unittest.TestCase):
             gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
             for flag, value in (("--max-distance", "30"), ("--matcher", "bruteforce"),
                                 ("--threads", "6"), ("--max-image-size", "1600"),
-                                ("--aliked-max-features", "2048")):
+                                ("--aliked-max-features", "2048"),
+                                ("--max-error", "1.5"), ("--min-inliers", "40"),
+                                ("--min-tri-angle", "4"), ("--ba-loss", "cauchy"),
+                                ("--ba-loss-param", "1")):
                 self.assertEqual(gps_args[gps_args.index(flag) + 1], value)
             # The versioned pipeline must forward independent SfM mask settings,
             # even when training masks are disabled.

@@ -19,6 +19,36 @@ config_positive_integer() {
     config_error "$1='$2' doit être un entier strictement positif."
 }
 
+init_sfm_geometry_config() {
+  SFM_MAX_ERROR="${SFM_MAX_ERROR:-2}"
+  SFM_MIN_INLIERS="${SFM_MIN_INLIERS:-30}"
+  SFM_MIN_TRI_ANGLE="${SFM_MIN_TRI_ANGLE:-3}"
+  SFM_BA_LOSS="${SFM_BA_LOSS:-huber}"
+  SFM_BA_LOSS_PARAM="${SFM_BA_LOSS_PARAM:-2}"
+}
+
+validate_sfm_geometry_config() {
+  local inliers="${SFM_MIN_INLIERS:-30}"
+  [[ "$inliers" =~ ^[1-9][0-9]*$ ]] &&
+    awk -v x="$inliers" 'BEGIN { exit !(x >= 4 && x <= 1000000) }' ||
+    config_error "SFM_MIN_INLIERS doit être un entier dans [4,1000000]."
+  config_choice SFM_BA_LOSS "${SFM_BA_LOSS:-huber}" 'trivial|huber|cauchy'
+  local name value
+  for name in SFM_MAX_ERROR SFM_MIN_TRI_ANGLE SFM_BA_LOSS_PARAM; do
+    case "$name" in
+      SFM_MAX_ERROR) value="${SFM_MAX_ERROR:-2}" ;;
+      SFM_MIN_TRI_ANGLE) value="${SFM_MIN_TRI_ANGLE:-3}" ;;
+      SFM_BA_LOSS_PARAM) value="${SFM_BA_LOSS_PARAM:-2}" ;;
+    esac
+    [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+      awk -v x="$value" -v name="$name" 'BEGIN {
+        if (name == "SFM_MAX_ERROR") exit !(x >= 0.1 && x <= 100)
+        if (name == "SFM_MIN_TRI_ANGLE") exit !(x > 0 && x <= 90)
+        exit !(x > 0 && x <= 1000)
+      }' || config_error "$name hors limites : erreur [0.1,100], angle ]0,90], échelle ]0,1000]."
+  done
+}
+
 reject_legacy_config() {
   local entry name replacement failed=0
   for entry in \
@@ -49,6 +79,7 @@ reject_legacy_config() {
 validate_config() {
   local config_errors=0 name value
   reject_legacy_config || return 1
+  validate_sfm_geometry_config
   for name in OUTPUT_DIR PANORAMAX_BBOX_LAMBERT93 SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
     [[ -n "${!name:-}" ]] || config_error "$name doit être défini et non vide."
   done

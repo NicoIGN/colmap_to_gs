@@ -91,6 +91,21 @@ SFM_MATCHER="lightglue"
 # pour ne pas utiliser la valeur SLURM_CPUS_PER_TASK de ce fichier.
 SFM_THREADS=""
 
+# Defauts geometriques stricts : moins de points fragiles, couverture possible reduite.
+# Erreur maximale en pixels d'extraction [0.1,100], verification et mapping.
+SFM_MAX_ERROR="2"
+# Entier [4,1000000] : inliers par paire, PAS observations minimum par point.
+SFM_MIN_INLIERS="30"
+# Angle de triangulation en degres : ]0,90]. Rejette les faibles parallaxes.
+# Augmenter peut supprimer des batiments lointains valides.
+SFM_MIN_TRI_ANGLE="3"
+# Perte du bundle adjustment : huber|cauchy|trivial.
+SFM_BA_LOSS="huber"
+# Echelle robuste ]0,1000] en pixels d'extraction (Huber delta / Cauchy c).
+SFM_BA_LOSS_PARAM="2"
+# Pour appliquer ces seuils a un SfM existant : choisir un nouvel OUTPUT_DIR.
+# TRAIN_CLEAN ne refait pas le SfM. Aucun nettoyage a posteriori ici.
+
 # Defaut : "". Vide = filtre GPS des paires desactive ; sinon nombre fini > 0
 # en metres : garder les paires a distance horizontale strictement < au rayon.
 # Les paires sans GPS sont gardees ; ne rajoute aucune paire.

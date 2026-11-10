@@ -28,6 +28,7 @@ SFM_PAIRS="${SFM_PAIRS:-prefilter}"
 SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
+init_sfm_geometry_config
 SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
 TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
@@ -87,6 +88,11 @@ Variables:
   SFM_FEATURES              Feature extractor (aliked-n16rot)
   SFM_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   SFM_THREADS               SfM CPU threads (empty: Spirula default)
+  SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
+  SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
+  SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (3)
+  SFM_BA_LOSS               Bundle adjustment loss: huber, cauchy, trivial (huber)
+  SFM_BA_LOSS_PARAM         Robust loss scale, extraction pixels (2)
   SFM_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
   SPLIT_OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
   TRAIN_CLEAN=true             Re-train blocks from scratch (destructive to GS outputs)
@@ -138,6 +144,9 @@ esac
 [[ -n "$DIR" ]] || { usage >&2; die "Définir DIR avec le chemin du dataset Panoramax."; }
 [[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
 [[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
+config_errors=0
+validate_sfm_geometry_config
+((config_errors == 0)) || exit 1
 
 for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS TRAIN_CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
   value="${!value_name}"
@@ -256,6 +265,10 @@ MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
+"$PYTHON_BIN" "$repo_root/tools/panoramax/sfm_geometry_policy.py" "$SFM_DIR" \
+  "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
+  "$SFM_BA_LOSS" "$SFM_BA_LOSS_PARAM"
+
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
   export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
@@ -287,6 +300,9 @@ prepare_blocks() {
       --features "$SFM_FEATURES" --matcher "$SFM_MATCHER"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
+      --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
+      --min-tri-angle "$SFM_MIN_TRI_ANGLE"
+      --ba-loss "$SFM_BA_LOSS" --ba-loss-param "$SFM_BA_LOSS_PARAM"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
@@ -309,9 +325,13 @@ prepare_blocks() {
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
       --features "$SFM_FEATURES"
       --matcher "$SFM_MATCHER"
+      --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
+      --min-tri-angle "$SFM_MIN_TRI_ANGLE"
+      --ba-loss "$SFM_BA_LOSS" --ba-loss-param "$SFM_BA_LOSS_PARAM"
+      --reuse-matches redo
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
-    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo --reuse-matches redo)
+    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi
 

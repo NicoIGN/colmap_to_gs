@@ -145,6 +145,13 @@ if args[0] == "sfm":
     assert get("--camera-mode") == "folder"
     assert get("--metric-gps") == "none"
     assert "--sequence" not in args and "--sensor-pairs" not in args
+    for flag, variable in (
+        ("--max-error", "SFM_MAX_ERROR"), ("--min-inliers", "SFM_MIN_INLIERS"),
+        ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_BA_LOSS"),
+        ("--ba-loss-param", "SFM_BA_LOSS_PARAM"),
+    ):
+        assert get(flag) == os.environ[variable]
+    assert get("--reuse-matches") == "redo"
     if os.environ["SFM_MASKS"] == "on":
         assert Path(get("--feature-masks"), "masks.json").is_file()
     else:
@@ -290,6 +297,38 @@ if "--wait" in args:
         result = self.run_pipeline("--phase", "merge")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_strict_geometry_defaults_and_overrides_local_and_slurm(self):
+        variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
+                     "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM")
+        flags = ("--max-error", "--min-inliers", "--min-tri-angle", "--ba-loss", "--ba-loss-param")
+        for slurm, values in ((False, ("2", "30", "3", "huber", "2")),
+                              (True, ("1.5", "50", "4", "cauchy", "1"))):
+            with self.subTest(slurm=slurm):
+                self.append(f'OUTPUT_DIR="{self.root / str(slurm)}"')
+                if slurm:
+                    self.append("\n".join(f'{key}="{value}"' for key, value in zip(variables, values)))
+                before = len(self.commands()) if self.events.exists() else 0
+                self.assert_ok(self.run_pipeline(*(["--wait"] if slurm else []), slurm=slurm))
+                sfm = next(cmd for cmd in self.commands()[before:] if cmd[:2] == ["spirula", "sfm"])
+                self.assertEqual(tuple(sfm[sfm.index(flag) + 1] for flag in flags), values)
+
+    def test_geometry_change_refuses_reuse(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.append("SFM_MIN_TRI_ANGLE=4")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_invalid_geometry_stops_before_submission(self):
+        self.append("SFM_MAX_ERROR=nan\nSFM_MIN_INLIERS=0\nSFM_MIN_TRI_ANGLE=91\n"
+                    "SFM_BA_LOSS=none\nSFM_BA_LOSS_PARAM=-1")
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        for name in ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
+                     "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM"):
+            self.assertIn(name, result.stderr)
+        self.assertFalse(self.jobs.exists())
 
     def test_mask_policy_changes_refuse_workspace_reuse(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

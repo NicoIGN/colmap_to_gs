@@ -10,6 +10,22 @@ ROOT = Path(__file__).resolve().parent
 
 
 class ValidateConfigTest(unittest.TestCase):
+    def test_invalid_geometry_rejected_local_and_slurm(self):
+        for script in ("run_pipeline.sh", "launch.sh"):
+            with self.subTest(script=script):
+                result, root = self.execute(script, """
+SFM_MAX_ERROR=0
+SFM_MIN_INLIERS=1.5
+SFM_MIN_TRI_ANGLE=91
+SFM_BA_LOSS=bad
+SFM_BA_LOSS_PARAM=nan
+""")
+                self.assertEqual(result.returncode, 1)
+                for name in ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
+                             "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM"):
+                    self.assertIn(name, result.stderr)
+                self.assertFalse((root / "output").exists())
+
     def execute(self, script, extra="", mode=None):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)

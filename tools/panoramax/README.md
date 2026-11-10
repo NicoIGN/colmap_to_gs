@@ -14,6 +14,29 @@ python3 -m pip install -r tools/panoramax/requirements.txt
 
 `pyproj` est déjà présent dans l'environnement Conda fourni par ce dépôt.
 
+## Contrôles géométriques du pipeline SfM
+
+Les pipelines Panoramax et images locales exposent les mêmes réglages :
+`SFM_MAX_ERROR=2` (pixels d'extraction), `SFM_MIN_INLIERS=30` (par paire),
+`SFM_MIN_TRI_ANGLE=3` (degrés), `SFM_BA_LOSS=huber` et `SFM_BA_LOSS_PARAM=2`
+(échelle robuste en pixels d'extraction). Ils sont transmis au SfM natif et,
+si le filtre GPS est activé, aux étapes `match` et `map` concernées.
+La perte Huber reste robuste ; le seuil de reprojection et l'angle plus stricts
+visent les appariements incohérents et les profondeurs à faible parallaxe.
+Ils ne garantissent pas l'absence de parasites et peuvent réduire la couverture,
+éliminer des bâtiments lointains valides ou fragmenter la reconstruction.
+
+Ces paramètres agissent pendant le calcul, pas sur un modèle déjà terminé.
+Pour les appliquer à un ancien SfM, choisir un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN`
+ne recalcule que les splats. Les nouveaux workspaces enregistrent la politique
+dans `sfm_geometry_policy.json` et refusent les changements incompatibles avant
+de réutiliser le SfM ou les blocs. Un ancien SfM sans signature est conservé
+avec un avertissement explicite : ses contrôles ne sont pas connus.
+Un nouveau calcul via le worker revérifie les matches (`--reuse-matches redo`).
+Le wrapper direct `scripts/run_spirula_sfm.sh` expose les options CLI équivalentes
+`--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`, `--ba-loss-param`.
+Vérifier leur disponibilité dans la version installée de Spirula.
+
 ## Utilisation
 
 Depuis la racine du dépôt :

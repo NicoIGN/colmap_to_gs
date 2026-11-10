@@ -83,6 +83,19 @@ Une caméra par sous-dossier est le défaut ; vérifier que les images d'un mêm
 dossier partagent bien les mêmes caractéristiques optiques. L'alignement
 géographique et l'échelle métrique ne sont pas garantis sans GPX optionnel.
 Tous les blocs restent alignés dans le même repère SfM.
+
+Les contrôles géométriques utilisent des défauts stricts, communs à Panoramax :
+`SFM_MAX_ERROR=2` (pixels d'extraction, vérification des paires et mapping),
+`SFM_MIN_INLIERS=30` (minimum par paire, pas par point),
+`SFM_MIN_TRI_ANGLE=3` (degrés), `SFM_BA_LOSS=huber` et
+`SFM_BA_LOSS_PARAM=2` (échelle robuste en pixels d'extraction).
+Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences
+peut aussi éliminer des bâtiments lointains valides et fragmenter la reconstruction.
+Ces réglages ne garantissent pas l'absence de faux points et ne filtrent pas
+un modèle déjà calculé. Leur modification exige un nouvel `OUTPUT_DIR` ;
+`TRAIN_CLEAN` ne recalcule pas le SfM. Les matches sont revérifiés lors d'un
+nouveau calcul SfM, pour ne pas hériter d'anciens seuils.
+
 Le découpage conserve les poses caméra et les coordonnées des points ; il
 sélectionne les observations sans recentrer ni redimensionner les sous-modèles.
 Chaque entraînement peut utiliser sa propre normalisation interne :

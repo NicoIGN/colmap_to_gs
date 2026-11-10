@@ -72,6 +72,10 @@ prepare() {
       --preset video --no-prepare --data-type individual --sequence= \
       --pairs "$SFM_PAIRS" --features "$SFM_FEATURES" --matcher "$SFM_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
+      --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
+      --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_BA_LOSS" \
+      --ba-loss-param "$SFM_BA_LOSS_PARAM" \
+      --reuse-matches redo \
       --camera-mode "$SFM_CAMERA_MODE" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps none --no-sensor-pairs --threads "$SFM_THREADS" "${feature_args[@]}"
   fi

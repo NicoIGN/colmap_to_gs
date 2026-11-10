@@ -46,6 +46,13 @@ def run(args):
         raise ValueError("SFM_PAIR_MAX_DISTANCE doit être fini et strictement positif")
     if args.threads < 0 or args.max_image_size <= 0 or args.aliked_max_features <= 0:
         raise ValueError("Résolution et budget de points doivent être positifs ; fils CPU >= 0")
+    if (not 4 <= args.min_inliers <= 1000000 or
+            not all(math.isfinite(x) and x > 0 for x in
+                    (args.max_error, args.min_tri_angle, args.ba_loss_param)) or
+            not 0.1 <= args.max_error <= 100 or
+            args.min_tri_angle > 90 or args.ba_loss_param > 1000):
+        raise ValueError("Seuils géométriques invalides : erreur [0.1,100], "
+                         "inliers [4,1000000], angle ]0,90], échelle ]0,1000]")
     args.dataset = args.dataset.resolve()
     args.output = args.output.resolve()
     marker = args.output / "gps_filter_run.json"
@@ -93,6 +100,7 @@ def run(args):
         "--pairs", ("prefilter" if selection["selected"] >= 100 else "exhaustive")
         if args.pairs == "auto" else args.pairs,
         "--matcher", args.matcher, "--camera-mode", "folder", "--camera-model", "opencv",
+        "--max-error", str(args.max_error), "--min-inliers", str(args.min_inliers),
         *common,
     ]
     if selection["focal_px"]:
@@ -101,6 +109,8 @@ def run(args):
         args.spirula_bin, "sfm", "map", str(filtered), str(features),
         "--output", str(args.output / "sparse"), "--image-dir", str(images),
         "--metric-gps", "full", *common,
+        "--max-error", str(args.max_error), "--min-tri-angle", str(args.min_tri_angle),
+        "--ba-loss", args.ba_loss, "--ba-loss-param", str(args.ba_loss_param),
     ]
     for stage, command in (("extraction", extract), ("appariement", match)):
         print(f"[SFM GPS] {stage} : {shlex.join(command)}", flush=True)
@@ -130,6 +140,11 @@ def main():
     parser.add_argument("--max-image-size", type=int, default=4096)
     parser.add_argument("--aliked-max-features", type=int, default=4096)
     parser.add_argument("--threads", type=int, default=0)
+    parser.add_argument("--max-error", type=float, default=2)
+    parser.add_argument("--min-inliers", type=int, default=30)
+    parser.add_argument("--min-tri-angle", type=float, default=3)
+    parser.add_argument("--ba-loss", choices=("huber", "cauchy", "trivial"), default="huber")
+    parser.add_argument("--ba-loss-param", type=float, default=2)
     parser.add_argument("--feature-masks", type=Path)
     args = parser.parse_args()
     try:
