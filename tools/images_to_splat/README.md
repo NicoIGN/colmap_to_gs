@@ -175,6 +175,27 @@ ne pas mélanger des blocs entraînés dans des repères différents.
 
 ## Reprise et fusion seule
 
+### Filtrage optionnel du sparse
+
+```bash
+SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
+```
+
+Le filtre expérimental de `tools/preprocess/filter_sparse_density.py` s'exécute
+sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
+ses seuils par défaut et écrit `sparse_filtered/0`, son rapport et les PLY
+conservés/rejetés ; le SfM brut et le modèle géoréférencé restent intacts.
+Les blocs et le recadrage bbox final utilisent tous deux ce sparse filtré.
+Les étapes sont journalisées en mode verbose, sans barres interactives en batch.
+Un résultat terminé et valide est réutilisé à la reprise.
+
+Activer avant la préparation et vérifier visuellement les points rejetés :
+ce filtre reste expérimental. Changer ce réglage après découpage/entraînement
+nécessite un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN` ne redécoupe pas les blocs.
+Le défaut `false` reste compatible avec les signatures antérieures.
+
+### Réutilisation du workspace
+
 Le pipeline conserve `inputs.json` (sélection, tailles/dates, paramètres SfM,
 masques et découpage). Une modification incompatible est refusée : choisir un
 nouvel `OUTPUT_DIR`, sans mélanger plusieurs reconstructions.

@@ -71,6 +71,9 @@ def prepare(check=False):
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
     settings = {key: value for key, value in os.environ.items()
                 if key.startswith(("SFM_", "TRAIN_MASKS", "SPLIT_"))}
+    # Keep old unfiltered signatures compatible without adopting new provenance.
+    if settings.get("SFM_FILTER_DENSITY") == "false":
+        settings.pop("SFM_FILTER_DENSITY")
     settings["mask_policies"] = policies()
     for prefix, mask in settings["mask_policies"].items():
         if mask is None:
@@ -112,13 +115,16 @@ def prepare(check=False):
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
-             ("images", "sfm", "masks", "feature_masks", "train_masks", "blocks", "gs")):
+             ("images", "sfm", "masks", "feature_masks", "train_masks",
+              "sparse_filtered", "blocks", "gs")):
         if not resume:
             raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
         adopted = True
-    if adopted and any((output / name).exists() for name in ("georef", "blocks", "gs")):
+    if adopted and any((output / name).exists()
+                       for name in ("georef", "sparse_filtered", "blocks", "gs")):
         raise ValueError(
-            "Reprise sans signature actuelle refusée après recalage/découpage/entraînement : "
+            "Reprise sans signature actuelle refusée après recalage/découpage/entraînement "
+            "ou filtrage sparse : "
             "choisir un nouvel OUTPUT_DIR."
         )
     if check:

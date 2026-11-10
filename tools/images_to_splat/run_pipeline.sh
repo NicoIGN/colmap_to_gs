@@ -50,6 +50,16 @@ sparse="$sfm/sparse/0"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/georef/0"
 fi
+filter_input="$sparse"
+if [[ "$SFM_FILTER_DENSITY" == true ]]; then
+  sparse="$OUTPUT_DIR/sparse_filtered/0"
+fi
+
+check_filtered_sparse() {
+  [[ -f "$sparse/.density_done" && -s "$sparse/density_report.json" ]] ||
+    die "Filtrage sparse incomplet : relancer --phase prepare."
+  "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
+}
 
 sparse_ready() {
   if [[ "$PIPELINE_RESUME" == true ]]; then
@@ -79,7 +89,7 @@ prepare() {
   fi
   if ! sparse_ready; then
     if [[ "$PIPELINE_RESUME" == true ]]; then
-      for downstream in georef blocks gs; do
+      for downstream in georef sparse_filtered blocks gs; do
         [[ ! -e "$OUTPUT_DIR/$downstream" ]] ||
           die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
       done
@@ -106,6 +116,19 @@ prepare() {
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     stage="recalage du SfM sur le GPX"
     "$PYTHON_BIN" "$script_dir/georeference.py" prepare
+  fi
+  if [[ "$SFM_FILTER_DENSITY" == true ]]; then
+    stage="filtrage du sparse par densité"
+    if [[ ! -f "$sparse/.density_done" ]]; then
+      [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" ]] ||
+        die "Filtrage absent mais blocs/train présents : choisir un nouvel OUTPUT_DIR."
+      "$PYTHON_BIN" "$repo_root/tools/preprocess/filter_sparse_density.py" \
+        --input "$filter_input" --output "$sparse" --verbose --no-progress
+      "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
+      touch "$sparse/.density_done"
+    else
+      check_filtered_sparse
+    fi
   fi
   if [[ ! -s "$blocks/manifest.json" ]]; then
     stage="découpage COLMAP"
@@ -135,6 +158,9 @@ else
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     "$PYTHON_BIN" "$script_dir/georeference.py" check
+  fi
+  if [[ "$SFM_FILTER_DENSITY" == true ]]; then
+    check_filtered_sparse
   fi
 fi
 [[ "$phase" != prepare ]] || exit 0

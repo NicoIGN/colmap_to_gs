@@ -47,7 +47,7 @@ import shutil, sys
 args = sys.argv[1:]
 name = Path(args[0]).name if args else ""
 known = {"generate_masks.py", "colmap_split_blocks.py", "georef_colmap_from_gpx.py", "export_ply.py",
-         "filter_splats.py", "merge_splats.py"}
+         "filter_splats.py", "merge_splats.py", "filter_sparse_density.py"}
 def get(flag): return args[args.index(flag) + 1]
 if name not in known:
     os.execv(sys.executable, [sys.executable, *args])
@@ -55,6 +55,10 @@ with open(os.environ["TEST_EVENTS"], "a") as log:
     log.write(json.dumps([name, *args[1:]]) + "\n")
 if os.environ.get("TEST_FAIL_TOOL") == name:
     sys.exit(7)
+if name == "filter_sparse_density.py":
+    expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"
+    assert get("--input").endswith(expected)
+    os.execv(sys.executable, [sys.executable, *args])
 if name == "generate_masks.py":
     source, output = Path(get("--images")), Path(get("--output"))
     prefix = "SFM_MASKS" if output.name == "feature_masks" else "TRAIN_MASKS"
@@ -99,6 +103,8 @@ elif name == "georef_colmap_from_gpx.py":
         "warnings": ["Solution à contrôler"]}))
 elif name == "colmap_split_blocks.py":
     expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"
+    if os.environ.get("SFM_FILTER_DENSITY") == "true":
+        expected = "/sparse_filtered/0"
     assert get("--input").endswith(expected)
     output = Path(get("--output"))
     count = int(get("--num-blocks"))
@@ -114,6 +120,8 @@ elif name == "export_ply.py":
 elif name == "filter_splats.py":
     assert get("--mode") == "off"
     expected = "/georef/0/points3D.bin" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0/points3D.bin"
+    if os.environ.get("SFM_FILTER_DENSITY") == "true":
+        expected = "/sparse_filtered/0/points3D.bin"
     assert get("--sparse-points").endswith(expected)
     assert Path(get("--input")).read_bytes() == b"raw-splat"
     output = Path(get("--output"))
@@ -297,6 +305,57 @@ if "--wait" in args:
                  for p in (self.output / "images").rglob("*.jpg")]
         self.assertEqual(names, ["root.jpg"])
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
+
+    def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
+        self.append("SFM_FILTER_DENSITY=true")
+        self.assert_ok(self.run_pipeline())
+        filtered = self.output / "sparse_filtered/0"
+        self.assertTrue((filtered / ".density_done").is_file())
+        self.assertTrue((filtered / "density_report.json").is_file())
+        self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"
+                             for cmd in self.commands()), 1)
+        raw = (self.output / "sfm/sparse/0/points3D.bin").read_bytes()
+        self.assert_ok(self.run_pipeline())
+        self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"
+                             for cmd in self.commands()), 1)
+        self.assertEqual((self.output / "sfm/sparse/0/points3D.bin").read_bytes(), raw)
+        # A separate Slurm workspace exercises GPX -> filter -> split -> bbox.
+        self.output = self.root / "filtered-gpx"
+        gpx = self.root / "track.gpx"
+        gpx.write_text("<gpx/>")
+        self.append(f'OUTPUT_DIR="{self.output}"\nGEOREF_GPX_FILE="{gpx}"\n'
+                    'GEOREF_VIEW_PREFIX=h00')
+        self.assert_ok(self.run_pipeline("--wait", slurm=True))
+        self.assertTrue((self.output / "scene.splat").is_file())
+        names = [cmd[0] for cmd in self.commands()]
+        georef = names.index("georef_colmap_from_gpx.py")
+        self.assertLess(georef, names.index("filter_sparse_density.py", georef))
+        self.assertTrue((self.output / "sparse_filtered/0/.density_done").is_file())
+
+    def test_density_filter_failures_stop_before_split_and_marking_complete(self):
+        self.append("SFM_FILTER_DENSITY=true")
+        self.env["TEST_FAIL_TOOL"] = "filter_sparse_density.py"
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.output / "blocks").exists())
+        self.assertFalse((self.output / "sparse_filtered/0/.density_done").exists())
+        self.assertFalse((self.output / ".prepare_done").exists())
+
+    def test_density_setting_changes_refuse_existing_blocks(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertNotIn("SFM_FILTER_DENSITY",
+                         json.loads((self.output / "inputs.json").read_text())["settings"])
+        self.append("SFM_FILTER_DENSITY=true\nPIPELINE_RESUME=true")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse((self.output / "sparse_filtered").exists())
+
+    def test_invalid_density_flag_stops_before_submission(self):
+        self.append("SFM_FILTER_DENSITY=yes")
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_FILTER_DENSITY", result.stderr)
+        self.assertFalse(self.jobs.exists())
 
     def test_changed_images_or_mask_policy_refuse_reuse(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
