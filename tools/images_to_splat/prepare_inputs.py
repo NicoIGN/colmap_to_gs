@@ -2,6 +2,7 @@
 """Select local images without flattening names; guard workspace reuse."""
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,10 +40,18 @@ def prepare(check=False):
             stat = model.stat()
             settings["mask_model_stamp"] = [str(model.resolve()), stat.st_size, stat.st_mtime_ns]
     record = {"source": str(source), "images": images, "settings": settings}
+    if os.environ.get("GEOREF_GPX_FILE"):
+        gpx = Path(os.environ["GEOREF_GPX_FILE"]).resolve()
+        record["georeference"] = {
+            "gpx": str(gpx),
+            "sha256": hashlib.sha256(gpx.read_bytes()).hexdigest(),
+            "view_prefix": os.environ["GEOREF_VIEW_PREFIX"],
+            "epsg": os.environ["GEOREF_EPSG"],
+        }
     marker = output / "inputs.json"
     if marker.is_file():
         if json.loads(marker.read_text()) != record:
-            raise ValueError("Images ou paramètres SfM/masques/découpage modifiés : "
+            raise ValueError("Images ou paramètres SfM/masques/découpage/GPX modifiés : "
                              "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM.")
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")

@@ -19,6 +19,10 @@ load_config() {
   SFM_THREADS="${SFM_THREADS:-16}"
   SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
   SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}"
+  GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
+  GEOREF_VIEW_PREFIX="${GEOREF_VIEW_PREFIX:-}"
+  GEOREF_EPSG="${GEOREF_EPSG:-2154}"
+  GEOREF_ALLOW_UNCERTAIN="${GEOREF_ALLOW_UNCERTAIN:-false}"
   SFM_MASKS="${SFM_MASKS:-on}"
   TRAIN_MASKS="${TRAIN_MASKS:-on}"
   MASKS_SPIRULA_MODEL="${MASKS_SPIRULA_MODEL:-}"
@@ -71,6 +75,12 @@ load_config() {
     config_positive_integer "$name" "${!name}"
   done
   config_choice INPUT_RECURSIVE "$INPUT_RECURSIVE" 'true|false'
+  config_choice GEOREF_ALLOW_UNCERTAIN "$GEOREF_ALLOW_UNCERTAIN" 'true|false'
+  config_positive_integer GEOREF_EPSG "$GEOREF_EPSG"
+  if [[ -n "$GEOREF_GPX_FILE" ]]; then
+    [[ "$GEOREF_GPX_FILE" == /* && -f "$GEOREF_GPX_FILE" ]] ||
+      config_error "GEOREF_GPX_FILE doit être un fichier GPX existant, chemin absolu."
+  fi
   config_choice SFM_MASKS "$SFM_MASKS" 'on|off'
   config_choice TRAIN_MASKS "$TRAIN_MASKS" 'on|off'
   config_choice MASKS_ACCEPT_LICENSE "$MASKS_ACCEPT_LICENSE" 'true|false'

@@ -59,7 +59,29 @@ SFM_THREADS="16"
 SFM_CAMERA_MODE="folder"
 SFM_CAMERA_MODEL="opencv"
 # Photos individuelles, sans sequence ni alignement GPS force.
-# Pas de georeferencement garanti ; toutes les sorties partagent le repere SfM.
+# Sans GPX ci-dessous, pas de georeferencement ; les sorties partagent le repere SfM.
+
+# ============================================================================
+# 2b. Georeferencement GPX OPTIONNEL, avant decoupage
+# ============================================================================
+# Vide/absent : comportement habituel, pas de recalage ni de dependances GPX.
+# Sinon chemin absolu de la trace ; le SfM brut est conserve dans sfm/sparse/0.
+# Le modele transforme est dans georef/0, repere local ENU en metres.
+GEOREF_GPX_FILE=""
+# Dossier de vues pour construire la trajectoire, ex. h00_y0 ; vide = auto.
+# Images ordonnees par _fXXXXX (ex. paris9_f002160.jpg), sans FPS ni horodatage.
+# Necessite >= 6 indices de frame distincts dans une trajectoire exploitable.
+GEOREF_VIEW_PREFIX=""
+# EPSG de l'origine projetee dans le rapport, PAS celui des coordonnees splat.
+# Les splats restent en ENU local, pas en grandes coordonnees Lambert-93.
+GEOREF_EPSG="2154"
+# false : bloquer si ambigu ou erreur normalisee > 0.08.
+# true : continuer APRES controle visuel des rapports et acceptation explicite.
+# Toute solution reste approximative et doit etre controlee sur la trace.
+GEOREF_ALLOW_UNCERTAIN="false"
+# Dependances supplementaires seulement si GPX : fiona et pyproj.
+# Altitudes GPX brutes, sans correction geoide. Rigs/frames COLMAP non supportes.
+# Changer de GPX implique un nouveau OUTPUT_DIR, meme avec TRAIN_CLEAN=true.
 
 # ============================================================================
 # 3. Decoupage

@@ -44,6 +44,10 @@ sfm="$OUTPUT_DIR/sfm"
 masks="$OUTPUT_DIR/masks"
 blocks="$OUTPUT_DIR/blocks"
 selected="$OUTPUT_DIR/images"
+sparse="$sfm/sparse/0"
+if [[ -n "$GEOREF_GPX_FILE" ]]; then
+  sparse="$OUTPUT_DIR/georef/0"
+fi
 
 prepare() {
   stage="sélection des images"
@@ -76,10 +80,14 @@ prepare() {
   for name in cameras images points3D; do
     [[ -s "$sfm/sparse/0/$name.bin" ]] || die "SfM incomplet : $name.bin"
   done
+  if [[ -n "$GEOREF_GPX_FILE" ]]; then
+    stage="recalage du SfM sur le GPX"
+    "$PYTHON_BIN" "$script_dir/georeference.py" prepare
+  fi
   if [[ ! -s "$blocks/manifest.json" ]]; then
     stage="découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/colmap_split_blocks.py" \
-      --input "$sfm/sparse/0" --output "$blocks" --num-blocks "$SPLIT_NUM_BLOCKS" \
+      --input "$sparse" --output "$blocks" --num-blocks "$SPLIT_NUM_BLOCKS" \
       --overlap-max-fraction "$SPLIT_OVERLAP_MAX_FRACTION" --export-binary
   fi
   "$PYTHON_BIN" - "$blocks/manifest.json" "$SPLIT_NUM_BLOCKS" <<'PY'
@@ -102,6 +110,9 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
 else
   stage="vérification du workspace"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
+  if [[ -n "$GEOREF_GPX_FILE" ]]; then
+    "$PYTHON_BIN" "$script_dir/georeference.py" check
+  fi
 fi
 [[ "$phase" != prepare ]] || exit 0
 
@@ -131,7 +142,7 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
     cropped="$OUTPUT_DIR/gs/$id/splats/$id.bbox.splat"
     "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
       --input "$raw" --output "$cropped" --mode off \
-      --sparse-points "$sfm/sparse/0/points3D.bin" \
+      --sparse-points "$sparse/points3D.bin" \
       --sparse-bbox-mode "$POSTPROCESS_SPARSE_BBOX_MODE" \
       --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION" --overwrite
@@ -144,4 +155,8 @@ stage="fusion des blocs"
 "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" "${inputs[@]}" \
   --output "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" --strength "$MERGE_STRENGTH"
 [[ -s "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" ]] || die "Splat final absent ou vide"
+if [[ -n "$GEOREF_GPX_FILE" ]]; then
+  stage="export de la référence géographique du splat"
+  "$PYTHON_BIN" "$script_dir/georeference.py" export
+fi
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

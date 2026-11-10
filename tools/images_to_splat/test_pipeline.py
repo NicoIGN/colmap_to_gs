@@ -46,7 +46,7 @@ from pathlib import Path
 import shutil, sys
 args = sys.argv[1:]
 name = Path(args[0]).name if args else ""
-known = {"generate_masks.py", "colmap_split_blocks.py", "export_ply.py",
+known = {"generate_masks.py", "colmap_split_blocks.py", "georef_colmap_from_gpx.py", "export_ply.py",
          "filter_splats.py", "merge_splats.py"}
 def get(flag): return args[args.index(flag) + 1]
 if name not in known:
@@ -67,7 +67,27 @@ if name == "generate_masks.py":
         target.write_bytes(b"mask")
     (output / "masks.json").write_text(json.dumps({
         "status": "complete", "settings": {"labels": "sky,cloud"}, "images": names}))
+elif name == "georef_colmap_from_gpx.py":
+    output = Path(get("--output-dir"))
+    assert get("--sparse-dir").endswith("/sfm/sparse")
+    assert get("--view-prefix") == "h00"
+    assert get("--epsg") == "2154"
+    source = Path(get("--sparse-dir")) / "0"
+    model = output / "0"
+    model.mkdir(parents=True)
+    for file in ("cameras.bin", "images.bin", "points3D.bin"):
+        shutil.copyfile(source / file, model / file)
+    (output / "georef_summary.json").write_text(json.dumps({"models": [{
+        "model": "0", "status": "exported_requires_validation"}]}))
+    (model / "georef_stats.json").write_text(json.dumps({
+        "output_reference": {"type": "local_ENU", "units": "meters",
+            "axes": ["East", "North", "Up"], "origin_lat_lon_height": [48.87, 2.34, 50.0]},
+        "ambiguous": os.environ.get("TEST_GEOREF_AMBIGUOUS") == "1",
+        "normalized_ordered_rmse": float(os.environ.get("TEST_GEOREF_ERROR", "0.01")),
+        "warnings": ["Solution à contrôler"]}))
 elif name == "colmap_split_blocks.py":
+    expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"
+    assert get("--input").endswith(expected)
     output = Path(get("--output"))
     count = int(get("--num-blocks"))
     for i in range(count):
@@ -81,7 +101,8 @@ elif name == "export_ply.py":
     Path(get("--out-ply")).write_bytes(b"raw-splat")
 elif name == "filter_splats.py":
     assert get("--mode") == "off"
-    assert get("--sparse-points").endswith("/sfm/sparse/0/points3D.bin")
+    expected = "/georef/0/points3D.bin" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0/points3D.bin"
+    assert get("--sparse-points").endswith(expected)
     assert Path(get("--input")).read_bytes() == b"raw-splat"
     output = Path(get("--output"))
     output.write_bytes(b"cropped" if get("--sparse-bbox-mode") == "apply" else b"raw-splat")
@@ -215,6 +236,8 @@ if "--wait" in args:
     def test_local_full_run_reuse_and_merge_only(self):
         self.assert_ok(self.run_pipeline())
         self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
+        self.assertFalse((self.output / "georef").exists())
+        self.assertFalse((self.output / "scene.georef.json").exists())
         selected = self.output / "images"
         for name in ("root.jpg", "h00/photo.jpg", "h01/photo.jpg"):
             self.assertTrue((selected / name).is_symlink())
@@ -346,6 +369,93 @@ if "--wait" in args:
         result = self.run_pipeline(slurm=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(Path(str(self.jobs) + ".cancelled").read_text().strip(), "100")
+
+    def enable_gpx(self):
+        gpx = self.root / "track.gpx"
+        gpx.write_text("<gpx/>")
+        self.append(f'GEOREF_GPX_FILE="{gpx}"\nGEOREF_VIEW_PREFIX="h00"')
+        return gpx
+
+    def test_optional_gpx_local_and_slurm_reference_and_order(self):
+        self.enable_gpx()
+        for slurm in (False, True):
+            with self.subTest(slurm=slurm):
+                output = self.root / f"gpx-{slurm}"
+                self.append(f'OUTPUT_DIR="{output}"')
+                before = len(self.commands()) if self.events.exists() else 0
+                self.assert_ok(self.run_pipeline(*(["--wait"] if slurm else []), slurm=slurm))
+                commands = self.commands()[before:]
+                stages = [cmd[0] for cmd in commands]
+                georef = stages.index("georef_colmap_from_gpx.py")
+                split = stages.index("colmap_split_blocks.py")
+                self.assertLess(georef, split)
+                self.assertTrue(any(cmd[:2] == ["spirula", "sfm"] for cmd in commands[:georef]))
+                self.assertTrue((output / "georef/source.gpx").exists())
+                reference = json.loads((output / "scene.georef.json").read_text())
+                self.assertEqual(reference["output_reference"]["axes"], ["East", "North", "Up"])
+                self.assertEqual(reference["splat"], "scene.splat")
+                self.assertTrue((output / "sfm/sparse/0/points3D.bin").exists())
+
+    def test_gpx_reuse_and_content_change_guard(self):
+        gpx = self.enable_gpx()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(sum(cmd[0] == "georef_colmap_from_gpx.py" for cmd in self.commands()), 1)
+        gpx.write_text("<gpx>changed</gpx>")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_adding_gpx_to_prepared_workspace_is_refused(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.enable_gpx()
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_uncertain_gpx_requires_explicit_acceptance_before_splitting(self):
+        self.enable_gpx()
+        self.env["TEST_GEOREF_AMBIGUOUS"] = "1"
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ambigu", result.stdout + result.stderr)
+        self.assertFalse((self.output / "blocks").exists())
+        self.append("GEOREF_ALLOW_UNCERTAIN=true")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertTrue((self.output / "blocks/manifest.json").exists())
+        self.assertEqual(sum(cmd[0] == "georef_colmap_from_gpx.py" for cmd in self.commands()), 1)
+
+    def test_high_gpx_residual_is_rejected(self):
+        self.enable_gpx()
+        self.env["TEST_GEOREF_ERROR"] = "0.2"
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("erreur normalisée", result.stdout + result.stderr)
+        self.assertFalse((self.output / ".prepare_done").exists())
+
+    def test_missing_gpx_rejected_before_submission(self):
+        self.append('GEOREF_GPX_FILE="/missing/trace.gpx"')
+        result = self.run_pipeline(slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("GEOREF_GPX_FILE", result.stderr)
+        self.assertFalse(self.jobs.exists())
+
+    def test_removing_gpx_from_prepared_workspace_is_refused(self):
+        self.enable_gpx()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.append('GEOREF_GPX_FILE=""')
+        result = self.run_pipeline("--phase", "merge")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
+
+    def test_gpx_failure_stops_before_partition_and_training(self):
+        self.enable_gpx()
+        self.env["TEST_FAIL_TOOL"] = "georef_colmap_from_gpx.py"
+        result = self.run_pipeline()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Géoréférencement GPX", result.stdout + result.stderr)
+        self.assertFalse((self.output / "blocks").exists())
+        self.assertFalse(any(cmd[:2] == ["spirula", "train"] for cmd in self.commands()))
 
 
 if __name__ == "__main__":

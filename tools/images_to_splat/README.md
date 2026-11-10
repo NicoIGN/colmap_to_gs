@@ -1,7 +1,7 @@
 # Images locales vers Gaussian Splats
 
 Pipeline Spirula sans téléchargement Panoramax :
-sélection d'images → masques partagés → SfM global → blocs COLMAP →
+sélection d'images → masques partagés → SfM global → recalage GPX optionnel → blocs COLMAP →
 entraînement → recadrage bbox COLMAP **avant fusion** → `.splat`.
 
 ## Utilisation
@@ -63,8 +63,56 @@ L'arrêt 14000/4000 laisse 4000 pas sans croissance.
 Le SfM utilise des photos individuelles, sans filtrage des paires GPS.
 Une caméra par sous-dossier est le défaut ; vérifier que les images d'un même
 dossier partagent bien les mêmes caractéristiques optiques. L'alignement
-géographique et l'échelle métrique ne sont pas garantis sans références.
+géographique et l'échelle métrique ne sont pas garantis sans GPX optionnel.
 Tous les blocs restent alignés dans le même repère SfM.
+
+## GPX optionnel
+
+Sans `GEOREF_GPX_FILE` (absent ou vide), **aucun changement de comportement** :
+le pipeline n'appelle pas le recalage et ne nécessite ni fiona ni pyproj.
+Pour l'activer dans la même config Bash/Slurm :
+
+```bash
+GEOREF_GPX_FILE="/chemin/absolu/parcours.gpx"
+GEOREF_VIEW_PREFIX="h00_y0"  # vide : sélection automatique du dossier
+GEOREF_EPSG="2154"
+GEOREF_ALLOW_UNCERTAIN="false"
+```
+
+Le pipeline réutilise `tools/preprocess/georef_colmap_from_gpx.py` : il recale
+la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,
+timestamps ni offset temporel. Les images doivent porter des indices `_fXXXXX`
+et fournir au moins six frames distinctes dans un dossier exploitable.
+Les parcours doivent avoir une géométrie suffisamment caractéristique ; des
+segments droits, répétitifs ou fortement déformés peuvent donner un recalage
+ambigu ou incorrect. Ce n'est pas une garantie de précision cartographique.
+
+Le recalage précède le découpage et l'entraînement. Le modèle brut
+`sfm/sparse/0` est conservé ; `georef/0` devient la source commune du découpage
+et du recadrage bbox. Le résultat est en **ENU local métrique**
+(Est, Nord, Haut), dont l'origine WGS84 est dans les rapports.
+`GEOREF_EPSG` définit seulement la référence projetée de cette origine.
+Les altitudes GPX sont utilisées sans correction géoïde.
+
+Sorties complémentaires : `georef/source.gpx`, `georef/georef_summary.json`,
+`georef/0/georef_stats.json`, trajectoire caméra GPX et
+`georef/georef_trajectories.gpkg` pour contrôle dans QGIS.
+Un recalage ambigu ou d'erreur normalisée > 0.08 arrête la préparation avant
+le découpage. Après contrôle, `GEOREF_ALLOW_UNCERTAIN=true` permet d'accepter
+explicitement cette solution sans refaire le SfM ; les avertissements restent
+affichés. **Tout recalage demande une validation visuelle**, même sans alerte.
+
+Le résultat final est accompagné de `<nom-du-splat>.georef.json`, compatible
+avec `tools/splat_to_3dtiles/convert.py --georef-summary`, sans appliquer une
+seconde transformation aux coordonnées. Un `.splat` seul n'embarque pas de CRS :
+conserver le fichier de référence avec lui.
+
+GPX activé : fiona et pyproj sont requis par l'outil existant. Les modèles
+COLMAP contenant `rigs.*` ou `frames.*` sont refusés explicitement par celui-ci.
+Une sortie GPX interrompue sans rapport doit être sauvegardée/déplacée avant
+de relancer la préparation ; le SfM brut n'a pas à être recalculé.
+Modifier/ajouter/retirer le GPX après préparation exige un **nouvel OUTPUT_DIR** :
+ne pas mélanger des blocs entraînés dans des repères différents.
 
 ## Reprise et fusion seule
 
