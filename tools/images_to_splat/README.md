@@ -65,6 +65,14 @@ Une caméra par sous-dossier est le défaut ; vérifier que les images d'un mêm
 dossier partagent bien les mêmes caractéristiques optiques. L'alignement
 géographique et l'échelle métrique ne sont pas garantis sans GPX optionnel.
 Tous les blocs restent alignés dans le même repère SfM.
+Le découpage conserve les poses caméra et les coordonnées des points ; il
+sélectionne les observations sans recentrer ni redimensionner les sous-modèles.
+Chaque entraînement peut utiliser sa propre normalisation interne :
+`scene_transform.json` est inversé lors de l'export `block_NNN.splat`, pour les
+centres, tailles et rotations des Gaussians. Les checkpoints PLY bruts ne doivent
+donc pas être mélangés directement aux splats exportés.
+Cette cohérence de repère ne garantit pas des surfaces identiques aux frontières :
+les optimisations indépendantes peuvent produire des écarts de reconstruction.
 
 ## GPX optionnel
 

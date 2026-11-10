@@ -4,10 +4,17 @@ import test from "node:test";
 
 const source = (await readFile(new URL("./html/viewer/colmap.js", import.meta.url), "utf8"))
   .replace('import * as pc from "playcanvas";', "");
-const { cameraFrustumDepth } = await import(
+const { cameraFrustumDepth, colmapPointPixels } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 
+test("point sizes are screen pixels, with DPI and hardware limits", () => {
+  assert.equal(colmapPointPixels(2, 1), 2);
+  assert.equal(colmapPointPixels(4, 2), 8);
+  assert.equal(colmapPointPixels(4, 3), 8);
+  assert.equal(colmapPointPixels(10, 2, 12), 12);
+  assert.equal(colmapPointPixels(0.5, 1), 1);
+});
 test("frustums follow SfM scale without an absolute minimum", () => {
   const centers = [0, 0, 0, 1, 2, 3, 2, 4, 6];
   const depth = cameraFrustumDepth(centers, 1000);

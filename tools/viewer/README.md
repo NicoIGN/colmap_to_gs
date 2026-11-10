@@ -35,6 +35,11 @@ Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtile
 `tools/splat_to_3dtiles/view.sh` est maintenant `tools/viewer/3dtiles/view.sh`.
 # Taille des frustums COLMAP
 
+Les points sparse (2 px par défaut) et centres caméra (4 px) sont des disques
+de taille écran, indépendants de l'échelle SfM et du GPX. Deux curseurs dans
+la section COLMAP permettent d'ajuster leur diamètre sans recharger le modèle.
+La densité de pixels de l'écran est prise en compte (facteur maximal 2).
+
 La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
 bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
 Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes

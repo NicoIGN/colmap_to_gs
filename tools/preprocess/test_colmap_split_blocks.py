@@ -115,14 +115,14 @@ class SoftBalanceTest(unittest.TestCase):
                 for _ in range(3):
                     pid = len(point_lines) + 1
                     point_lines.append(
-                        f"{pid} 0 0 1 255 255 255 0 "
+                        f"{pid} {pid * 0.125} {-pid * 0.25} {1 + pid * 0.0625} 255 255 255 0 "
                         f"{a + 1} {len(observations[a])} {b + 1} {len(observations[b])}\n"
                     )
                     observations[a].append(pid)
                     observations[b].append(pid)
             (source / "points3D.txt").write_text("".join(point_lines))
             (source / "images.txt").write_text("".join(
-                f"{i + 1} 1 0 0 0 0 0 0 1 image-{i}.jpg\n"
+                f"{i + 1} 0.9238795325112867 0 0 0.3826834323650898 {i * 0.125} {-i * 0.25} 2 1 image-{i}.jpg\n"
                 + " ".join(f"0 0 {pid}" for pid in pids) + "\n"
                 for i, pids in enumerate(observations)
             ))
@@ -141,13 +141,24 @@ class SoftBalanceTest(unittest.TestCase):
             manifest = json.loads((output / "manifest.json").read_text())
             self.assertEqual([block["num_primary_images"] for block in manifest["blocks"]], [7, 3])
             memberships = []
+            with contextlib.redirect_stderr(io.StringIO()):
+                source_cameras, source_images, source_points, _ = splitter.load_colmap_model(source)
             for block in range(2):
                 folder = output / f"block_{block:03d}"
                 for name in ("cameras.bin", "images.bin", "points3D.bin"):
                     self.assertGreater((folder / name).stat().st_size, 0)
                 with contextlib.redirect_stderr(io.StringIO()):
-                    _, images, _, _ = splitter.load_colmap_model(folder)
+                    cameras, images, points, _ = splitter.load_colmap_model(folder)
                 self.assertEqual(len(images), (7, 3)[block])
+                for iid, image in images.items():
+                    np.testing.assert_array_equal(image.qvec, source_images[iid].qvec)
+                    np.testing.assert_array_equal(image.tvec, source_images[iid].tvec)
+                    np.testing.assert_allclose(splitter.image_center_world(image),
+                                               splitter.image_center_world(source_images[iid]))
+                for pid, point in points.items():
+                    np.testing.assert_array_equal(point.xyz, source_points[pid].xyz)
+                for cid, camera in cameras.items():
+                    np.testing.assert_array_equal(camera.params, source_cameras[cid].params)
                 memberships.extend(json.loads((folder / "image_membership.json").read_text())["primary_image_ids"])
             self.assertEqual(sorted(memberships), list(range(1, 11)))
 

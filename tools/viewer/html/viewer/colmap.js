@@ -288,6 +288,18 @@ function getFxFy(camera) {
   }
 }
 
+export function colmapPointPixels(size, pixelRatio = 1, maximum = 64) {
+  return Math.min(maximum, Math.max(1, size * Math.min(pixelRatio, 2)));
+}
+
+function setPointSize(app, material, size) {
+  const gl = app.graphicsDevice.gl;
+  const range = gl?.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
+  material.setParameter("uPointSize", colmapPointPixels(
+    size, window.devicePixelRatio || 1, Number(range?.[1]) || 64
+  ));
+}
+
 function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   const material = new pc.ShaderMaterial({
     uniqueName: points
@@ -338,21 +350,7 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
       `,
   });
 
-  const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
-  let maxPointSize = 64;
-
-  const gl = app.graphicsDevice.gl;
-  if (gl) {
-    const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE);
-    if (range?.length === 2) {
-      maxPointSize = Number(range[1]) || maxPointSize;
-    }
-  }
-
-  material.setParameter(
-    "uPointSize",
-    Math.min(maxPointSize, Math.max(1, pointSize * pixelRatio))
-  );
+  setPointSize(app, material, pointSize);
 
   material.cull = pc.CULLFACE_NONE;
   material.depthTest = true;
@@ -429,6 +427,8 @@ export function createColmapLayer({
   const cbPoints = document.getElementById("colmapPointsVisible");
   const cbCameras = document.getElementById("colmapCamerasVisible");
   const cbFrustums = document.getElementById("colmapFrustumsVisible");
+  const pointSize = document.getElementById("colmapPointSize");
+  const cameraSize = document.getElementById("colmapCameraSize");
   const removeBtn = document.getElementById("colmapRemove");
 
   let disposed = false;
@@ -486,6 +486,17 @@ export function createColmapLayer({
     if (pointsEntity && cbPoints) pointsEntity.enabled = cbPoints.checked;
     if (cameraCentersEntity && cbCameras) {
       cameraCentersEntity.enabled = cbCameras.checked;
+    }
+
+    function refreshPointSizes() {
+      for (const [input, resource] of [
+        [pointSize, pointsResource], [cameraSize, cameraCentersResource],
+      ]) {
+        if (!input) continue;
+        const output = document.getElementById(`${input.id}Value`);
+        if (output) output.value = `${input.value} px`;
+        if (resource) setPointSize(app, resource.material, Number(input.value));
+      }
     }
     if (frustumsEntity && cbFrustums) {
       frustumsEntity.enabled = cbFrustums.checked;
@@ -736,7 +747,7 @@ export function createColmapLayer({
         rootEntity = new pc.Entity("COLMAP sparse");
         app.root.addChild(rootEntity);
 
-        pointsResource = makePointMesh(app, points.positions, points.colors, 2);
+        pointsResource = makePointMesh(app, points.positions, points.colors, Number(pointSize?.value ?? 2));
         pointsEntity = new pc.Entity("COLMAP points");
         pointsEntity.addComponent("render", {
           type: "asset",
@@ -751,7 +762,7 @@ export function createColmapLayer({
           centerColors[i * 3 + 2] = 0;
         }
 
-        cameraCentersResource = makePointMesh(app, cameraCenters, centerColors, 8);
+        cameraCentersResource = makePointMesh(app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4));
         cameraCentersEntity = new pc.Entity("COLMAP camera centers");
         cameraCentersEntity.addComponent("render", {
           type: "asset",
@@ -827,6 +838,9 @@ export function createColmapLayer({
   listen(cbPoints, "change", refreshUI);
   listen(cbCameras, "change", refreshUI);
   listen(cbFrustums, "change", refreshUI);
+  listen(pointSize, "input", refreshPointSizes);
+  listen(cameraSize, "input", refreshPointSizes);
+  refreshPointSizes();
 
   listen(removeBtn, "click", () => {
     clear();
