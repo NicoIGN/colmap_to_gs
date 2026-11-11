@@ -1,5 +1,23 @@
 # Visualisation locale
 
+## 1. Objectif
+
+Visualiser localement des scènes `.splat` et des données COLMAP dans un navigateur, ou consulter des tilesets 3D Tiles avec CesiumJS.
+
+Exemple d’invocation :
+
+```bash
+python3 tools/viewer/server.py /chemin/vers/scene.splat
+```
+
+## 2. Entrées et sorties
+
+Les fichiers du dossier de données sont accessibles par la route
+`/__datasets__/<chemin relatif>`. Sans fichier en argument, utiliser l'interface
+pour importer une scène. Voir `--help` pour les options complètes.
+
+## 3. Configuration et utilisation
+
 Depuis la racine du dépôt, avec Python 3.10+ :
 
 ```bash
@@ -12,11 +30,9 @@ Le serveur écoute uniquement sur `127.0.0.1` ; arrêt avec `Ctrl+C`.
 
 Options utiles : `--port 8080`, `--no-browser`, `--flip-up`,
 `--camera-pos="px,py,pz,tx,ty,tz"` et `--data-directory /chemin/vers/datasets`.
-Les fichiers du dossier de données sont accessibles par la route
-`/__datasets__/<chemin relatif>`. Sans fichier en argument, utiliser l'interface
-pour importer une scène. Voir `--help` pour les options complètes.
+Voir `--help` pour les options complètes.
 
-## 3D Tiles avec fond OpenStreetMap
+### 3D Tiles avec fond OpenStreetMap
 
 ```bash
 bash tools/viewer/3dtiles/view.sh /chemin/vers/tileset.json
@@ -29,11 +45,9 @@ dans son dossier ou ses sous-dossiers.
 
 Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtiles/README.md).
 
-## Migration
+## 4. Fonctionnement internes
 
-`python/server.py` et `python/html/` sont déplacés ici ; le lanceur Cesium
-`tools/splat_to_3dtiles/view.sh` est maintenant `tools/viewer/3dtiles/view.sh`.
-# Taille des frustums COLMAP
+### Taille des frustums COLMAP
 
 Les points sparse (2 px par défaut) et centres caméra (4 px) sont des disques
 de taille écran, indépendants de l'échelle SfM et du GPX. Deux curseurs dans
@@ -69,3 +83,10 @@ bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
 Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes
 SfM sans GPX dont l'échelle est arbitraire. Si les centres sont confondus,
 le rayon de la scène sert de référence.
+
+## 5. Notes et informations complémentaires
+
+### Migration
+
+`python/server.py` et `python/html/` sont déplacés ici ; le lanceur Cesium
+`tools/splat_to_3dtiles/view.sh` est maintenant `tools/viewer/3dtiles/view.sh`.

@@ -1,27 +1,31 @@
 # Images locales vers Gaussian Splats
 
+## 1. Objectif
+
+Produire des Gaussian Splats à partir d’images locales, sans téléchargement Panoramax, au moyen d’une sélection d’images, masques partagés, SfM global, entraînement par blocs, recadrage bbox avant fusion et export `.splat`.
+
+Exemple d’invocation :
+
+```bash
+bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
+```
+
 Pipeline Spirula sans téléchargement Panoramax :
 sélection d'images → masques partagés → SfM global → recalage GPX optionnel → blocs COLMAP →
 entraînement → recadrage bbox COLMAP **avant fusion** → `.splat`.
 
-## Socle commun
+## 2. Entrées et sorties
 
-Les deux pipelines utilisent `python/mask_policies.py` pour les politiques et
-l'appel du générateur de masques, ainsi que `scripts/pipeline_config.sh` pour les
-validations communes et les seuils SfM. `python/sfm_geometry_policy.py` protège
-la réutilisation des modèles du worker multi-blocs ; les images locales
-enregistrent ces paramètres dans leur signature `inputs.json`.
-`scripts/pipeline_postprocess.sh` partage le recadrage sparse et la fusion,
-et `scripts/pipeline_slurm.sh` la soumission, le contrôle des réponses et
-l'annulation des jobs en cas d'échec. Les workers Spirula restent dans `scripts/`.
+Le dossier d'images peut être indiqué dans la configuration ou remplacé pour
+les deux modes par `--images /chemin/absolu/images`. `SFM_IMAGES_DIR` définit
+la source et `SFM_IMAGES_RECURSIVE=true`
+parcourt les sous-dossiers ordinaires. Les liens vers des fichiers sont acceptés,
+mais pas le parcours des dossiers symboliques. Les noms relatifs sont préservés :
+`h00_y0/photo.jpg` et `h01_y45/photo.jpg` restent distincts.
+Le workspace doit être extérieur au dossier source. Le dossier `images/` du
+workspace contient uniquement des liens symboliques vers la sélection.
 
-Ce dossier conserve la sélection des fichiers locaux, la disposition du
-workspace, ses signatures et le recalage GPX. Panoramax conserve l'acquisition,
-les métadonnées et le traitement GPS EXIF. Les commandes, configurations et
-chemins de sortie ne changent pas ; les options propres à chaque pipeline
-(repère, seuil de recadrage, nettoyage final) ne sont pas uniformisées.
-
-## Utilisation
+## 3. Configuration et utilisation
 
 Copier `config.sh.example` vers un fichier personnel, régler les chemins et
 les ressources. Pour SAM 3, accepter ses conditions explicitement avec
@@ -44,15 +48,6 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh
 bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 ```
 
-Le dossier d'images peut être indiqué dans la configuration ou remplacé pour
-les deux modes par `--images /chemin/absolu/images`. `SFM_IMAGES_DIR` définit
-la source et `SFM_IMAGES_RECURSIVE=true`
-parcourt les sous-dossiers ordinaires. Les liens vers des fichiers sont acceptés,
-mais pas le parcours des dossiers symboliques. Les noms relatifs sont préservés :
-`h00_y0/photo.jpg` et `h01_y45/photo.jpg` restent distincts.
-Le workspace doit être extérieur au dossier source. Le dossier `images/` du
-workspace contient uniquement des liens symboliques vers la sélection.
-
 `launch.sh` soumet les jobs : ne pas le lancer avec `sbatch`.
 `launch.slurm` est le worker interne ; les paramètres Slurm viennent de la config,
 pas de directives `#SBATCH` séparées. Les jobs héritent de l'environnement actif ;
@@ -61,7 +56,7 @@ nœuds. `SLURM_BLOCK_PARALLELISM=4` autorise quatre tâches GPU simultanées ;
 le mode local reste séquentiel. Les étapes suivantes ont une dépendance `afterok`.
 Les journaux sont dans `OUTPUT_DIR/logs/`.
 
-## Masques, budgets et repères
+### Masques, budgets et repères
 
 Les variables sont celles de `tools/panoramax` : `SFM_MASKS_*` pour l'extraction
 et `TRAIN_MASKS_*` pour l'entraînement. Une valeur SfM vide hérite de la valeur
@@ -125,7 +120,9 @@ donc pas être mélangés directement aux splats exportés.
 Cette cohérence de repère ne garantit pas des surfaces identiques aux frontières :
 les optimisations indépendantes peuvent produire des écarts de reconstruction.
 
-## GPX optionnel
+
+### GPX optionnel
+
 
 Sans `GEOREF_GPX_FILE` (absent ou vide), **aucun changement de comportement** :
 le pipeline n'appelle pas le recalage et ne nécessite ni fiona ni pyproj.
@@ -173,9 +170,26 @@ de relancer la préparation ; le SfM brut n'a pas à être recalculé.
 Modifier/ajouter/retirer le GPX après préparation exige un **nouvel OUTPUT_DIR** :
 ne pas mélanger des blocs entraînés dans des repères différents.
 
-## Reprise et fusion seule
+## 4. Fonctionnement internes
 
-### Filtrage optionnel du sparse
+Les deux pipelines utilisent `python/mask_policies.py` pour les politiques et
+l'appel du générateur de masques, ainsi que `scripts/pipeline_config.sh` pour les
+validations communes et les seuils SfM. `python/sfm_geometry_policy.py` protège
+la réutilisation des modèles du worker multi-blocs ; les images locales
+enregistrent ces paramètres dans leur signature `inputs.json`.
+`scripts/pipeline_postprocess.sh` partage le recadrage sparse et la fusion,
+et `scripts/pipeline_slurm.sh` la soumission, le contrôle des réponses et
+l'annulation des jobs en cas d'échec. Les workers Spirula restent dans `scripts/`.
+
+Ce dossier conserve la sélection des fichiers locaux, la disposition du
+workspace, ses signatures et le recalage GPX. Panoramax conserve l'acquisition,
+les métadonnées et le traitement GPS EXIF. Les commandes, configurations et
+chemins de sortie ne changent pas ; les options propres à chaque pipeline
+(repère, seuil de recadrage, nettoyage final) ne sont pas uniformisées.
+
+## 5. Notes et informations complémentaires
+
+#### Filtrage optionnel du sparse
 
 ```bash
 SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
@@ -195,7 +209,7 @@ ce filtre reste expérimental. Changer ce réglage après découpage/entraîneme
 nécessite un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN` ne redécoupe pas les blocs.
 Le défaut `false` reste compatible avec les signatures antérieures.
 
-### Réutilisation du workspace
+#### Réutilisation du workspace
 
 Le pipeline conserve `inputs.json` (sélection, tailles/dates, paramètres SfM,
 masques et découpage). Une modification incompatible est refusée : choisir un
@@ -206,7 +220,7 @@ Les entraînements terminés sont réutilisés par défaut ; `TRAIN_CLEAN=true`
 recalcule le 3DGS uniquement. Les sorties partielles du train nécessitent aussi
 ce réglage, après sauvegarde. L'exemple ne supprime jamais les images source.
 
-### Masques terminés, SfM interrompu
+#### Masques terminés, SfM interrompu
 
 Pour reprendre un workspace partiel, activer explicitement dans la configuration :
 

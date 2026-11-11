@@ -4,57 +4,7 @@ Ce lanceur recherche les photos du catalogue fédéré Panoramax via `/api/searc
 pagine jusqu'au dernier résultat et télécharge les images HD disponibles.
 Il n'a pas besoin de compte Panoramax.
 
-## Socle commun avec les images locales
-
-Les politiques et appels de génération des masques sont partagés dans
-`python/mask_policies.py`, la signature géométrique SfM dans
-`python/sfm_geometry_policy.py`. Les helpers `scripts/pipeline_config.sh`,
-`scripts/pipeline_postprocess.sh` et `scripts/pipeline_slurm.sh` regroupent
-respectivement validation commune, recadrage/fusion et soumission/annulation
-Slurm. Les workers SfM et entraînement restent dans `scripts/`.
-
-Ce dossier conserve le téléchargement, la préparation des images et métadonnées,
-les signatures liées à Panoramax, le filtrage des paires GPS et l'export de la
-référence géographique. Le pipeline local conserve son recalage GPX indépendant.
-Les commandes, configurations, dispositions de workspace et particularités de
-post-traitement restent inchangées.
-
-## Installation
-
-Dans ton environnement Python actif (Python 3.10 ou plus récent) :
-
-```bash
-python3 -m pip install -r tools/panoramax/requirements.txt
-```
-
-`pyproj` est déjà présent dans l'environnement Conda fourni par ce dépôt.
-
-## Contrôles géométriques du pipeline SfM
-
-Les pipelines Panoramax et images locales exposent les mêmes réglages :
-`SFM_MAX_ERROR=2` (pixels d'extraction), `SFM_MIN_INLIERS=30` (par paire),
-`SFM_MIN_TRI_ANGLE=3` (degrés), `SFM_BA_LOSS=huber` et `SFM_BA_LOSS_PARAM=2`
-(échelle robuste en pixels d'extraction). Ils sont transmis au SfM natif et,
-si le filtre GPS est activé, aux étapes `match` et `map` concernées.
-La perte Huber reste robuste ; le seuil de reprojection et l'angle plus stricts
-visent les appariements incohérents et les profondeurs à faible parallaxe.
-Ils ne garantissent pas l'absence de parasites et peuvent réduire la couverture,
-éliminer des bâtiments lointains valides ou fragmenter la reconstruction.
-
-Ces paramètres agissent pendant le calcul, pas sur un modèle déjà terminé.
-Pour les appliquer à un ancien SfM, choisir un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN`
-ne recalcule que les splats. Les nouveaux workspaces enregistrent la politique
-dans `sfm_geometry_policy.json` et refusent les changements incompatibles avant
-de réutiliser le SfM ou les blocs. Un ancien SfM sans signature est conservé
-avec un avertissement explicite : ses contrôles ne sont pas connus.
-Un nouveau calcul via le worker revérifie les matches (`--reuse-matches redo`).
-Le wrapper direct `scripts/run_spirula_sfm.sh` expose les options CLI équivalentes
-`--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`, `--ba-loss-param`.
-Vérifier leur disponibilité dans la version installée de Spirula.
-
-## Utilisation
-
-Depuis la racine du dépôt :
+## 1. Objectif
 
 ```bash
 bash tools/panoramax/download.sh \
@@ -62,33 +12,15 @@ bash tools/panoramax/download.sh \
   --output-dir /chemin/vers/panoramax
 ```
 
+## 2. Entrées et sorties
+
 L'ordre est **xmin,ymin,xmax,ymax**, en mètres, en **Lambert-93 (EPSG:2154)**.
-Les coordonnées de l'exemple sont illustratives, pas une garantie de présence de photos.
 Le script transforme une enveloppe densifiée en WGS84 pour la recherche STAC,
 puis vérifie chaque point de prise de vue dans la bbox Lambert-93 initiale.
 
-Options :
 
-| Option | Description |
-|---|---|
-| `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
-| `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
-| `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
-| `--api-url https://une-instance/api` | Autre API compatible ; défaut : catalogue fédéré `explore.panoramax.fr` |
-| `--timeout 120` | Délai réseau par requête, en secondes |
 
-## Périmètre
-
-« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
-visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
-ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
-photos extérieures de séquences qui traversent la zone.
-
-La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
-l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
-inférieure n'est effectué si l'asset demandé manque.
-
-## Sorties et reprise
+### Sorties et reprise
 
 ```text
 output-dir/
@@ -106,54 +38,46 @@ présentes dans la réponse. Les fichiers sont nommés à partir d'un hash de
 collection + identifiant photo pour éviter collisions et noms dangereux.
 Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
-Relancer la même commande reprend les images dont l'URL et la taille correspondent
-aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
-avant remplacement ; les photos en échec sont signalées par un avertissement,
-indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
-avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
-ou une autre erreur fatale entraîne un code de sortie non nul.
-Les réponses API brutes sont conservées.
-Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
-sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
-Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
-restent présents, donc utiliser un dossier distinct pour une autre sélection.
+## 3. Configuration et utilisation
 
-Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
-HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
-par une petite zone et respecter les conditions d'utilisation et d'attribution
-des instances et des photos.
+### Contrôles géométriques du pipeline SfM
 
-Dans un terminal interactif, une barre de progression affiche les photos
-téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
-trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+Les pipelines Panoramax et images locales exposent les mêmes réglages :
+`SFM_MAX_ERROR=2` (pixels d'extraction), `SFM_MIN_INLIERS=30` (par paire),
+`SFM_MIN_TRI_ANGLE=3` (degrés), `SFM_BA_LOSS=huber` et `SFM_BA_LOSS_PARAM=2`
+(échelle robuste en pixels d'extraction). Ils sont transmis au SfM natif et,
+si le filtre GPS est activé, aux étapes `match` et `map` concernées.
+Le wrapper direct `scripts/run_spirula_sfm.sh` expose les options CLI équivalentes
+`--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`, `--ba-loss-param`.
+Vérifier leur disponibilité dans la version installée de Spirula.
 
-Le script demande jusqu'à 10 000 métadonnées à l'API (sans télécharger les
-images à cette étape), compte les photos dont le point est dans la bbox exacte
-Lambert-93, puis affiche ce total et l'écrit dans `summary.json` (`available`,
-`available_is_exact`). Si l'API renvoie 10 000 résultats sur sa dernière page,
-le total affiché est une borne basse (`+`) et un avertissement le précise.
 
-`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
-sans réduire le comptage : par exemple, `--image-max 400` affiche le total
-disponible dans la bbox et en traite au plus 400.
 
-## Références
+### Installation
 
-- API : https://explore.panoramax.fr/swagger
-- CLI officielle : https://docs.panoramax.fr/cli/COMMANDS/#panoramax_cli-download
-- Catalogue GeoParquet (alternative pour les grandes recherches) :
-  https://docs.panoramax.fr/federated-catalog/tutorials/duckdb/
-
-## Vérification locale
+Dans ton environnement Python actif (Python 3.10 ou plus récent) :
 
 ```bash
-python3 -m unittest discover -s tools/panoramax -p 'test_*.py'
+python3 -m pip install -r tools/panoramax/requirements.txt
 ```
 
-Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélection
-géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
 
-## Reconstruction Spirula géoréférencée par l'EXIF
+### Utilisation
+
+Depuis la racine du dépôt :
+
+
+Options :
+
+| Option | Description |
+|---|---|
+| `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
+| `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
+| `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
+| `--api-url https://une-instance/api` | Autre API compatible ; défaut : catalogue fédéré `explore.panoramax.fr` |
+| `--timeout 120` | Délai réseau par requête, en secondes |
+
+### Reconstruction Spirula géoréférencée par l'EXIF
 
 Les JPEG HD de Panoramax conservent le GPS EXIF (latitude, longitude,
 altitude, cap). Spirula s'en sert directement pour placer le modèle dans un
@@ -172,7 +96,7 @@ séquence (les noms de fichiers sont des empreintes), `--metric-gps full` et
 `--sensor-pairs --sensor-pair-radius 30`. Un code de sortie 4 signifie que le
 modèle a été écrit sans le repère métrique demandé.
 
-## Pipeline complet bbox → `.splat`
+### Pipeline complet bbox → `.splat`
 
 Le lanceur `run_pipeline.sh` enchaîne le téléchargement Panoramax, le SfM
 géoréférencé, le découpage COLMAP, l'entraînement Spirula de chaque bloc et la
@@ -207,12 +131,6 @@ La validation seule ne nécessite ni GPU, ni Python, ni Slurm :
 bash tools/panoramax/validate_config.sh /chemin/vers/paris.sh slurm
 ```
 
-Elle contrôle les choix SfM/entraînement, entiers, rayons, recouvrement,
-booléens, bbox ordonnée, URL et nom de sortie, ainsi que la syntaxe des
-ressources Slurm en mode `slurm`. Elle n'exécute pas Spirula, ne vérifie pas
-la disponibilité des partitions/ressources du cluster et ne garantit pas
-la compatibilité de la version installée. Le fichier Bash reste du code
-de confiance et est sourcé, même en validation seule.
 
 Les intermédiaires sont rangés sous `OUTPUT_DIR/panoramax/`. Le résultat est
 `OUTPUT_DIR/EXPORT_SPLAT_NAME`; son dossier adjacent `EXPORT_SPLAT_NAME` sans extension suivi
@@ -236,7 +154,6 @@ Pour remplacer ce filtre par le nettoyage expérimental du ciel multivues,
 définir `POSTPROCESS_CLEANER="cleangs"` et `CLEANGS_MODEL` (dossier local de
 segmentation). `CLEANGS_MODE="diagnostic"` conserve les splats et exporte les
 rejets ; `apply` les retire. La fusion Slurm demande alors un GPU NVIDIA.
-Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel :
 installation, dépendances et précautions sont décrites dans
 [tools/clean_gs](../clean_gs/README.md).
 L'installation complète se fait avec `bash tools/clean_gs/install.sh
@@ -253,7 +170,7 @@ compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
 peuvent être ajoutés via `TRAIN_MASKS_LABELS`. Installation, variables et
 limites : [tools/segmentation_masks](../segmentation_masks/README.md).
 
-### Qualité d'entraînement
+#### Qualité d'entraînement
 
 `TRAIN_DISTRACTION_ROBUSTNESS="off"` transmet `--distraction-robustness`
 à Spirula, en local et sous Slurm. `mild` et `strong` modifient les scores
@@ -270,7 +187,7 @@ réglage de résolution. Les valeurs explicites `TRAIN_CAP_MAX` (éventuellement
 limité par `TRAIN_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires :
 changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
 
-### Masques avant SfM et partage avec l'entraînement
+#### Masques avant SfM et partage avec l'entraînement
 
 `SFM_MASKS="on"` prépare les images puis calcule les masques **avant**
 l'extraction/appariement. Le lanceur transmet `--feature-masks` à Spirula
@@ -371,7 +288,7 @@ Avec `PANORAMAX_REPLACE_REQUEST="true"`, l'ancien `OUTPUT_DIR/panoramax` est
 renommé en `panoramax.replaced-AAAAMMJJ-HHMMSS` (rien n'est supprimé), puis la
 nouvelle requête est téléchargée dans un dossier vide.
 
-### Filtre exclusif des paires par distance GPS
+#### Filtre exclusif des paires par distance GPS
 
 Dans le fichier de configuration :
 
@@ -412,7 +329,7 @@ la signature ne correspond pas au rayon, aux paramètres et aux entrées.
 avant reconstruction, extraction et appariement sont relancés. Un modèle
 partiel doit être déplacé en sauvegarde avant de réessayer.
 
-### Exécution GPU sur Slurm
+#### Exécution GPU sur Slurm
 
 `launch.sh` soumet **le même pipeline complet** en trois étapes dépendantes :
 un job GPU de téléchargement/SfM/découpage, un tableau Slurm (`--array`) avec
@@ -516,7 +433,7 @@ python3 tools/panoramax/prepare_sfm.py --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm --dry-run
 ```
 
-### Noms des paramètres par étape
+#### Noms des paramètres par étape
 
 Les configurations locales et Slurm utilisent les mêmes noms préfixés.
 Les chemins et outils communs (`OUTPUT_DIR`, `GIT_ROOT`, `SPIRULA_BIN`,
@@ -551,3 +468,120 @@ Pour le worker `scripts/run_spirula_block.sh`, les anciennes variables
 `QUALITY`, `NUM_ITERATIONS` et `CLEAN` sont également refusées : utiliser
 `TRAIN_QUALITY`, `TRAIN_NUM_ITER` et `TRAIN_CLEAN`. Les arguments CLI du
 worker (`--quality`, `--num-iterations`, `--clean`) restent disponibles.
+### Vérification locale
+
+```bash
+python3 -m unittest discover -s tools/panoramax -p 'test_*.py'
+```
+
+Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélection
+géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
+
+
+## 4. Fonctionnement internes
+
+`pyproj` est déjà présent dans l'environnement Conda fourni par ce dépôt.
+
+
+
+### Socle commun avec les images locales
+
+Les politiques et appels de génération des masques sont partagés dans
+`python/mask_policies.py`, la signature géométrique SfM dans
+`python/sfm_geometry_policy.py`. Les helpers `scripts/pipeline_config.sh`,
+`scripts/pipeline_postprocess.sh` et `scripts/pipeline_slurm.sh` regroupent
+respectivement validation commune, recadrage/fusion et soumission/annulation
+Slurm. Les workers SfM et entraînement restent dans `scripts/`.
+
+Ce dossier conserve le téléchargement, la préparation des images et métadonnées,
+les signatures liées à Panoramax, le filtrage des paires GPS et l'export de la
+référence géographique. Le pipeline local conserve son recalage GPX indépendant.
+Les commandes, configurations, dispositions de workspace et particularités de
+post-traitement restent inchangées.
+
+## 5. Notes et informations complémentaires
+
+Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel :
+
+
+
+Elle contrôle les choix SfM/entraînement, entiers, rayons, recouvrement,
+booléens, bbox ordonnée, URL et nom de sortie, ainsi que la syntaxe des
+ressources Slurm en mode `slurm`. Elle n'exécute pas Spirula, ne vérifie pas
+la disponibilité des partitions/ressources du cluster et ne garantit pas
+la compatibilité de la version installée. Le fichier Bash reste du code
+de confiance et est sourcé, même en validation seule.
+
+
+
+### Références
+
+- API : https://explore.panoramax.fr/swagger
+- CLI officielle : https://docs.panoramax.fr/cli/COMMANDS/#panoramax_cli-download
+- Catalogue GeoParquet (alternative pour les grandes recherches) :
+  https://docs.panoramax.fr/federated-catalog/tutorials/duckdb/
+
+
+
+Les coordonnées de l'exemple sont illustratives, pas une garantie de présence de photos.
+
+
+
+Relancer la même commande reprend les images dont l'URL et la taille correspondent
+aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
+avant remplacement ; les photos en échec sont signalées par un avertissement,
+indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
+avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
+ou une autre erreur fatale entraîne un code de sortie non nul.
+Les réponses API brutes sont conservées.
+Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
+sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
+Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
+restent présents, donc utiliser un dossier distinct pour une autre sélection.
+
+Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
+HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
+par une petite zone et respecter les conditions d'utilisation et d'attribution
+des instances et des photos.
+
+Dans un terminal interactif, une barre de progression affiche les photos
+téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
+trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+
+Le script demande jusqu'à 10 000 métadonnées à l'API (sans télécharger les
+images à cette étape), compte les photos dont le point est dans la bbox exacte
+Lambert-93, puis affiche ce total et l'écrit dans `summary.json` (`available`,
+`available_is_exact`). Si l'API renvoie 10 000 résultats sur sa dernière page,
+le total affiché est une borne basse (`+`) et un avertissement le précise.
+
+`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
+sans réduire le comptage : par exemple, `--image-max 400` affiche le total
+disponible dans la bbox et en traite au plus 400.
+
+
+
+La perte Huber reste robuste ; le seuil de reprojection et l'angle plus stricts
+visent les appariements incohérents et les profondeurs à faible parallaxe.
+Ils ne garantissent pas l'absence de parasites et peuvent réduire la couverture,
+éliminer des bâtiments lointains valides ou fragmenter la reconstruction.
+
+Ces paramètres agissent pendant le calcul, pas sur un modèle déjà terminé.
+Pour les appliquer à un ancien SfM, choisir un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN`
+ne recalcule que les splats. Les nouveaux workspaces enregistrent la politique
+dans `sfm_geometry_policy.json` et refusent les changements incompatibles avant
+de réutiliser le SfM ou les blocs. Un ancien SfM sans signature est conservé
+avec un avertissement explicite : ses contrôles ne sont pas connus.
+Un nouveau calcul via le worker revérifie les matches (`--reuse-matches redo`).
+
+
+
+### Périmètre
+
+« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
+visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
+ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
+photos extérieures de séquences qui traversent la zone.
+
+La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
+l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
+inférieure n'est effectué si l'asset demandé manque.

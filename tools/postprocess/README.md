@@ -1,5 +1,17 @@
 # Traitement des résultats
 
+## 1. Objectif
+
+Fournir les outils d’export, de nettoyage, de filtrage contextuel et de fusion des résultats Gaussian Splatting.
+
+Exemple d’invocation :
+
+```bash
+python3 tools/postprocess/export_ply.py --help
+```
+
+## 2. Entrées et sorties
+
 Ces outils proviennent de `python/` et de `scripts/`. Les pipelines utilisent
 maintenant directement leurs chemins sous `tools/postprocess/`.
 
@@ -20,7 +32,7 @@ python3 tools/postprocess/export_ply.py --help
 bash tools/postprocess/clean_ply.sh --help
 ```
 
-### Fusion des blocs
+## 3. Configuration et utilisation
 
 `merge_splats.py` fusionne des blocs déjà alignés sans modifier leurs coordonnées.
 `--strength` multiplie la taille médiane des grands demi-axes pour fixer la taille
@@ -37,7 +49,7 @@ Après mise à jour, relancer uniquement la fusion, sans réentraîner les blocs
 `scripts/run_spirula_block.sh` utilise `export_ply.py` par défaut, tout en conservant
 la surcharge `--export-script` / `EXPORT_SCRIPT`.
 
-### Nouveau filtre contextuel (diagnostic par défaut)
+## 4. Fonctionnement internes
 
 Le seuil global de taille et la suppression hors BBOX COLMAP sont retirés de
 l'exporteur par défaut. Aucun test de proximité aux points COLMAP n'est utilisé :
@@ -139,7 +151,7 @@ pour compatibilité, mais ne servent plus à retirer des splats ; un message le
 précise. `--max-world-scale` est refusé avec le nouveau filtre, car il impose
 un seuil absolu.
 
-### Ancien filtre en sauvegarde
+## 5. Notes et informations complémentaires
 
 `export_ply_legacy.py` conserve exactement le comportement précédent, y compris
 ses garde-fous (avertissement au-delà de 10 %, filtre ignoré au-delà de 20 %).

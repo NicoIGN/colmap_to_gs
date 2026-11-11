@@ -1,5 +1,16 @@
 # Masques de segmentation pour l'entraînement 3DGS
 
+## 1. Objectif
+
+Générer des masques locaux pour les images utilisées à l’entraînement 3DGS/Spirula ; le comportement par défaut masque le ciel.
+
+Exemple d’invocation :
+
+```bash
+"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
+  --model mapillary --list-labels
+```
+
 Outil optionnel : un segmenteur local produit, pour chaque image, un masque transmis à l'entraînement Spirula. Par défaut, il masque le **ciel**. Les nuages font partie de la classe `sky` : ADE20K et Mapillary Vistas ne fournissent pas de classe « nuage » distincte. D'autres objets peuvent être masqués en indiquant leurs labels.
 
 Deux moteurs sont disponibles via `TRAIN_MASKS_BACKEND` :
@@ -9,7 +20,36 @@ Deux moteurs sont disponibles via `TRAIN_MASKS_BACKEND` :
 
 Ce choix change le **calcul** des masques, pas leur utilisation par l'entraînement.
 
-## Installation
+## 2. Entrées et sorties
+
+- **Entrée** : `sfm-*/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
+- **Sortie** : `sfm-*/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
+- **`masks.json`** : paramètres de génération, fraction masquée et statut pour chaque image, ainsi qu'un résumé global.
+- **Reprise** : si les paramètres enregistrés sont identiques, les masques existants présents dans le rapport sont réutilisés lorsque `--verbose` n'est pas activé. Si les paramètres changent, les masques sont régénérés dans un dossier temporaire puis remplacent l'ancien dossier à la fin du traitement.
+- **Mode verbose** : `tmp_labels/` est recréé et les images sont recalculées pour produire les diagnostics, même si des masques existaient déjà.
+- **Garde-fou** : si une image dépasse `--max-masked-fraction`, son masque de sortie est entièrement blanc (aucun pixel masqué) et son statut est `overmasked_kept`. Cela évite qu'une erreur de segmentation supprime une vue entière.
+- **Sous-dossiers** : les chemins relatifs des images sont conservés dans les dossiers de sortie, y compris pour les diagnostics.
+- **Intégration pipeline** : chaque bloc enregistre les masques utilisés dans `train_masks.txt`. Un bloc déjà entraîné est réutilisé, avec un avertissement si ses masques diffèrent ; `TRAIN_CLEAN=true` force le réentraînement.
+
+#### Diagnostics `--verbose`
+
+Avec `--verbose`, le dossier suivant est produit à côté des masques :
+
+```text
+tmp_labels/
+├── labels.txt
+├── semantic/       # carte des classes en fausses couleurs RGB
+├── overlay/        # image originale avec les couleurs de classes superposées
+├── probability/    # score normalisé du ou des labels demandés (noir=0, blanc=1)
+├── threshold/      # résultat binaire : classe demandée et score >= confidence
+└── ids/            # identifiants de classes numériques, PNG 16 bits
+```
+
+`labels.txt` donne, pour chaque classe, son identifiant, son nom et sa couleur hexadécimale ; les classes demandées sont marquées `[MASQUER]`. Les fichiers de diagnostics gardent l'arborescence relative des images sources.
+
+Les logs indiquent, pour chaque image, la proportion de pixels dont la classe gagnante est demandée, la proportion retenue après `--confidence` et le score maximal du label demandé. Pour le backend Spirula, la carte de diagnostic est binaire : SAM renvoie l'union des régions trouvées pour les prompts, pas une classe distincte par prompt.
+
+## 3. Configuration et utilisation
 
 ```bash
 bash tools/segmentation_masks/install.sh \
@@ -41,17 +81,17 @@ Options de l'installateur :
 
 L'installation nécessite un accès réseau à PyPI et Hugging Face. Après téléchargement, la génération utilise les modèles locaux (`local_files_only=True`) et ne nécessite plus d'accès réseau. Python >= 3.9 est requis. Linux (CUDA) et macOS (MPS) sont pris en charge par PyTorch ; sans accélérateur compatible, le calcul peut être effectué sur CPU, mais il sera plus lent.
 
-### NumPy / PyTorch sur macOS
+#### NumPy / PyTorch sur macOS
 
 L'installateur impose `numpy<2` et vérifie le passage d'un tableau NumPy vers PyTorch puis retour, afin d'éviter les incompatibilités ABI rencontrées avec certaines roues PyTorch et NumPy 2 (`_ARRAY_API not found`). Relancer la même commande d'installation met à jour les dépendances sans devoir supprimer le venv ni les poids déjà téléchargés.
 
-### Choix du périphérique (CUDA, MPS ou CPU)
+#### Choix du périphérique (CUDA, MPS ou CPU)
 
 Avec `--device auto`, le script choisit dans cet ordre : CUDA, MPS, puis CPU. Il est possible de forcer le périphérique avec `--device cuda`, `--device cuda:N`, `--device mps` ou `--device cpu`.
 
 **Sur le Mac utilisé pour les tests Mapillary de ce projet, MPS a produit 0 % de pixels `Sky` sur l'image de contrôle, alors que le même checkpoint et le même traitement sur CPU ont détecté 4 % de pixels `Sky`.** Pour ce modèle sur cette machine, utiliser explicitement `--device cpu` (ou `TRAIN_MASKS_DEVICE="cpu"` dans la configuration du pipeline). Ne pas supposer que `auto` choisira le CPU : sur Apple Silicon, il sélectionne MPS lorsqu'il est disponible.
 
-### Backend natif Spirula
+#### Backend natif Spirula
 
 Exemple de configuration du pipeline :
 
@@ -85,35 +125,9 @@ Pour SAM, `TRAIN_MASKS_CONFIDENCE` règle le **score de détection SAM** transmi
 
 Un changement de moteur ou de paramètres de génération invalide les masques existants. `TRAIN_CLEAN=true` est nécessaire pour réentraîner des blocs déjà terminés.
 
-## Segmenteurs Transformers
 
-| Modèle | Données | Intérêt |
-|---|---|---|
-| `nvidia/segformer-b5-finetuned-ade-640-640` (`ade20k`) | ADE20K, 150 classes | Généraliste ; classes `sky`, `person`, `car`, `bicycle`, `truck`, `bus`, `tree`… ; plus léger. |
-| `facebook/mask2former-swin-large-mapillary-vistas-semantic` (`mapillary`) | Mapillary Vistas | Spécialisé dans les scènes urbaines extérieures et les vues de rue, proches des images Panoramax ; plus lourd. |
+### Variables de configuration du pipeline
 
-Les deux familles (SegFormer et Mask2Former) sont gérées. Le traitement Mask2Former utilise le post-traitement sémantique du processeur Hugging Face pour produire la carte de classes. Les scores de la classe demandée sont calculés séparément pour appliquer éventuellement le seuil complémentaire `--confidence`.
-
-Les noms exacts des labels dépendent du modèle. Consulter le `labels.txt` du modèle ou afficher les classes depuis le script :
-
-```bash
-"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
-  --model mapillary --list-labels
-```
-
-La comparaison des noms est insensible à la casse ; un identifiant numérique est aussi accepté. Un label inconnu arrête le calcul avant l'écriture des masques, avec des suggestions de labels proches.
-
-Les préréglages `ade20k` et `mapillary` sont résolus dans :
-
-```text
-${TRAIN_MASKS_INSTALL_DIR:-~/.local/share/colmap-to-gs/segmentation-masks}/models/
-```
-
-On peut aussi fournir à `--model` le chemin local d'un autre modèle Transformers. Avec `--backend spirula`, `--model` doit obligatoirement être le chemin d'un checkpoint SAM GGML ; les préréglages Transformers ne sont pas utilisables avec ce backend.
-
-Licences : les poids de ces modèles ne sont pas sous licence MIT (licence NVIDIA pour SegFormer, termes ADE20K/Mapillary pour les données). Vérifier leur compatibilité avec l'usage prévu, en particulier commercial.
-
-## Variables de configuration du pipeline
 
 À ajouter dans le fichier de configuration du pipeline Panoramax. Ces variables sont consommées par l'orchestration du pipeline, qui les transmet au script sous forme d'options de ligne de commande :
 
@@ -138,17 +152,9 @@ Sur Slurm, la génération a lieu dans le job de préparation, qui dispose déj�
 
 > **À distinguer :** le script autonome lit directement `TRAIN_MASKS_INSTALL_DIR` (pour résoudre les préréglages) et `TRAIN_MASKS_MODEL` (valeur par défaut de `--model`). Les autres variables ci-dessus sont des paramètres de l'orchestration du pipeline ; lors d'un appel autonome, les options correspondantes doivent être passées explicitement (`--labels`, `--confidence`, `--dilate-fraction`, `--max-masked-fraction`, `--device`, etc.).
 
-## Modes de perte des masques
 
-Spirula propose deux interprétations d'un pixel masqué (`--apply-loss-for-mask`) :
+### Options du script `generate_masks.py`
 
-- `ignore` : pixels exclus de la perte. Adapté aux objets mobiles (piétons, voitures) ; la façade cachée derrière eux n'est pas effacée.
-- `empty` : pixels appris comme **vides** (transparents). Adapté au ciel : les splats qui se projettent dans le ciel sont poussés vers l'opacité nulle, ce qui vise directement les flotteurs-nuages.
-- `auto` (défaut) : `empty` si seul `sky` est demandé, sinon `ignore`. Spirula n'applique qu'un mode par entraînement : avec `sky,person`, le ciel est aussi en `ignore`. Forcer `empty` avec des objets effacerait ce qu'ils masquent.
-
-`TRAIN_MASKS_DILATE="auto"` élargit le masque de 0,2 % de la diagonale de l'image en mode `ignore` (marge prudente autour des objets) et ne l'élargit pas en mode `empty` (pour ne pas creuser les bords des toits et des arbres). Le script autonome, lui, attend une valeur numérique dans `--dilate-fraction` ; la conversion de `auto` est faite par l'orchestration du pipeline.
-
-## Options du script `generate_masks.py`
 
 | Option | Défaut | Description |
 |---|---:|---|
@@ -185,7 +191,7 @@ export TRAIN_MASKS_PYTHON="$TRAIN_MASKS_INSTALL_DIR/venv/bin/python"
   --verbose
 ```
 
-### Interprétation de `--confidence` en segmentation
+#### Interprétation de `--confidence` en segmentation
 
 Le masque s'appuie d'abord sur la **classe gagnante** prédite pour chaque pixel : un pixel n'est masqué que si sa classe gagnante appartient aux labels demandés. `--confidence` ajoute ensuite un seuil sur le score de cette classe ; il ne permet pas de transformer une autre classe en `sky`.
 
@@ -194,36 +200,47 @@ Le masque s'appuie d'abord sur la **classe gagnante** prédite pour chaque pixel
 
 Pour Mapillary sur le Mac testé dans ce projet, le traitement CPU a reconnu 4 % de pixels `Sky` sur l'image de contrôle, tandis que MPS en reconnaissait 0 %. Le réglage `--confidence 0` ne remplace donc pas le choix du périphérique : utiliser `--device cpu` sur cette configuration Mac.
 
-## Fonctionnement et fichiers produits
+## 4. Fonctionnement internes
 
-- **Entrée** : `sfm-*/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
-- **Sortie** : `sfm-*/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
-- **`masks.json`** : paramètres de génération, fraction masquée et statut pour chaque image, ainsi qu'un résumé global.
-- **Reprise** : si les paramètres enregistrés sont identiques, les masques existants présents dans le rapport sont réutilisés lorsque `--verbose` n'est pas activé. Si les paramètres changent, les masques sont régénérés dans un dossier temporaire puis remplacent l'ancien dossier à la fin du traitement.
-- **Mode verbose** : `tmp_labels/` est recréé et les images sont recalculées pour produire les diagnostics, même si des masques existaient déjà.
-- **Garde-fou** : si une image dépasse `--max-masked-fraction`, son masque de sortie est entièrement blanc (aucun pixel masqué) et son statut est `overmasked_kept`. Cela évite qu'une erreur de segmentation supprime une vue entière.
-- **Sous-dossiers** : les chemins relatifs des images sont conservés dans les dossiers de sortie, y compris pour les diagnostics.
-- **Intégration pipeline** : chaque bloc enregistre les masques utilisés dans `train_masks.txt`. Un bloc déjà entraîné est réutilisé, avec un avertissement si ses masques diffèrent ; `TRAIN_CLEAN=true` force le réentraînement.
+| Modèle | Données | Intérêt |
+|---|---|---|
+| `nvidia/segformer-b5-finetuned-ade-640-640` (`ade20k`) | ADE20K, 150 classes | Généraliste ; classes `sky`, `person`, `car`, `bicycle`, `truck`, `bus`, `tree`… ; plus léger. |
+| `facebook/mask2former-swin-large-mapillary-vistas-semantic` (`mapillary`) | Mapillary Vistas | Spécialisé dans les scènes urbaines extérieures et les vues de rue, proches des images Panoramax ; plus lourd. |
 
-### Diagnostics `--verbose`
+Les deux familles (SegFormer et Mask2Former) sont gérées. Le traitement Mask2Former utilise le post-traitement sémantique du processeur Hugging Face pour produire la carte de classes. Les scores de la classe demandée sont calculés séparément pour appliquer éventuellement le seuil complémentaire `--confidence`.
 
-Avec `--verbose`, le dossier suivant est produit à côté des masques :
+Les noms exacts des labels dépendent du modèle. Consulter le `labels.txt` du modèle ou afficher les classes depuis le script :
 
-```text
-tmp_labels/
-├── labels.txt
-├── semantic/       # carte des classes en fausses couleurs RGB
-├── overlay/        # image originale avec les couleurs de classes superposées
-├── probability/    # score normalisé du ou des labels demandés (noir=0, blanc=1)
-├── threshold/      # résultat binaire : classe demandée et score >= confidence
-└── ids/            # identifiants de classes numériques, PNG 16 bits
+```bash
+"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
+  --model mapillary --list-labels
 ```
 
-`labels.txt` donne, pour chaque classe, son identifiant, son nom et sa couleur hexadécimale ; les classes demandées sont marquées `[MASQUER]`. Les fichiers de diagnostics gardent l'arborescence relative des images sources.
+La comparaison des noms est insensible à la casse ; un identifiant numérique est aussi accepté. Un label inconnu arrête le calcul avant l'écriture des masques, avec des suggestions de labels proches.
 
-Les logs indiquent, pour chaque image, la proportion de pixels dont la classe gagnante est demandée, la proportion retenue après `--confidence` et le score maximal du label demandé. Pour le backend Spirula, la carte de diagnostic est binaire : SAM renvoie l'union des régions trouvées pour les prompts, pas une classe distincte par prompt.
+Les préréglages `ade20k` et `mapillary` sont résolus dans :
 
-## Limites
+```text
+${TRAIN_MASKS_INSTALL_DIR:-~/.local/share/colmap-to-gs/segmentation-masks}/models/
+```
+
+On peut aussi fournir à `--model` le chemin local d'un autre modèle Transformers. Avec `--backend spirula`, `--model` doit obligatoirement être le chemin d'un checkpoint SAM GGML ; les préréglages Transformers ne sont pas utilisables avec ce backend.
+
+Licences : les poids de ces modèles ne sont pas sous licence MIT (licence NVIDIA pour SegFormer, termes ADE20K/Mapillary pour les données). Vérifier leur compatibilité avec l'usage prévu, en particulier commercial.
+
+
+### Modes de perte des masques
+
+
+Spirula propose deux interprétations d'un pixel masqué (`--apply-loss-for-mask`) :
+
+- `ignore` : pixels exclus de la perte. Adapté aux objets mobiles (piétons, voitures) ; la façade cachée derrière eux n'est pas effacée.
+- `empty` : pixels appris comme **vides** (transparents). Adapté au ciel : les splats qui se projettent dans le ciel sont poussés vers l'opacité nulle, ce qui vise directement les flotteurs-nuages.
+- `auto` (défaut) : `empty` si seul `sky` est demandé, sinon `ignore`. Spirula n'applique qu'un mode par entraînement : avec `sky,person`, le ciel est aussi en `ignore`. Forcer `empty` avec des objets effacerait ce qu'ils masquent.
+
+`TRAIN_MASKS_DILATE="auto"` élargit le masque de 0,2 % de la diagonale de l'image en mode `ignore` (marge prudente autour des objets) et ne l'élargit pas en mode `empty` (pour ne pas creuser les bords des toits et des arbres). Le script autonome, lui, attend une valeur numérique dans `--dilate-fraction` ; la conversion de `auto` est faite par l'orchestration du pipeline.
+
+## 5. Notes et informations complémentaires
 
 - Le modèle est un classifieur sémantique : il peut manquer une partie du ciel ou confondre certains éléments avec le ciel. Contrôler visuellement les overlays et les masques sur un échantillon représentatif avant un long entraînement.
 - Les résultats CPU/MPS/CUDA peuvent différer selon le modèle, la version de PyTorch et le matériel. Sur la configuration Mac testée ici, Mapillary doit être exécuté sur CPU pour obtenir la détection observée.
@@ -231,7 +248,9 @@ Les logs indiquent, pour chaque image, la proportion de pixels dont la classe ga
 - Une erreur de segmentation (arbre ou toit classé `sky`) se propage : en mode `empty`, elle peut creuser la géométrie. Contrôler les diagnostics et augmenter `TRAIN_MASKS_CONFIDENCE` (par exemple `0.7`) si des pixels mal classés doivent être écartés.
 - Le comportement exact du mode `empty` avec le fond de rendu Spirula doit être validé sur un bloc représentatif ; comparer un bloc `empty` et un bloc `ignore`.
 
-## Tests
+
+### Tests
+
 
 ```bash
 python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'

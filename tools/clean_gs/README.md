@@ -1,5 +1,19 @@
 # Nettoyage multivues du ciel inspiré de Clean-GS
 
+## 1. Objectif
+
+Nettoyer un `.splat` en segmentant le ciel dans toutes les vues COLMAP et en supprimant uniquement les centres qui satisfont le vote défini par le filtre.
+
+Exemple d’invocation :
+
+```bash
+python tools/clean_gs/clean_sky.py \
+  --input /chemin/scene.unfiltered.splat \
+  --output /chemin/scene.cleangs.splat \
+  --scene /chemin/sfm-12000 \
+  --model /chemin/segformer --mode diagnostic
+```
+
 Cette adaptation expérimentale utilise le parseur COLMAP du projet
 [Clean-GS](https://github.com/smlab-niser/clean-gs) (MIT, parseur gsplat
 Apache-2.0) et la projection/rasterisation gsplat. Contrairement à Clean-GS
@@ -12,7 +26,26 @@ La visibilité est celle de projection de gsplat (frustum/rayon positif), pas
 un test d'occlusion exacte. Cela n'enlève pas nécessairement les flotteurs
 qui se projettent devant les bâtiments ou la végétation.
 
-## Installation
+## 2. Entrées et sorties
+
+```bash
+python tools/clean_gs/clean_sky.py \
+  --input /chemin/scene.unfiltered.splat \
+  --output /chemin/scene.cleangs.splat \
+  --scene /chemin/sfm-12000 \
+  --model /chemin/segformer --mode diagnostic
+```
+
+Le dossier scène doit contenir `images/` et `sparse/0/`, dans le même repère
+que le SPLAT. Sont supportées les caméras COLMAP perspective PINHOLE,
+SIMPLE_PINHOLE, SIMPLE_RADIAL, RADIAL et OPENCV ; les images sont corrigées
+de leur distorsion avant segmentation et projection. Les masques PNG du ciel,
+le SPLAT des rejets et le rapport JSON sont enregistrés à côté de la sortie.
+Examiner les masques et les rejets avant `--mode apply` ; par défaut plus de
+20 % de suppressions appliquées sont refusées. Ce filtre n'est pas combiné
+automatiquement aux filtres contextuel et bbox.
+
+## 3. Configuration et utilisation
 
 L'installateur prépare un environnement **séparé de `gsplat`**, la révision
 Clean-GS `78a39e941c14df5857903b1112040d117f230ac4` avec son verrou de dépendances,
@@ -49,7 +82,9 @@ par le site. Le cache de compilation gsplat doit rester accessible en écriture.
 Les images ne sont jamais envoyées à un service ; seule l'installation
 télécharge les poids, l'inférence les charge ensuite sans accès réseau.
 
-## Variables à ajouter dans la configuration Panoramax
+
+### Variables à ajouter dans la configuration Panoramax
+
 
 L'installateur affiche les chemins exacts à reporter dans `config.sh` :
 
@@ -79,24 +114,21 @@ Les options `SPLAT_FILTER_*` et `SPLAT_SPARSE_BBOX_*` n'agissent pas en mode
 `cleangs`. Le diagnostic produit le `.splat` final sans suppressions ;
 `CLEANGS_MODE="apply"` active le nettoyage avec la limite indiquée.
 
-## Utilisation autonome
+## 4. Fonctionnement internes
 
-```bash
-python tools/clean_gs/clean_sky.py \
-  --input /chemin/scene.unfiltered.splat \
-  --output /chemin/scene.cleangs.splat \
-  --scene /chemin/sfm-12000 \
-  --model /chemin/segformer --mode diagnostic
-```
+Cette adaptation expérimentale utilise le parseur COLMAP du projet
+[Clean-GS](https://github.com/smlab-niser/clean-gs) (MIT, parseur gsplat
+Apache-2.0) et la projection/rasterisation gsplat. Contrairement à Clean-GS
+officiel, elle ne sélectionne pas trois vues par Pareto et ne filtre pas un
+objet segmenté : elle analyse **toutes les vues enregistrées**, segmente le
+ciel et ne rejette que les centres projetés avec au moins deux votes de ciel
+et aucun vote de premier plan. Les splats non observés ou aux pixels incertains
+sont conservés. Une erreur de segmentation peut masquer des détails utiles.
+La visibilité est celle de projection de gsplat (frustum/rayon positif), pas
+un test d'occlusion exacte. Cela n'enlève pas nécessairement les flotteurs
+qui se projettent devant les bâtiments ou la végétation.
 
-Le dossier scène doit contenir `images/` et `sparse/0/`, dans le même repère
-que le SPLAT. Sont supportées les caméras COLMAP perspective PINHOLE,
-SIMPLE_PINHOLE, SIMPLE_RADIAL, RADIAL et OPENCV ; les images sont corrigées
-de leur distorsion avant segmentation et projection. Les masques PNG du ciel,
-le SPLAT des rejets et le rapport JSON sont enregistrés à côté de la sortie.
-Examiner les masques et les rejets avant `--mode apply` ; par défaut plus de
-20 % de suppressions appliquées sont refusées. Ce filtre n'est pas combiné
-automatiquement aux filtres contextuel et bbox.
+## 5. Notes et informations complémentaires
 
 Le format `.splat` ne contient ni les harmoniques sphériques d'ordre supérieur
 ni l'apparence originale complète ; les enregistrements conservés sont copiés

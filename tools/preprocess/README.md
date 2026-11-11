@@ -1,5 +1,17 @@
 # Préparation des données
 
+## 1. Objectif
+
+Préparer les données d’images pour COLMAP, géoréférencer ou découper les reconstructions, et proposer un filtre expérimental du sparse.
+
+Exemple d’invocation :
+
+```bash
+python3 tools/preprocess/images_to_colmap.py --help
+```
+
+## 2. Entrées et sorties
+
 Ces outils autonomes étaient dans `python/`. Depuis la racine du dépôt :
 
 ```bash
@@ -21,6 +33,41 @@ externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
 Les composants internes de Nerfstudio `colmap_to_transforms.py` et
 `estimate_planes.py` restent dans `python/` et sont appelés par `scripts/run.sh`.
+
+## 3. Configuration et utilisation
+
+### Découpage et entraînement Spirula par blocs
+
+Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
+
+```bash
+DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
+  bash /chemin/vers/colmap_to_gs/scripts/run_spirula_blocks.sh
+```
+
+Le lanceur réutilise le SfM existant `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ;
+sinon il lance la reconstruction Panoramax. Il découpe ensuite `sparse/0`
+avec ce script dans `blocks-SPLIT_NUM_BLOCKS/`, puis entraîne chaque bloc
+indépendamment dans `DIR/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/block_NNN/`.
+Le manifeste et les blocs COLMAP complets sont réutilisés à la relance.
+Les sorties de découpage partielles ou incohérentes ne sont jamais supprimées
+automatiquement. `SPLIT_NUM_BLOCKS`, `TRAIN_NUM_ITER`, `TRAIN_CAP_MAX` et les paramètres SfM
+sont configurables par variables d'environnement ; voir `--help`.
+
+Le découpage spectral recherche les séparations de faible covisibilité
+(peu de points 3D partagés, pondérés par la distance entre caméras).
+Un ajustement glouton des frontières vise ensuite environ `N / SPLIT_NUM_BLOCKS`
+images principales par bloc, avec une tolérance de 20 % arrondie à l'entier.
+Il privilégie les déplacements coupant le moins de poids et ne déconnecte
+pas un bloc donneur connexe. Si aucun déplacement sûr n'est possible,
+les tailles inégales sont acceptées avec un avertissement : l'équilibrage
+n'arrête plus le pipeline. Le recouvrement est ajouté après cet ajustement
+et peut augmenter les effectifs finaux.
+
+`TRAIN_CAP_MAX` s'applique à chaque bloc séparément : le plafond cumulé peut donc
+atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
+
+## 4. Fonctionnement internes
 
 ### Filtrage expérimental du sparse par densité
 
@@ -57,37 +104,9 @@ Le modèle d'entrée reste intact. Le modèle rejeté est vide si aucun point
 n'est supprimé (en-tête binaire à zéro point, caméras/images conservées).
 Les éventuels `rigs.bin` et `frames.bin` sont également conservés.
 Le rapport récapitule les paramètres, les points rejetés et leurs votes.
+
+## 5. Notes et informations complémentaires
+
 Il s'agit d'un filtre à valider visuellement :
 tester le sparse original et sa sortie dans le viewer avant de l'utiliser pour
 l'entraînement.
-
-### Découpage et entraînement Spirula par blocs
-
-Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
-
-```bash
-DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
-  bash /chemin/vers/colmap_to_gs/scripts/run_spirula_blocks.sh
-```
-
-Le lanceur réutilise le SfM existant `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ;
-sinon il lance la reconstruction Panoramax. Il découpe ensuite `sparse/0`
-avec ce script dans `blocks-SPLIT_NUM_BLOCKS/`, puis entraîne chaque bloc
-indépendamment dans `DIR/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/block_NNN/`.
-Le manifeste et les blocs COLMAP complets sont réutilisés à la relance.
-Les sorties de découpage partielles ou incohérentes ne sont jamais supprimées
-automatiquement. `SPLIT_NUM_BLOCKS`, `TRAIN_NUM_ITER`, `TRAIN_CAP_MAX` et les paramètres SfM
-sont configurables par variables d'environnement ; voir `--help`.
-
-Le découpage spectral recherche les séparations de faible covisibilité
-(peu de points 3D partagés, pondérés par la distance entre caméras).
-Un ajustement glouton des frontières vise ensuite environ `N / SPLIT_NUM_BLOCKS`
-images principales par bloc, avec une tolérance de 20 % arrondie à l'entier.
-Il privilégie les déplacements coupant le moins de poids et ne déconnecte
-pas un bloc donneur connexe. Si aucun déplacement sûr n'est possible,
-les tailles inégales sont acceptées avec un avertissement : l'équilibrage
-n'arrête plus le pipeline. Le recouvrement est ajouté après cet ajustement
-et peut augmenter les effectifs finaux.
-
-`TRAIN_CAP_MAX` s'applique à chaque bloc séparément : le plafond cumulé peut donc
-atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
