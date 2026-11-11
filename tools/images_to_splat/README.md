@@ -6,12 +6,12 @@ Pipeline Spirula pour produire un Gaussian Splat `.splat` à partir d’images :
 
 ```text
 Images
-  → sélection → [masques] → SfM global → [recalage GPX]
+  → sélection → [masques] → SfM global → [recalage sur une trajectoire GPS]
   → découpage COLMAP → entraînement par blocs
   → recadrage bbox → fusion → fichier .splat
 ```
 
-Les masques et le recalage GPX sont optionnels.
+Les masques et le recalage sur une trajectoire GPS sont optionnels.
 
 Exemple d’invocation :
 
@@ -24,6 +24,8 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 - `SFM_IMAGES_DIR` : dossier source des images ; l'option
   `--images /chemin/absolu/images` peut remplacer cette valeur à l'appel.
 - `SFM_IMAGES_RECURSIVE=true` : parcourt les sous-dossiers ordinaires.
+- `GEOREF_GPX_FILE` : fichier au format GPX contenant la trajectoire GPS de
+  référence pour le recalage ; facultatif, absent ou vide pour ne pas recaler.
 - Liens : les liens vers des fichiers sont acceptés, mais pas le parcours des
   dossiers symboliques.
 - Noms relatifs : préservés ; `h00_y0/photo.jpg` et `h01_y45/photo.jpg`
