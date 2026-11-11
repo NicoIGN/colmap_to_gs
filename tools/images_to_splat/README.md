@@ -204,7 +204,7 @@ de relancer la préparation ; le SfM brut n'a pas à être recalculé.
 Modifier/ajouter/retirer le GPX après préparation exige un **nouvel OUTPUT_DIR** :
 ne pas mélanger des blocs entraînés dans des repères différents.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le pipeline **Images locales vers Gaussian Splats** prépare les photos,
 reconstruit la scène et entraîne les blocs. Il partage avec le pipeline

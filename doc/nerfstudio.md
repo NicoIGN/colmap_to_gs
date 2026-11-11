@@ -20,7 +20,7 @@ Exemple :
 - [Objectif](#1-objectif)
 - [Entrées et sorties](#2-entrées-et-sorties)
 - [Configuration et utilisation](#3-configuration-et-utilisation)
-- [Fonctionnement internes](#4-fonctionnement-internes)
+- [Fonctionnement interne](#4-fonctionnement-interne)
 - [Notes et informations complémentaires](#5-notes-et-informations-complémentaires)
 
 ## 1. Objectif
@@ -377,7 +377,7 @@ Logs SLURM :
 └── gsplat-<jobid>.err
 ```
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 ### Création du dataset COLMAP
 

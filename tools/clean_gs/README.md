@@ -125,7 +125,7 @@ chemins de l'environnement et du modèle ; `CLEANGS_MODE` accepte `diagnostic`
 `CLEANGS_SKY_CONFIDENCE` vaut `0.9` par défaut ;
 `CLEANGS_MAX_REMOVAL_FRACTION` vaut `0.2` par défaut.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 L'outil **Clean-GS** parcourt les vues de la scène, repère les splats qui se
 projettent dans le ciel et retire ceux qui sont identifiés comme parasites.

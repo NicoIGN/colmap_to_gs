@@ -204,7 +204,7 @@ Le masque s'appuie d'abord sur la **classe gagnante** prédite pour chaque pixel
 
 Pour Mapillary sur le Mac testé dans ce projet, le traitement CPU a reconnu 4 % de pixels `Sky` sur l'image de contrôle, tandis que MPS en reconnaissait 0 %. Le réglage `--confidence 0` ne remplace donc pas le choix du périphérique : utiliser `--device cpu` sur cette configuration Mac.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le script `generate_masks.py` traite les images une par une et produit, pour
 chacune, une carte indiquant les zones à garder ou à masquer.

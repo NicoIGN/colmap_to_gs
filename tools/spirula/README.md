@@ -69,7 +69,7 @@ remote de suivi. Les chemins relatifs fournis sont résolus depuis le dossier
 de lancement. Les options CMake après `--` nécessitent `--clean` si un
 exécutable existe déjà. Le script amont choisit le parallélisme selon la RAM.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le script `install_spirula.sh` récupère les sources de Spirula Studio,
 le compile pour le système visé et vérifie que l'exécutable démarre. Il

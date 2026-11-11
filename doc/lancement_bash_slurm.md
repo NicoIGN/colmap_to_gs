@@ -128,7 +128,7 @@ GIT_ROOT=/chemin/depot CONFIG_SH=/chemin/config.sh \
 - `VERBOSE` : `1` ou `true` affiche les journaux complets et les ressources
   CPU/GPU toutes les 120 secondes ; sinon les journaux sont filtrés.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Les pipelines images locales et Panoramax exécutent les blocs successivement
 en Bash direct. Sous Slurm, ils soumettent trois étapes dépendantes :

@@ -46,7 +46,7 @@ bash tools/postprocess/clean_ply.sh --help
 - `scripts/run_spirula_block.sh` : utilise `export_ply.py` par défaut ;
   surcharge possible avec `--export-script` / `EXPORT_SCRIPT`.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Les scripts de `tools/postprocess/` exportent les modèles, fusionnent les blocs
 et proposent des filtres pour retirer certains splats indésirables.

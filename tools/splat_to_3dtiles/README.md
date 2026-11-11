@@ -71,7 +71,7 @@ python3 tools/splat_to_3dtiles/convert.py \
 
 Le résultat est `scene_tiles/tileset.json` et les contenus référencés sous `scene_tiles/tiles/`. Le répertoire de sortie doit ne pas exister ; `--overwrite` autorise explicitement le convertisseur à le remplacer.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le convertisseur `tools/splat_to_3dtiles/convert.py` prépare le `.splat` dans
 un format que le convertisseur 3D Tiles peut lire. Celui-ci découpe ensuite

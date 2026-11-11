@@ -447,7 +447,7 @@ Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélect
 géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
 
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le pipeline **Panoramax** recherche et télécharge les photos, puis prépare
 la reconstruction, entraîne les blocs et rassemble le résultat. Il partage

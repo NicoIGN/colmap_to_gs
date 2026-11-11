@@ -56,7 +56,7 @@ dans son dossier ou ses sous-dossiers.
 
 Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtiles/README.md).
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Le visualiseur web affiche les scènes `.splat`, les modèles COLMAP et les
 trajectoires GPS dans un même espace. Il permet de contrôler les reconstructions,

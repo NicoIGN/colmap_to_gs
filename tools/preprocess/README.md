@@ -75,7 +75,7 @@ et peut augmenter les effectifs finaux.
 - `TRAIN_CAP_MAX` s'applique à chaque bloc séparément ; le plafond cumulé peut
   donc atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
 
-## 4. Fonctionnement internes
+## 4. Fonctionnement interne
 
 Les outils de `tools/preprocess/` préparent les images et les reconstructions
 COLMAP. En particulier, `filter_sparse_density.py` cherche les points 3D
