@@ -92,7 +92,10 @@ cp tools/images_to_splat/config.sh.example /chemin/images.sh
 cp tools/panoramax/config.sh.example /chemin/panoramax.sh
 ```
 
-**En Bash** — exécution directe, avec les blocs entraînés successivement :
+**Exécution directe, sans soumission Slurm** — les calculs tournent sur la
+machine courante et les blocs sont entraînés successivement. Ces commandes
+ne réservent aucune ressource Slurm, même si la configuration contient des
+paramètres `SLURM_*` :
 
 ```bash
 # Images locales → 3DGS
@@ -102,9 +105,13 @@ bash script/images_to_3dgs.sh /chemin/images.sh
 bash script/panoramax_to_3dgs.sh /chemin/panoramax.sh
 ```
 
-**Sur Slurm** — depuis le nœud de connexion, les lanceurs appellent `sbatch`
-avec les ressources `SLURM_*` de la configuration. Les blocs sont des tâches
-GPU indépendantes ; `SLURM_BLOCK_PARALLELISM` fixe leur parallélisme maximal.
+**Soumission à un cluster Slurm** — utiliser les lanceurs `launch_*` ci-dessous
+depuis le nœud de connexion. Ils lisent les ressources `SLURM_*` de la
+configuration et appellent eux-mêmes `sbatch` : les calculs s'exécutent sur les
+nœuds alloués, avec un GPU par bloc actif et au plus
+`SLURM_BLOCK_PARALLELISM` blocs simultanés. Les lanceurs se démarrent avec
+`bash`, pas avec `sbatch` ; c'est le choix du script `launch_*` qui déclenche
+la soumission Slurm.
 
 ```bash
 # Images locales → 3DGS
