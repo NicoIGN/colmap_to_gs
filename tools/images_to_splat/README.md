@@ -94,12 +94,6 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 - `TRAIN_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
   une initialisation à 10 % du cap ; un nuage sparse plus fourni peut faire
   atteindre le cap plus tôt.
-- Locale : le calcul utilise la locale `C` pour transmettre un point décimal à
-  Spirula, y compris sur un système configuré en français.
-
-- Anciens noms refusés : `INPUT_IMAGES_DIR`, `INPUT_RECURSIVE` et paramètres de
-  politique `MASKS_*` non préfixés. Les remplacer par `SFM_IMAGES_DIR`,
-  `SFM_IMAGES_RECURSIVE` et `SFM_MASKS_*`/`TRAIN_MASKS_*`.
 - Si seuls les paramètres SfM sont définis, renseigner également ceux du train
   lorsque `TRAIN_MASKS=on`.
 - Signature de préparation : enregistre les politiques SfM et entraînement ; ne pas
