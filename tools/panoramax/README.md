@@ -1,5 +1,7 @@
 # Télécharger des photos Panoramax par bbox Lambert-93
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 Ce lanceur télécharge les images HD disponibles dans une bbox Lambert-93 depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
 
@@ -376,73 +378,16 @@ partiel doit être déplacé en sauvegarde avant de réessayer.
 
 #### Exécution GPU sur Slurm
 
-- `launch.sh` soumet le pipeline complet en trois étapes dépendantes :
-
-```text
-Job GPU : téléchargement → SfM → découpage
-                    ↓ afterok
-Tableau Slurm : entraînement GPU d'un bloc par tâche
-                    ↓ afterok
-Job CPU : fusion → copie du géoréférencement
-```
-
-- Le tableau Slurm réserve un GPU NVIDIA par bloc.
-- Entraînement : les blocs s'exécutent en parallèle, sous réserve des GPU disponibles.
-- Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
-- Variables `SLURM_*` : ressources commentées dans
-  [`config.sh.example`, section « 7. Execution Slurm »](config.sh.example) :
-  partition, CPU, RAM, durée, type GPU, compte et QoS.
-Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
-CPU, RAM et durée sont demandés **par job/tâche**, pas pour l'ensemble.
-- `SLURM_BLOCK_PARALLELISM` : limite les blocs simultanés ; défaut
-  `SPLIT_NUM_BLOCKS`, `1` pour les entraîner successivement.
-- Quatre blocs simultanés réservent jusqu'à quatre GPU et quatre fois les
-  CPU/RAM configurés.
-- La partition choisie doit aussi autoriser le job de fusion sans GPU.
+Le [guide de lancement Bash / Slurm](../../doc/lancement_bash_slurm.md) décrit
+les ressources `SLURM_*`, le parallélisme des blocs, l'environnement des nœuds,
+les dépendances et le suivi des jobs.
 
 ```bash
 # Sur le nœud de connexion, après adaptation de la configuration au cluster :
 bash tools/panoramax/launch.sh /chemin/partage/config.sh
-# Ou attendre la fin, avec un code de retour non nul si le job échoue :
-bash tools/panoramax/launch.sh /chemin/partage/config.sh --wait
 ```
 
-- Sans `--wait` : le lanceur confirme uniquement les trois soumissions et
-  affiche leurs ID, les commandes `squeue`/`sacct`/`scancel` et les journaux
-  `OUTPUT_DIR/logs/submit.log`, `panoramax-prepare-JOBID.{out,err}`,
-  `panoramax-block-ARRAYID_INDICE.{out,err}` et
-  `panoramax-merge-JOBID.{out,err}`.
-- Dépendances `afterok` : empêchent l'entraînement sans préparation réussie et
-  la fusion si un bloc échoue.
-- `--kill-on-invalid-dep=yes` : annule les jobs dont la dépendance échoue, sans
-  attente indéfinie.
-- `--wait` : attend la fusion et renvoie un échec si elle échoue ou ne peut pas démarrer.
-- Soumission partiellement refusée : annule les jobs déjà soumis.
-- Accès requis : dépôt, configuration, exécutables et données accessibles sur
-  le nœud de calcul aux mêmes chemins.
-- Chemins relatifs : interprétés depuis le dossier de soumission ; préférer des
-  chemins absolus.
-- Ne pas modifier la configuration tant que le job est en attente ou en cours.
-- Le nœud doit avoir accès à l'API Panoramax pour le téléchargement.
-
-Spirula doit être compilé pour **Vulkan sous Linux** (par exemple
-`spirula-studio/build_vulkan/spirula`, à renseigner dans `SPIRULA_BIN`) ;
-la disponibilité CUDA/PyTorch seule ne suffit pas. Le pilote NVIDIA et son
-ICD Vulkan doivent être installés sur les nœuds. Slurm doit isoler les
-périphériques du job (cgroups) : `CUDA_VISIBLE_DEVICES` seul ne sélectionne
-pas un GPU Vulkan. Les GPU MIG ne sont pas pris en charge par ce lanceur.
-
-- `SLURM_ENV_SETUP` : script Bash de confiance pour charger les modules du site
-  ou configurer Vulkan.
-- `SLURM_CONDA_ENV` : environnement Conda à activer (par exemple `gsplat`).
-- `SLURM_CONDA_BASE` : chemin de base Conda, si nécessaire.
-- Sans configuration Conda, l'environnement est hérité de la soumission.
-- Dépendances Python : `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
-- Vérifications : chaque job vérifie ces imports ; les jobs GPU vérifient aussi
-  `nvidia-smi`. Toute erreur de préparation ou de calcul est propagée à Slurm.
-En cas d'arrêt du pipeline, un message précise l'étape concernée ; le bilan
-Slurm indique le job, le code de sortie et les chemins des journaux. Les lignes
-`srun: error` relaient cet arrêt et ne sont pas, à elles seules, sa cause.
+- Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
 
 Si Spirula plante dans LightGlue avec `gemm: weight is ... but out has ...`,
 il s'agit d'une incompatibilité de dimensions dans l'appariement, avant la

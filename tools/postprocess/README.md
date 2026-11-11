@@ -1,5 +1,7 @@
 # Traitement des résultats
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Outils d’export, de nettoyage, de filtrage contextuel et de fusion des résultats Gaussian Splatting.
@@ -14,7 +16,7 @@ python3 tools/postprocess/export_ply.py --help
 
 | Outil | Fonction |
 |---|---|
-| `export_splat_to_ply.sh` | Export [Nerfstudio](../../README.md) via `ns-export` |
+| `export_splat_to_ply.sh` | Export [Nerfstudio](../../doc/nerfstudio.md) via `ns-export` |
 | `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP |
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
 | `export_ply_legacy.py` | Sauvegarde exacte de l'ancien exporteur (BBOX et seuil global de taille) |

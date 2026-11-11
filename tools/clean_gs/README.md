@@ -1,5 +1,7 @@
 # Nettoyage multivues du ciel inspiré de Clean-GS
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Filtrer les splats projetés dans le ciel à partir des masques générés pour toutes les vues COLMAP.

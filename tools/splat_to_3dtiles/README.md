@@ -1,5 +1,7 @@
 # `.splat` vers 3D Tiles
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Convertir un `.splat` local géoréférencé en tileset 3D Tiles 1.1 contenant des Gaussian Splats.

@@ -1,5 +1,7 @@
 # Guide utilisateur — produire et visualiser un Gaussian Splat
 
+[Accueil du projet](../README.md)
+
 Ce guide présente le principe des Gaussian Splats et les grandes étapes pour
 transformer des images en une scène 3D visualisable. Les commandes complètes,
 options, paramètres et détails de chaque outil sont documentés dans les README
@@ -45,7 +47,7 @@ Le dépôt propose plusieurs parcours. Choisir celui qui correspond aux données
 disponibles :
 
 - **Dataset COLMAP existant, Nerfstudio / Splatfacto** : consulter le
-  [README principal](../README.md) pour les prérequis, l'environnement, le
+  [guide Nerfstudio](nerfstudio.md) pour les prérequis, l'environnement, le
   lancement de `scripts/run.sh`, les sorties et l'exécution sur Slurm.
 - **Images locales, pipeline Spirula** : voir
   [Images locales vers Gaussian Splats](../tools/images_to_splat/README.md).
@@ -75,7 +77,7 @@ Pour le pipeline Nerfstudio / Splatfacto, le point d'entrée est
 
 Cette commande illustre le lancement ; les options, valeurs possibles,
 prérequis et étapes exécutées sont décrits dans le
-[README principal](../README.md#3-configuration-et-utilisation).
+[guide Nerfstudio](nerfstudio.md#3-configuration-et-utilisation).
 
 Pour les autres parcours, utiliser les commandes et fichiers de configuration
 de leur README : le pipeline images locales et le pipeline Panoramax ont des
@@ -83,6 +85,8 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 
 ## 4. Consulter les guides des outils
 
+- **Lancement Bash ou Slurm, ressources et suivi des jobs** :
+  [guide de lancement](lancement_bash_slurm.md).
 - **Préparation des données et sparse COLMAP** :
   [tools/preprocess](../tools/preprocess/README.md).
 - **Masques de segmentation** :
@@ -122,4 +126,4 @@ commandes de validation et particularités de chaque outil.
 Le pipeline Nerfstudio conserve un `transforms.json` déjà présent. Pour repartir
 des paramètres COLMAP courants, supprimer ce fichier avant de relancer
 `scripts/run.sh`. Les détails de ce comportement et des transformations sont
-dans le [README principal](../README.md#2-entrées-et-sorties).
+dans le [guide Nerfstudio](nerfstudio.md#2-entrées-et-sorties).

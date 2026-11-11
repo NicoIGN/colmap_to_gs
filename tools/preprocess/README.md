@@ -1,5 +1,7 @@
 # Préparation des données
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Outils de préparation d’images pour COLMAP, géoréférencement et découpage de reconstructions, et filtrage expérimental du sparse.
@@ -30,7 +32,7 @@ python3 tools/preprocess/images_to_colmap.py --help
 - Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-- `python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../README.md),
+- `python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
   appelée par `scripts/run.sh`.
 - `python/estimate_planes.py` : estimation des plans, appelée par `scripts/run.sh`.
 

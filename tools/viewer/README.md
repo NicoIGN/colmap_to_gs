@@ -1,5 +1,7 @@
 # Visualisation locale
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Visualiser dans un navigateur des scènes `.splat`, des données COLMAP ou des tilesets 3D Tiles.

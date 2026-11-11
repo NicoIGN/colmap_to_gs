@@ -1,5 +1,7 @@
 # Images locales vers Gaussian Splats
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Pipeline [Spirula](../spirula/README.md) pour produire un Gaussian Splat `.splat` à partir d’images :
@@ -57,21 +59,10 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 
 # Soumission à Slurm : préparation GPU, tâches GPU, puis fusion CPU.
 bash tools/images_to_splat/launch.sh /chemin/config.sh
-
-# Variante Slurm : attendre la fin et retourner un code d'erreur en cas d'échec.
-bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 ```
 
-- `launch.sh` : soumet les jobs ; ne pas le lancer avec `sbatch`.
-- `launch.slurm` : worker interne ; les paramètres Slurm viennent de la config,
-  pas de directives `#SBATCH` séparées.
-- Environnement Slurm : les jobs héritent de l'environnement actif ;
-  `SLURM_ENV_SETUP` permet de charger les modules/activer l'environnement sur les nœuds.
-- `SLURM_*` : ressources et parallélisme des jobs ; voir la section
-  « 7. Slurm uniquement » de [`config.sh.example`](config.sh.example).
-  L'exécution directe reste séquentielle.
-- Dépendances : les étapes suivantes ont une dépendance `afterok`.
-- Journaux : `OUTPUT_DIR/logs/`.
+Les ressources, le parallélisme, l'environnement des nœuds et le suivi des jobs
+sont décrits dans le [guide de lancement Bash / Slurm](../../doc/lancement_bash_slurm.md).
 
 ### Masques
 
@@ -237,24 +228,6 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 (repère, seuil de recadrage, nettoyage final).
 
 ## 5. Notes et informations complémentaires
-
-#### Choisir comment lancer le pipeline
-
-Depuis la racine du dépôt, avec le même fichier de configuration :
-
-```bash
-# Directement dans le shell Bash ; les blocs sont exécutés successivement.
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
-
-# Soumettre les étapes au gestionnaire Slurm.
-bash tools/images_to_splat/launch.sh /chemin/config.sh
-```
-
-La première commande exécute le pipeline directement dans le shell. La seconde
-soumet les jobs à Slurm ; ne pas la préfixer avec `sbatch`. Pour attendre la fin
-des jobs et obtenir un code de retour non nul en cas d'échec, ajouter
-`--wait` à la commande Slurm. Les détails d'ordonnancement et de ressources
-Slurm sont décrits dans la section « Configuration et utilisation » ci-dessus.
 
 #### Filtrage optionnel du sparse
 

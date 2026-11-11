@@ -1,5 +1,7 @@
 # Installer Spirula Studio et SAM 3
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Installer Spirula Studio avec le backend Vulkan/SAM 3 utilisé pour générer les

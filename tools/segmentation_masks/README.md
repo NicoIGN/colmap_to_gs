@@ -1,5 +1,7 @@
 # Masques de segmentation pour l'entraînement 3DGS
 
+[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+
 ## 1. Objectif
 
 Générer des masques locaux pour les images d'entraînement 3DGS/[Spirula](../spirula/README.md). Par défaut, le masque exclut le ciel.
