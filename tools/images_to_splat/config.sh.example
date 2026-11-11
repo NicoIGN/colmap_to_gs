@@ -106,6 +106,9 @@ SFM_MIN_INLIERS="30"      # entier [4,1000000] par paire, pas par point 3D
 SFM_MIN_TRI_ANGLE="3"     # ]0,90] degres ; augmente = moins de faible parallaxe
 SFM_BA_LOSS="huber"       # huber|cauchy|trivial
 SFM_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy c
+# Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entrainement.
+# Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
+SFM_SP_IMAGE_EXPOSURE=""
 # Plus strict = moins de parasites, mais risque de perdre des vues/points valides.
 # Nouveau OUTPUT_DIR necessaire pour recalculer avec d'autres seuils.
 # folder : intrinseques partages par sous-dossier ; single : une camera ;
@@ -164,6 +167,18 @@ TRAIN_REFINE_STOP_ITER="14000"
 TRAIN_REFINE_STOP_NUM_ITER="4000"
 TRAIN_FLOATER_SUPPRESSION="mild"       # off|mild|strong
 TRAIN_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
+# Corrections photometriques Spirula uniquement ; vide = defauts Spirula observes :
+# true, no_crf_no_vig, false, true, ppisp. Valeurs PPISP : original|rqs|no_crf|
+# no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp.
+TRAIN_SP_USE_PPISP=""
+TRAIN_SP_PPISP_PARAM_TYPE=""
+# Initialiser la correction d'exposition depuis les EXIF, s'ils sont disponibles.
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=""
+# PPISP ajuste exposition/couleur ; no_crf inclut le vignettage, no_crf_no_vig l'omet.
+# Booléens : true|false. La grille bilaterale affine aussi les couleurs.
+TRAIN_SP_USE_BILATERAL_GRID=""
+# Type de grille : affine|ppisp|loglinear.
+TRAIN_SP_BILAGRID_TYPE=""
 # false : reutiliser un checkpoint final ; une sortie partielle est refusee.
 # true : supprimer/recalculer les sorties 3DGS des blocs, PAS le SfM.
 # Sauvegarder les anciens entrainements avant de l'activer.

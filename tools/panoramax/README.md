@@ -16,6 +16,15 @@ les checkpoints Spirula. La fusion reste en coordonnées COLMAP originales.
 Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfacto.
 `NS_TRAIN_BIN`, `NS_EXPORT_BIN` et `NS_DOWNSCALE_FACTOR` règlent ce moteur.
 
+**Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
+l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
+correction PPISP et la grille bilatérale à l'entraînement ; `no_crf` inclut le
+vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
+si ces métadonnées sont présentes. Ces options ne sont pas transmises à
+Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
+`SFM_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
+[`config.sh.example`](config.sh.example).
+
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
 

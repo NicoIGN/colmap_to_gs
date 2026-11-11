@@ -14,6 +14,40 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
+    def test_spirula_analysis_exposure_reaches_sfm_and_training_options_reach_blocks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(data / "sfm-3")
+            (data / "sfm-3/images").mkdir(parents=True)
+            (data / "images/img.jpg").write_bytes(
+                b"\xff\xd8\xff\xc0\x00\x11\x08\x00\x01\x00\x01" + b"\x00" * 12)
+            env.update(
+                SFM_SP_IMAGE_EXPOSURE="-1.5",
+                TRAIN_SP_USE_PPISP="true",
+                TRAIN_SP_PPISP_PARAM_TYPE="no_crf",
+                TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="true",
+                TRAIN_SP_USE_BILATERAL_GRID="false",
+                TRAIN_SP_BILAGRID_TYPE="ppisp",
+            )
+            prepared = execute("--prepare-only")
+            self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            sfm = next(cmd for cmd in commands if cmd[:2] == ["spirula", "sfm"])
+            self.assertEqual(sfm[sfm.index("--image-exposure") + 1], "-1.5")
+
+            trained = execute()
+            self.assertEqual(trained.returncode, 0, trained.stdout + trained.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            for train in (cmd for cmd in commands if cmd[:2] == ["spirula", "train"]):
+                for flag, value in (
+                    ("--use-ppisp", "1"),
+                    ("--ppisp-param-type", "no_crf"),
+                    ("--ppisp-exposure-from-exif", "1"),
+                    ("--use-bilateral-grid", "0"),
+                    ("--bilagrid-type", "ppisp"),
+                ):
+                    self.assertEqual(train[train.index(flag) + 1], value)
+
     def test_strict_geometry_reaches_native_sfm_and_guards_reuse(self):
         for overrides in ({}, {"SFM_MAX_ERROR": "1.5", "SFM_MIN_INLIERS": "50",
                                "SFM_MIN_TRI_ANGLE": "4", "SFM_BA_LOSS": "cauchy",
@@ -434,6 +468,82 @@ class BlockPipelineTest(unittest.TestCase):
             failed = execute()
             self.assertNotEqual(failed.returncode, 0)
             self.assertIn("TRAIN_MASKS_BACKEND", failed.stderr)
+
+    def test_spirula_photometric_options_are_forwarded_and_guard_checkpoint_reuse(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            sparse = root / "sparse"
+            images = root / "images"
+            sparse.mkdir()
+            images.mkdir()
+            for name in ("cameras.bin", "images.bin", "points3D.bin"):
+                (sparse / name).write_bytes(b"colmap")
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            log = root / "commands.jsonl"
+            spirula = fake_bin / "spirula"
+            spirula.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "args = sys.argv[1:]\n"
+                "with open(os.environ['COMMAND_LOG'], 'a') as f: "
+                "f.write(json.dumps(['spirula'] + args) + '\\n')\n"
+                "if args[0] == 'train':\n"
+                "  import pathlib\n"
+                "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
+                "  iterations = int(args[args.index('--num-iterations') + 1])\n"
+                "  splats = pathlib.Path(prefix) / 'splats'\n"
+                "  ckpt = splats / f'step-{iterations:09d}.ckpt'\n"
+                "  ckpt.mkdir(parents=True, exist_ok=True)\n"
+                "  (ckpt / 'splat.ply').write_bytes(b'ply')\n"
+                "  (splats / 'scene_transform.json').write_text('{}')\n"
+            )
+            spirula.chmod(0o755)
+            python = fake_bin / "python"
+            python.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, sys\n"
+                "if sys.argv[1].endswith('export_ply.py'):\n"
+                "  args=sys.argv[2:]; out=args[args.index('--out-ply')+1]\n"
+                "  open(out, 'wb').write(b'splat')\n"
+                "else: os.execvp(os.environ['REAL_PYTHON'], [os.environ['REAL_PYTHON'], *sys.argv[1:]])\n"
+            )
+            python.chmod(0o755)
+            env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}",
+                       REAL_PYTHON=REAL_PYTHON, COMMAND_LOG=str(log),
+                       TRAIN_GROWTH_FACTOR="1.05", TRAIN_CAP_MAX="1000",
+                       TRAIN_SP_USE_PPISP="true",
+                       TRAIN_SP_PPISP_PARAM_TYPE="no_crf",
+                       TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="true",
+                       TRAIN_SP_USE_BILATERAL_GRID="false",
+                       TRAIN_SP_BILAGRID_TYPE="ppisp")
+            output = root / "output"
+            command = [
+                "bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                "--spirula-bin", str(spirula), "--python-bin", str(python),
+                "--sparse-dir", str(sparse), "--images-dir", str(images),
+                "--output-dir", str(output), "--num-iterations", "3",
+            ]
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            train = next(json.loads(line) for line in log.read_text().splitlines()
+                         if json.loads(line)[:2] == ["spirula", "train"])
+            for flag, value in (
+                ("--use-ppisp", "1"),
+                ("--ppisp-param-type", "no_crf"),
+                ("--ppisp-exposure-from-exif", "1"),
+                ("--use-bilateral-grid", "0"),
+                ("--bilagrid-type", "ppisp"),
+            ):
+                self.assertEqual(train[train.index(flag) + 1], value)
+            self.assertIn("ppisp_param_type=no_crf", (output / "train_sp_photometric.txt").read_text())
+
+            env["TRAIN_SP_PPISP_PARAM_TYPE"] = "no_crf_no_vig"
+            reused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(reused.returncode, 0, reused.stdout + reused.stderr)
+            self.assertIn("d'autres paramètres photométriques", reused.stderr)
+            self.assertEqual(sum(json.loads(line)[:2] == ["spirula", "train"]
+                                 for line in log.read_text().splitlines()), 1)
 
     def test_quality_is_forwarded_and_validated(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -114,6 +114,9 @@ SFM_MIN_TRI_ANGLE="3"
 SFM_BA_LOSS="huber"
 # Echelle robuste ]0,1000] en pixels d'extraction (Huber delta / Cauchy c).
 SFM_BA_LOSS_PARAM="2"
+# Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entrainement.
+# Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
+SFM_SP_IMAGE_EXPOSURE=""
 # Pour appliquer ces seuils a un SfM existant : choisir un nouvel OUTPUT_DIR.
 # TRAIN_CLEAN ne refait pas le SfM. Aucun nettoyage a posteriori ici.
 
@@ -261,6 +264,18 @@ TRAIN_QUALITY=""
 # carte robuste sensible aux contours et un score median entre observations.
 # Ne remplace pas les masques ni TRAIN_FLOATER_SUPPRESSION.
 TRAIN_DISTRACTION_ROBUSTNESS="off"
+# Corrections photometriques Spirula uniquement ; vide = defauts Spirula observes :
+# true, no_crf_no_vig, false, true, ppisp. Valeurs PPISP : original|rqs|no_crf|
+# no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp.
+TRAIN_SP_USE_PPISP=""
+TRAIN_SP_PPISP_PARAM_TYPE=""
+# Initialiser la correction d'exposition depuis les EXIF, s'ils sont disponibles.
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=""
+# PPISP ajuste exposition/couleur ; no_crf inclut le vignettage, no_crf_no_vig l'omet.
+# Booléens : true|false. La grille bilaterale affine aussi les couleurs.
+TRAIN_SP_USE_BILATERAL_GRID=""
+# Type de grille : affine|ppisp|loglinear.
+TRAIN_SP_BILAGRID_TYPE=""
 
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
 # Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.

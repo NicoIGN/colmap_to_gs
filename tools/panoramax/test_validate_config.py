@@ -231,6 +231,37 @@ SFM_MASKS_MAX_FRACTION=0
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("MASKS_ACCEPT_LICENSE", result.stderr)
 
+    def test_spirula_photometric_options_and_backend_guards(self):
+        result, _ = self.execute("validate_config.sh", """
+SFM_SP_IMAGE_EXPOSURE=-1.5
+TRAIN_SP_USE_PPISP=true
+TRAIN_SP_PPISP_PARAM_TYPE=no_crf
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=false
+TRAIN_SP_USE_BILATERAL_GRID=true
+TRAIN_SP_BILAGRID_TYPE=ppisp
+""")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+        result, root = self.execute("validate_config.sh", """
+TRAIN_BACKEND=nerfstudio
+TRAIN_SP_USE_PPISP=true
+""")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("TRAIN_SP_USE_PPISP", result.stderr)
+        self.assertFalse((root / "output").exists())
+
+        result, root = self.execute("validate_config.sh", """
+SFM_SP_IMAGE_EXPOSURE=auto
+SFM_PAIR_MAX_DISTANCE=30
+""")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("SFM_SP_IMAGE_EXPOSURE", result.stderr)
+        self.assertFalse((root / "output").exists())
+
+        result, _ = self.execute("validate_config.sh", "TRAIN_SP_PPISP_PARAM_TYPE=invalid\n")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("TRAIN_SP_PPISP_PARAM_TYPE", result.stderr)
+
     def test_training_quality_choices(self):
         for value in ("", "low", "medium", "high", "ultra"):
             result, _ = self.execute("validate_config.sh", f'TRAIN_QUALITY="{value}"\n')

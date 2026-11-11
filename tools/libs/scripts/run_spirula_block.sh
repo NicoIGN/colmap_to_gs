@@ -21,6 +21,11 @@ export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
 
 quality="${TRAIN_QUALITY:-}"
 distraction_robustness="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
+sp_use_ppisp="${TRAIN_SP_USE_PPISP:-}"
+sp_ppisp_param_type="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
+sp_ppisp_exposure_from_exif="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
+sp_use_bilateral_grid="${TRAIN_SP_USE_BILATERAL_GRID:-}"
+sp_bilagrid_type="${TRAIN_SP_BILAGRID_TYPE:-}"
 cap_max="${TRAIN_CAP_MAX:-}"
 densify_loss_map_mode="${DENSIFY_LOSS_MAP_MODE:-}"
 densify_score_mode="${DENSIFY_SCORE_MODE:-}"
@@ -178,6 +183,18 @@ case "$distraction_robustness" in
   off|mild|strong) ;;
   *) die "--distraction-robustness doit être off, mild ou strong." ;;
 esac
+for value in "$sp_use_ppisp" "$sp_ppisp_exposure_from_exif" "$sp_use_bilateral_grid"; do
+  [[ -z "$value" || "$value" == true || "$value" == false ]] ||
+    die "Les paramètres booléens TRAIN_SP_* doivent être vides, true ou false."
+done
+case "$sp_ppisp_param_type" in
+  ""|original|rqs|no_crf|no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp) ;;
+  *) die "TRAIN_SP_PPISP_PARAM_TYPE invalide : $sp_ppisp_param_type" ;;
+esac
+case "$sp_bilagrid_type" in
+  ""|affine|ppisp|loglinear) ;;
+  *) die "TRAIN_SP_BILAGRID_TYPE invalide : $sp_bilagrid_type" ;;
+esac
 
 is_positive_integer "$num_iterations" ||
   die "--num-iterations doit être un entier > 0"
@@ -203,6 +220,11 @@ case "$floater_suppression" in
   ""|off|mild|strong) ;;
   *) die "--floater-suppression attend off, mild ou strong" ;;
 esac
+
+photometric_signature="$(printf 'use_ppisp=%s\nppisp_param_type=%s\nppisp_exposure_from_exif=%s\nuse_bilateral_grid=%s\nbilagrid_type=%s' \
+  "$sp_use_ppisp" "$sp_ppisp_param_type" "$sp_ppisp_exposure_from_exif" \
+  "$sp_use_bilateral_grid" "$sp_bilagrid_type")"
+photometric_signature_file="$output_dir/train_sp_photometric.txt"
 
 if [[ -n "$min_init_fraction" ]]; then
   is_number "$min_init_fraction" || die "--min-init-fraction invalide"
@@ -377,6 +399,14 @@ fi
 if [[ "$clean" == false ]]; then
   if [[ -s "$final_ckpt" ]]; then
     log "Checkpoint final déjà présent. Entraînement ignoré."
+    previous_photometric_signature=""
+    [[ ! -f "$photometric_signature_file" ]] ||
+      previous_photometric_signature="$(cat "$photometric_signature_file")"
+    if [[ -z "$previous_photometric_signature" ]]; then
+      echo "[AVERTISSEMENT] Les paramètres photométriques Spirula du checkpoint ne sont pas connus ; --clean pour les appliquer avec certitude." >&2
+    elif [[ "$previous_photometric_signature" != "$photometric_signature" ]]; then
+      echo "[AVERTISSEMENT] Ce checkpoint a été entraîné avec d'autres paramètres photométriques Spirula (voir $photometric_signature_file) ; --clean pour réentraîner." >&2
+    fi
     previous_signature="masks=none"
     [[ ! -f "$masks_signature_file" ]] || previous_signature="$(cat "$masks_signature_file")"
     if [[ "$previous_signature" != "$masks_signature" ]]; then
@@ -398,7 +428,7 @@ fi
 
 if [[ "$clean" == true ]]; then
   rm -rf -- "$splats_dir"
-  rm -f -- "$train_done_file" "$export_done_file"
+  rm -f -- "$train_done_file" "$export_done_file" "$photometric_signature_file"
 fi
 
 [[ ! -L "$output_dir/sparse" ]] || die "$output_dir/sparse ne doit pas être un lien symbolique"
@@ -468,6 +498,21 @@ cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
+for pair in \
+  "use-ppisp:$sp_use_ppisp" \
+  "ppisp-exposure-from-exif:$sp_ppisp_exposure_from_exif" \
+  "use-bilateral-grid:$sp_use_bilateral_grid"; do
+  flag="${pair%%:*}"
+  value="${pair#*:}"
+  [[ -z "$value" ]] || {
+    [[ "$value" != true ]] || value=1
+    [[ "$value" != false ]] || value=0
+    cmd+=("--$flag" "$value")
+  }
+done
+[[ -z "$sp_ppisp_param_type" ]] ||
+  cmd+=(--ppisp-param-type "$sp_ppisp_param_type")
+[[ -z "$sp_bilagrid_type" ]] || cmd+=(--bilagrid-type "$sp_bilagrid_type")
 
 if [[ -n "$masks_dir" ]]; then
   apply_loss_for_mask=0
@@ -504,6 +549,7 @@ fi
   die "Entraînement terminé mais checkpoint final introuvable : $final_ckpt"
 
 mark_train_done "completed_training"
+printf '%s\n' "$photometric_signature" > "$photometric_signature_file"
 log "Entraînement terminé."
 log "Marqueur train : $train_done_file"
 

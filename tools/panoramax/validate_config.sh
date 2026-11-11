@@ -17,6 +17,10 @@ validate_config() {
     esac
   fi
   validate_sfm_geometry_config
+  validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
+  if [[ -n "${SFM_SP_IMAGE_EXPOSURE:-}" && -n "${SFM_PAIR_MAX_DISTANCE:-}" ]]; then
+    config_error "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_PAIR_MAX_DISTANCE)."
+  fi
   for name in OUTPUT_DIR PANORAMAX_BBOX SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
     [[ -n "${!name:-}" ]] || config_error "$name doit être défini et non vide."
   done

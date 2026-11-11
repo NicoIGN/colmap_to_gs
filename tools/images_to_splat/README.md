@@ -29,6 +29,15 @@ Les résultats sont séparés dans `gs/` et `gs-nerfstudio/`.
 Le recadrage et la fusion utilisent des exports dans les coordonnées COLMAP
 originales, après inversion de la transformation de chaque entraînement.
 
+**Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` ajuste
+l'exposition utilisée pendant l'analyse SfM ; ce réglage n'agit pas sur
+l'entraînement. Les paramètres `TRAIN_SP_*` pilotent la correction PPISP et la
+grille bilatérale pendant l'entraînement. `no_crf` inclut la correction du
+vignettage, contrairement à `no_crf_no_vig`. `TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF`
+peut initialiser la correction depuis les balises EXIF disponibles. Ces options
+ne sont pas transmises à Nerfstudio. Les valeurs vides conservent les défauts
+de Spirula installée ; voir [`config.sh.example`](config.sh.example).
+
 **Masques Nerfstudio.** Ils sont générés par
 [`tools/segmentation_masks`](../segmentation_masks/README.md), avec
 **Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et

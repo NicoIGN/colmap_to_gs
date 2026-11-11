@@ -620,6 +620,20 @@ if "--wait" in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
 
+    def test_spirula_exposure_is_forwarded_and_backend_specific(self):
+        self.append('SFM_SP_IMAGE_EXPOSURE="-1.5"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assert_ok(result)
+        sfm = next(cmd for cmd in self.commands() if cmd[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--image-exposure") + 1], "-1.5")
+
+        before = len(self.commands())
+        self.append('COLMAP_METHOD="colmap"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_SP_IMAGE_EXPOSURE est propre", result.stdout + result.stderr)
+        self.assertEqual(len(self.commands()), before)
+
     def test_strict_geometry_defaults_and_overrides_local_and_slurm(self):
         variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
                      "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM")

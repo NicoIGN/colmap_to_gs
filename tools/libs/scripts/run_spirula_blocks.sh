@@ -22,12 +22,18 @@ TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-}"
 TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
 TRAIN_QUALITY="${TRAIN_QUALITY:-}"
 TRAIN_DISTRACTION_ROBUSTNESS="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
+TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
+TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
+TRAIN_SP_USE_BILATERAL_GRID="${TRAIN_SP_USE_BILATERAL_GRID:-}"
+TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_PAIRS="${SFM_PAIRS:-prefilter}"
 SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
 SFM_MATCHER="${SFM_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
+SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
 init_sfm_geometry_config
 SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
@@ -82,12 +88,14 @@ Variables:
   TRAIN_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
   TRAIN_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
+  TRAIN_SP_*                Optional Spirula-only photometric training correction
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
   SFM_PAIRS                 Spirula pair selection (prefilter)
   SFM_FEATURES              Feature extractor (aliked-n16rot)
   SFM_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   SFM_THREADS               SfM CPU threads (empty: Spirula default)
+  SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
   SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (3)
@@ -116,6 +124,7 @@ Variables:
 
 Existing SfM and a complete matching block split are reused. Incomplete or
 mismatched split folders are never deleted automatically.
+SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_PAIR_MAX_DISTANCE.
 EOF
 }
 
@@ -146,6 +155,10 @@ esac
 [[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
 config_errors=0
 validate_sfm_geometry_config
+validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
+if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
+  die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_PAIR_MAX_DISTANCE)."
+fi
 ((config_errors == 0)) || exit 1
 
 for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS TRAIN_CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
@@ -340,6 +353,8 @@ prepare_blocks() {
       --ba-loss "$SFM_BA_LOSS" --ba-loss-param "$SFM_BA_LOSS_PARAM"
       --reuse-matches redo
     )
+    [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
+      sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"

@@ -49,6 +49,36 @@ validate_sfm_geometry_config() {
   done
 }
 
+validate_spirula_photometric_config() {
+  local train_backend="${1:-spirula}" sfm_backend="${2:-spirula}"
+  local name value
+  for name in TRAIN_SP_USE_PPISP TRAIN_SP_USE_BILATERAL_GRID \
+    TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF; do
+    value="${!name:-}"
+    [[ -z "$value" ]] || config_choice "$name" "$value" 'true|false'
+    if [[ -n "$value" && "$train_backend" != spirula ]]; then
+      config_error "$name est propre à Spirula et exige TRAIN_BACKEND=spirula."
+    fi
+  done
+  value="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
+  [[ -z "$value" ]] || config_choice TRAIN_SP_PPISP_PARAM_TYPE "$value" \
+    'original|rqs|no_crf|no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp'
+  [[ -z "$value" || "$train_backend" == spirula ]] ||
+    config_error "TRAIN_SP_PPISP_PARAM_TYPE est propre à Spirula et exige TRAIN_BACKEND=spirula."
+  value="${TRAIN_SP_BILAGRID_TYPE:-}"
+  [[ -z "$value" ]] || config_choice TRAIN_SP_BILAGRID_TYPE "$value" \
+    'affine|ppisp|loglinear'
+  [[ -z "$value" || "$train_backend" == spirula ]] ||
+    config_error "TRAIN_SP_BILAGRID_TYPE est propre à Spirula et exige TRAIN_BACKEND=spirula."
+
+  value="${SFM_SP_IMAGE_EXPOSURE:-}"
+  if [[ -n "$value" && ! "$value" =~ ^(auto|[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+))$ ]]; then
+    config_error "SFM_SP_IMAGE_EXPOSURE doit être vide, auto ou un nombre de stops."
+  fi
+  [[ -z "$value" || "$sfm_backend" == spirula ]] ||
+    config_error "SFM_SP_IMAGE_EXPOSURE est propre au SfM Spirula."
+}
+
 reject_legacy_config() {
   local entry name replacement failed=0
   for entry in \
