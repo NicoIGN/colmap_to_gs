@@ -9,6 +9,22 @@ SPIRULA_BIN="/chemin/spirula"
 COLMAP_METHOD="spirula" # ou colmap pour COLMAP/SIFT direct avec masques
 TRAIN_BACKEND="nerfstudio"
 
+# Les options d'entrainement TRAIN_SP_* de la configuration source ne
+# s'appliquent pas a Nerfstudio ; les vider pour rendre ce choix explicite.
+TRAIN_SP_PRESET=""
+TRAIN_SP_QUALITY=""
+TRAIN_SP_CAP_MAX=""
+TRAIN_SP_GROWTH_FACTOR=""
+TRAIN_SP_REFINE_STOP_ITER=""
+TRAIN_SP_REFINE_STOP_NUM_ITER=""
+TRAIN_SP_FLOATER_SUPPRESSION=""
+TRAIN_SP_DISTRACTION_ROBUSTNESS=""
+TRAIN_SP_USE_PPISP=""
+TRAIN_SP_PPISP_PARAM_TYPE=""
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=""
+TRAIN_SP_USE_BILATERAL_GRID=""
+TRAIN_SP_BILAGRID_TYPE=""
+
 # Le tool segmentation_masks genere les PNG charges par Nerfstudio.
 SFM_MASKS="on"
 TRAIN_MASKS="on"
@@ -23,8 +39,8 @@ TRAIN_MASKS_MODE="ignore"
 TRAIN_MASKS_DEVICE="auto"
 TRAIN_MASKS_CONFIDENCE="0.5"
 
-NS_TRAIN_BIN="/chemin/conda/envs/nerfstudio/bin/ns-train"
-NS_EXPORT_BIN="/chemin/conda/envs/nerfstudio/bin/ns-export"
-NS_DOWNSCALE_FACTOR="1"
+TRAIN_NS_TRAIN_BIN="/chemin/conda/envs/nerfstudio/bin/ns-train"
+TRAIN_NS_EXPORT_BIN="/chemin/conda/envs/nerfstudio/bin/ns-export"
+TRAIN_NS_DOWNSCALE_FACTOR="1"
 TRAIN_NUM_ITER="30000"
 EXPORT_SPLAT_NAME="scene-nerfstudio.splat"

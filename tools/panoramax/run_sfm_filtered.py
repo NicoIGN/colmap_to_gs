@@ -43,7 +43,7 @@ def signature(args, images):
 
 def run(args):
     if not math.isfinite(args.max_distance) or args.max_distance <= 0:
-        raise ValueError("SFM_PAIR_MAX_DISTANCE doit être fini et strictement positif")
+        raise ValueError("SFM_SP_PAIR_MAX_DISTANCE doit être fini et strictement positif")
     if args.threads < 0 or args.max_image_size <= 0 or args.aliked_max_features <= 0:
         raise ValueError("Résolution et budget de points doivent être positifs ; fils CPU >= 0")
     if (not 4 <= args.min_inliers <= 1000000 or
@@ -118,7 +118,7 @@ def run(args):
     counts = filter_matches(original, filtered, args.dataset / "metadata", args.max_distance)
     (args.output / "gps_filter_summary.json").write_text(json.dumps(counts, indent=2) + "\n")
     if not counts["kept_pairs"]:
-        raise ValueError("Aucune paire après filtrage GPS ; augmenter SFM_PAIR_MAX_DISTANCE")
+        raise ValueError("Aucune paire après filtrage GPS ; augmenter SFM_SP_PAIR_MAX_DISTANCE")
     print(f"[SFM GPS] reconstruction : {shlex.join(mapping)}", flush=True)
     subprocess.run(mapping, check=True)
     if not all((sparse / name).is_file() and (sparse / name).stat().st_size

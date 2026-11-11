@@ -50,8 +50,8 @@ class BlockPipelineTest(unittest.TestCase):
 
     def test_strict_geometry_reaches_native_sfm_and_guards_reuse(self):
         for overrides in ({}, {"SFM_MAX_ERROR": "1.5", "SFM_MIN_INLIERS": "50",
-                               "SFM_MIN_TRI_ANGLE": "4", "SFM_BA_LOSS": "cauchy",
-                               "SFM_BA_LOSS_PARAM": "1"}):
+                               "SFM_MIN_TRI_ANGLE": "4", "SFM_SP_BA_LOSS": "cauchy",
+                               "SFM_SP_BA_LOSS_PARAM": "1"}):
             with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
                 shutil.rmtree(data / "sfm-3")
@@ -65,8 +65,8 @@ class BlockPipelineTest(unittest.TestCase):
                     ("--max-error", "SFM_MAX_ERROR", "2"),
                     ("--min-inliers", "SFM_MIN_INLIERS", "30"),
                     ("--min-tri-angle", "SFM_MIN_TRI_ANGLE", "3"),
-                    ("--ba-loss", "SFM_BA_LOSS", "huber"),
-                    ("--ba-loss-param", "SFM_BA_LOSS_PARAM", "2"),
+                    ("--ba-loss", "SFM_SP_BA_LOSS", "huber"),
+                    ("--ba-loss-param", "SFM_SP_BA_LOSS_PARAM", "2"),
                 ):
                     self.assertEqual(sfm[sfm.index(flag) + 1], overrides.get(key, default))
                 self.assertEqual(sfm[sfm.index("--reuse-matches") + 1], "redo")
@@ -164,8 +164,8 @@ class BlockPipelineTest(unittest.TestCase):
                 COMMAND_LOG=str(log),
                 TRAIN_NUM_ITER="3",
                 SPLIT_NUM_BLOCKS="2",
-                TRAIN_CAP_MAX="1000",
-                TRAIN_GROWTH_FACTOR="1.05",
+                TRAIN_SP_CAP_MAX="1000",
+                TRAIN_SP_GROWTH_FACTOR="1.05",
             )
 
             def execute(*args):
@@ -180,12 +180,12 @@ class BlockPipelineTest(unittest.TestCase):
         for mode in ("local", "array"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
-                env.update(TRAIN_NUM_ITER="20000", TRAIN_CAP_MAX="8000000",
-                           TRAIN_REFINE_STOP_ITER="14000", TRAIN_REFINE_STOP_NUM_ITER="4000")
+                env.update(TRAIN_NUM_ITER="20000", TRAIN_SP_CAP_MAX="8000000",
+                           TRAIN_SP_REFINE_STOP_ITER="14000", TRAIN_SP_REFINE_STOP_NUM_ITER="4000")
                 if mode == "local":
-                    env["TRAIN_GROWTH_FACTOR"] = ""
+                    env["TRAIN_SP_GROWTH_FACTOR"] = ""
                 else:
-                    env.pop("TRAIN_GROWTH_FACTOR")
+                    env.pop("TRAIN_SP_GROWTH_FACTOR")
                 (data / "sfm-3").rename(data / "sfm-20000")
                 if mode == "array":
                     prepared = execute("--prepare-only")
@@ -210,23 +210,23 @@ class BlockPipelineTest(unittest.TestCase):
         cases = (
             # Every growth step is strictly inside (500, stop).
             ({}, ["--num-iterations", "20000"], 10 ** (1 / 169), 169, False),
-            ({"TRAIN_REFINE_STOP_ITER": "18000", "TRAIN_REFINE_STOP_NUM_ITER": "12000"},
+            ({"TRAIN_SP_REFINE_STOP_ITER": "18000", "TRAIN_SP_REFINE_STOP_NUM_ITER": "12000"},
              ["--num-iterations", "30000"], 10 ** (1 / 174), 174, False),
-            ({"TRAIN_REFINE_STOP_ITER": "14000", "TRAIN_REFINE_STOP_NUM_ITER": "4000"},
+            ({"TRAIN_SP_REFINE_STOP_ITER": "14000", "TRAIN_SP_REFINE_STOP_NUM_ITER": "4000"},
              ["--num-iterations", "20000", "--min-init-fraction", "0.2"],
              5 ** (1 / 154), 154, False),
             ({}, ["--num-iterations", "700"], 1.05, 1, True),
             ({}, ["--num-iterations", "300000"], 1.001, 2969, True),
-            ({"TRAIN_GROWTH_FACTOR": "1.08"}, ["--num-iterations", "3"], 1.08, None, False),
-            ({"TRAIN_GROWTH_FACTOR": "1.01"}, ["--num-iterations", "20000"],
+            ({"TRAIN_SP_GROWTH_FACTOR": "1.08"}, ["--num-iterations", "3"], 1.08, None, False),
+            ({"TRAIN_SP_GROWTH_FACTOR": "1.01"}, ["--num-iterations", "20000"],
              1.01, None, False),
-            ({"TRAIN_GROWTH_FACTOR": "1.01"},
+            ({"TRAIN_SP_GROWTH_FACTOR": "1.01"},
              ["--num-iterations", "20000", "--growth-factor", "1.02"], 1.02, None, False),
         )
         for settings, args, expected, cycles, bounded in cases:
             with self.subTest(settings=settings, args=args), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
-                env["TRAIN_GROWTH_FACTOR"] = ""
+                env["TRAIN_SP_GROWTH_FACTOR"] = ""
                 env.update(settings)
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
@@ -254,14 +254,14 @@ class BlockPipelineTest(unittest.TestCase):
                       "--refine-stop-num-iter", "19500"]):
             with self.subTest(args=args), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
-                env.pop("TRAIN_GROWTH_FACTOR")
+                env.pop("TRAIN_SP_GROWTH_FACTOR")
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
                      "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
                      "--output-dir", str(root / "unused"), *args],
                     env=env, capture_output=True, text=True, timeout=10)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("Estimation TRAIN_GROWTH_FACTOR impossible", result.stderr)
+                self.assertIn("Estimation TRAIN_SP_GROWTH_FACTOR impossible", result.stderr)
                 self.assertFalse(log.exists())
                 self.assertFalse((root / "unused").exists())
 
@@ -286,8 +286,8 @@ class BlockPipelineTest(unittest.TestCase):
             )
             wrapper.chmod(0o755)
             env.pop("LC_ALL", None)
-            env.update(TRAIN_GROWTH_FACTOR="", LC_NUMERIC="C",
-                       TRAIN_REFINE_STOP_ITER="12000", TRAIN_REFINE_STOP_NUM_ITER="3000")
+            env.update(TRAIN_SP_GROWTH_FACTOR="", LC_NUMERIC="C",
+                       TRAIN_SP_REFINE_STOP_ITER="12000", TRAIN_SP_REFINE_STOP_NUM_ITER="3000")
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
@@ -325,7 +325,7 @@ class BlockPipelineTest(unittest.TestCase):
 
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
                 (sparse / name).unlink()
-            env.update(SFM_FEATURES="aliked-n16rot", SFM_MATCHER="bruteforce",
+            env.update(SFM_SP_FEATURES="aliked-n16rot", SFM_SP_MATCHER="bruteforce",
                        SFM_THREADS="6", PREPARE="false")
             prepared = execute("--prepare-only")
             self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
@@ -511,7 +511,7 @@ class BlockPipelineTest(unittest.TestCase):
             python.chmod(0o755)
             env = dict(os.environ, PATH=f"{fake_bin}:{os.environ['PATH']}",
                        REAL_PYTHON=REAL_PYTHON, COMMAND_LOG=str(log),
-                       TRAIN_GROWTH_FACTOR="1.05", TRAIN_CAP_MAX="1000",
+                       TRAIN_SP_GROWTH_FACTOR="1.05", TRAIN_SP_CAP_MAX="1000",
                        TRAIN_SP_USE_PPISP="true",
                        TRAIN_SP_PPISP_PARAM_TYPE="no_crf",
                        TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="true",
@@ -548,8 +548,8 @@ class BlockPipelineTest(unittest.TestCase):
     def test_quality_is_forwarded_and_validated(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
-            env["TRAIN_QUALITY"] = "ultra"
-            env["TRAIN_DISTRACTION_ROBUSTNESS"] = "strong"
+            env["TRAIN_SP_QUALITY"] = "ultra"
+            env["TRAIN_SP_DISTRACTION_ROBUSTNESS"] = "strong"
             result = execute()
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -559,10 +559,10 @@ class BlockPipelineTest(unittest.TestCase):
                     self.assertEqual(cmd[cmd.index("--distraction-robustness") + 1], "strong")
                     self.assertEqual(cmd[cmd.index("--cap-max") + 1], "1000")
                     self.assertEqual(cmd[cmd.index("--num-iterations") + 1], "3")
-            env["TRAIN_QUALITY"] = "invalid"
+            env["TRAIN_SP_QUALITY"] = "invalid"
             result = execute("--prepare-only")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TRAIN_QUALITY", result.stderr)
+            self.assertIn("TRAIN_SP_QUALITY", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
@@ -575,10 +575,10 @@ class BlockPipelineTest(unittest.TestCase):
     def test_invalid_distraction_robustness_is_rejected_by_workers(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
-            env["TRAIN_DISTRACTION_ROBUSTNESS"] = "invalid"
+            env["TRAIN_SP_DISTRACTION_ROBUSTNESS"] = "invalid"
             result = execute("--prepare-only")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TRAIN_DISTRACTION_ROBUSTNESS", result.stderr)
+            self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),

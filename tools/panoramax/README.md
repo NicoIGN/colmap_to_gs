@@ -14,7 +14,16 @@ le mode `empty` n'est pas transposé.
 Les résultats Nerfstudio ont un suffixe `-nerfstudio` pour ne pas réutiliser
 les checkpoints Spirula. La fusion reste en coordonnées COLMAP originales.
 Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfacto.
-`NS_TRAIN_BIN`, `NS_EXPORT_BIN` et `NS_DOWNSCALE_FACTOR` règlent ce moteur.
+`TRAIN_NS_TRAIN_BIN`, `TRAIN_NS_EXPORT_BIN` et `TRAIN_NS_DOWNSCALE_FACTOR` règlent ce moteur.
+
+**Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
+de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
+`SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
+`SFM_ALIKED_MAX_FEATURES` et `SFM_THREADS` sont les paramètres communs exposés
+à cette étape. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
+reste partagé. Les exemples et commentaires de
+[`config.sh.example`](config.sh.example) regroupent ces paramètres par backend.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
@@ -22,7 +31,7 @@ correction PPISP et la grille bilatérale à l'entraînement ; `no_crf` inclut l
 vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
 si ces métadonnées sont présentes. Ces options ne sont pas transmises à
 Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
-`SFM_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
+`SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
 [`config.sh.example`](config.sh.example).
 
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
@@ -70,12 +79,14 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ## 3. Configuration et utilisation
 
-### Contrôles géométriques du pipeline SfM
+### Paramètres SfM exposés
 
-- `SFM_*` : contrôles de reprojection, d'appariement et de triangulation ;
-  valeurs, unités et défauts dans [`config.sh.example`](config.sh.example),
-  section « 2. Reconstruction SfM et appariement ». Ces réglages sont partagés
-  avec le pipeline [images locales](../images_to_splat/README.md).
+- `SFM_MAX_ERROR`, `SFM_MIN_INLIERS` et `SFM_MIN_TRI_ANGLE` règlent les seuils
+  géométriques. `SFM_SP_BA_LOSS` et `SFM_SP_BA_LOSS_PARAM` sont propres au
+  bundle adjustment Spirula.
+- `SFM_SP_FEATURES`, `SFM_SP_MATCHER`, `SFM_SP_PAIRS`,
+  `SFM_SP_IMAGE_EXPOSURE` et `SFM_SP_PAIR_MAX_DISTANCE` sont spécifiques à
+  Spirula. Le dernier filtre les paires par distance GPS.
 - Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
   `match` et `map` concernées.
 - `tools/libs/scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
@@ -173,14 +184,14 @@ n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
 cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
-# Éditer paris.sh : bbox et code EPSG, OUTPUT_DIR, nombre de blocs, TRAIN_CAP_MAX, etc.
+# Éditer paris.sh : bbox et code EPSG, OUTPUT_DIR, nombre de blocs, TRAIN_SP_CAP_MAX, etc.
 bash script/panoramax_to_3dgs.sh /chemin/vers/paris.sh
 ```
 
 - Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
   avant toute soumission.
 - Erreurs : regroupées et indiquent le paramètre, sa valeur et les valeurs
-  attendues (par exemple `lightblue` est refusé pour `SFM_MATCHER`, sans
+  attendues (par exemple `lightblue` est refusé pour `SFM_SP_MATCHER`, sans
   correction automatique).
 - Listes Spirula : correspondent aux options prises en charge par ce lanceur ;
   les actualiser si une future version ajoute des extracteurs, apparieurs ou préréglages.
@@ -237,23 +248,23 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 
 #### Qualité d'entraînement
 
-- `TRAIN_DISTRACTION_ROBUSTNESS="off"` : défaut ; valeurs possibles `mild` et
+- `TRAIN_SP_DISTRACTION_ROBUSTNESS="off"` : défaut ; valeurs possibles `mild` et
   `strong` également ;
   transmet `--distraction-robustness` à Spirula en local et sous Slurm.
 - `mild` et `strong` modifient les scores de densification pour limiter
   l'influence des incohérences entre photos. Commencer par `mild` ; `strong`
   peut aussi atténuer des détails peu observés.
-- Ce réglage ne remplace ni les masques ni `TRAIN_FLOATER_SUPPRESSION`.
+- Ce réglage ne remplace ni les masques ni `TRAIN_SP_FLOATER_SUPPRESSION`.
 - Appliquer à un bloc terminé : réentraîner avec `TRAIN_CLEAN=true`.
 
-- `TRAIN_QUALITY=""` : défaut ; valeurs possibles `low`, `medium`, `high` ou
+- `TRAIN_SP_QUALITY=""` : défaut ; valeurs possibles `low`, `medium`, `high` ou
   `ultra`. Vide conserve le comportement précédent. Une valeur renseignée transmet
   `--quality` à `spirula train`, en local comme sous Slurm.
 - Dans Spirula, cette macro propose un budget de splats et une durée ; ce n'est
   pas un réglage de résolution.
-- Priorité : les valeurs explicites `TRAIN_CAP_MAX` (éventuellement limité par
-  `TRAIN_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires ;
-  changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
+- Priorité : les valeurs explicites `TRAIN_SP_CAP_MAX` (éventuellement limité par
+  `TRAIN_SP_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires ;
+  changer uniquement `TRAIN_SP_QUALITY` ne relève donc pas ces deux valeurs.
 
 #### Masques avant SfM et partage avec l'entraînement
 
@@ -314,23 +325,23 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 
 - Spirula (MCMC) augmente le nombre de splats jusqu'à `cap_max` ; atteindre le
   plafond est donc attendu.
-- `TRAIN_CAP_MAX` : plafond dur **par bloc** ; valeur initiale `1500000`.
-- `TRAIN_SPLATS_PER_IMAGE` : défaut vide ; le budget reste `TRAIN_CAP_MAX`.
-- `TRAIN_GROWTH_FACTOR` : défaut vide ; le facteur de croissance est estimé
+- `TRAIN_SP_CAP_MAX` : plafond dur **par bloc** ; valeur initiale `1500000`.
+- `TRAIN_SP_SPLATS_PER_IMAGE` : défaut vide ; le budget reste `TRAIN_SP_CAP_MAX`.
+- `TRAIN_SP_GROWTH_FACTOR` : défaut vide ; le facteur de croissance est estimé
   automatiquement. Une valeur explicite reste prioritaire et n'est pas bornée
   automatiquement.
-- `TRAIN_REFINE_STOP_ITER` : défaut vide ; valeur d'arrêt effective par défaut
-  déterminée avec `TRAIN_REFINE_STOP_NUM_ITER`.
-- `TRAIN_REFINE_STOP_NUM_ITER` : défaut vide ; paramètres d'arrêt par défaut
+- `TRAIN_SP_REFINE_STOP_ITER` : défaut vide ; valeur d'arrêt effective par défaut
+  déterminée avec `TRAIN_SP_REFINE_STOP_NUM_ITER`.
+- `TRAIN_SP_REFINE_STOP_NUM_ITER` : défaut vide ; paramètres d'arrêt par défaut
   `14000/2500`.
-- Avec ces variables vides, le budget reste `TRAIN_CAP_MAX`, la croissance est
+- Avec ces variables vides, le budget reste `TRAIN_SP_CAP_MAX`, la croissance est
   estimée automatiquement et les paramètres d'arrêt utilisés sont `14000/2500`.
-- Estimation automatique : si `TRAIN_GROWTH_FACTOR` est absent ou vide, chaque
+- Estimation automatique : si `TRAIN_SP_GROWTH_FACTOR` est absent ou vide, chaque
   worker local ou Slurm estime le facteur pour approcher le plafond **à la fin
   de la croissance** avec `facteur = (plafond / nombre_initial_estimé)^(1 / cycles)`,
   borné à **[1.001, 1.05]**.
 - Initialisation estimée : `10 %` du budget (rapport égal à 10 quel que soit
-  le plafond, y compris avec `TRAIN_SPLATS_PER_IMAGE`). L'option worker
+  le plafond, y compris avec `TRAIN_SP_SPLATS_PER_IMAGE`). L'option worker
   `--min-init-fraction`, si utilisée, remplace cette fraction.
 - Cycles : tous les 100 pas, strictement après 500 et strictement avant
   `min(TRAIN_NUM_ITER, arrêt_effectif)`, selon le calendrier natif Spirula.
@@ -345,14 +356,14 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   le nombre initial peut dépasser 10 % si le nuage sparse est plus fourni, et
   la dynamique réelle de densification/relocalisation peut modifier la trajectoire.
 - Exemple de réglage sobre :
-  - `TRAIN_SPLATS_PER_IMAGE="2000"` : budget
-    `min(TRAIN_CAP_MAX, images × TRAIN_SPLATS_PER_IMAGE)`.
-  - `TRAIN_GROWTH_FACTOR="1.03"`.
-  - `TRAIN_REFINE_STOP_ITER="18000"`.
-  - `TRAIN_REFINE_STOP_NUM_ITER="12000"`.
+  - `TRAIN_SP_SPLATS_PER_IMAGE="2000"` : budget
+    `min(TRAIN_SP_CAP_MAX, images × TRAIN_SP_SPLATS_PER_IMAGE)`.
+  - `TRAIN_SP_GROWTH_FACTOR="1.03"`.
+  - `TRAIN_SP_REFINE_STOP_ITER="18000"`.
+  - `TRAIN_SP_REFINE_STOP_NUM_ITER="12000"`.
   Avec 30000 itérations, la croissance s'arrête à 60 % du calcul.
-- Arrêt effectif : `max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)`.
-- Calibrer `TRAIN_SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas
+- Arrêt effectif : `max(TRAIN_SP_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER)`.
+- Calibrer `TRAIN_SP_SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas
   sur le PSNR d'une étape isolée.
 - Réexport des blocs : sans filtre de BBOX/taille lors de leur relance et sans
   réentraînement si le checkpoint final existe et `TRAIN_CLEAN=false` ; c'est
@@ -367,11 +378,11 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 
 #### Filtre exclusif des paires par distance GPS
 
-- `SFM_PAIR_MAX_DISTANCE` : rayon en mètres ; valeur `""` désactive le filtre
+- `SFM_SP_PAIR_MAX_DISTANCE` : rayon en mètres ; valeur `""` désactive le filtre
   (défaut).
 
 ```bash
-SFM_PAIR_MAX_DISTANCE="30"  # mètres ; "" désactive le filtre (défaut)
+SFM_SP_PAIR_MAX_DISTANCE="30"  # mètres ; "" désactive le filtre (défaut)
 ```
 
 Quand il est activé, le pipeline exécute les commandes natives Spirula
@@ -384,10 +395,10 @@ La distance est géodésique horizontale WGS84, calculée depuis les coordonnée
 des métadonnées Panoramax ; l'altitude n'intervient pas.
 
 Ce filtre retire des paires candidates ; il n'en ajoute aucune, contrairement
-au `--sensor-pairs` du mode auto non filtré. `SFM_PAIRS` continue de choisir les
+au `--sensor-pairs` du mode auto non filtré. `SFM_SP_PAIRS` continue de choisir les
 candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
 réduit donc pas son coût et ne corrige pas un plantage LightGlue. En cas de
-plantage connu, configurer séparément `SFM_MATCHER="bruteforce"`.
+plantage connu, configurer séparément `SFM_SP_MATCHER="bruteforce"`.
 
 Le workspace `panoramax/sfm-TRAIN_NUM_ITER/` conserve `matches.bin` original,
 `matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
@@ -423,7 +434,7 @@ bash script/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
 Si Spirula plante dans LightGlue avec `gemm: weight is ... but out has ...`,
 il s'agit d'une incompatibilité de dimensions dans l'appariement, avant la
 reconstruction et l'entraînement des splats. Le code `139` indique un SIGSEGV,
-pas à lui seul un manque de mémoire GPU. Essayer `SFM_MATCHER="bruteforce"`
+pas à lui seul un manque de mémoire GPU. Essayer `SFM_SP_MATCHER="bruteforce"`
 pour contourner LightGlue, ou mettre à jour Spirula ; aucun contournement
 automatique ne change la méthode de calcul à l'insu de l'utilisateur.
 Si `sfm auto` termine avec SIGSEGV après l'export, le wrapper vérifie que les

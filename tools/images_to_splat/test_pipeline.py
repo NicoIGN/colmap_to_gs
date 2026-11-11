@@ -158,8 +158,8 @@ if args[0] == "sfm":
     assert "--sequence" not in args
     for flag, variable in (
         ("--max-error", "SFM_MAX_ERROR"), ("--min-inliers", "SFM_MIN_INLIERS"),
-        ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_BA_LOSS"),
-        ("--ba-loss-param", "SFM_BA_LOSS_PARAM"),
+        ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_SP_BA_LOSS"),
+        ("--ba-loss-param", "SFM_SP_BA_LOSS_PARAM"),
     ):
         assert get(flag) == os.environ[variable]
     assert get("--reuse-matches") == "redo"
@@ -636,7 +636,7 @@ if "--wait" in args:
 
     def test_strict_geometry_defaults_and_overrides_local_and_slurm(self):
         variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
-                     "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM")
+                     "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM")
         flags = ("--max-error", "--min-inliers", "--min-tri-angle", "--ba-loss", "--ba-loss-param")
         for slurm, values in ((False, ("2", "30", "3", "huber", "2")),
                               (True, ("1.5", "50", "4", "cauchy", "1"))):
@@ -658,11 +658,11 @@ if "--wait" in args:
 
     def test_invalid_geometry_stops_before_submission(self):
         self.append("SFM_MAX_ERROR=nan\nSFM_MIN_INLIERS=0\nSFM_MIN_TRI_ANGLE=91\n"
-                    "SFM_BA_LOSS=none\nSFM_BA_LOSS_PARAM=-1")
+                    "SFM_SP_BA_LOSS=none\nSFM_BA_LOSS_PARAM=-1")
         result = self.run_pipeline(slurm=True)
         self.assertNotEqual(result.returncode, 0)
         for name in ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
-                     "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM"):
+                     "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM"):
             self.assertIn(name, result.stderr)
         self.assertFalse(self.jobs.exists())
 
@@ -774,12 +774,12 @@ if "--wait" in args:
                     self.assertFalse(cropped.exists())
 
     def test_validation_and_no_images(self):
-        self.append("TRAIN_CAP_MAX=0")
+        self.append("TRAIN_SP_CAP_MAX=0")
         result = self.run_pipeline(slurm=True)
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("TRAIN_CAP_MAX", result.stderr)
+        self.assertIn("TRAIN_SP_CAP_MAX", result.stderr)
         self.assertFalse(self.jobs.exists())
-        self.append(f'TRAIN_CAP_MAX=2000000\nOUTPUT_DIR="{self.images / "output"}"')
+        self.append(f'TRAIN_SP_CAP_MAX=2000000\nOUTPUT_DIR="{self.images / "output"}"')
         result = self.run_pipeline()
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("extérieur", result.stderr)

@@ -38,6 +38,16 @@ peut initialiser la correction depuis les balises EXIF disponibles. Ces options
 ne sont pas transmises à Nerfstudio. Les valeurs vides conservent les défauts
 de Spirula installée ; voir [`config.sh.example`](config.sh.example).
 
+**Paramètres par backend.** Le fichier d'exemple regroupe les réglages SfM
+communs (`SFM_MAX_*`, seuils géométriques et threads), puis les options
+`SFM_SP_*`, `SFM_COLMAP_*` et `SFM_NS_*` selon le producteur sélectionné par
+`COLMAP_METHOD`. Les réglages `TRAIN_SP_*` ne s'appliquent qu'à
+`TRAIN_BACKEND=spirula` ; `TRAIN_NS_*` ne s'appliquent qu'à
+`TRAIN_BACKEND=nerfstudio`. `TRAIN_NUM_ITER` et `TRAIN_CLEAN` sont communs.
+Les options SfM `SFM_SP_*` non applicables à la méthode sélectionnée sont
+refusées ; les options d'entraînement `TRAIN_SP_*` n'affectent pas Nerfstudio
+et ne lui sont pas transmises.
+
 **Masques Nerfstudio.** Ils sont générés par
 [`tools/segmentation_masks`](../segmentation_masks/README.md), avec
 **Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et
@@ -46,8 +56,8 @@ de Spirula installée ; voir [`config.sh.example`](config.sh.example).
 du `transforms.json` transmis à Nerfstudio.
 Le mode `empty` de Spirula n'est pas transposé. Les paramètres Spirula de cap,
 qualité, croissance, flottants et distractions ne sont pas appliqués à Splatfacto ;
-`TRAIN_NUM_ITER` reste commun. `NS_DOWNSCALE_FACTOR` règle la réduction des images.
-`NS_TRAIN_BIN` et `NS_EXPORT_BIN` choisissent les exécutables de l'environnement
+`TRAIN_NUM_ITER` reste commun. `TRAIN_NS_DOWNSCALE_FACTOR` règle la réduction des images.
+`TRAIN_NS_TRAIN_BIN` et `TRAIN_NS_EXPORT_BIN` choisissent les exécutables de l'environnement
 correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
 
 **Exemple Nerfstudio.** Le fichier
@@ -132,7 +142,7 @@ de splats pour chaque bloc.
   [`config.sh.example`](config.sh.example), section « 4. Entrainement de chaque bloc ».
   Les budgets s'appliquent **par bloc**.
 - Cap : maximum ; ni le nombre final ni la qualité ne sont garantis.
-- `TRAIN_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
+- `TRAIN_SP_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
   une initialisation à 10 % du cap ; un nuage sparse plus fourni peut faire
   atteindre le cap plus tôt.
 ### Protection des résultats et reprise

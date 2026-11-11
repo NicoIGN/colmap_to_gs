@@ -5,10 +5,13 @@ OUTPUT_DIR="/chemin/dataset-colmap"
 PYTHON_BIN="python3"
 COLMAP_METHOD="spirula" # spirula | colmap | nerfstudio | orientations
 SPIRULA_BIN="/chemin/spirula"
-COLMAP_BIN="colmap"
-COLMAP_USE_GPU="false"
-COLMAP_MATCHING="exhaustive"
-NS_PROCESS_DATA_BIN="ns-process-data"
+# --- COLMAP_METHOD=colmap uniquement ---
+SFM_COLMAP_BIN="colmap"
+SFM_COLMAP_USE_GPU="false"
+# --- Matching COLMAP direct / ns-process-data ---
+SFM_COLMAP_MATCHING="exhaustive"
+# --- COLMAP_METHOD=nerfstudio uniquement ---
+SFM_NS_PROCESS_DATA_BIN="ns-process-data"
 SFM_CAMERA_MODEL="opencv"
 SFM_CAMERA_MODE="single" # ns-process-data : single obligatoire
 SFM_MAX_IMAGE_SIZE="2048"

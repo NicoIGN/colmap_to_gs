@@ -232,17 +232,17 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f'SPIRULA_BIN="{spirula}"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
                 'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_CAP_MAX="1000"\n'
-                'TRAIN_PRESET="3dgs"\nTRAIN_QUALITY="high"\nTRAIN_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
+                'TRAIN_SP_PRESET="3dgs"\nTRAIN_QUALITY="high"\nTRAIN_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
-                'SFM_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
+                'SFM_SP_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
                 'SFM_MAX_ERROR="1.5"\nSFM_MIN_INLIERS="40"\nSFM_MIN_TRI_ANGLE="4"\n'
-                'SFM_BA_LOSS="cauchy"\nSFM_BA_LOSS_PARAM="1"\n'
+                'SFM_SP_BA_LOSS="cauchy"\nSFM_BA_LOSS_PARAM="1"\n'
                 'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'
                 'EXPORT_SPLAT_NAME="test.splat"\nMERGE_STRENGTH="1.0"\n'
                 'POSTPROCESS_FILTER_MODE="apply"\nPOSTPROCESS_FILTER_SIZE_FACTOR="12"\n'
                 'POSTPROCESS_SPARSE_BBOX_MODE="diagnostic"\nPOSTPROCESS_SPARSE_BBOX_MARGIN="0.1"\n'
-                'TRAIN_SPLATS_PER_IMAGE="200"\nTRAIN_GROWTH_FACTOR="1.03"\n'
-                'TRAIN_REFINE_STOP_ITER="2"\nTRAIN_REFINE_STOP_NUM_ITER="1"\nTRAIN_FLOATER_SUPPRESSION="mild"\n'
+                'TRAIN_SP_SPLATS_PER_IMAGE="200"\nTRAIN_GROWTH_FACTOR="1.03"\n'
+                'TRAIN_SP_REFINE_STOP_ITER="2"\nTRAIN_REFINE_STOP_NUM_ITER="1"\nTRAIN_FLOATER_SUPPRESSION="mild"\n'
             )
             log = root / "commands.log"
 
@@ -348,12 +348,12 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 self.assertEqual((splats / f"Paris-3-block-{index:03d}.splat").read_bytes(),
                                  b"splat")
             with config.open("a") as stream:
-                stream.write('SFM_PAIR_MAX_DISTANCE=""\n')
+                stream.write('SFM_SP_PAIR_MAX_DISTANCE=""\n')
             result = execute("prepare")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Ce SfM a été filtré par GPS", result.stderr)
             with config.open("a") as stream:
-                stream.write('SFM_PAIR_MAX_DISTANCE="30"\n')
+                stream.write('SFM_SP_PAIR_MAX_DISTANCE="30"\n')
             (dataset / "sfm-3").rename(dataset / "sfm-3-backup")
             result = execute("prepare")
             self.assertNotEqual(result.returncode, 0)

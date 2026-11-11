@@ -4,11 +4,13 @@ die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
 
 load_config() {
   local config="$1" images="${2:-}" name replacement
+  local config_errors=0
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
   source "$config"
   source "$repo_root/tools/libs/scripts/pipeline_config.sh"
-  init_sfm_geometry_config
+  normalize_backend_config_names || exit 1
+  init_sfm_geometry_config "$COLMAP_METHOD"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
     if [[ -v "$name" ]]; then
@@ -27,19 +29,25 @@ load_config() {
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
-  COLMAP_BIN="${COLMAP_BIN:-colmap}"
-  COLMAP_USE_GPU="${COLMAP_USE_GPU:-true}"
-  COLMAP_MATCHING="${COLMAP_MATCHING:-exhaustive}"
+  SFM_COLMAP_BIN="${SFM_COLMAP_BIN:-colmap}"
+  SFM_COLMAP_USE_GPU="${SFM_COLMAP_USE_GPU:-true}"
+  SFM_COLMAP_MATCHING="${SFM_COLMAP_MATCHING:-exhaustive}"
   ORIENTATIONS_JSON="${ORIENTATIONS_JSON:-}"
   LIDAR_PLY="${LIDAR_PLY:-}"
-  NS_PROCESS_DATA_BIN="${NS_PROCESS_DATA_BIN:-ns-process-data}"
+  SFM_NS_PROCESS_DATA_BIN="${SFM_NS_PROCESS_DATA_BIN:-ns-process-data}"
   TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
-  NS_TRAIN_BIN="${NS_TRAIN_BIN:-ns-train}"
-  NS_EXPORT_BIN="${NS_EXPORT_BIN:-ns-export}"
-  NS_DOWNSCALE_FACTOR="${NS_DOWNSCALE_FACTOR:-1}"
-  SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
-  SFM_MATCHER="${SFM_MATCHER:-bruteforce}"
-  SFM_PAIRS="${SFM_PAIRS:-prefilter}"
+  TRAIN_NS_TRAIN_BIN="${TRAIN_NS_TRAIN_BIN:-ns-train}"
+  TRAIN_NS_EXPORT_BIN="${TRAIN_NS_EXPORT_BIN:-ns-export}"
+  TRAIN_NS_DOWNSCALE_FACTOR="${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
+  if [[ "$COLMAP_METHOD" == spirula ]]; then
+    SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
+    SFM_SP_MATCHER="${SFM_SP_MATCHER:-bruteforce}"
+    SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+  else
+    SFM_SP_FEATURES="${SFM_SP_FEATURES:-}"
+    SFM_SP_MATCHER="${SFM_SP_MATCHER:-}"
+    SFM_SP_PAIRS="${SFM_SP_PAIRS:-}"
+  fi
   SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
   SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-8192}"
   SFM_THREADS="${SFM_THREADS:-16}"
@@ -78,15 +86,15 @@ load_config() {
   TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-empty}"
   SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
   SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.10}"
-  TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
-  TRAIN_QUALITY="${TRAIN_QUALITY:-ultra}"
+  TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
+  TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-ultra}"
   TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-20000}"
-  TRAIN_CAP_MAX="${TRAIN_CAP_MAX:-2000000}"
-  TRAIN_GROWTH_FACTOR="${TRAIN_GROWTH_FACTOR:-}"
-  TRAIN_REFINE_STOP_ITER="${TRAIN_REFINE_STOP_ITER:-14000}"
-  TRAIN_REFINE_STOP_NUM_ITER="${TRAIN_REFINE_STOP_NUM_ITER:-4000}"
-  TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-mild}"
-  TRAIN_DISTRACTION_ROBUSTNESS="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
+  TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-2000000}"
+  TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
+  TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-14000}"
+  TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-4000}"
+  TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-mild}"
+  TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
   TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
   TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
   TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
@@ -115,21 +123,25 @@ load_config() {
   export SFM_IMAGES_DIR OUTPUT_DIR
 
   reject_legacy_config || exit 1
-  local config_errors=0
   validate_sfm_geometry_config
   validate_spirula_photometric_config "$TRAIN_BACKEND" "$COLMAP_METHOD"
   for name in SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES SFM_THREADS \
-    SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX SLURM_CPUS_PER_TASK SLURM_BLOCK_PARALLELISM; do
+    SPLIT_NUM_BLOCKS TRAIN_NUM_ITER SLURM_CPUS_PER_TASK SLURM_BLOCK_PARALLELISM; do
     config_positive_integer "$name" "${!name}"
   done
+  if [[ "$TRAIN_BACKEND" == spirula ]]; then
+    config_positive_integer TRAIN_SP_CAP_MAX "$TRAIN_SP_CAP_MAX"
+  fi
   config_choice SFM_IMAGES_RECURSIVE "$SFM_IMAGES_RECURSIVE" 'true|false'
   config_choice PIPELINE_RESUME "$PIPELINE_RESUME" 'true|false'
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
   config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
-  config_choice COLMAP_USE_GPU "$COLMAP_USE_GPU" 'true|false'
-  config_choice COLMAP_MATCHING "$COLMAP_MATCHING" 'exhaustive|sequential'
+  config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'
+  config_choice SFM_COLMAP_MATCHING "$SFM_COLMAP_MATCHING" 'exhaustive|sequential'
   config_choice TRAIN_BACKEND "$TRAIN_BACKEND" 'spirula|nerfstudio'
-  config_positive_integer NS_DOWNSCALE_FACTOR "$NS_DOWNSCALE_FACTOR"
+  if [[ "$TRAIN_BACKEND" == nerfstudio ]]; then
+    config_positive_integer TRAIN_NS_DOWNSCALE_FACTOR "$TRAIN_NS_DOWNSCALE_FACTOR"
+  fi
   if [[ "$COLMAP_METHOD" == orientations ]]; then
     for name in ORIENTATIONS_JSON LIDAR_PLY; do
       [[ "${!name}" == /* && -s "${!name}" ]] ||
@@ -163,22 +175,30 @@ load_config() {
   config_choice MASKS_ACCEPT_LICENSE "$MASKS_ACCEPT_LICENSE" 'true|false'
   config_choice TRAIN_CLEAN "$TRAIN_CLEAN" 'true|false'
   config_choice TRAIN_MASKS_MODE "$TRAIN_MASKS_MODE" 'auto|ignore|empty'
-  config_choice SFM_FEATURES "$SFM_FEATURES" 'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
-  config_choice SFM_MATCHER "$SFM_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
-  config_choice SFM_PAIRS "$SFM_PAIRS" 'auto|prefilter|exhaustive'
+  if [[ "$COLMAP_METHOD" == spirula ]]; then
+    config_choice SFM_SP_FEATURES "$SFM_SP_FEATURES" 'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
+    config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
+    config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive'
+  elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" ]]; then
+    config_error "SFM_SP_FEATURES, SFM_SP_MATCHER et SFM_SP_PAIRS ne s'appliquent qu'à COLMAP_METHOD=spirula."
+  fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
-  config_choice TRAIN_PRESET "$TRAIN_PRESET" '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
-  config_choice TRAIN_QUALITY "$TRAIN_QUALITY" 'low|medium|high|ultra'
-  config_choice TRAIN_FLOATER_SUPPRESSION "$TRAIN_FLOATER_SUPPRESSION" 'off|mild|strong'
-  config_choice TRAIN_DISTRACTION_ROBUSTNESS "$TRAIN_DISTRACTION_ROBUSTNESS" 'off|mild|strong'
+  if [[ "$TRAIN_BACKEND" == spirula ]]; then
+    config_choice TRAIN_SP_PRESET "$TRAIN_SP_PRESET" '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
+    config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'
+    config_choice TRAIN_SP_FLOATER_SUPPRESSION "$TRAIN_SP_FLOATER_SUPPRESSION" 'off|mild|strong'
+    config_choice TRAIN_SP_DISTRACTION_ROBUSTNESS "$TRAIN_SP_DISTRACTION_ROBUSTNESS" 'off|mild|strong'
+  fi
   config_choice POSTPROCESS_SPARSE_BBOX_MODE "$POSTPROCESS_SPARSE_BBOX_MODE" 'apply|diagnostic|off'
-  for name in TRAIN_REFINE_STOP_ITER TRAIN_REFINE_STOP_NUM_ITER; do
-    [[ "${!name}" =~ ^[0-9]+$ ]] || config_error "$name doit être un entier >= 0."
-  done
-  if [[ -n "$TRAIN_GROWTH_FACTOR" ]]; then
-    [[ "$TRAIN_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-      awk -v x="$TRAIN_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }' ||
-      config_error "TRAIN_GROWTH_FACTOR doit être vide ou > 1."
+  if [[ "$TRAIN_BACKEND" == spirula ]]; then
+    for name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER; do
+      [[ "${!name}" =~ ^[0-9]+$ ]] || config_error "$name doit être un entier >= 0."
+    done
+    if [[ -n "$TRAIN_SP_GROWTH_FACTOR" ]]; then
+      [[ "$TRAIN_SP_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+        awk -v x="$TRAIN_SP_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }' ||
+        config_error "TRAIN_SP_GROWTH_FACTOR doit être vide ou > 1."
+    fi
   fi
   for name in SPLIT_OVERLAP_MAX_FRACTION \
     POSTPROCESS_SPARSE_BBOX_MARGIN POSTPROCESS_MAX_REMOVAL_FRACTION MERGE_STRENGTH; do

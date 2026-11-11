@@ -176,8 +176,8 @@ def prepare(check=False):
     if method != "spirula":
         record["colmap_policy"] = {
             "method": method,
-            "matching": os.environ["COLMAP_MATCHING"],
-            "gpu": os.environ["COLMAP_USE_GPU"],
+            "matching": os.environ["SFM_COLMAP_MATCHING"],
+            "gpu": os.environ["SFM_COLMAP_USE_GPU"],
         }
         for key in ("ORIENTATIONS_JSON", "LIDAR_PLY"):
             if method == "orientations":

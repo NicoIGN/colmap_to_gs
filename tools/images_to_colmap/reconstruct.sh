@@ -28,11 +28,11 @@ case "$COLMAP_METHOD" in
     bash "$repo_root/tools/libs/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
       --preset video --no-prepare --data-type individual --sequence= \
-      --pairs "$SFM_PAIRS" --features "$SFM_FEATURES" --matcher "$SFM_MATCHER" \
+      --pairs "$SFM_SP_PAIRS" --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
-      --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_BA_LOSS" \
-      --ba-loss-param "$SFM_BA_LOSS_PARAM" --reuse-matches redo \
+      --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
+      --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches redo \
       --camera-mode "$SFM_CAMERA_MODE" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps "$metric_gps" "${sensor_args[@]}" \
       --threads "$SFM_THREADS" "${mask_args[@]}" \

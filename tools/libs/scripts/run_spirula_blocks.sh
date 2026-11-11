@@ -6,22 +6,37 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
+config_errors=0
+normalize_backend_config_names || exit 1
 reject_legacy_config || exit 1
 
 DIR="${DIR:-}"
 SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
 SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
-TRAIN_CAP_MAX="${TRAIN_CAP_MAX:-1500000}"
-TRAIN_SPLATS_PER_IMAGE="${TRAIN_SPLATS_PER_IMAGE:-}"
-TRAIN_GROWTH_FACTOR="${TRAIN_GROWTH_FACTOR:-}"
-TRAIN_REFINE_STOP_ITER="${TRAIN_REFINE_STOP_ITER:-}"
-TRAIN_REFINE_STOP_NUM_ITER="${TRAIN_REFINE_STOP_NUM_ITER:-}"
-TRAIN_FLOATER_SUPPRESSION="${TRAIN_FLOATER_SUPPRESSION:-}"
-TRAIN_PRESET="${TRAIN_PRESET:-3dgs}"
-TRAIN_QUALITY="${TRAIN_QUALITY:-}"
-TRAIN_DISTRACTION_ROBUSTNESS="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
+if [[ "$TRAIN_BACKEND" == spirula ]]; then
+  TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-1500000}"
+  TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
+  TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
+  TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
+  TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+  TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
+  TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
+  TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
+else
+  TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-}"
+  TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
+  TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
+  TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
+  TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+  TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
+  TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
+  TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
+fi
 TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
 TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
 TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
@@ -29,13 +44,13 @@ TRAIN_SP_USE_BILATERAL_GRID="${TRAIN_SP_USE_BILATERAL_GRID:-}"
 TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
-SFM_PAIRS="${SFM_PAIRS:-prefilter}"
-SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
-SFM_MATCHER="${SFM_MATCHER:-lightglue}"
+SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
+SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
 init_sfm_geometry_config
-SFM_PAIR_MAX_DISTANCE="${SFM_PAIR_MAX_DISTANCE:-}"
+SFM_SP_PAIR_MAX_DISTANCE="${SFM_SP_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
 TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
@@ -77,31 +92,31 @@ Variables:
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
   TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
   SPLIT_NUM_BLOCKS                Number of COLMAP blocks (4)
-  TRAIN_CAP_MAX                   Maximum splats per block (1500000)
-  TRAIN_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_CAP_MAX, images × value)
-  TRAIN_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
-  TRAIN_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
-  TRAIN_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
-                            Growth stops at max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)
-  TRAIN_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
-  TRAIN_PRESET              Spirula training preset (3dgs)
-  TRAIN_QUALITY             Optional macro: low, medium, high, ultra;
+  TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
+  TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
+  TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
+  TRAIN_SP_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
+  TRAIN_SP_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+                            Growth stops at max(TRAIN_SP_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER)
+  TRAIN_SP_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
+  TRAIN_SP_PRESET              Spirula training preset (3dgs)
+  TRAIN_SP_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
-  TRAIN_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
+  TRAIN_SP_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
   TRAIN_SP_*                Optional Spirula-only photometric training correction
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
-  SFM_PAIRS                 Spirula pair selection (prefilter)
-  SFM_FEATURES              Feature extractor (aliked-n16rot)
-  SFM_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
+  SFM_SP_PAIRS                 Spirula pair selection (prefilter)
+  SFM_SP_FEATURES              Feature extractor (aliked-n16rot)
+  SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   SFM_THREADS               SfM CPU threads (empty: Spirula default)
   SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
   SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (3)
-  SFM_BA_LOSS               Bundle adjustment loss: huber, cauchy, trivial (huber)
-  SFM_BA_LOSS_PARAM         Robust loss scale, extraction pixels (2)
-  SFM_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
+  SFM_SP_BA_LOSS               Bundle adjustment loss: huber, cauchy, trivial (huber)
+  SFM_SP_BA_LOSS_PARAM         Robust loss scale, extraction pixels (2)
+  SFM_SP_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
   SPLIT_OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
   TRAIN_CLEAN=true             Re-train blocks from scratch (destructive to GS outputs)
   TRAIN_MASKS               off (default) or on: segmentation masks for training
@@ -124,7 +139,7 @@ Variables:
 
 Existing SfM and a complete matching block split are reused. Incomplete or
 mismatched split folders are never deleted automatically.
-SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_PAIR_MAX_DISTANCE.
+SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
 EOF
 }
 
@@ -156,54 +171,60 @@ esac
 config_errors=0
 validate_sfm_geometry_config
 validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
-if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
-  die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_PAIR_MAX_DISTANCE)."
+if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+  die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
 fi
 ((config_errors == 0)) || exit 1
 
-for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS TRAIN_CAP_MAX SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
+for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
   value="${!value_name}"
   [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$value_name doit être un entier positif : $value"
 done
 [[ "$SPLIT_NUM_BLOCKS" -ge 1 ]] || die "SPLIT_NUM_BLOCKS doit être supérieur ou égal à 1."
-[[ "$TRAIN_CAP_MAX" -ge 1 ]] || die "TRAIN_CAP_MAX doit être supérieur ou égal à 1."
-[[ -z "$TRAIN_SPLATS_PER_IMAGE" || "$TRAIN_SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
-  die "TRAIN_SPLATS_PER_IMAGE doit être vide ou un entier positif."
-[[ -z "$TRAIN_GROWTH_FACTOR" ]] || {
-  [[ "$TRAIN_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-    awk -v x="$TRAIN_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
-} || die "TRAIN_GROWTH_FACTOR doit être vide ou un nombre > 1."
-for value_name in TRAIN_REFINE_STOP_ITER TRAIN_REFINE_STOP_NUM_ITER; do
-  value="${!value_name}"
-  [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
-    die "$value_name doit être vide ou un entier >= 0 : $value"
-done
-growth_stop=$(( ${TRAIN_REFINE_STOP_ITER:-14000} > TRAIN_NUM_ITER - ${TRAIN_REFINE_STOP_NUM_ITER:-2500} ?
-                ${TRAIN_REFINE_STOP_ITER:-14000} : TRAIN_NUM_ITER - ${TRAIN_REFINE_STOP_NUM_ITER:-2500} ))
-if ((growth_stop >= TRAIN_NUM_ITER)); then
-  printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= TRAIN_NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
-    "$growth_stop" "$TRAIN_NUM_ITER" >&2
+growth_stop="$TRAIN_NUM_ITER"
+if [[ "$TRAIN_BACKEND" == spirula ]]; then
+  for value_name in TRAIN_SP_CAP_MAX; do
+    value="${!value_name}"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$value_name doit être un entier positif : $value"
+  done
+  [[ -z "$TRAIN_SP_SPLATS_PER_IMAGE" || "$TRAIN_SP_SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
+    die "TRAIN_SP_SPLATS_PER_IMAGE doit être vide ou un entier positif."
+  [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || {
+    [[ "$TRAIN_SP_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+      awk -v x="$TRAIN_SP_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
+  } || die "TRAIN_SP_GROWTH_FACTOR doit être vide ou un nombre > 1."
+  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER; do
+    value="${!value_name}"
+    [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
+      die "$value_name doit être vide ou un entier >= 0 : $value"
+  done
+  growth_stop=$(( ${TRAIN_SP_REFINE_STOP_ITER:-14000} > TRAIN_NUM_ITER - ${TRAIN_SP_REFINE_STOP_NUM_ITER:-2500} ?
+                  ${TRAIN_SP_REFINE_STOP_ITER:-14000} : TRAIN_NUM_ITER - ${TRAIN_SP_REFINE_STOP_NUM_ITER:-2500} ))
+  if ((growth_stop >= TRAIN_NUM_ITER)); then
+    printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= TRAIN_NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
+      "$growth_stop" "$TRAIN_NUM_ITER" >&2
+  fi
+  case "$TRAIN_SP_FLOATER_SUPPRESSION" in
+    ""|off|mild|strong) ;;
+    *) die "TRAIN_SP_FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
+  esac
+  case "$TRAIN_SP_QUALITY" in
+    ""|low|medium|high|ultra) ;;
+    *) die "TRAIN_SP_QUALITY doit être vide, low, medium, high ou ultra." ;;
+  esac
+  case "$TRAIN_SP_DISTRACTION_ROBUSTNESS" in
+    off|mild|strong) ;;
+    *) die "TRAIN_SP_DISTRACTION_ROBUSTNESS doit être off, mild ou strong." ;;
+  esac
 fi
-case "$TRAIN_FLOATER_SUPPRESSION" in
-  ""|off|mild|strong) ;;
-  *) die "TRAIN_FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
-esac
-case "$TRAIN_QUALITY" in
-  ""|low|medium|high|ultra) ;;
-  *) die "TRAIN_QUALITY doit être vide, low, medium, high ou ultra." ;;
-esac
-case "$TRAIN_DISTRACTION_ROBUSTNESS" in
-  off|mild|strong) ;;
-  *) die "TRAIN_DISTRACTION_ROBUSTNESS doit être off, mild ou strong." ;;
-esac
 [[ -z "$block_index" || "$block_index" -lt "$SPLIT_NUM_BLOCKS" ]] ||
   die "Indice de bloc $block_index hors de [0,$((SPLIT_NUM_BLOCKS - 1))]."
 [[ -z "$SFM_THREADS" || "$SFM_THREADS" =~ ^[1-9][0-9]*$ ]] ||
   die "SFM_THREADS doit être vide ou un entier positif."
-if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
-  [[ "$SFM_PAIR_MAX_DISTANCE" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
-    awk -v radius="$SFM_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
-    die "SFM_PAIR_MAX_DISTANCE doit être vide ou un nombre positif."
+if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+  [[ "$SFM_SP_PAIR_MAX_DISTANCE" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v radius="$SFM_SP_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
+    die "SFM_SP_PAIR_MAX_DISTANCE doit être vide ou un nombre positif."
 fi
 [[ "$SPLIT_OVERLAP_MAX_FRACTION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] ||
   die "SPLIT_OVERLAP_MAX_FRACTION doit être dans [0,1] : $SPLIT_OVERLAP_MAX_FRACTION"
@@ -290,7 +311,7 @@ SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 "$PYTHON_BIN" "$repo_root/tools/libs/python/sfm_geometry_policy.py" "$SFM_DIR" \
   "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
-  "$SFM_BA_LOSS" "$SFM_BA_LOSS_PARAM"
+  "$SFM_SP_BA_LOSS" "$SFM_SP_BA_LOSS_PARAM"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
@@ -304,7 +325,7 @@ prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
   local feature_args=()
-  if [[ ( "$SFM_MASKS" == on || -n "$SFM_PAIR_MAX_DISTANCE" ) &&
+  if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
         -d "$GS_ROOT" && ( ! -s "$SPARSE_DIR/cameras.bin" ||
         ! -s "$SPARSE_DIR/images.bin" || ! -s "$SPARSE_DIR/points3D.bin" ) ]]; then
     die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
@@ -315,23 +336,23 @@ prepare_blocks() {
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
   fi
-  if [[ -n "$SFM_PAIR_MAX_DISTANCE" ]]; then
+  if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
     sfm_args=(
       "$repo_root/tools/panoramax/run_sfm_filtered.py"
       --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
-      --max-distance "$SFM_PAIR_MAX_DISTANCE" --pairs "$SFM_PAIRS"
-      --features "$SFM_FEATURES" --matcher "$SFM_MATCHER"
+      --max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --pairs "$SFM_SP_PAIRS"
+      --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
-      --ba-loss "$SFM_BA_LOSS" --ba-loss-param "$SFM_BA_LOSS_PARAM"
+      --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
     "$PYTHON_BIN" "${sfm_args[@]}"
   elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
-    die "Ce SfM a été filtré par GPS ; conserver SFM_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
+    die "Ce SfM a été filtré par GPS ; conserver SFM_SP_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
   elif [[ -s "$SPARSE_DIR/cameras.bin" &&
         -s "$SPARSE_DIR/images.bin" &&
         -s "$SPARSE_DIR/points3D.bin" ]]; then
@@ -343,14 +364,14 @@ prepare_blocks() {
       --dataset "$DIR"
       --output-dir "$SFM_DIR"
       --preset panoramax
-      --pairs "$SFM_PAIRS"
+      --pairs "$SFM_SP_PAIRS"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
-      --features "$SFM_FEATURES"
-      --matcher "$SFM_MATCHER"
+      --features "$SFM_SP_FEATURES"
+      --matcher "$SFM_SP_MATCHER"
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
-      --ba-loss "$SFM_BA_LOSS" --ba-loss-param "$SFM_BA_LOSS_PARAM"
+      --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
       --reuse-matches redo
     )
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
@@ -458,35 +479,36 @@ for ((index = first_index; index < last_index; index++)); do
   splat_name="Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
   printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$SPLIT_NUM_BLOCKS"
 
-  block_cap="$TRAIN_CAP_MAX"
-  if [[ -n "$TRAIN_SPLATS_PER_IMAGE" ]]; then
-    block_images="$(od -An -t u8 -N 8 "$block_sparse/images.bin" | tr -d '[:space:]')"
-    [[ "$block_images" =~ ^[1-9][0-9]*$ ]] ||
-      die "Nombre d'images illisible : $block_sparse/images.bin"
-    block_cap=$((block_images * TRAIN_SPLATS_PER_IMAGE))
-    ((block_cap <= TRAIN_CAP_MAX)) || block_cap="$TRAIN_CAP_MAX"
-    printf '[pipeline] Budget du bloc : %s images × %s = %s splats (plafond %s).\n' \
-      "$block_images" "$TRAIN_SPLATS_PER_IMAGE" "$block_cap" "$TRAIN_CAP_MAX"
-  fi
   block_args=(
     --spirula-bin "$SPIRULA_BIN"
     --sparse-dir "$block_sparse"
     --images-dir "$SFM_DIR/images"
     --output-dir "$block_output"
-    --train-preset "$TRAIN_PRESET"
-    --cap-max "$block_cap"
     --num-iterations "$TRAIN_NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
     --export-filter-mode off
   )
-  [[ -z "$TRAIN_QUALITY" ]] || block_args+=(--quality "$TRAIN_QUALITY")
-  block_args+=(--distraction-robustness "$TRAIN_DISTRACTION_ROBUSTNESS")
-  [[ -z "$TRAIN_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_GROWTH_FACTOR")
-  [[ -z "$TRAIN_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_FLOATER_SUPPRESSION")
-  [[ -z "$TRAIN_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_REFINE_STOP_ITER")
-  [[ -z "$TRAIN_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_REFINE_STOP_NUM_ITER")
-  printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
+  if [[ "$TRAIN_BACKEND" == spirula ]]; then
+    block_cap="$TRAIN_SP_CAP_MAX"
+    if [[ -n "$TRAIN_SP_SPLATS_PER_IMAGE" ]]; then
+      block_images="$(od -An -t u8 -N 8 "$block_sparse/images.bin" | tr -d '[:space:]')"
+      [[ "$block_images" =~ ^[1-9][0-9]*$ ]] ||
+        die "Nombre d'images illisible : $block_sparse/images.bin"
+      block_cap=$((block_images * TRAIN_SP_SPLATS_PER_IMAGE))
+      ((block_cap <= TRAIN_SP_CAP_MAX)) || block_cap="$TRAIN_SP_CAP_MAX"
+      printf '[pipeline] Budget du bloc : %s images × %s = %s splats (plafond %s).\n' \
+        "$block_images" "$TRAIN_SP_SPLATS_PER_IMAGE" "$block_cap" "$TRAIN_SP_CAP_MAX"
+    fi
+    block_args+=(--train-preset "$TRAIN_SP_PRESET" --cap-max "$block_cap")
+    [[ -z "$TRAIN_SP_QUALITY" ]] || block_args+=(--quality "$TRAIN_SP_QUALITY")
+    block_args+=(--distraction-robustness "$TRAIN_SP_DISTRACTION_ROBUSTNESS")
+    [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_SP_GROWTH_FACTOR")
+    [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
+    [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
+    [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")
+    printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
+  fi
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
   [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
   bash "$script_dir/run_3dgs_block.sh" "${block_args[@]}"

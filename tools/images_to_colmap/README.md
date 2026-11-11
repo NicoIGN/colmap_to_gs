@@ -13,7 +13,7 @@ bash tools/images_to_colmap/run.sh /chemin/config.sh
 
 - `spirula` : SfM Spirula existant, masques et géoréférencement EXIF automatiques.
 - `colmap` : COLMAP direct avec SIFT, masques par image, matching exhaustif ou
-  séquentiel ; `COLMAP_USE_GPU=false` permet le CPU.
+  séquentiel ; `SFM_COLMAP_USE_GPU=false` permet le CPU.
 - `nerfstudio` : `ns-process-data images` avec COLMAP/SIFT, sans copie ni renommage
   des images. PyTorch et une carte NVIDIA utilisable via CUDA sont obligatoires.
   Cette interface ne transmet pas les masques SfM : `SFM_MASKS=off` et
@@ -25,11 +25,14 @@ bash tools/images_to_colmap/run.sh /chemin/config.sh
 
 **Réglages.** Copier [`config.sh.example`](config.sh.example). Les masques,
 la reprise et le recalage GPX reprennent les réglages du
-[pipeline images](../images_to_splat/README.md). Les options `SFM_FEATURES`,
-`SFM_MATCHER`, `SFM_PAIRS` et de bundle adjustment concernent Spirula.
+[pipeline images](../images_to_splat/README.md). Les options `SFM_SP_FEATURES`,
+`SFM_SP_MATCHER`, `SFM_SP_PAIRS` et de bundle adjustment concernent Spirula.
 COLMAP direct applique les seuils d'erreur, d'inliers et d'angle aux étapes
 correspondantes, mais ne transpose pas la politique de perte robuste Spirula.
-`COLMAP_MATCHING` concerne COLMAP direct et `ns-process-data`.
+`SFM_COLMAP_*` règle COLMAP direct ; `SFM_NS_PROCESS_DATA_BIN` choisit
+`ns-process-data`. `SFM_COLMAP_MATCHING` est pris en charge par COLMAP direct
+et transmis aussi à `ns-process-data`. Les variables `TRAIN_SP_*` / `TRAIN_NS_*`
+ne concernent pas cette préparation autonome : aucun entraînement 3DGS n'est lancé.
 
 **Sorties.** `colmap_dataset.json` indique les chemins relatifs `images` et
 `sparse_model`. Le modèle brut est `sfm/sparse/0`, remplacé pour les étapes

@@ -31,13 +31,13 @@ def reconstruct():
         sys.path.insert(0, str(ROOT / "tools/libs/python"))
         from nerfstudio_runtime import check_runtime
         check_runtime()
-        if env["COLMAP_MATCHING"] == "vocab_tree":
+        if env["SFM_COLMAP_MATCHING"] == "vocab_tree":
             raise ValueError("ns-process-data : utiliser exhaustive ou sequential.")
         run([
-            env["NS_PROCESS_DATA_BIN"], "images", "--data", images,
+            env["SFM_NS_PROCESS_DATA_BIN"], "images", "--data", images,
             "--output-dir", sfm, "--sfm-tool", "colmap",
-            "--matching-method", env["COLMAP_MATCHING"], "--num-downscales", "0",
-            "--skip-image-processing", "--colmap-cmd", env["COLMAP_BIN"],
+            "--matching-method", env["SFM_COLMAP_MATCHING"], "--num-downscales", "0",
+            "--skip-image-processing", "--colmap-cmd", env["SFM_COLMAP_BIN"],
             "--camera-type", {
                 "opencv": "perspective", "pinhole": "pinhole",
                 "simple_pinhole": "simple_pinhole", "opencv_fisheye": "fisheye",
@@ -47,9 +47,9 @@ def reconstruct():
         sparse = sfm / "colmap/sparse"
     else:
         sfm.mkdir(parents=True, exist_ok=True)
-        binary = env["COLMAP_BIN"]
+        binary = env["SFM_COLMAP_BIN"]
         database = sfm / "database.db"
-        gpu = "1" if env["COLMAP_USE_GPU"] == "true" else "0"
+        gpu = "1" if env["SFM_COLMAP_USE_GPU"] == "true" else "0"
         mode = env["SFM_CAMERA_MODE"]
         camera_flags = {
             "single": ["--ImageReader.single_camera", "1"],
@@ -70,10 +70,10 @@ def reconstruct():
                 masks = output / "feature_masks"
             command += ["--ImageReader.mask_path", masks]
         run(command)
-        if env["COLMAP_MATCHING"] == "vocab_tree":
+        if env["SFM_COLMAP_MATCHING"] == "vocab_tree":
             raise ValueError("Le matching vocab_tree exige un vocabulaire ; utiliser exhaustive ou sequential.")
         run([
-            binary, env["COLMAP_MATCHING"] + "_matcher", "--database_path", database,
+            binary, env["SFM_COLMAP_MATCHING"] + "_matcher", "--database_path", database,
             "--SiftMatching.use_gpu", gpu, "--SiftMatching.num_threads", env["SFM_THREADS"],
             "--SiftMatching.max_error", env["SFM_MAX_ERROR"],
             "--SiftMatching.min_num_inliers", env["SFM_MIN_INLIERS"],

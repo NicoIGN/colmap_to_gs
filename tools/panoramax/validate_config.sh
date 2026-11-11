@@ -3,11 +3,12 @@
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/tools/libs/scripts/pipeline_config.sh"
 
 validate_config() {
-  local config_errors=0 name value
+  local config_errors=0 name value train_backend="${TRAIN_BACKEND:-spirula}"
+  normalize_backend_config_names || return 1
   reject_legacy_config || return 1
-  config_choice TRAIN_BACKEND "${TRAIN_BACKEND:-spirula}" 'spirula|nerfstudio'
-  if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
-    config_positive_integer NS_DOWNSCALE_FACTOR "${NS_DOWNSCALE_FACTOR:-1}"
+  config_choice TRAIN_BACKEND "$train_backend" 'spirula|nerfstudio'
+  if [[ "$train_backend" == nerfstudio ]]; then
+    config_positive_integer TRAIN_NS_DOWNSCALE_FACTOR "${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
     case "${TRAIN_MASKS:-off}" in
       on|true|1|yes)
         [[ "${TRAIN_MASKS_MODE:-auto}" == ignore ]] ||
@@ -18,31 +19,41 @@ validate_config() {
   fi
   validate_sfm_geometry_config
   validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
-  if [[ -n "${SFM_SP_IMAGE_EXPOSURE:-}" && -n "${SFM_PAIR_MAX_DISTANCE:-}" ]]; then
-    config_error "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_PAIR_MAX_DISTANCE)."
+  if [[ -n "${SFM_SP_IMAGE_EXPOSURE:-}" && -n "${SFM_SP_PAIR_MAX_DISTANCE:-}" ]]; then
+    config_error "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
   fi
-  for name in OUTPUT_DIR PANORAMAX_BBOX SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
+  for name in OUTPUT_DIR PANORAMAX_BBOX SPLIT_NUM_BLOCKS TRAIN_NUM_ITER; do
     [[ -n "${!name:-}" ]] || config_error "$name doit être défini et non vide."
   done
+  if [[ "$train_backend" == spirula ]]; then
+    for name in TRAIN_SP_CAP_MAX TRAIN_SP_PRESET; do
+      [[ -n "${!name:-}" ]] || config_error "$name doit être défini pour TRAIN_BACKEND=spirula."
+    done
+  fi
   config_positive_integer SPLIT_NUM_BLOCKS "${SPLIT_NUM_BLOCKS:-}"
   config_positive_integer TRAIN_NUM_ITER "${TRAIN_NUM_ITER:-}"
-  config_positive_integer TRAIN_CAP_MAX "${TRAIN_CAP_MAX:-}"
+  if [[ "$train_backend" == spirula ]]; then
+    config_positive_integer TRAIN_SP_CAP_MAX "${TRAIN_SP_CAP_MAX:-}"
+  fi
   config_positive_integer SFM_MAX_IMAGE_SIZE "${SFM_MAX_IMAGE_SIZE:-4096}"
   config_positive_integer SFM_ALIKED_MAX_FEATURES "${SFM_ALIKED_MAX_FEATURES:-4096}"
   for name in PANORAMAX_IMAGE_MAX SFM_THREADS; do
     value="${!name:-}"
     [[ -z "$value" ]] || config_positive_integer "$name" "$value"
   done
-  config_choice SFM_MATCHER "${SFM_MATCHER:-lightglue}" \
+  config_choice SFM_SP_MATCHER "${SFM_SP_MATCHER:-lightglue}" \
     'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
-  config_choice SFM_FEATURES "${SFM_FEATURES:-aliked-n16rot}" \
+  config_choice SFM_SP_FEATURES "${SFM_SP_FEATURES:-aliked-n16rot}" \
     'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
-  config_choice SFM_PAIRS "${SFM_PAIRS:-prefilter}" 'auto|prefilter|exhaustive|sequential'
-  config_choice TRAIN_PRESET "${TRAIN_PRESET:-}" \
-    '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
-  [[ -z "${TRAIN_QUALITY:-}" ]] ||
-    config_choice TRAIN_QUALITY "$TRAIN_QUALITY" 'low|medium|high|ultra'
-  config_choice TRAIN_DISTRACTION_ROBUSTNESS "${TRAIN_DISTRACTION_ROBUSTNESS:-off}" 'off|mild|strong'
+  config_choice SFM_SP_PAIRS "${SFM_SP_PAIRS:-prefilter}" 'auto|prefilter|exhaustive|sequential'
+  if [[ "$train_backend" == spirula ]]; then
+    config_choice TRAIN_SP_PRESET "${TRAIN_SP_PRESET:-}" \
+      '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
+    [[ -z "${TRAIN_SP_QUALITY:-}" ]] ||
+      config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'
+    config_choice TRAIN_SP_DISTRACTION_ROBUSTNESS "${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}" 'off|mild|strong'
+    config_choice TRAIN_SP_FLOATER_SUPPRESSION "${TRAIN_SP_FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
+  fi
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
@@ -125,26 +136,29 @@ validate_config() {
     awk -v x="$value" 'BEGIN { exit !(x >= 0 && x < 1) }' ||
     config_error "CLEANGS_MAX_REMOVAL_FRACTION='$value' doit être dans [0,1[."
   config_choice POSTPROCESS_SPARSE_BBOX_MODE "${POSTPROCESS_SPARSE_BBOX_MODE:-apply}" 'apply|diagnostic|off'
-  config_choice TRAIN_FLOATER_SUPPRESSION "${TRAIN_FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
-  value="${TRAIN_SPLATS_PER_IMAGE:-}"
-  [[ -z "$value" ]] || config_positive_integer TRAIN_SPLATS_PER_IMAGE "$value"
+  if [[ "$train_backend" == spirula ]]; then
+    value="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
+    [[ -z "$value" ]] || config_positive_integer TRAIN_SP_SPLATS_PER_IMAGE "$value"
+  fi
   value="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.05}"
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
     config_error "POSTPROCESS_SPARSE_BBOX_MARGIN='$value' doit être un nombre >= 0 (fraction de la bbox)."
-  value="${TRAIN_GROWTH_FACTOR:-}"
-  [[ -z "$value" ]] || {
-    [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 1) }'
-  } || config_error "TRAIN_GROWTH_FACTOR='$value' doit être vide ou un nombre > 1."
-  for name in TRAIN_REFINE_STOP_ITER TRAIN_REFINE_STOP_NUM_ITER; do
-    value="${!name:-}"
-    [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
-      config_error "$name='$value' doit être vide ou un entier >= 0."
-  done
+  if [[ "$train_backend" == spirula ]]; then
+    value="${TRAIN_SP_GROWTH_FACTOR:-}"
+    [[ -z "$value" ]] || {
+      [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] && awk -v x="$value" 'BEGIN { exit !(x > 1) }'
+    } || config_error "TRAIN_SP_GROWTH_FACTOR='$value' doit être vide ou un nombre > 1."
+    for name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER; do
+      value="${!name:-}"
+      [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
+        config_error "$name='$value' doit être vide ou un entier >= 0."
+    done
+  fi
   value="${POSTPROCESS_FILTER_SIZE_FACTOR:-10}"
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v x="$value" 'BEGIN { exit !(x > 1 && x / 2 < x) }' ||
     config_error "POSTPROCESS_FILTER_SIZE_FACTOR='$value' doit être fini et > 1."
-  for name in SFM_PAIR_MAX_DISTANCE MERGE_STRENGTH; do
+  for name in SFM_SP_PAIR_MAX_DISTANCE MERGE_STRENGTH; do
     value="${!name:-}"
     [[ "$name" != MERGE_STRENGTH ]] || value="${value:-1.0}"
     [[ -n "$value" ]] || continue

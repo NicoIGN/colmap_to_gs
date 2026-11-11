@@ -7,8 +7,9 @@
 # Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
 # "" signifie une option non forcee ; le commentaire indique alors le repli.
 # OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : valeurs d'exemple a remplacer.
-# SPLIT_NUM_BLOCKS, TRAIN_NUM_ITER, TRAIN_CAP_MAX et TRAIN_PRESET sont obligatoires dans une config ;
-# leurs valeurs ci-dessous reprennent les defauts du lanceur de blocs.
+# SPLIT_NUM_BLOCKS et TRAIN_NUM_ITER sont communs et obligatoires.
+# TRAIN_SP_CAP_MAX et TRAIN_SP_PRESET sont obligatoires seulement si
+# TRAIN_BACKEND=spirula. Les options TRAIN_SP_* sont ignorees par Nerfstudio.
 # Ce fichier couvre les options exposees par le pipeline et son lanceur Slurm,
 # pas toutes les options CLI des outils utilisables independamment.
 
@@ -17,12 +18,8 @@
 # ============================================================================
 
 TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
-NS_TRAIN_BIN="ns-train"
-NS_EXPORT_BIN="ns-export"
-NS_DOWNSCALE_FACTOR="1"
 # Nerfstudio : PyTorch + NVIDIA/CUDA requis, TRAIN_MASKS_MODE=ignore si masques.
 # Masques Nerfstudio : backend segmentation, modele local Mask2Former ou SegFormer.
-# Les budgets de croissance/cap Spirula ne sont pas des limites Splatfacto.
 
 # Obligatoire, aucun defaut. Dossier de sortie non vide, accessible en ecriture.
 # Contient panoramax/ (photos, SfM, blocs), le .splat final et les references GPS.
@@ -77,25 +74,29 @@ PANORAMAX_REPLACE_REQUEST="false"
 # ============================================================================
 # 2. Reconstruction SfM et appariement
 # ============================================================================
+# Le SfM Panoramax est toujours calcule par Spirula, quelle que soit la valeur
+# de TRAIN_BACKEND ; les options SFM_SP_* ci-dessous ne concernent que Spirula.
 
+# --- Reglages partages du SfM ---
 # Defaut : 4096. Entier > 0 ; taille maximale de travail en pixels.
 SFM_MAX_IMAGE_SIZE="4096"
 
 # Defaut : 4096. Entier > 0 ; budget de points ALIKED par image.
 SFM_ALIKED_MAX_FEATURES="4096"
 
+# --- Reglages Spirula uniquement ---
 # Defaut : prefilter. Valeurs : auto|prefilter|exhaustive|sequential.
 # prefilter convient aux photos Panoramax sans ordre chronologique des noms.
-SFM_PAIRS="prefilter"
+SFM_SP_PAIRS="prefilter"
 
 # Defaut : aliked-n16rot.
 # Valeurs : sift|aliked-n16rot|aliked-n32|loma-b128|loma-b.
-SFM_FEATURES="aliked-n16rot"
+SFM_SP_FEATURES="aliked-n16rot"
 
 # Defaut : lightglue.
 # Valeurs : bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g.
 # bruteforce contourne LightGlue si celui-ci plante (par exemple erreur gemm).
-SFM_MATCHER="lightglue"
+SFM_SP_MATCHER="lightglue"
 
 # Defaut : "". Vide = SLURM_CPUS_PER_TASK si defini, sinon defaut Spirula.
 # Sinon entier > 0 : nombre de fils CPU du SfM. Definir explicitement en local
@@ -111,9 +112,9 @@ SFM_MIN_INLIERS="30"
 # Augmenter peut supprimer des batiments lointains valides.
 SFM_MIN_TRI_ANGLE="3"
 # Perte du bundle adjustment : huber|cauchy|trivial.
-SFM_BA_LOSS="huber"
+SFM_SP_BA_LOSS="huber"
 # Echelle robuste ]0,1000] en pixels d'extraction (Huber delta / Cauchy c).
-SFM_BA_LOSS_PARAM="2"
+SFM_SP_BA_LOSS_PARAM="2"
 # Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entrainement.
 # Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
 SFM_SP_IMAGE_EXPOSURE=""
@@ -123,7 +124,7 @@ SFM_SP_IMAGE_EXPOSURE=""
 # Defaut : "". Vide = filtre GPS des paires desactive ; sinon nombre fini > 0
 # en metres : garder les paires a distance horizontale strictement < au rayon.
 # Les paires sans GPS sont gardees ; ne rajoute aucune paire.
-SFM_PAIR_MAX_DISTANCE=""
+SFM_SP_PAIR_MAX_DISTANCE=""
 
 # ============================================================================
 # 3. Calcul optionnel des masques SfM et d'entrainement
@@ -249,21 +250,24 @@ SPLIT_OVERLAP_MAX_FRACTION="0.05"
 # 5. Entrainement 3DGS de chaque bloc
 # ============================================================================
 
+# --- TRAIN_BACKEND=spirula uniquement ---
+# Preset, qualite, plafonds, croissance, robustesse et suppression des flottants
+# sont des options Spirula, ignorees par Splatfacto/Nerfstudio.
 # Valeur initiale : 3dgs (defaut du lanceur de blocs). Champ obligatoire.
 # Valeurs : 3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing.
-TRAIN_PRESET="3dgs"
+TRAIN_SP_PRESET="3dgs"
 
 # Defaut : "". Vide = ne pas transmettre --quality (Spirula : medium).
 # Valeurs : low|medium|high|ultra. Macro de budget et duree, pas de resolution.
-# Le pipeline force TRAIN_CAP_MAX et TRAIN_NUM_ITER : ils restent prioritaires sur la macro.
-TRAIN_QUALITY=""
+# Le pipeline force TRAIN_SP_CAP_MAX et TRAIN_NUM_ITER : ils restent prioritaires sur la macro.
+TRAIN_SP_QUALITY=""
 
 # Defaut : off. Valeurs : off|mild|strong.
 # Robustesse de la densification aux incoherences entre photos.
 # mild reduit l'influence des erreurs extremes ; strong utilise aussi une
 # carte robuste sensible aux contours et un score median entre observations.
-# Ne remplace pas les masques ni TRAIN_FLOATER_SUPPRESSION.
-TRAIN_DISTRACTION_ROBUSTNESS="off"
+# Ne remplace pas les masques ni TRAIN_SP_FLOATER_SUPPRESSION.
+TRAIN_SP_DISTRACTION_ROBUSTNESS="off"
 # Corrections photometriques Spirula uniquement ; vide = defauts Spirula observes :
 # true, no_crf_no_vig, false, true, ppisp. Valeurs PPISP : original|rqs|no_crf|
 # no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp.
@@ -277,17 +281,19 @@ TRAIN_SP_USE_BILATERAL_GRID=""
 # Type de grille : affine|ppisp|loglinear.
 TRAIN_SP_BILAGRID_TYPE=""
 
+# --- Parametres partages ---
+# Nombre d'iterations par bloc ; utilise par Spirula et Nerfstudio.
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
 # Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.
 TRAIN_NUM_ITER="30000"
 
 # Valeur initiale : 1500000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
-# Plafond de splats par bloc ; total maximal theorique SPLIT_NUM_BLOCKS * TRAIN_CAP_MAX.
-TRAIN_CAP_MAX="1500000"
+# Plafond de splats par bloc ; total maximal theorique SPLIT_NUM_BLOCKS * TRAIN_SP_CAP_MAX.
+TRAIN_SP_CAP_MAX="1500000"
 
-# Defaut : "". Vide = budget TRAIN_CAP_MAX ; sinon entier > 0 :
-# budget du bloc = min(TRAIN_CAP_MAX, nombre d'images du bloc * TRAIN_SPLATS_PER_IMAGE).
-TRAIN_SPLATS_PER_IMAGE=""
+# Defaut : "". Vide = budget TRAIN_SP_CAP_MAX ; sinon entier > 0 :
+# budget du bloc = min(TRAIN_SP_CAP_MAX, nombre d'images du bloc * TRAIN_SP_SPLATS_PER_IMAGE).
+TRAIN_SP_SPLATS_PER_IMAGE=""
 
 # Defaut : "". Vide ou absent = estimation automatique bornee a [1.001, 1.05].
 # Sinon nombre > 1 : valeur explicite prioritaire, sans bornage automatique.
@@ -295,28 +301,34 @@ TRAIN_SPLATS_PER_IMAGE=""
 # Estimation : (1 / 0.1)^(1 / cycles), avec initialisation supposee a 10 % du
 # budget et cycles tous les 100 pas, strictement apres 500 et avant l'arret.
 # Vise le plafond a la fin de la croissance, pas a la derniere iteration.
-TRAIN_GROWTH_FACTOR=""
+TRAIN_SP_GROWTH_FACTOR=""
 
 # Defaut : "". Vide = defaut Spirula (14000) ; sinon entier >= 0.
 # Pas minimal d'arret de croissance : arret effectif au maximum de
-# TRAIN_REFINE_STOP_ITER et TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER.
-TRAIN_REFINE_STOP_ITER=""
+# TRAIN_SP_REFINE_STOP_ITER et TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER.
+TRAIN_SP_REFINE_STOP_ITER=""
 
 # Defaut : "". Vide = defaut Spirula (2500) ; sinon entier >= 0.
 # Nombre de pas reserves a l'affinage seul en fin de calcul, sous reserve
-# du minimum TRAIN_REFINE_STOP_ITER. Si l'arret effectif >= TRAIN_NUM_ITER, avertissement.
-TRAIN_REFINE_STOP_NUM_ITER=""
+# du minimum TRAIN_SP_REFINE_STOP_ITER. Si l'arret effectif >= TRAIN_NUM_ITER, avertissement.
+TRAIN_SP_REFINE_STOP_NUM_ITER=""
 
 # Defaut : off. Valeurs : off|mild|strong.
 # Suppression native des flotteurs ; mild/strong limitent aussi leur taille
 # a l'ecran. Comparer sur un bloc avant de generaliser.
-TRAIN_FLOATER_SUPPRESSION="off"
+TRAIN_SP_FLOATER_SUPPRESSION="off"
 
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # true = supprime uniquement les sorties GS des blocs et les reentraine.
 # Ne supprime ni photos, ni SfM, ni decoupage. Necessaire pour appliquer de
 # nouveaux masques a des blocs deja entraines (sinon reutilisation avertie).
 TRAIN_CLEAN="false"
+
+# --- TRAIN_BACKEND=nerfstudio uniquement ---
+# Ignorés par Spirula ; Nerfstudio/Splatfacto exige PyTorch et NVIDIA/CUDA.
+TRAIN_NS_TRAIN_BIN="ns-train"
+TRAIN_NS_EXPORT_BIN="ns-export"
+TRAIN_NS_DOWNSCALE_FACTOR="1"
 
 # ============================================================================
 # 6. Fusion, nettoyage final et export georeference

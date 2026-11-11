@@ -31,19 +31,20 @@ PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
 # Producteur du modele : spirula | colmap | nerfstudio | orientations.
 # Le mode nerfstudio appelle ns-process-data (COLMAP/SIFT) et exige NVIDIA/CUDA.
 COLMAP_METHOD="spirula"
-COLMAP_BIN="colmap"
-COLMAP_USE_GPU="true"                 # COLMAP direct seulement
-COLMAP_MATCHING="exhaustive"          # exhaustive | sequential, hors Spirula
-NS_PROCESS_DATA_BIN="ns-process-data"
+
+# --- COLMAP_METHOD=colmap uniquement ---
+SFM_COLMAP_BIN="colmap"
+SFM_COLMAP_USE_GPU="true"
+# --- Matching COLMAP direct / ns-process-data ---
+SFM_COLMAP_MATCHING="exhaustive"          # exhaustive | sequential
+# --- COLMAP_METHOD=nerfstudio uniquement ---
+SFM_NS_PROCESS_DATA_BIN="ns-process-data"
 # Mode orientations : poses camera JSON explicites et PLY colore dans les memes coordonnees.
 ORIENTATIONS_JSON=""
 LIDAR_PLY=""
 
 # Moteur d'entrainement, independant du producteur COLMAP.
 TRAIN_BACKEND="spirula"              # spirula | nerfstudio
-NS_TRAIN_BIN="ns-train"
-NS_EXPORT_BIN="ns-export"
-NS_DOWNSCALE_FACTOR="1"
 # Nerfstudio exige PyTorch + GPU NVIDIA/CUDA ; aucun repli CPU/Metal.
 # Avec TRAIN_MASKS=on, definir explicitement TRAIN_MASKS_MODE=ignore.
 # Nerfstudio : TRAIN_MASKS_BACKEND=segmentation, modele local Mask2Former/SegFormer,
@@ -93,23 +94,28 @@ TRAIN_MASKS_MODE="empty"
 # ============================================================================
 # 2. Reconstruction SfM globale
 # ============================================================================
-SFM_FEATURES="aliked-n16rot"
-SFM_MATCHER="bruteforce"
-# prefilter|auto|exhaustive ; exhaustive couteux sur plusieurs milliers d'images.
-SFM_PAIRS="prefilter"
+# Ces parametres communs sont utilises par les producteurs compatibles
+# (Spirula ou COLMAP direct). Les options specifiques sont dans les groupes
+# SFM_SP_*, SFM_COLMAP_* et SFM_NS_*.
 SFM_MAX_IMAGE_SIZE="4096"
 SFM_ALIKED_MAX_FEATURES="8192"
 SFM_THREADS="16"
-# Defauts stricts, identiques a Panoramax ; configurables selon la couverture.
+# Seuils geometriques partages avec COLMAP direct ; le SfM Nerfstudio garde
+# ses propres seuils. Plus strict = moins de parasites, mais couverture reduite.
 SFM_MAX_ERROR="2"         # [0.1,100], pixels d'extraction : verification + mapping
 SFM_MIN_INLIERS="30"      # entier [4,1000000] par paire, pas par point 3D
 SFM_MIN_TRI_ANGLE="3"     # ]0,90] degres ; augmente = moins de faible parallaxe
-SFM_BA_LOSS="huber"       # huber|cauchy|trivial
-SFM_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy c
+
+# --- COLMAP_METHOD=spirula uniquement ---
+SFM_SP_FEATURES="aliked-n16rot"
+SFM_SP_MATCHER="bruteforce"
+# prefilter|auto|exhaustive ; exhaustive couteux sur plusieurs milliers d'images.
+SFM_SP_PAIRS="prefilter"
+SFM_SP_BA_LOSS="huber"       # huber|cauchy|trivial
+SFM_SP_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy c
 # Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entrainement.
 # Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
 SFM_SP_IMAGE_EXPOSURE=""
-# Plus strict = moins de parasites, mais risque de perdre des vues/points valides.
 # Nouveau OUTPUT_DIR necessaire pour recalculer avec d'autres seuils.
 # folder : intrinseques partages par sous-dossier ; single : une camera ;
 # image : intrinseques independants par image.
@@ -154,19 +160,25 @@ SPLIT_OVERLAP_MAX_FRACTION="0.10"  # [0,1[, recouvrement entre blocs
 # ============================================================================
 # 4. Entrainement de chaque bloc
 # ============================================================================
-TRAIN_PRESET="3dgs"
-TRAIN_QUALITY="ultra"    # low|medium|high|ultra ; macro, pas une resolution
-# Ces budgets explicites priment sur TRAIN_QUALITY.
+# Nombre d'iterations commun aux backends Spirula et Nerfstudio.
 TRAIN_NUM_ITER="20000"   # PAR BLOC, pas reparti entre les blocs
-TRAIN_CAP_MAX="2000000"  # PAR BLOC : 4 x 2 M = jusqu'a 8 M avant fusion
+
+# --- TRAIN_BACKEND=spirula uniquement ---
+TRAIN_SP_PRESET="3dgs"
+TRAIN_SP_QUALITY="ultra"    # low|medium|high|ultra ; macro, pas une resolution
+# Ces budgets explicites priment sur TRAIN_SP_QUALITY.
+TRAIN_SP_CAP_MAX="2000000"  # PAR BLOC : 4 x 2 M = jusqu'a 8 M avant fusion
+# Vide : plafond TRAIN_SP_CAP_MAX ; sinon limite par bloc a
+# min(TRAIN_SP_CAP_MAX, nombre d'images du bloc x cette valeur).
+TRAIN_SP_SPLATS_PER_IMAGE=""
 # Vide/absent : estimation [1.001,1.05] pour atteindre le cap a l'arret.
 # Valeur explicite > 1 : prioritaire, non bornee automatiquement.
-TRAIN_GROWTH_FACTOR=""
+TRAIN_SP_GROWTH_FACTOR=""
 # Arret = max(14000, 20000-4000) = 16000, puis 4000 pas sans croissance.
-TRAIN_REFINE_STOP_ITER="14000"
-TRAIN_REFINE_STOP_NUM_ITER="4000"
-TRAIN_FLOATER_SUPPRESSION="mild"       # off|mild|strong
-TRAIN_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
+TRAIN_SP_REFINE_STOP_ITER="14000"
+TRAIN_SP_REFINE_STOP_NUM_ITER="4000"
+TRAIN_SP_FLOATER_SUPPRESSION="mild"       # off|mild|strong
+TRAIN_SP_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
 # Corrections photometriques Spirula uniquement ; vide = defauts Spirula observes :
 # true, no_crf_no_vig, false, true, ppisp. Valeurs PPISP : original|rqs|no_crf|
 # no_crf_clamp|no_crf_no_vig|no_crf_no_vig_clamp.
@@ -179,6 +191,11 @@ TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=""
 TRAIN_SP_USE_BILATERAL_GRID=""
 # Type de grille : affine|ppisp|loglinear.
 TRAIN_SP_BILAGRID_TYPE=""
+# --- TRAIN_BACKEND=nerfstudio uniquement ---
+# Ces parametres sont ignores par Spirula ; Nerfstudio requiert NVIDIA/CUDA.
+TRAIN_NS_TRAIN_BIN="ns-train"
+TRAIN_NS_EXPORT_BIN="ns-export"
+TRAIN_NS_DOWNSCALE_FACTOR="1"
 # false : reutiliser un checkpoint final ; une sortie partielle est refusee.
 # true : supprimer/recalculer les sorties 3DGS des blocs, PAS le SfM.
 # Sauvegarder les anciens entrainements avant de l'activer.

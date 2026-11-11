@@ -59,7 +59,8 @@ DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
   de découpage partielles ou incohérentes ne sont jamais supprimées automatiquement.
 - `SPLIT_NUM_BLOCKS` : nombre de blocs, défini par variable d'environnement.
 - `TRAIN_NUM_ITER` : nombre d'itérations, défini par variable d'environnement.
-- `TRAIN_CAP_MAX` : plafond d'entraînement, défini par variable d'environnement.
+- `TRAIN_SP_CAP_MAX` : plafond d'entraînement Spirula, défini par variable
+  d'environnement ; sans effet sur Nerfstudio/Splatfacto.
 - Paramètres SfM : définis par variables d'environnement ; voir `--help`.
 
 Le découpage spectral recherche les séparations de faible covisibilité
@@ -72,8 +73,8 @@ les tailles inégales sont acceptées avec un avertissement : l'équilibrage
 n'arrête plus le pipeline. Le recouvrement est ajouté après cet ajustement
 et peut augmenter les effectifs finaux.
 
-- `TRAIN_CAP_MAX` s'applique à chaque bloc séparément ; le plafond cumulé peut
-  donc atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
+- `TRAIN_SP_CAP_MAX` s'applique à chaque bloc séparément avec Spirula ; le plafond cumulé peut
+  donc atteindre `SPLIT_NUM_BLOCKS × TRAIN_SP_CAP_MAX` Gaussians.
 
 ## 4. Fonctionnement interne
 

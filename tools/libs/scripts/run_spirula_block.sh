@@ -11,7 +11,7 @@ spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 sparse_dir="${SPARSE_DIR:-}"
 images_dir="${IMAGES_DIR:-}"
 output_dir="${OUTPUT_DIR:-}"
-train_preset="${TRAIN_PRESET:-3dgs}"
+train_preset="${TRAIN_SP_PRESET:-3dgs}"
 clean="${TRAIN_CLEAN:-false}"
 export_name="block.splat"
 
@@ -19,23 +19,23 @@ python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
 export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
 
-quality="${TRAIN_QUALITY:-}"
-distraction_robustness="${TRAIN_DISTRACTION_ROBUSTNESS:-off}"
+quality="${TRAIN_SP_QUALITY:-}"
+distraction_robustness="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
 sp_use_ppisp="${TRAIN_SP_USE_PPISP:-}"
 sp_ppisp_param_type="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
 sp_ppisp_exposure_from_exif="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
 sp_use_bilateral_grid="${TRAIN_SP_USE_BILATERAL_GRID:-}"
 sp_bilagrid_type="${TRAIN_SP_BILAGRID_TYPE:-}"
-cap_max="${TRAIN_CAP_MAX:-}"
+cap_max="${TRAIN_SP_CAP_MAX:-}"
 densify_loss_map_mode="${DENSIFY_LOSS_MAP_MODE:-}"
 densify_score_mode="${DENSIFY_SCORE_MODE:-}"
 min_init_fraction="${MIN_INIT_FRACTION:-}"
 num_iterations="${TRAIN_NUM_ITER:-50000}"
 train_resolution_divisor="${TRAIN_RESOLUTION_DIVISOR:-}"
-growth_factor="${TRAIN_GROWTH_FACTOR:-}"
-refine_stop_iter="${TRAIN_REFINE_STOP_ITER:-}"
-refine_stop_num_iter="${TRAIN_REFINE_STOP_NUM_ITER:-}"
-floater_suppression="${TRAIN_FLOATER_SUPPRESSION:-}"
+growth_factor="${TRAIN_SP_GROWTH_FACTOR:-}"
+refine_stop_iter="${TRAIN_SP_REFINE_STOP_ITER:-}"
+refine_stop_num_iter="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+floater_suppression="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
 masks_dir="${MASKS_DIR:-}"
 mask_mode="${MASK_MODE:-ignore}"
 
@@ -249,9 +249,9 @@ if [[ -z "$growth_factor" ]]; then
       if (factor < 1.001) factor = 1.001
       if (factor > 1.05) factor = 1.05
       printf "%.12f %.12f %d %d %.12g\n", factor, raw, cycles, stop, fraction
-    }')" || die "Estimation TRAIN_GROWTH_FACTOR impossible : fraction initiale > 0 et au moins un cycle de croissance requis ; définir un facteur explicite ou modifier le calendrier."
+    }')" || die "Estimation TRAIN_SP_GROWTH_FACTOR impossible : fraction initiale > 0 et au moins un cycle de croissance requis ; définir un facteur explicite ou modifier le calendrier."
   read -r growth_factor growth_raw growth_cycles growth_stop growth_fraction <<< "$growth_estimate"
-  log "TRAIN_GROWTH_FACTOR estimé : $growth_factor ($growth_cycles cycles avant le pas $growth_stop ; fraction initiale supposée $growth_fraction du budget)."
+  log "TRAIN_SP_GROWTH_FACTOR estimé : $growth_factor ($growth_cycles cycles avant le pas $growth_stop ; fraction initiale supposée $growth_fraction du budget)."
   if awk -v x="$growth_raw" 'BEGIN { exit !(x < 1.001 || x > 1.05) }'; then
     echo "[AVERTISSEMENT] Facteur théorique $growth_raw borné à $growth_factor ; l'arrivée au plafond à l'arrêt de croissance n'est pas garantie." >&2
   fi

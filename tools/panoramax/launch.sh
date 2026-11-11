@@ -39,8 +39,10 @@ validate_config slurm || exit 1
 : "${PANORAMAX_BBOX:?PANORAMAX_BBOX doit être défini dans la configuration}"
 : "${SPLIT_NUM_BLOCKS:?SPLIT_NUM_BLOCKS doit être défini dans la configuration}"
 : "${TRAIN_NUM_ITER:?TRAIN_NUM_ITER doit être défini dans la configuration}"
-: "${TRAIN_CAP_MAX:?TRAIN_CAP_MAX doit être défini dans la configuration}"
-: "${TRAIN_PRESET:?TRAIN_PRESET doit être défini dans la configuration}"
+if [[ "${TRAIN_BACKEND:-spirula}" == spirula ]]; then
+  : "${TRAIN_SP_CAP_MAX:?TRAIN_SP_CAP_MAX doit être défini pour TRAIN_BACKEND=spirula}"
+  : "${TRAIN_SP_PRESET:?TRAIN_SP_PRESET doit être défini pour TRAIN_BACKEND=spirula}"
+fi
 SLURM_PARTITION="${SLURM_PARTITION:-jean-zellou}"
 SLURM_CPUS_PER_TASK="${SLURM_CPUS_PER_TASK:-16}"
 SLURM_MEMORY="${SLURM_MEMORY:-64G}"

@@ -148,8 +148,8 @@ class ConversionTest(unittest.TestCase):
 
         env = {
             "OUTPUT_DIR": str(self.root / "native"), "COLMAP_METHOD": "colmap",
-            "COLMAP_BIN": "colmap", "COLMAP_USE_GPU": "false",
-            "COLMAP_MATCHING": "exhaustive", "SFM_CAMERA_MODE": "folder",
+            "SFM_COLMAP_BIN": "colmap", "SFM_COLMAP_USE_GPU": "false",
+            "SFM_COLMAP_MATCHING": "exhaustive", "SFM_CAMERA_MODE": "folder",
             "SFM_CAMERA_MODEL": "opencv", "SFM_MAX_IMAGE_SIZE": "2048",
             "SFM_ALIKED_MAX_FEATURES": "4096", "SFM_THREADS": "4",
             "SFM_MASKS": "on", "SFM_MAX_ERROR": "2", "SFM_MIN_INLIERS": "30",
@@ -173,8 +173,8 @@ class ConversionTest(unittest.TestCase):
 
         env = {
             "OUTPUT_DIR": str(self.root / "ns"), "COLMAP_METHOD": "nerfstudio",
-            "COLMAP_MATCHING": "exhaustive", "COLMAP_BIN": "colmap",
-            "NS_PROCESS_DATA_BIN": "ns-process-data", "SFM_CAMERA_MODEL": "opencv",
+            "SFM_COLMAP_MATCHING": "exhaustive", "SFM_COLMAP_BIN": "colmap",
+            "SFM_NS_PROCESS_DATA_BIN": "ns-process-data", "SFM_CAMERA_MODEL": "opencv",
         }
         Path(env["OUTPUT_DIR"]).mkdir()
         (Path(env["OUTPUT_DIR"]) / "images").symlink_to(self.images, target_is_directory=True)

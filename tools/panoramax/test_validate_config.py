@@ -17,12 +17,12 @@ class ValidateConfigTest(unittest.TestCase):
 SFM_MAX_ERROR=0
 SFM_MIN_INLIERS=1.5
 SFM_MIN_TRI_ANGLE=91
-SFM_BA_LOSS=bad
-SFM_BA_LOSS_PARAM=nan
+SFM_SP_BA_LOSS=bad
+SFM_SP_BA_LOSS_PARAM=nan
 """)
                 self.assertEqual(result.returncode, 1)
                 for name in ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
-                             "SFM_BA_LOSS", "SFM_BA_LOSS_PARAM"):
+                             "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM"):
                     self.assertIn(name, result.stderr)
                 self.assertFalse((root / "output").exists())
 
@@ -47,24 +47,24 @@ SFM_BA_LOSS_PARAM=nan
     def test_typo_stops_local_and_slurm_before_side_effects(self):
         for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
-                result, root = self.execute(script, 'SFM_MATCHER="lightblue"\n')
+                result, root = self.execute(script, 'SFM_SP_MATCHER="lightblue"\n')
                 self.assertEqual(result.returncode, 1)
-                self.assertIn("SFM_MATCHER='lightblue'", result.stderr)
+                self.assertIn("SFM_SP_MATCHER='lightblue'", result.stderr)
                 self.assertIn("bruteforce|lightglue", result.stderr)
                 self.assertNotIn("sbatch introuvable", result.stderr)
                 self.assertFalse((root / "output").exists())
 
     def test_all_invalid_values_are_reported_together(self):
         result, root = self.execute("validate_config.sh", """
-SFM_MATCHER=lightblue
-SFM_FEATURES=alikedd
-SFM_PAIRS=prefliter
-TRAIN_PRESET=3dgz
+SFM_SP_MATCHER=lightblue
+SFM_SP_FEATURES=alikedd
+SFM_SP_PAIRS=prefliter
+TRAIN_SP_PRESET=3dgz
 SPLIT_NUM_BLOCKS=0
 TRAIN_NUM_ITER=-1
-TRAIN_CAP_MAX=1.5
+TRAIN_SP_CAP_MAX=1.5
 SFM_THREADS=4.5
-SFM_PAIR_MAX_DISTANCE=nan
+SFM_SP_PAIR_MAX_DISTANCE=nan
 SPLIT_OVERLAP_MAX_FRACTION=1.1
 TRAIN_CLEAN=flase
 PANORAMAX_REPLACE_REQUEST=oui
@@ -83,11 +83,11 @@ CLEANGS_MAX_REMOVAL_FRACTION=1
 POSTPROCESS_FILTER_SIZE_FACTOR=1
 POSTPROCESS_SPARSE_BBOX_MODE=yes
 POSTPROCESS_SPARSE_BBOX_MARGIN=-0.1
-TRAIN_SPLATS_PER_IMAGE=0
-TRAIN_GROWTH_FACTOR=1
-TRAIN_REFINE_STOP_ITER=1.5
-TRAIN_REFINE_STOP_NUM_ITER=-1
-TRAIN_FLOATER_SUPPRESSION=medium
+TRAIN_SP_SPLATS_PER_IMAGE=0
+TRAIN_SP_GROWTH_FACTOR=1
+TRAIN_SP_REFINE_STOP_ITER=1.5
+TRAIN_SP_REFINE_STOP_NUM_ITER=-1
+TRAIN_SP_FLOATER_SUPPRESSION=medium
 TRAIN_MASKS=maybe
 TRAIN_MASKS_BACKEND=bad
 TRAIN_MASKS_MODE=hide
@@ -102,17 +102,17 @@ SLURM_MEMORY=64GB
 SLURM_TIME_LIMIT=48:99:00
 """, "slurm")
         self.assertEqual(result.returncode, 1)
-        for name in ("SFM_MATCHER", "SFM_FEATURES", "SFM_PAIRS", "TRAIN_PRESET",
-                     "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "SFM_THREADS",
-                     "SFM_PAIR_MAX_DISTANCE", "SPLIT_OVERLAP_MAX_FRACTION", "TRAIN_CLEAN", "PANORAMAX_REPLACE_REQUEST",
+        for name in ("SFM_SP_MATCHER", "SFM_SP_FEATURES", "SFM_SP_PAIRS", "TRAIN_SP_PRESET",
+                     "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SFM_THREADS",
+                     "SFM_SP_PAIR_MAX_DISTANCE", "SPLIT_OVERLAP_MAX_FRACTION", "TRAIN_CLEAN", "PANORAMAX_REPLACE_REQUEST",
                      "PANORAMAX_QUALITY", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "PANORAMAX_API_URL",
                      "EXPORT_SPLAT_NAME", "MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
                      "POSTPROCESS_FILTER_MODE", "POSTPROCESS_FILTER_SIZE_FACTOR",
                      "POSTPROCESS_CLEANER", "CLEANGS_MODE", "CLEANGS_MIN_VIEWS",
                      "CLEANGS_SKY_CONFIDENCE", "CLEANGS_MAX_REMOVAL_FRACTION",
                      "POSTPROCESS_SPARSE_BBOX_MODE", "POSTPROCESS_SPARSE_BBOX_MARGIN",
-                     "TRAIN_SPLATS_PER_IMAGE", "TRAIN_GROWTH_FACTOR", "TRAIN_REFINE_STOP_ITER", "TRAIN_REFINE_STOP_NUM_ITER",
-                     "TRAIN_FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
+                     "TRAIN_SP_SPLATS_PER_IMAGE", "TRAIN_SP_GROWTH_FACTOR", "TRAIN_SP_REFINE_STOP_ITER", "TRAIN_SP_REFINE_STOP_NUM_ITER",
+                     "TRAIN_SP_FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
                      "TRAIN_MASKS_CONFIDENCE", "TRAIN_MASKS_DILATE", "TRAIN_MASKS_MAX_FRACTION",
                      "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
@@ -122,15 +122,15 @@ SLURM_TIME_LIMIT=48:99:00
     def test_defaults_and_optional_empty_values_are_valid(self):
         for mode in ("local", "slurm"):
             result, root = self.execute("validate_config.sh", """
-SFM_PAIR_MAX_DISTANCE=""
+SFM_SP_PAIR_MAX_DISTANCE=""
 SFM_THREADS=""
 PANORAMAX_IMAGE_MAX=""
 SLURM_BLOCK_PARALLELISM=""
-SFM_MATCHER=bruteforce
-TRAIN_SPLATS_PER_IMAGE=""
-TRAIN_GROWTH_FACTOR=""
-TRAIN_REFINE_STOP_ITER=""
-TRAIN_REFINE_STOP_NUM_ITER=""
+SFM_SP_MATCHER=bruteforce
+TRAIN_SP_SPLATS_PER_IMAGE=""
+TRAIN_SP_GROWTH_FACTOR=""
+TRAIN_SP_REFINE_STOP_ITER=""
+TRAIN_SP_REFINE_STOP_NUM_ITER=""
 """, mode)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("Paramètres valides", result.stdout)
@@ -150,7 +150,7 @@ TRAIN_REFINE_STOP_NUM_ITER=""
         values = dict(assignments)
         self.assertEqual(len(values), len(assignments), "Duplicate config parameters")
         required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
-                    "TRAIN_CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
+                    "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
         for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             defaults = re.findall(
@@ -165,7 +165,7 @@ TRAIN_REFINE_STOP_NUM_ITER=""
             r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
             (ROOT.parents[1] / "tools/libs/scripts" / "run_spirula_blocks.sh").read_text(),
             re.MULTILINE))
-        for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "TRAIN_PRESET"):
+        for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
         self.assertIn('SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"',
                       (ROOT.parents[1] / "script/panoramax_to_3dgs.sh").read_text())
@@ -252,7 +252,7 @@ TRAIN_SP_USE_PPISP=true
 
         result, root = self.execute("validate_config.sh", """
 SFM_SP_IMAGE_EXPOSURE=auto
-SFM_PAIR_MAX_DISTANCE=30
+SFM_SP_PAIR_MAX_DISTANCE=30
 """)
         self.assertEqual(result.returncode, 1)
         self.assertIn("SFM_SP_IMAGE_EXPOSURE", result.stderr)
@@ -264,32 +264,32 @@ SFM_PAIR_MAX_DISTANCE=30
 
     def test_training_quality_choices(self):
         for value in ("", "low", "medium", "high", "ultra"):
-            result, _ = self.execute("validate_config.sh", f'TRAIN_QUALITY="{value}"\n')
+            result, _ = self.execute("validate_config.sh", f'TRAIN_SP_QUALITY="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
         for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
-            result, root = self.execute(script, 'TRAIN_QUALITY="maximum"\n')
+            result, root = self.execute(script, 'TRAIN_SP_QUALITY="maximum"\n')
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TRAIN_QUALITY", result.stderr)
+            self.assertIn("TRAIN_SP_QUALITY", result.stderr)
             self.assertFalse((root / "output").exists())
 
     def test_distraction_robustness_choices(self):
         for value in ("off", "mild", "strong"):
             result, _ = self.execute("validate_config.sh",
-                                    f'TRAIN_DISTRACTION_ROBUSTNESS="{value}"\n')
+                                    f'TRAIN_SP_DISTRACTION_ROBUSTNESS="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
         for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
-            result, root = self.execute(script, 'TRAIN_DISTRACTION_ROBUSTNESS="invalid"\n')
+            result, root = self.execute(script, 'TRAIN_SP_DISTRACTION_ROBUSTNESS="invalid"\n')
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("TRAIN_DISTRACTION_ROBUSTNESS", result.stderr)
+            self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
             self.assertFalse((root / "output").exists())
 
     def test_legacy_names_are_rejected_even_when_empty_or_new_name_exists(self):
         for old, new in (
-                ("CAP_MAX", "TRAIN_CAP_MAX"), ("NUM_ITER", "TRAIN_NUM_ITER"),
+                ("CAP_MAX", "TRAIN_SP_CAP_MAX"), ("NUM_ITER", "TRAIN_NUM_ITER"),
                 ("NUM_BLOCKS", "SPLIT_NUM_BLOCKS"), ("CLEAN_GS", "TRAIN_CLEAN"),
                 ("BBOX_LAMBERT93", "PANORAMAX_BBOX"),
                 ("PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_BBOX"),
-                ("GROWTH_FACTOR", "TRAIN_GROWTH_FACTOR"),
+                ("GROWTH_FACTOR", "TRAIN_SP_GROWTH_FACTOR"),
                 ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
             for script in ("validate_config.sh", "../../script/panoramax_to_3dgs.sh", "launch.sh"):
                 result, root = self.execute(script, f'{old}=""\n')

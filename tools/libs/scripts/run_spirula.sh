@@ -9,7 +9,7 @@ spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"
 output_dir="${OUTPUT_DIR:-}"
 clean="${CLEAN:-false}"
-train_preset="${TRAIN_PRESET:-3dgs}"
+train_preset="${TRAIN_SP_PRESET:-3dgs}"
 
 max_resolution="${MAX_RESOLUTION:-}"
 pairs="${PAIRS:-}"
@@ -58,7 +58,7 @@ Options:
                         Env: OUTPUT_DIR
 
   --train-preset NAME   Preset d'entraînement Spirula
-                        Env: TRAIN_PRESET
+                        Env: TRAIN_SP_PRESET
                         Défaut: 3dgs
                         Valeurs typiques:
                           3dgs

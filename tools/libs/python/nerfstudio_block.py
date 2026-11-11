@@ -73,9 +73,9 @@ def train(args):
     masks = args.masks_dir.resolve() if args.masks_dir else None
     iterations = (args.num_iterations if args.num_iterations is not None
                   else int(os.environ.get("TRAIN_NUM_ITER", "20000")))
-    factor = int(os.environ.get("NS_DOWNSCALE_FACTOR", "1"))
+    factor = int(os.environ.get("TRAIN_NS_DOWNSCALE_FACTOR", "1"))
     if iterations < 1 or factor < 1:
-        raise ValueError("Itérations et NS_DOWNSCALE_FACTOR doivent être >= 1.")
+        raise ValueError("Itérations et TRAIN_NS_DOWNSCALE_FACTOR doivent être >= 1.")
     mask_mode = args.mask_mode or os.environ.get("TRAIN_MASKS_MODE", "ignore")
     if masks is not None and mask_mode != "ignore":
         raise ValueError("Nerfstudio exige le mode de masques ignore, pas empty/auto.")
@@ -91,8 +91,8 @@ def train(args):
             for key in ("cameras.bin", "images.bin", "points3D.bin")
         },
         "mask_policy": (masks / "masks.json").read_text() if masks else None,
-        "ns_train": os.environ.get("NS_TRAIN_BIN", "ns-train"),
-        "ns_export": os.environ.get("NS_EXPORT_BIN", "ns-export"),
+        "ns_train": os.environ.get("TRAIN_NS_TRAIN_BIN", "ns-train"),
+        "ns_export": os.environ.get("TRAIN_NS_EXPORT_BIN", "ns-export"),
         "name": name,
     }
     marker = output / "nerfstudio_inputs.json"
@@ -127,7 +127,7 @@ def train(args):
         print(
             "[Nerfstudio] Les paramètres Spirula de cap, qualité, croissance, "
             "flottants et distractions ne sont pas transposés. Splatfacto utilise "
-            "ses réglages propres ; TRAIN_CAP_MAX n'est pas une limite garantie.",
+            "ses réglages propres ; TRAIN_SP_CAP_MAX n'est pas une limite garantie.",
             flush=True,
         )
         run([
