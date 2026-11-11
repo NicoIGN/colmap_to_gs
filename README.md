@@ -85,22 +85,33 @@ Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
 
 ### Démarrer
 
-Exemple pour lancer le pipeline images locales depuis la racine du dépôt :
+Depuis la racine du dépôt, copier puis adapter les configurations :
 
 ```bash
-cp tools/images_to_splat/config.sh.example /chemin/config.sh
-# Adapter les chemins et réglages dans /chemin/config.sh.
-bash script/images_to_3dgs.sh /chemin/config.sh
+cp tools/images_to_splat/config.sh.example /chemin/images.sh
+cp tools/panoramax/config.sh.example /chemin/panoramax.sh
 ```
 
-Sur un cluster Slurm, deux méthodes de lancement existent pour chaque pipeline
-global (`images_to_3dgs` et `panoramax_to_3dgs`) :
+**En Bash** — exécution directe, avec les blocs entraînés successivement :
 
 ```bash
-# 1. Lanceur : soumet préparation, tableau de blocs et fusion en jobs dépendants.
-bash script/launch_images_to_3dgs.sh /chemin/config.sh
-# 2. sbatch : un seul job, blocs entraînés en parallèle, un GPU par bloc.
-sbatch -p PARTITION --gres=gpu:4 script/images_to_3dgs.slurm /chemin/config.sh
+# Images locales → 3DGS
+bash script/images_to_3dgs.sh /chemin/images.sh
+
+# Panoramax → 3DGS
+bash script/panoramax_to_3dgs.sh /chemin/panoramax.sh
+```
+
+**Avec `sbatch`** — sur un cluster Slurm, soumettre depuis le nœud de connexion
+en adaptant `PARTITION` et le nombre de GPU. Chaque job réserve une allocation ;
+les blocs y sont entraînés en parallèle, avec un GPU par bloc actif.
+
+```bash
+# Images locales → 3DGS
+sbatch -p PARTITION --gres=gpu:4 script/images_to_3dgs.slurm /chemin/images.sh
+
+# Panoramax → 3DGS
+sbatch -p PARTITION --gres=gpu:4 script/panoramax_to_3dgs.slurm /chemin/panoramax.sh
 ```
 
 Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
