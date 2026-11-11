@@ -2,11 +2,12 @@
 
 [Retour à la documentation générale](guide_utilisateur.md)
 
-**Pipeline commun.** Le [pipeline images](../tools/images_to_splat/README.md)
-et le [pipeline Panoramax](../tools/panoramax/README.md) proposent maintenant
+Le [pipeline images](../tools/images_to_splat/README.md) et le
+[pipeline Panoramax](../tools/panoramax/README.md) acceptent
 `TRAIN_BACKEND=nerfstudio`, avec export `.splat` dans les coordonnées COLMAP
-et fusion commune. Le contrôle PyTorch/NVIDIA-CUDA est obligatoire.
-La suite décrit le parcours historique autonome, qui conserve sa sortie `.ply`.
+et fusion commune. PyTorch et un GPU NVIDIA/CUDA sont obligatoires.
+Ce document décrit l'entraînement Nerfstudio d'une scène unique, sans blocs,
+avec sortie `.ply`.
 
 Les commandes de ce document se lancent depuis la racine du dépôt.
 

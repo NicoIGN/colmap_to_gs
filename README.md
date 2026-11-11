@@ -79,7 +79,7 @@ l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
 - **Images locales → splat** : [pipeline images vers splat](tools/images_to_splat/README.md).
 
 La préparation COLMAP possède son propre outil et sa configuration :
-Spirula, COLMAP direct, `ns-process-data` ou conversion de poses et LiDAR.
+Spirula, COLMAP direct, `ns-process-data` ou conversion de poses caméra et LiDAR.
 Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
 échoue explicitement s'ils sont absents.
 
@@ -93,6 +93,18 @@ cp tools/images_to_splat/config.sh.example /chemin/config.sh
 bash script/images_to_3dgs.sh /chemin/config.sh
 ```
 
+Sur un cluster Slurm, deux méthodes de lancement existent pour chaque pipeline
+global (`images_to_3dgs` et `panoramax_to_3dgs`) :
+
+```bash
+# 1. Lanceur : soumet préparation, tableau de blocs et fusion en jobs dépendants.
+bash script/launch_images_to_3dgs.sh /chemin/config.sh
+# 2. sbatch : un seul job, blocs entraînés en parallèle, un GPU par bloc.
+sbatch -p PARTITION --gres=gpu:4 script/images_to_3dgs.slurm /chemin/config.sh
+```
+
+Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
+
 Les installations, données attendues, paramètres et sorties sont décrits dans
 le README du pipeline choisi.
 
@@ -100,6 +112,7 @@ le README du pipeline choisi.
 
 - [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/images_to_colmap/README.md).
+- [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
 - [Installation de Spirula](tools/spirula/README.md).
 - [Masques](tools/segmentation_masks/README.md).
 - [Export, filtrage et fusion](tools/postprocess/README.md).

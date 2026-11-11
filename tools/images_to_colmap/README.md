@@ -19,8 +19,9 @@ bash tools/images_to_colmap/run.sh /chemin/config.sh
   Cette interface ne transmet pas les masques SfM : `SFM_MASKS=off` et
   `SFM_CAMERA_MODE=single` sont requis. Le regroupement des caméras et les seuils
   SfM sont ceux de Nerfstudio, pas les réglages Spirula.
-- `orientations` : conversion de poses calibrées et d'un PLY coloré, sans nouvelle
-  estimation photogrammétrique. `SFM_MASKS=off` est requis.
+- `orientations` : conversion de poses caméra calibrées (position, rotation,
+  intrinsèques) et d'un PLY coloré, sans nouvelle estimation photogrammétrique.
+  `SFM_MASKS=off` est requis.
 
 **Réglages.** Copier [`config.sh.example`](config.sh.example). Les masques,
 la reprise et le recalage GPX reprennent les réglages du
@@ -46,7 +47,7 @@ elle n'est pas reprise implicitement.
 
 ## Orientations et LiDAR
 
-**Convention.** `ORIENTATIONS_JSON` décrit des poses OpenCV monde → caméra :
+**Convention.** `ORIENTATIONS_JSON` décrit des poses caméra (extrinsèques) OpenCV monde → caméra :
 `X_camera = R(qvec) × X_world + tvec`, quaternion `[w,x,y,z]`.
 Les pixels ont leur origine en haut à gauche. Les images conservent leurs noms
 relatifs et leurs dimensions brutes. PINHOLE et OPENCV sont supportés.
@@ -83,7 +84,22 @@ découpage existant. Ce ne sont pas des correspondances vérifiées par SfM :
 occlusions résiduelles et erreurs de calibration restent possibles.
 Valider visuellement les projections ; réduire les gros nuages avant conversion.
 
-**Conversions.** Deux scripts préparent les données sans modifier leur repère :
+**Conversions.** Les scripts suivants produisent `ORIENTATIONS_JSON` et
+`LIDAR_PLY` :
+
+| Données source | Outil |
+|---|---|
+| Poses caméra IGNF `.CON` + LiDAR `.LAZ` | [`tools/con_laz_to_orientations`](../con_laz_to_orientations/README.md) |
+| `transforms.json` Nerfstudio | `transforms_to_orientations.py` (ci-dessous) |
+| LAS/LAZ coloré seul | `las_to_ply.py` (ci-dessous) |
+
+```bash
+# .CON + .LAZ : poses caméra et nuage, avec origine locale commune.
+python tools/con_laz_to_orientations/con_laz_to_orientations.py \
+  --images /chemin/images --laz /chemin/lidar.laz --output-dir /chemin/ori --stride 10
+```
+
+Les deux scripts suivants ne modifient pas le repère :
 
 ```bash
 # transforms.json : matrices OpenGL camera-to-world explicites, pas un checkpoint.
@@ -95,8 +111,6 @@ python tools/images_to_colmap/las_to_ply.py \
   --input /chemin/points.laz --output /chemin/points.ply --stride 10
 ```
 
-**Limite.** Aucun lecteur CON/XML n'est présent dans cette version du dépôt.
-Ces formats demandent un adaptateur vers le JSON ci-dessus, avec vérification
-des conventions de rotation et de calibration ; ils ne sont pas interprétés
-par approximation. Le champ `reference` est conservé dans
-`sfm/sparse/0/orientation_reference.json`, sans inventer d'origine géographique.
+`las_to_ply.py` accepte aussi `--origin X,Y,Z` (soustrait) et
+`--bbox xmin,ymin,xmax,ymax` (appliquée avant `--stride`). Le champ `reference` du JSON est conservé dans
+`sfm/sparse/0/orientation_reference.json`.

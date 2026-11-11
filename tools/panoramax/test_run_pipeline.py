@@ -7,8 +7,8 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).with_name("run_pipeline.sh").resolve()
-REPO_ROOT = SCRIPT.parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = REPO_ROOT / "script" / "panoramax_to_3dgs.sh"
 
 
 class PanoramaxPipelineTest(unittest.TestCase):

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Configuration Bash de confiance : elle est sourcee, jamais interpretee comme
-# de simples donnees. Meme fichier pour run_pipeline.sh (local) et launch.sh (Slurm).
+# de simples donnees. Meme fichier pour script/images_to_3dgs.sh (local) et le lancement Slurm.
 # Tous les chemins de donnees/modeles doivent etre absolus et visibles des noeuds.
 
 # ============================================================================
@@ -35,7 +35,7 @@ COLMAP_BIN="colmap"
 COLMAP_USE_GPU="true"                 # COLMAP direct seulement
 COLMAP_MATCHING="exhaustive"          # exhaustive | sequential, hors Spirula
 NS_PROCESS_DATA_BIN="ns-process-data"
-# Mode orientations : poses JSON explicites et PLY colore dans les memes coordonnees.
+# Mode orientations : poses camera JSON explicites et PLY colore dans les memes coordonnees.
 ORIENTATIONS_JSON=""
 LIDAR_PLY=""
 

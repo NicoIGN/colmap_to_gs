@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 
 class ValidateConfigTest(unittest.TestCase):
     def test_invalid_geometry_rejected_local_and_slurm(self):
-        for script in ("run_pipeline.sh", "launch.sh"):
+        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, """
 SFM_MAX_ERROR=0
@@ -45,7 +45,7 @@ SFM_BA_LOSS_PARAM=nan
         return result, root
 
     def test_typo_stops_local_and_slurm_before_side_effects(self):
-        for script in ("run_pipeline.sh", "launch.sh"):
+        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, 'SFM_MATCHER="lightblue"\n')
                 self.assertEqual(result.returncode, 1)
@@ -152,7 +152,7 @@ TRAIN_REFINE_STOP_NUM_ITER=""
         required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
                     "TRAIN_CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
-        for script in ("run_pipeline.sh", "launch.sh"):
+        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             defaults = re.findall(
                 r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
                 (ROOT / script).read_text(), re.MULTILINE)
@@ -235,7 +235,7 @@ SFM_MASKS_MAX_FRACTION=0
         for value in ("", "low", "medium", "high", "ultra"):
             result, _ = self.execute("validate_config.sh", f'TRAIN_QUALITY="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("run_pipeline.sh", "launch.sh"):
+        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_QUALITY="maximum"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_QUALITY", result.stderr)
@@ -246,7 +246,7 @@ SFM_MASKS_MAX_FRACTION=0
             result, _ = self.execute("validate_config.sh",
                                     f'TRAIN_DISTRACTION_ROBUSTNESS="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("run_pipeline.sh", "launch.sh"):
+        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_DISTRACTION_ROBUSTNESS="invalid"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_DISTRACTION_ROBUSTNESS", result.stderr)
@@ -260,7 +260,7 @@ SFM_MASKS_MAX_FRACTION=0
                 ("PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_BBOX"),
                 ("GROWTH_FACTOR", "TRAIN_GROWTH_FACTOR"),
                 ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
-            for script in ("validate_config.sh", "run_pipeline.sh", "launch.sh"):
+            for script in ("validate_config.sh", "../../script/panoramax_to_3dgs.sh", "launch.sh"):
                 result, root = self.execute(script, f'{old}=""\n')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"ancien paramètre {old} interdit", result.stderr)

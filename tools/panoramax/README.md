@@ -129,7 +129,7 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Pipeline complet bbox → `.splat`
 
-- `run_pipeline.sh` exécute :
+- `script/panoramax_to_3dgs.sh` exécute :
 
 ```text
 Bbox + configuration
@@ -168,8 +168,8 @@ cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 bash script/panoramax_to_3dgs.sh /chemin/vers/paris.sh
 ```
 
-- Validation de configuration : avant téléchargement et, avec `launch.sh`,
-  avant toute soumission Slurm.
+- Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
+  avant toute soumission.
 - Erreurs : regroupées et indiquent le paramètre, sa valeur et les valeurs
   attendues (par exemple `lightblue` est refusé pour `SFM_MATCHER`, sans
   correction automatique).
@@ -405,8 +405,12 @@ les ressources `SLURM_*`, le parallélisme des blocs, l'environnement des nœuds
 les dépendances et le suivi des jobs.
 
 ```bash
-# Sur le nœud de connexion, après adaptation de la configuration au cluster :
-bash tools/panoramax/launch.sh /chemin/partage/config.sh
+# Méthode 1 (lanceur) : préparation, tableau de blocs et fusion en jobs dépendants.
+bash script/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
+
+# Méthode 2 (sbatch) : un seul job ; blocs en parallèle, un GPU par bloc.
+sbatch -p PARTITION --gres=gpu:4 --cpus-per-task=32 --mem=128G \
+  script/panoramax_to_3dgs.slurm /chemin/partage/config.sh
 ```
 
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.

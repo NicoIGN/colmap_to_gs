@@ -20,8 +20,10 @@ les images, ou à réutiliser un modèle COLMAP existant avec ses images.
   propose `COLMAP_METHOD=spirula|colmap|nerfstudio|orientations`, avec une
   configuration commune. Les [outils de préparation](../tools/preprocess/README.md)
   permettent aussi d'extraire des images d'une vidéo.
-- Orientations et LiDAR : convertir les poses vers le JSON explicite documenté
+- Orientations et LiDAR : convertir les poses caméra vers le JSON explicite documenté
   et le nuage coloré vers PLY, puis utiliser `COLMAP_METHOD=orientations`.
+  Pour des poses IGNF `.CON` et un `.LAZ`, utiliser
+  [tools/con_laz_to_orientations](../tools/con_laz_to_orientations/README.md).
 - Modèle existant : conserver les images associées, les paramètres des caméras,
   leurs poses et les points 3D.
 
@@ -110,6 +112,8 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
   [tools/preprocess](../tools/preprocess/README.md).
 - **Choix du producteur COLMAP et conversion orientations/LiDAR** :
   [tools/images_to_colmap](../tools/images_to_colmap/README.md).
+- **Conversion des poses caméra IGNF `.CON` et du LiDAR `.LAZ`** :
+  [tools/con_laz_to_orientations](../tools/con_laz_to_orientations/README.md).
 - **Masques de segmentation** :
   [tools/segmentation_masks](../tools/segmentation_masks/README.md).
 - **Filtrage et fusion des splats** :

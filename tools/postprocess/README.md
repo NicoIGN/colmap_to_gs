@@ -19,7 +19,7 @@ python3 tools/postprocess/export_ply.py --help
 | `export_splat_to_ply.sh` | Export [Nerfstudio](../../doc/nerfstudio.md) via `ns-export` |
 | `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP |
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
-| `export_ply_legacy.py` | Sauvegarde exacte de l'ancien exporteur (BBOX et seuil global de taille) |
+| `export_ply_legacy.py` | Exporteur alternatif : filtre par BBOX et seuil global de taille |
 | `filter_splats.py` | Diagnostic/nettoyage contextuel d'un `.splat`, sans seuil de distance absolu |
 | `merge_splats.py` | Fusion de résultats déjà alignés par sélection dans les voxels |
 | `colmap_to_gpkg.py` | Export de données COLMAP en GeoPackage (GDAL requis) |
@@ -123,7 +123,7 @@ python3 tools/postprocess/filter_splats.py \
 - Le JSON contient un compteur distinct `sparse_support.unsupported`.
 
 - [Pipeline Panoramax](../panoramax/README.md) : **les blocs sont exportés sans filtre géométrique** ;
-  le nouveau filtre est évalué après fusion, sur l'ensemble de la scène, afin
+  le filtre contextuel est évalué après fusion, sur l'ensemble de la scène, afin
   que les frontières internes des blocs ne soient pas traitées comme des bords de chantier.
 - `POSTPROCESS_FILTER_MODE="diagnostic"` : défaut ; valeurs alternatives
   `"apply"` ou `"off"`.
@@ -137,15 +137,15 @@ python3 tools/postprocess/filter_splats.py \
 - `export_ply.py` autonome : utilise le mode diagnostic par défaut
   (`--filter-mode diagnostic|apply|off`) sur la scène fournie ; produit les
   mêmes diagnostics et conserve le PLY d'entrée.
-- Anciens arguments `--points`, `--dist`, `--radius-factor`, `--outlier-percent`
-  et `--max-points` : restent acceptés pour compatibilité, mais ne servent plus
-  à retirer des splats ; un message le précise.
-- `--max-world-scale` : refusé avec le nouveau filtre, car il impose un seuil absolu.
+- Arguments `--points`, `--dist`, `--radius-factor`, `--outlier-percent`
+  et `--max-points` : acceptés mais sans effet sur les splats retenus ;
+  un message le précise.
+- `--max-world-scale` : refusé avec le filtre contextuel, car il impose un seuil absolu.
 
 ## 5. Notes et informations complémentaires
 
-`export_ply_legacy.py` conserve exactement le comportement précédent, y compris
-ses garde-fous (avertissement au-delà de 10 %, filtre ignoré au-delà de 20 %).
+`export_ply_legacy.py` applique un filtre par BBOX et un seuil global de taille,
+avec ses garde-fous (avertissement au-delà de 10 %, filtre ignoré au-delà de 20 %).
 Pour le réutiliser explicitement :
 
 ```bash
@@ -153,15 +153,15 @@ EXPORT_SCRIPT="$PWD/tools/postprocess/export_ply_legacy.py" \
   bash tools/libs/scripts/run_spirula_block.sh --sparse-dir ... --images-dir ... --output-dir ...
 ```
 
-L'ancien exporteur accepte toujours `MAX_WORLD_SCALE` via le lanceur. Cette
-surcharge peut de nouveau retirer de grands splats de route : elle ne doit pas
-être utilisée pour tester la nouvelle politique sur des blocs.
+Cet exporteur accepte `MAX_WORLD_SCALE` via le lanceur. Cette surcharge peut
+retirer de grands splats de route : elle ne convient pas pour évaluer le filtre
+contextuel sur des blocs.
 
 Pour réexporter un entraînement existant, relancer la même commande
 `run_spirula_block.sh` **sans `--clean`** : le checkpoint final est réutilisé,
 sans nouvel entraînement, et le `.splat` est remplacé.
-Pour récupérer les splats qu'un ancien export avait supprimés, il faut
-réexporter depuis le checkpoint PLY : filtrer un ancien `.splat` ne peut pas
+Pour récupérer les splats supprimés par un export précédent, il faut
+réexporter depuis le checkpoint PLY : filtrer un `.splat` existant ne peut pas
 recréer les splats manquants.
 
 ```bash

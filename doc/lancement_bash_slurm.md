@@ -5,7 +5,8 @@
 ## 1. Objectif
 
 L'exécution directe lance le calcul dans le shell courant. Slurm réserve les
-ressources d'un cluster et exécute les étapes sur ses nœuds de calcul.
+ressources d'un cluster et exécute les étapes sur ses nœuds de calcul, selon
+deux méthodes : le lanceur multi-jobs ou un job unique soumis avec `sbatch`.
 
 Ce guide concerne trois pipelines :
 
@@ -18,19 +19,50 @@ Ce guide concerne trois pipelines :
 
 Depuis la racine du dépôt, après adaptation de la configuration :
 
-| Pipeline | Exécution directe | Soumission Slurm |
-|---|---|---|
-| Images locales | `bash script/images_to_3dgs.sh /chemin/config.sh` | `bash script/launch_images_to_3dgs.sh /chemin/config.sh` |
-| Panoramax | `bash script/panoramax_to_3dgs.sh /chemin/config.sh` | `bash script/launch_panoramax_to_3dgs.sh /chemin/config.sh` |
+| Pipeline | Exécution directe | Slurm 1 : lanceur multi-jobs | Slurm 2 : job unique `sbatch` |
+|---|---|---|---|
+| Images locales | `bash script/images_to_3dgs.sh CONFIG` | `bash script/launch_images_to_3dgs.sh CONFIG` | `sbatch [options] script/images_to_3dgs.slurm CONFIG [--images DIR]` |
+| Panoramax | `bash script/panoramax_to_3dgs.sh CONFIG` | `bash script/launch_panoramax_to_3dgs.sh CONFIG` | `sbatch [options] script/panoramax_to_3dgs.slurm CONFIG` |
 
-`TRAIN_BACKEND=nerfstudio` conserve ce découpage en jobs. Les tâches
+**Méthode 1 — lanceur multi-jobs.** Se lance avec **Bash, pas avec `sbatch`** :
+le lanceur soumet lui-même un job de préparation, un tableau de jobs (un par
+bloc) et un job de fusion, liés par dépendances. Les ressources viennent des
+variables `SLURM_*` de la configuration. Ajouter `--wait` pour attendre la fin
+de la fusion et obtenir un échec si elle échoue ; sans cette option, un retour
+réussi confirme seulement la soumission. Adapté aux files d'attente où l'on
+préfère de petits jobs indépendants.
+
+**Méthode 2 — job unique `sbatch`.** Une seule allocation exécute préparation,
+blocs puis fusion. Les blocs sont entraînés **en parallèle**, chacun dans un
+step `srun` lié à un GPU de l'allocation : le nombre de GPU demandés fixe le
+parallélisme (borné par `SPLIT_NUM_BLOCKS`). CPU et RAM de l'allocation sont
+répartis à parts égales entre les blocs actifs ; préparation et fusion
+utilisent toute l'allocation. Soumettre depuis la racine du dépôt (ou définir
+`COLMAP_TO_GS_ROOT`) :
+
+```bash
+cd /chemin/colmap_to_gs
+sbatch -p PARTITION --gres=gpu:4 --cpus-per-task=32 --mem=128G \
+  script/panoramax_to_3dgs.slurm /chemin/partage/config.sh
+```
+
+- Directives par défaut des scripts : 1 nœud, `gpu:4`, 32 CPU, `128G`,
+  `48:00:00` ; les options de la ligne `sbatch` les remplacent. Les variables
+  `SLURM_PARTITION`, `SLURM_CPUS_PER_TASK`, `SLURM_MEMORY`, `SLURM_TIME_LIMIT`,
+  `SLURM_GPU_TYPE` et `SLURM_BLOCK_PARALLELISM` de la configuration ne
+  s'appliquent pas à cette méthode.
+- `SLURM_ENV_SETUP` (et `SLURM_CONDA_ENV` pour Panoramax) restent chargés
+  avant chaque étape.
+- Journaux : `images-to-3dgs-JOBID.{out,err}` ou
+  `panoramax-to-3dgs-JOBID.{out,err}` dans le dossier de soumission, et un
+  fichier par bloc `OUTPUT_DIR/logs/sbatch-block-JOBID_INDICE.{out,err}`.
+- Un bloc en échec laisse finir les blocs en cours puis arrête le job sans fusion.
+- Les GPU doivent être isolés par step (cgroups), condition déjà requise par
+  Spirula/Vulkan.
+
+`TRAIN_BACKEND=nerfstudio` fonctionne avec les deux méthodes. Les étapes
 d'entraînement exigent PyTorch et une carte NVIDIA utilisable via CUDA ;
-la fusion reste une étape CPU sans lancement de Nerfstudio.
-
-Les lanceurs `launch.sh` se lancent avec **Bash, pas avec `sbatch`** :
-ils soumettent eux-mêmes les jobs. Ajouter `--wait` à leur commande pour attendre
-la fin de la fusion et obtenir un échec si elle échoue ou ne peut pas démarrer.
-Sans cette option, un retour réussi confirme seulement la soumission.
+la fusion n'exécute pas Nerfstudio.
 
 ## 2. Entrées et sorties
 
@@ -53,7 +85,7 @@ journaux de soumission et d'exécution.
 
 ## 3. Configuration et utilisation
 
-### Ressources Slurm des pipelines images locales et Panoramax
+### Ressources Slurm du lanceur multi-jobs (méthode 1)
 
 Ces paramètres se règlent dans le même fichier que les paramètres du pipeline.
 Les ressources sont demandées **par job ou tâche**, pas pour tout le pipeline.
@@ -135,7 +167,7 @@ GIT_ROOT=/chemin/depot CONFIG_SH=/chemin/config.sh \
 ## 4. Fonctionnement interne
 
 Les pipelines images locales et Panoramax exécutent les blocs successivement
-en Bash direct. Sous Slurm, ils soumettent trois étapes dépendantes :
+en Bash direct. Le lanceur Slurm (méthode 1) soumet trois étapes dépendantes :
 
 ```text
 Préparation GPU : images → masques éventuels → SfM → découpage
@@ -154,6 +186,9 @@ Fusion CPU → export final
 - `launch.sh` : réserve les ressources et soumet les étapes.
 - `launch.slurm` : exécute une étape dans l'allocation ; ne pas le lancer
   directement.
+- `script/*.slurm` (méthode 2) : enchaîne les mêmes étapes dans une allocation
+  via `tools/libs/scripts/pipeline_sbatch.sh` ; les blocs sont des steps `srun`
+  concurrents (`--exact`, un GPU chacun).
 - Nerfstudio : utilise un seul job pour l'ensemble du calcul, sans tableau
   de blocs.
 
