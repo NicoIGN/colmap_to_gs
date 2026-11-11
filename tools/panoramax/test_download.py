@@ -9,6 +9,7 @@ from argparse import Namespace
 from email.message import Message
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 from unittest.mock import patch
 from urllib.error import HTTPError
 
@@ -103,6 +104,7 @@ class DownloadTest(unittest.TestCase):
                     output = Path(temporary)
                     args = Namespace(
                         bbox=(651000, 6861000, 652000, 6862000), output_dir=output,
+                        bbox_epsg=2154,
                         api_url=f"http://127.0.0.1:{server.server_port}/api",
                         datetime="2026-01-01T00:00:00Z/2026-12-31T23:59:59Z",
                         quality="hd", timeout=5,
@@ -121,6 +123,9 @@ class DownloadTest(unittest.TestCase):
                             self.assertEqual(image.read_bytes(), photo)
                         self.assertIn("bbox=", requests[0])
                         self.assertIn("datetime=", requests[0])
+                        request_metadata = json.loads((output / "request.json").read_text())
+                        self.assertEqual(request_metadata["bbox_epsg"], 2154)
+                        self.assertEqual(request_metadata["bbox_crs"], "EPSG:2154")
                         self.assertEqual(download.run(args), 0)
                         self.assertEqual(requests.count("/photo.jpg"), 2)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["reused"], 2)
@@ -191,6 +196,7 @@ class DownloadTest(unittest.TestCase):
                     output = Path(temporary)
                     args = Namespace(
                         bbox=(651000, 6861000, 652000, 6862000),
+                        bbox_epsg=2154,
                         output_dir=output,
                         api_url=f"http://127.0.0.1:{server.server_port}/api",
                         datetime=None, quality="hd", timeout=5, image_max=2,
@@ -209,6 +215,7 @@ class DownloadTest(unittest.TestCase):
                     self.assertEqual(search_query["limit"], [str(download.SEARCH_LIMIT)])
                     request_metadata = json.loads((output / "request.json").read_text())
                     self.assertEqual(request_metadata["image_max"], 2)
+                    self.assertEqual(request_metadata["bbox_epsg"], 2154)
                     self.assertEqual(request_metadata["api_limit"], download.SEARCH_LIMIT)
                     self.assertEqual(summary["available"], 3)
                     self.assertEqual(download.parse_positive_int("400"), 400)
@@ -223,6 +230,58 @@ class DownloadTest(unittest.TestCase):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):
             download.item_in_bbox({"id": "invalid", "geometry": None}, (0, 0, 1, 1), transformer)
+
+    def test_bbox_in_geographic_epsg(self):
+        lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(
+            651500, 6861500
+        )
+        feature = {"id": "inside", "geometry": {"type": "Point", "coordinates": [lon, lat]}}
+        to_bbox_crs = Transformer.from_crs(4326, 4326, always_xy=True)
+        self.assertTrue(
+            download.item_in_bbox(
+                feature, (lon - 0.01, lat - 0.01, lon + 0.01, lat + 0.01),
+                to_bbox_crs,
+            )
+        )
+
+    def test_run_transforms_bbox_and_selects_in_input_epsg(self):
+        lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(
+            651500, 6861500
+        )
+        feature = {
+            "type": "Feature", "id": "inside", "collection": "sequence",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "assets": {"hd": {"href": "https://example.test/photo.jpg"}},
+        }
+        bbox = (lon - 0.01, lat - 0.01, lon + 0.01, lat + 0.01)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            args = Namespace(
+                bbox=bbox, bbox_epsg=4326, output_dir=output,
+                api_url="https://example.test/api", datetime=None,
+                quality="hd", timeout=5, image_max=None,
+            )
+
+            def save_image(url, destination, timeout):
+                destination.write_bytes(b"\xff\xd8test-image\xff\xd9")
+
+            with patch.object(
+                download, "read_json",
+                return_value={"features": [feature], "links": []},
+            ) as read_json, patch.object(
+                download, "download_image", side_effect=save_image
+            ), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(download.run(args), 0)
+
+            query_bbox = tuple(
+                map(float, parse_qs(urlsplit(read_json.call_args.args[0]).query)["bbox"][0].split(","))
+            )
+            for actual, expected in zip(query_bbox, bbox):
+                self.assertAlmostEqual(actual, expected)
+            request_metadata = json.loads((output / "request.json").read_text())
+            self.assertEqual(request_metadata["bbox_epsg"], 4326)
+            self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
+            self.assertEqual(json.loads((output / "summary.json").read_text())["selected"], 1)
 
     def test_http_retry_limit(self):
         error = HTTPError("http://localhost/api/search", 429, "Too many requests", {}, None)

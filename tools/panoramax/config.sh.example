@@ -6,7 +6,7 @@
 #
 # Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
 # "" signifie une option non forcee ; le commentaire indique alors le repli.
-# OUTPUT_DIR et PANORAMAX_BBOX_LAMBERT93 n'ont aucun defaut : valeurs d'exemple a remplacer.
+# OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : valeurs d'exemple a remplacer.
 # SPLIT_NUM_BLOCKS, TRAIN_NUM_ITER, TRAIN_CAP_MAX et TRAIN_PRESET sont obligatoires dans une config ;
 # leurs valeurs ci-dessous reprennent les defauts du lanceur de blocs.
 # Ce fichier couvre les options exposees par le pipeline et son lanceur Slurm,
@@ -38,9 +38,12 @@ export MVK_CONFIG_LOG_LEVEL="1"
 # 1. Recherche et telechargement Panoramax
 # ============================================================================
 
-# Obligatoire, aucun defaut. Exemple a remplacer : emprise EPSG:2154 (metres),
-# ordre xmin,ymin,xmax,ymax ; quatre nombres finis, xmin<xmax et ymin<ymax.
-PANORAMAX_BBOX_LAMBERT93="655418.37,6860846.96,655918.37,6861346.96"
+# Obligatoire, aucun defaut. Ordre xmin,ymin,xmax,ymax dans le systeme indique
+# ci-dessous ; quatre nombres finis, xmin<xmax et ymin<ymax.
+PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
+
+# Defaut : 2154 (Lambert-93). Code EPSG des coordonnees de PANORAMAX_BBOX.
+PANORAMAX_BBOX_EPSG="2154"
 
 # Defaut : https://explore.panoramax.fr/api.
 # URL HTTP(S) racine de l'API STAC, sans /search ni espaces.

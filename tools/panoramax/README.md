@@ -1,12 +1,12 @@
-# Télécharger des photos Panoramax par bbox Lambert-93
+# Télécharger des photos Panoramax par bbox
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
-Ce lanceur télécharge les images HD disponibles dans une bbox Lambert-93 depuis
+Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
 
 ```text
-Bbox Lambert-93 → recherche STAC/WGS84 → vérification des prises de vue
+Bbox (EPSG indiqué) → recherche STAC/WGS84 → vérification des prises de vue
                 → pagination des résultats → téléchargement des images
 ```
 
@@ -14,15 +14,16 @@ Bbox Lambert-93 → recherche STAC/WGS84 → vérification des prises de vue
 
 ```bash
 bash tools/panoramax/download.sh \
-  --bbox "651000,6861000,652000,6862000" \
+  --bbox "651000,6861000,652000,6862000" --bbox-epsg 2154 \
   --output-dir /chemin/vers/panoramax
 ```
 
 ## 2. Entrées et sorties
 
-L'ordre est **xmin,ymin,xmax,ymax**, en mètres, en **Lambert-93 (EPSG:2154)**.
-Le script transforme une enveloppe densifiée en WGS84 pour la recherche STAC,
-puis vérifie chaque point de prise de vue dans la bbox Lambert-93 initiale.
+L'ordre est **xmin,ymin,xmax,ymax**, dans le système de coordonnées désigné
+par le code EPSG. Le défaut est **EPSG:2154 (Lambert-93)**. Le script transforme
+la bbox en WGS84 pour la recherche STAC, puis vérifie chaque point de prise de
+vue dans la bbox et son système d'origine.
 
 
 
@@ -34,7 +35,7 @@ output-dir/
 ├── metadata/<identifiant-haché>.json
 ├── pages/page-000001.json
 ├── manifest.jsonl
-├── request.json
+├── request.json               # bbox, code EPSG d'entrée et requête API
 └── summary.json
 ```
 
@@ -75,11 +76,18 @@ python3 -m pip install -r tools/panoramax/requirements.txt
 
 Depuis la racine du dépôt :
 
+```bash
+bash tools/panoramax/download.sh \
+  --bbox "651000,6861000,652000,6862000" \
+  --bbox-epsg 2154 \
+  --output-dir /chemin/vers/panoramax
+```
 
 Options :
 
 | Option | Description |
 |---|---|
+| `--bbox-epsg 2154` | Code EPSG des coordonnées de `--bbox` ; défaut `2154` (Lambert-93) |
 | `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
 | `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
 | `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
@@ -132,7 +140,7 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
   valeurs possibles et son défaut sont commentés dans
   [`tools/panoramax/config.sh.example`](config.sh.example), organisé par étape du pipeline.
 - Défauts : le modèle reprend les défauts, sans préréglage de croissance sobre.
-- Valeurs d'exemple à remplacer : `OUTPUT_DIR` et `PANORAMAX_BBOX_LAMBERT93`.
+- Valeurs d'exemple à remplacer : `OUTPUT_DIR` et `PANORAMAX_BBOX`.
 
 Le découpage privilégie les séparations de faible covisibilité et vise des
 blocs d'environ `N / SPLIT_NUM_BLOCKS` images principales (tolérance de 20 %,
@@ -142,7 +150,7 @@ n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
 cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
-# Éditer paris.sh : bbox Lambert-93, OUTPUT_DIR, nombre de blocs, TRAIN_CAP_MAX, etc.
+# Éditer paris.sh : bbox et code EPSG, OUTPUT_DIR, nombre de blocs, TRAIN_CAP_MAX, etc.
 bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
 ```
 

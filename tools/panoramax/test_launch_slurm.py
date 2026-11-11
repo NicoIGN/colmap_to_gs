@@ -30,7 +30,7 @@ class SlurmLaunchTest(unittest.TestCase):
         self.config = self.root / "dataset config.sh"
         self.config.write_text(
             f'OUTPUT_DIR="{self.output}"\n'
-            'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+            'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
             'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
             'PYTHON_BIN=job-python\n'
         )

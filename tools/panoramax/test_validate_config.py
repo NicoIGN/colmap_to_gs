@@ -33,7 +33,7 @@ SFM_BA_LOSS_PARAM=nan
         config = root / "config.sh"
         config.write_text(
             f'OUTPUT_DIR="{root / "output"}"\n'
-            'PANORAMAX_BBOX_LAMBERT93="652600,6863300,652900,6863500"\n'
+            'PANORAMAX_BBOX="652600,6863300,652900,6863500"\n'
             'SPLIT_NUM_BLOCKS=3\nTRAIN_NUM_ITER=15000\nTRAIN_CAP_MAX=4000000\nTRAIN_PRESET=3dgs\n'
             + extra
         )
@@ -69,7 +69,8 @@ SPLIT_OVERLAP_MAX_FRACTION=1.1
 TRAIN_CLEAN=flase
 PANORAMAX_REPLACE_REQUEST=oui
 PANORAMAX_QUALITY=HD
-PANORAMAX_BBOX_LAMBERT93="4,3,2,1"
+PANORAMAX_BBOX="4,3,2,1"
+PANORAMAX_BBOX_EPSG=0
 PANORAMAX_API_URL=example.test
 EXPORT_SPLAT_NAME=bad.ply
 MERGE_STRENGTH=0
@@ -104,7 +105,7 @@ SLURM_TIME_LIMIT=48:99:00
         for name in ("SFM_MATCHER", "SFM_FEATURES", "SFM_PAIRS", "TRAIN_PRESET",
                      "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "SFM_THREADS",
                      "SFM_PAIR_MAX_DISTANCE", "SPLIT_OVERLAP_MAX_FRACTION", "TRAIN_CLEAN", "PANORAMAX_REPLACE_REQUEST",
-                     "PANORAMAX_QUALITY", "PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_API_URL",
+                     "PANORAMAX_QUALITY", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "PANORAMAX_API_URL",
                      "EXPORT_SPLAT_NAME", "MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
                      "POSTPROCESS_FILTER_MODE", "POSTPROCESS_FILTER_SIZE_FACTOR",
                      "POSTPROCESS_CLEANER", "CLEANGS_MODE", "CLEANGS_MIN_VIEWS",
@@ -148,7 +149,7 @@ TRAIN_REFINE_STOP_NUM_ITER=""
                                  example, re.MULTILINE)
         values = dict(assignments)
         self.assertEqual(len(values), len(assignments), "Duplicate config parameters")
-        required = {"OUTPUT_DIR", "PANORAMAX_BBOX_LAMBERT93", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
+        required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
                     "TRAIN_CAP_MAX", "TRAIN_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
         for script in ("run_pipeline.sh", "launch.sh"):
@@ -199,9 +200,9 @@ TRAIN_MASKS_LABELS="sky,person"
     def test_nonfinite_and_malformed_bbox_rejected(self):
         for bbox in ("nan,0,1,1", "0,0,inf,1", "0,0,1e9999,1",
                      "0,0,1", "0,0,1,1,2", "0,0,0,1"):
-            result, _ = self.execute("validate_config.sh", f'PANORAMAX_BBOX_LAMBERT93="{bbox}"\n')
+            result, _ = self.execute("validate_config.sh", f'PANORAMAX_BBOX="{bbox}"\n')
             self.assertEqual(result.returncode, 1, bbox)
-            self.assertIn("PANORAMAX_BBOX_LAMBERT93", result.stderr)
+            self.assertIn("PANORAMAX_BBOX", result.stderr)
 
     def test_sfm_masks_inheritance_and_validation(self):
         result, _ = self.execute("validate_config.sh", """
@@ -255,7 +256,8 @@ SFM_MASKS_MAX_FRACTION=0
         for old, new in (
                 ("CAP_MAX", "TRAIN_CAP_MAX"), ("NUM_ITER", "TRAIN_NUM_ITER"),
                 ("NUM_BLOCKS", "SPLIT_NUM_BLOCKS"), ("CLEAN_GS", "TRAIN_CLEAN"),
-                ("BBOX_LAMBERT93", "PANORAMAX_BBOX_LAMBERT93"),
+                ("BBOX_LAMBERT93", "PANORAMAX_BBOX"),
+                ("PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_BBOX"),
                 ("GROWTH_FACTOR", "TRAIN_GROWTH_FACTOR"),
                 ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
             for script in ("validate_config.sh", "run_pipeline.sh", "launch.sh"):

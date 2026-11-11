@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Télécharger les photos Panoramax prises dans une bbox Lambert-93."""
+"""Télécharger les photos Panoramax prises dans une bbox en coordonnées EPSG."""
 
 import argparse
 import hashlib
@@ -130,7 +130,9 @@ def parse_bbox(text):
     try:
         bbox = tuple(float(part) for part in text.split(","))
     except ValueError as exc:
-        raise argparse.ArgumentTypeError("Utiliser xmin,ymin,xmax,ymax en mètres.") from exc
+        raise argparse.ArgumentTypeError(
+            "Utiliser xmin,ymin,xmax,ymax dans les unités du système EPSG choisi."
+        ) from exc
     if (
         len(bbox) != 4
         or not all(math.isfinite(value) for value in bbox)
@@ -151,7 +153,7 @@ def parse_positive_int(text):
     return value
 
 
-def item_in_bbox(feature, bbox, to_l93):
+def item_in_bbox(feature, bbox, to_bbox_crs):
     geometry = feature.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") != "Point":
         raise ValueError(f"Géométrie Point attendue pour {feature.get('id')}.")
@@ -166,7 +168,7 @@ def item_in_bbox(feature, bbox, to_l93):
         or not -180 <= lon <= 180 or not -90 <= lat <= 90
     ):
         raise ValueError(f"Coordonnées WGS84 invalides pour {feature.get('id')}.")
-    x, y = to_l93.transform(lon, lat, errcheck=True)
+    x, y = to_bbox_crs.transform(lon, lat, errcheck=True)
     return bbox[0] <= x <= bbox[2] and bbox[1] <= y <= bbox[3]
 
 
@@ -174,11 +176,11 @@ def run(args):
     image_max = getattr(args, "image_max", None)
     if image_max is not None and image_max < 1:
         raise ValueError("--image-max doit être supérieur ou égal à 1.")
-    output = args.output_dir.expanduser().resolve()
-    for folder in ("images", "metadata", "pages"):
-        (output / folder).mkdir(parents=True, exist_ok=True)
-    to_wgs84 = Transformer.from_crs(2154, 4326, always_xy=True)
-    to_l93 = Transformer.from_crs(4326, 2154, always_xy=True)
+    bbox_epsg = getattr(args, "bbox_epsg", 2154)
+    if isinstance(bbox_epsg, bool) or not isinstance(bbox_epsg, int) or bbox_epsg < 1:
+        raise ValueError("Le code EPSG de la bbox doit être un entier positif.")
+    to_wgs84 = Transformer.from_crs(bbox_epsg, 4326, always_xy=True)
+    to_bbox_crs = Transformer.from_crs(4326, bbox_epsg, always_xy=True)
     xmin, ymin, xmax, ymax = args.bbox
     boundary = []
     for index in range(103):
@@ -190,14 +192,20 @@ def run(args):
     )
     geographic = (min(longitudes), min(latitudes), max(longitudes), max(latitudes))
     if not all(math.isfinite(value) for value in geographic) or geographic[0] >= geographic[2]:
-        raise ValueError("La bbox Lambert-93 ne produit pas une bbox WGS84 exploitable.")
+        raise ValueError(
+            f"La bbox EPSG:{bbox_epsg} ne produit pas une bbox WGS84 exploitable."
+        )
+    output = args.output_dir.expanduser().resolve()
+    for folder in ("images", "metadata", "pages"):
+        (output / folder).mkdir(parents=True, exist_ok=True)
     api_limit = SEARCH_LIMIT
     parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
         parameters["datetime"] = args.datetime
     url = args.api_url.rstrip("/") + "/search?" + urlencode(parameters)
     atomic_json(output / "request.json", {
-        "crs": "EPSG:2154", "bbox": args.bbox, "bbox_wgs84": geographic,
+        "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
+        "bbox": args.bbox, "bbox_wgs84": geographic,
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
@@ -232,7 +240,7 @@ def run(args):
             if key in seen_items:
                 continue
             seen_items.add(key)
-            if item_in_bbox(feature, args.bbox, to_l93):
+            if item_in_bbox(feature, args.bbox, to_bbox_crs):
                 candidates.append((feature, url, key))
         next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
         if len(next_links) > 1:
@@ -253,7 +261,7 @@ def run(args):
     selected = candidates[:image_max] if image_max is not None else candidates
     progress = Progress(len(selected))
     print(
-        f"Photos dans la bbox Lambert-93 : "
+        f"Photos dans la bbox EPSG:{bbox_epsg} : "
         f"{counts['available']}{'' if total_is_exact else '+'}"
     )
     if image_max is not None:
@@ -341,7 +349,14 @@ def run(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--bbox", required=True, type=parse_bbox, help="xmin,ymin,xmax,ymax en EPSG:2154")
+    parser.add_argument(
+        "--bbox", required=True, type=parse_bbox,
+        help="xmin,ymin,xmax,ymax dans les unités de --bbox-epsg",
+    )
+    parser.add_argument(
+        "--bbox-epsg", type=parse_positive_int, default=2154,
+        help="Code EPSG des coordonnées de --bbox (défaut : 2154, Lambert-93)",
+    )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--api-url", default="https://explore.panoramax.fr/api", help="Racine API STAC, sans /search")
     parser.add_argument("--datetime", help="Date ou intervalle STAC ISO 8601 (début/fin)")

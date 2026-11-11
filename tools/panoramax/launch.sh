@@ -36,7 +36,7 @@ source "$script_dir/validate_config.sh"
 validate_config slurm || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
-: "${PANORAMAX_BBOX_LAMBERT93:?PANORAMAX_BBOX_LAMBERT93 doit être défini dans la configuration}"
+: "${PANORAMAX_BBOX:?PANORAMAX_BBOX doit être défini dans la configuration}"
 : "${SPLIT_NUM_BLOCKS:?SPLIT_NUM_BLOCKS doit être défini dans la configuration}"
 : "${TRAIN_NUM_ITER:?TRAIN_NUM_ITER doit être défini dans la configuration}"
 : "${TRAIN_CAP_MAX:?TRAIN_CAP_MAX doit être défini dans la configuration}"

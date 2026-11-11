@@ -536,7 +536,7 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 ### Autres guides et outils
 
 - [Guide utilisateur](guide_utilisateur.md).
-- Télécharger des images géolocalisées : [extraction Panoramax par bbox Lambert-93](../tools/panoramax/README.md).
+- Télécharger des images géolocalisées : [extraction Panoramax par bbox](../tools/panoramax/README.md).
 - Images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](../tools/images_to_splat/README.md).
 - Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeline `.splat` vers 3D Tiles](../tools/splat_to_3dtiles/README.md).
 
@@ -568,7 +568,7 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
     │   ├── server.py              # visualiseur PLY / SPLAT
     │   ├── html/                  # interface et modules JavaScript
     │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
-    ├── panoramax/                 # récupération d'images par bbox Lambert-93
+    ├── panoramax/                 # récupération d'images par bbox et EPSG indiqué
     ├── images_to_splat/           # images locales → splat, Bash et Slurm
     ├── spirula/                   # installation et compilation de Spirula Studio
     └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles

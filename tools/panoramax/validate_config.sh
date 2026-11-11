@@ -6,7 +6,7 @@ validate_config() {
   local config_errors=0 name value
   reject_legacy_config || return 1
   validate_sfm_geometry_config
-  for name in OUTPUT_DIR PANORAMAX_BBOX_LAMBERT93 SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
+  for name in OUTPUT_DIR PANORAMAX_BBOX SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
     [[ -n "${!name:-}" ]] || config_error "$name doit être défini et non vide."
   done
   config_positive_integer SPLIT_NUM_BLOCKS "${SPLIT_NUM_BLOCKS:-}"
@@ -143,14 +143,15 @@ validate_config() {
   value="${EXPORT_SPLAT_NAME:-panoramax.splat}"
   [[ "$value" == *.splat && "$value" != */* && "$value" != .splat ]] ||
     config_error "EXPORT_SPLAT_NAME='$value' doit être un nom de fichier terminé par .splat."
-  value="${PANORAMAX_BBOX_LAMBERT93:-}"
+  config_positive_integer PANORAMAX_BBOX_EPSG "${PANORAMAX_BBOX_EPSG:-2154}"
+  value="${PANORAMAX_BBOX:-}"
   awk -v bbox="$value" 'BEGIN {
     if (split(bbox, a, ",") != 4) exit 1
     for (i=1; i<=4; i++)
       if (a[i] !~ /^[[:space:]]*[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?[[:space:]]*$/ ||
           (a[i]+0 != 0 && (a[i]+0)/2 == a[i]+0)) exit 1
     exit !(a[1]+0 < a[3]+0 && a[2]+0 < a[4]+0)
-  }' || config_error "PANORAMAX_BBOX_LAMBERT93='$value' attend xmin,ymin,xmax,ymax finis avec xmin<xmax et ymin<ymax."
+  }' || config_error "PANORAMAX_BBOX='$value' attend xmin,ymin,xmax,ymax finis avec xmin<xmax et ymin<ymax."
   value="${PANORAMAX_API_URL:-https://explore.panoramax.fr/api}"
   [[ "$value" =~ ^https?://[^/[:space:]]+(/[^[:space:]]*)?$ ]] ||
     config_error "PANORAMAX_API_URL='$value' doit être une URL HTTP(S)."

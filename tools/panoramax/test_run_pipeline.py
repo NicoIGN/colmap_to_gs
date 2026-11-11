@@ -12,6 +12,43 @@ REPO_ROOT = SCRIPT.parents[2]
 
 
 class PanoramaxPipelineTest(unittest.TestCase):
+    def test_existing_lambert93_request_uses_default_epsg(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            dataset = root / "output" / "panoramax"
+            (dataset / "images").mkdir(parents=True)
+            (dataset / "images" / "photo.jpg").write_bytes(b"old")
+            (dataset / "request.json").write_text(json.dumps({
+                "bbox": [651000, 6861000, 652000, 6862000],
+                "crs": "EPSG:2154",
+                "api_url": "https://explore.panoramax.fr/api",
+                "datetime": None, "quality": "hd", "image_max": None,
+            }))
+            python = root / "python3"
+            python.write_text(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "if sys.argv[1:2] == ['-']:\n"
+                f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
+                "sys.exit(42)\n"
+            )
+            python.chmod(0o755)
+            config = root / "config.sh"
+            config.write_text(
+                f'OUTPUT_DIR="{root / "output"}"\n'
+                'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                f'PYTHON_BIN="{python}"\n'
+            )
+            result = subprocess.run(
+                ["bash", str(SCRIPT), str(config), "prepare"],
+                capture_output=True, text=True, timeout=15,
+            )
+            self.assertEqual(result.returncode, 42, result.stderr)
+            self.assertNotIn("PANORAMAX_REPLACE_REQUEST", result.stderr)
+            self.assertNotIn("archivée", result.stdout)
+            self.assertTrue((dataset / "images" / "photo.jpg").is_file())
+
     def test_download_fatal_error_names_stage_and_diagnostics(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -21,7 +58,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "config.sh"
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
-                'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
                 'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
@@ -58,7 +95,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "config.sh"
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
-                'PANORAMAX_BBOX_LAMBERT93="652600,6863400,652800,6863500"\n'
+                'PANORAMAX_BBOX="652600,6863400,652800,6863500"\n'
                 'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
@@ -110,7 +147,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'bbox':bbox,'api_url':args[args.index('--api-url')+1],"
                 "    'datetime':None,'quality':args[args.index('--quality')+1],"
                 "    'image_max':int(args[args.index('--image-max')+1]),"
-                "    'crs':'EPSG:2154'}, open(os.path.join(root,'request.json'),'w'))\n"
+                "    'bbox_epsg':int(args[args.index('--bbox-epsg')+1]),"
+                "    'bbox_crs':'EPSG:'+args[args.index('--bbox-epsg')+1]},"
+                "    open(os.path.join(root,'request.json'),'w'))\n"
                 "  json.dump({'available':1,'selected':1}, open(os.path.join(root,'summary.json'),'w'))\n"
                 "  open(os.path.join(root,'images','photo.jpg'),'wb').write(b'jpeg')\n"
                 "  json.dump({'download':{}}, open(os.path.join(root,'metadata','photo.json'),'w'))\n"
@@ -185,7 +224,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config = root / "dataset.sh"
             config.write_text(
                 f'OUTPUT_DIR="{output}"\n'
-                'PANORAMAX_BBOX_LAMBERT93="651000,6861000,652000,6862000"\n'
+                'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
+                'PANORAMAX_BBOX_EPSG="4326"\n'
                 'PANORAMAX_API_URL="https://example.test/api"\n'
                 'PANORAMAX_QUALITY="hd"\n'
                 'PANORAMAX_IMAGE_MAX="5"\n'
@@ -216,6 +256,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
 
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            request_metadata = json.loads((dataset / "request.json").read_text())
+            self.assertEqual(request_metadata["bbox_epsg"], 4326)
+            self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
             self.assertFalse((dataset / "gs-3-blocks-2").exists())
             self.assertFalse((output / "test.splat").exists())
             gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
@@ -273,6 +316,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
+            self.assertEqual(metadata["source_bbox_crs"], "EPSG:4326")
             with config.open("a") as stream:
                 stream.write('POSTPROCESS_CLEANER="cleangs"\nCLEANGS_MODEL="/local/model"\n')
             result = execute("merge")

@@ -11,7 +11,7 @@ Usage:
   bash run_pipeline.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
 The config is a trusted Bash file. Start from tools/panoramax/config.sh.example.
-It defines the Panoramax bbox, output directory, SfM/block/training parameters,
+It defines the Panoramax bbox and its EPSG code, output directory, SfM/block/training parameters,
 and final .splat name.
 Default: all. prepare downloads, reconstructs and partitions; train-block trains
 only one prepared zero-based block; merge requires every block to be exported.
@@ -63,13 +63,14 @@ source "$script_dir/validate_config.sh"
 validate_config || exit 1
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
-: "${PANORAMAX_BBOX_LAMBERT93:?PANORAMAX_BBOX_LAMBERT93 doit être défini dans la configuration}"
+: "${PANORAMAX_BBOX:?PANORAMAX_BBOX doit être défini dans la configuration}"
 : "${SPLIT_NUM_BLOCKS:?SPLIT_NUM_BLOCKS doit être défini dans la configuration}"
 : "${TRAIN_NUM_ITER:?TRAIN_NUM_ITER doit être défini dans la configuration}"
 : "${TRAIN_CAP_MAX:?TRAIN_CAP_MAX doit être défini dans la configuration}"
 : "${TRAIN_PRESET:?TRAIN_PRESET doit être défini dans la configuration}"
 
 PANORAMAX_API_URL="${PANORAMAX_API_URL:-https://explore.panoramax.fr/api}"
+PANORAMAX_BBOX_EPSG="${PANORAMAX_BBOX_EPSG:-2154}"
 PANORAMAX_QUALITY="${PANORAMAX_QUALITY:-hd}"
 PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
@@ -147,23 +148,24 @@ prepare_images() {
   local bbox_args request_status=0 archive
   if [[ -e "$DATASET_DIR/request.json" ]]; then
     "$PYTHON_BIN" - \
-    "$DATASET_DIR/request.json" "$PANORAMAX_BBOX_LAMBERT93" "$PANORAMAX_API_URL" \
+    "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
     "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY' || request_status=$?
 import json
 import sys
 
-path, bbox, api_url, datetime, quality, image_max = sys.argv[1:]
+path, bbox, bbox_epsg, api_url, datetime, quality, image_max = sys.argv[1:]
 with open(path, encoding="utf-8") as stream:
     previous = json.load(stream)
 expected = {
     "bbox": [float(value) for value in bbox.split(",")],
+    "bbox_epsg": int(bbox_epsg),
     "api_url": api_url,
     "datetime": datetime or None,
     "quality": quality,
     "image_max": int(image_max) if image_max else None,
 }
 for key, value in expected.items():
-    actual = previous.get(key)
+    actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
     if key == "api_url":
         actual = actual.rstrip("/")
         value = value.rstrip("/")
@@ -194,7 +196,8 @@ PY
     die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
   fi
 
-  bbox_args=(--bbox "$PANORAMAX_BBOX_LAMBERT93" --output-dir "$DATASET_DIR" \
+  bbox_args=(--bbox "$PANORAMAX_BBOX" --bbox-epsg "$PANORAMAX_BBOX_EPSG" \
+    --output-dir "$DATASET_DIR" \
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
@@ -370,19 +373,20 @@ for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   cp "$transform" "$GEOREF_DIR/scene_transforms/block_${block_id}.json"
 done
 "$PYTHON_BIN" - "$GEOREF_DIR/georeference.json" "$FINAL_SPLAT" \
-  "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS" "$TRAIN_NUM_ITER" <<'PY'
+  "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS" "$TRAIN_NUM_ITER" \
+  "$PANORAMAX_BBOX_EPSG" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-output, splat_path, splat_name, blocks, iterations = sys.argv[1:]
+output, splat_path, splat_name, blocks, iterations, bbox_epsg = sys.argv[1:]
 data = {
     "splat": Path(splat_path).name,
     "format": "splat",
     "coordinate_frame": "Spirula SfM metric frame aligned from Panoramax EXIF GPS",
     "crs": "local ENU; not projected EPSG coordinates",
     "source_gps": "Panoramax image metadata and JPEG EXIF; WGS84 longitude/latitude and EXIF altitude",
-    "source_bbox_crs": "EPSG:2154",
+    "source_bbox_crs": f"EPSG:{bbox_epsg}",
     "references": {
         "request": "request.json",
         "download_summary": "summary.json",
