@@ -1,3 +1,5 @@
 .DS_Store
 example/output
 __pycache__
+tools/segmentation_masks/segmentation_masks
+venv
