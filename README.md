@@ -7,14 +7,31 @@ puis les exporter, les traiter et les visualiser.
 Images → reconstruction des caméras et points 3D → entraînement → export → visualisation
 ```
 
-## Documentation
+## Construire le résultat étape par étape
 
 Commencer par le [guide utilisateur](doc/guide_utilisateur.md) pour comprendre
-le résultat et choisir un pipeline.
+le résultat.
 
-- **Images locales avec Spirula** : [pipeline images vers splat](tools/images_to_splat/README.md).
-- **Images Panoramax avec Spirula** : [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
-- **Dataset COLMAP avec Nerfstudio / Splatfacto** : [guide du pipeline](doc/nerfstudio.md).
+1. **Produire les données COLMAP** : reconstruire les caméras et les points 3D
+   depuis les images avec les [outils de préparation](tools/preprocess/README.md),
+   ou utiliser un modèle COLMAP existant avec ses images.
+2. **Choisir l'entraînement** : utiliser
+   [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou
+   [Spirula](doc/guide_utilisateur.md#22-choisir-lentraînement).
+
+```text
+Images → données COLMAP → Nerfstudio / Splatfacto ou Spirula → Gaussian Splat
+```
+
+## Utiliser un pipeline complet
+
+Deux pipelines dans `tools/` enchaînent la préparation des données COLMAP,
+l'entraînement et l'export. Ils utilisent **uniquement Spirula** :
+
+- **Bbox + flux Panoramax → splat** :
+  [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
+- **Images locales → splat** :
+  [pipeline images vers splat](tools/images_to_splat/README.md).
 
 ## Démarrer
 

@@ -43,19 +43,50 @@ pour rapprocher les vues synthétiques des images d'entrée.
 
 ## 2. Choisir un parcours
 
-Le dépôt propose plusieurs parcours. Choisir celui qui correspond aux données
-disponibles :
+### 2.1. Produire les données COLMAP
 
-- **Dataset COLMAP existant, Nerfstudio / Splatfacto** : consulter le
-  [guide Nerfstudio](nerfstudio.md) pour les prérequis, l'environnement, le
-  lancement de `scripts/run.sh`, les sorties et l'exécution sur Slurm.
-- **Images locales, pipeline Spirula** : voir
-  [Images locales vers Gaussian Splats](../tools/images_to_splat/README.md).
-- **Recherche et téléchargement d'images Panoramax par bbox** : voir le
+La première étape consiste à reconstruire les caméras et les points 3D depuis
+les images, ou à réutiliser un modèle COLMAP existant avec ses images.
+
+- Images : les [outils de préparation](../tools/preprocess/README.md)
+  permettent notamment d'extraire des images d'une vidéo et de lancer
+  `images_to_colmap.py`.
+- Modèle existant : conserver les images associées, les paramètres des caméras,
+  leurs poses et les points 3D.
+
+### 2.2. Choisir l'entraînement
+
+Une fois les données COLMAP disponibles, choisir le moteur d'entraînement :
+
+- **Nerfstudio / Splatfacto** : `scripts/run.sh` prépare les données
+  Nerfstudio, entraîne et exporte en `.ply` ; voir le
+  [guide Nerfstudio](nerfstudio.md).
+- **Spirula** : installer l'outil suivant son
+  [README](../tools/spirula/README.md), puis entraîner depuis le modèle COLMAP
+  et ses images avec `scripts/run_spirula_block.sh`. Exemple :
+
+```bash
+bash scripts/run_spirula_block.sh \
+  --sparse-dir /chemin/colmap/sparse/0 \
+  --images-dir /chemin/images \
+  --output-dir /chemin/resultats
+```
+
+Les options de ce lanceur sont accessibles avec `--help` ; l'export `.splat`
+est décrit dans le [README du post-traitement](../tools/postprocess/README.md).
+
+### 2.3. Utiliser un pipeline complet
+
+Deux pipelines dans `tools/` enchaînent la production des données COLMAP,
+l'entraînement et l'export. Ils utilisent **uniquement Spirula**, sans choix
+Nerfstudio :
+
+- **Bbox + flux Panoramax → splat** : recherche et téléchargement des images,
+  reconstruction, entraînement par blocs et fusion ; voir le
   [pipeline Panoramax](../tools/panoramax/README.md).
-- **Préparation d'images, reconstruction COLMAP, découpage et filtre sparse** :
-  consulter les outils décrits dans
-  [Préparation des données](../tools/preprocess/README.md).
+- **Images locales → splat** : sélection des images, reconstruction,
+  entraînement par blocs et fusion ; voir le
+  [pipeline images locales](../tools/images_to_splat/README.md).
 
 ## 3. Préparer les données et lancer un calcul
 
