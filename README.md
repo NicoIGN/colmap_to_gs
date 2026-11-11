@@ -7,7 +7,7 @@ puis les exporter, les traiter et les visualiser.
 Images → reconstruction des caméras et points 3D → entraînement → export → visualisation
 ```
 
-## 1. Comprendre le résultat
+## 1. Qu’est-ce que le 3D Gaussian Splatting ?
 
 ### 1.1. Qu’est-ce qu’un Gaussian Splat ?
 
