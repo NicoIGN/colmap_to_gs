@@ -228,8 +228,6 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   l'extraction/appariement.
 - Transmission : le lanceur passe `--feature-masks` à Spirula (y compris avec
   le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
-- Le téléchargement, les jobs Slurm et le reste du pipeline restent inchangés ;
-  aucun script de calcul personnalisé n'est nécessaire.
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour le SfM / l'entraînement ;
   réglages, héritage et défauts dans
   [`config.sh.example`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](config.sh.example).
@@ -494,41 +492,6 @@ python3 tools/panoramax/prepare_sfm.py --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm --dry-run
 ```
 
-#### Noms des paramètres par étape
-
-Les configurations locales et Slurm utilisent les mêmes noms préfixés.
-Les chemins et outils communs (`OUTPUT_DIR`, `GIT_ROOT`, `SPIRULA_BIN`,
-`PYTHON_BIN`) ainsi que les variables natives d'environnement restent inchangés.
-Les anciens noms ci-dessous sont **refusés**, même vides ou accompagnés du
-nouveau nom ; mettre à jour le fichier de configuration avant de relancer.
-Les options CLI Spirula et les noms des dossiers de calcul ne changent pas.
-
-| Ancien nom | Nouveau nom |
-|---|---|
-| `BBOX_LAMBERT93` | `PANORAMAX_BBOX_LAMBERT93` |
-| `NUM_BLOCKS` | `SPLIT_NUM_BLOCKS` |
-| `OVERLAP_MAX_FRACTION` | `SPLIT_OVERLAP_MAX_FRACTION` |
-| `NUM_ITER` | `TRAIN_NUM_ITER` |
-| `CAP_MAX` | `TRAIN_CAP_MAX` |
-| `SPLATS_PER_IMAGE` | `TRAIN_SPLATS_PER_IMAGE` |
-| `GROWTH_FACTOR` | `TRAIN_GROWTH_FACTOR` |
-| `REFINE_STOP_ITER` | `TRAIN_REFINE_STOP_ITER` |
-| `REFINE_STOP_NUM_ITER` | `TRAIN_REFINE_STOP_NUM_ITER` |
-| `FLOATER_SUPPRESSION` | `TRAIN_FLOATER_SUPPRESSION` |
-| `CLEAN_GS` | `TRAIN_CLEAN` |
-| `SAM_ACCEPT_LICENSE` | `MASKS_ACCEPT_LICENSE` |
-| `SPLAT_NAME` | `EXPORT_SPLAT_NAME` |
-| `SPLAT_MERGE_STRENGTH` | `MERGE_STRENGTH` |
-| `SPLAT_CLEANER` | `POSTPROCESS_CLEANER` |
-| `SPLAT_FILTER_MODE` | `POSTPROCESS_FILTER_MODE` |
-| `SPLAT_FILTER_SIZE_FACTOR` | `POSTPROCESS_FILTER_SIZE_FACTOR` |
-| `SPLAT_SPARSE_BBOX_MODE` | `POSTPROCESS_SPARSE_BBOX_MODE` |
-| `SPLAT_SPARSE_BBOX_MARGIN` | `POSTPROCESS_SPARSE_BBOX_MARGIN` |
-
-Pour le worker `scripts/run_spirula_block.sh`, les anciennes variables
-`QUALITY`, `NUM_ITERATIONS` et `CLEAN` sont également refusées : utiliser
-`TRAIN_QUALITY`, `TRAIN_NUM_ITER` et `TRAIN_CLEAN`. Les arguments CLI du
-worker (`--quality`, `--num-iterations`, `--clean`) restent disponibles.
 ### Vérification locale
 
 ```bash
@@ -547,18 +510,20 @@ géographique, la reprise, les erreurs de téléchargement et les nouvelles tent
 
 ### Socle commun avec les images locales
 
-Les politiques et appels de génération des masques sont partagés dans
-`python/mask_policies.py`, la signature géométrique SfM dans
-`python/sfm_geometry_policy.py`. Les helpers `scripts/pipeline_config.sh`,
-`scripts/pipeline_postprocess.sh` et `scripts/pipeline_slurm.sh` regroupent
-respectivement validation commune, recadrage/fusion et soumission/annulation
-Slurm. Les workers SfM et entraînement restent dans `scripts/`.
+Les scripts partagés avec le pipeline images locales sont :
 
-Ce dossier conserve le téléchargement, la préparation des images et métadonnées,
-les signatures liées à Panoramax, le filtrage des paires GPS et l'export de la
-référence géographique. Le pipeline local conserve son recalage GPX indépendant.
-Les commandes, configurations, dispositions de workspace et particularités de
-post-traitement restent inchangées.
+- `python/mask_policies.py` : politiques et appel du générateur de masques.
+- `python/sfm_geometry_policy.py` : signature géométrique SfM.
+- `scripts/pipeline_config.sh` : validations communes.
+- `scripts/pipeline_postprocess.sh` : recadrage et fusion.
+- `scripts/pipeline_slurm.sh` : soumission et annulation des jobs Slurm.
+- `scripts/` : workers SfM et entraînement.
+
+Les étapes propres à chaque pipeline sont :
+
+- **Panoramax** : téléchargement, préparation des images et métadonnées,
+  signatures, filtrage des paires GPS et export de la référence géographique.
+- **Images locales** : recalage sur une trajectoire GPS fournie au format GPX.
 
 ## 5. Notes et informations complémentaires
 

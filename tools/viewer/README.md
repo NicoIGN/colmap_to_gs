@@ -87,15 +87,10 @@ son comportement de remplacement. Le panneau d'informations regroupe les
 cases de visibilité des scènes splat, des groupes COLMAP et de la trajectoire
 GPS.
 
+## 5. Notes et informations complémentaires
+
 La profondeur des frustums vaut 1 % du rayon de l'étendue des centres caméra,
 bornée aux quantiles 2/98 % pour limiter l'effet des caméras aberrantes.
 Il n'y a pas de taille minimale absolue : l'affichage suit aussi les scènes
 SfM sans GPX dont l'échelle est arbitraire. Si les centres sont confondus,
 le rayon de la scène sert de référence.
-
-## 5. Notes et informations complémentaires
-
-### Migration
-
-`python/server.py` et `python/html/` sont déplacés ici ; le lanceur Cesium
-`tools/splat_to_3dtiles/view.sh` est maintenant `tools/viewer/3dtiles/view.sh`.

@@ -181,19 +181,24 @@ ne pas mélanger des blocs entraînés dans des repères différents.
 ## 4. Fonctionnement internes
 
 Les pipelines **images locales** et **Panoramax** partagent certains scripts :
-`python/mask_policies.py` gère les politiques et l'appel du générateur de
-masques ; `scripts/pipeline_config.sh` porte les validations communes et les
-seuils SfM. `python/sfm_geometry_policy.py` protège
-la réutilisation des modèles du worker multi-blocs ; les images locales
-enregistrent ces paramètres dans leur signature `inputs.json`.
-`scripts/pipeline_postprocess.sh` partage le recadrage sparse et la fusion,
-et `scripts/pipeline_slurm.sh` la soumission, le contrôle des réponses et
-l'annulation des jobs en cas d'échec. Les workers Spirula restent dans `scripts/`.
 
-Ce dossier conserve la sélection des fichiers locaux, la disposition du
-workspace, ses signatures et le recalage GPX. Panoramax conserve l'acquisition,
-les métadonnées et le traitement GPS EXIF. Chaque pipeline possède sa
-configuration, ses chemins de sortie et ses options propres
+- `python/mask_policies.py` : politiques et appel du générateur de masques.
+- `scripts/pipeline_config.sh` : validations communes et seuils SfM.
+- `python/sfm_geometry_policy.py` : contrôle de compatibilité des modèles SfM
+  avant réutilisation par le worker multi-blocs.
+- `scripts/pipeline_postprocess.sh` : recadrage sparse et fusion.
+- `scripts/pipeline_slurm.sh` : soumission des jobs, contrôle des réponses et
+  annulation en cas d'échec.
+- `scripts/` : workers Spirula pour le SfM et l'entraînement.
+- `inputs.json` : signature des images et paramètres de préparation.
+
+Les étapes propres à chaque pipeline sont :
+
+- **Images locales** : sélection des fichiers, préparation du workspace,
+  signatures et recalage sur une trajectoire GPS.
+- **Panoramax** : acquisition des images, métadonnées et traitement GPS EXIF.
+
+Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 (repère, seuil de recadrage, nettoyage final).
 
 ## 5. Notes et informations complémentaires

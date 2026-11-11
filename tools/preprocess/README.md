@@ -12,7 +12,6 @@ python3 tools/preprocess/images_to_colmap.py --help
 
 ## 2. Entrées et sorties
 
-- Ces outils autonomes se trouvaient dans `python/`.
 - Exécuter les scripts depuis la racine du dépôt :
 
 ```bash
@@ -28,12 +27,12 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
 
-- Les arguments et formats ne changent pas ; seul le chemin des scripts change.
-- Les dépendances restent celles de l'environnement du projet.
+- Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-- Les composants internes de [Nerfstudio](../../README.md) `colmap_to_transforms.py` et
-  `estimate_planes.py` restent dans `python/` et sont appelés par `scripts/run.sh`.
+- `python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../README.md),
+  appelée par `scripts/run.sh`.
+- `python/estimate_planes.py` : estimation des plans, appelée par `scripts/run.sh`.
 
 ## 3. Configuration et utilisation
 

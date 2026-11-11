@@ -12,9 +12,6 @@ python3 tools/postprocess/export_ply.py --help
 
 ## 2. Entrées et sorties
 
-Ces outils proviennent de `python/` et de `scripts/`. Les pipelines utilisent
-maintenant directement leurs chemins sous `tools/postprocess/`.
-
 | Outil | Fonction |
 |---|---|
 | `export_splat_to_ply.sh` | Export [Nerfstudio](../../README.md) via `ns-export` |
@@ -38,28 +35,25 @@ bash tools/postprocess/clean_ply.sh --help
 - `--strength` : multiplie la taille médiane des grands demi-axes pour fixer la
   taille des voxels ; `0.5` est prudent, `1` normal, `2` plus agressif.
 - Sélection : dans chaque voxel, conserve les splats du bloc au meilleur score moyen.
-- Clés de voxels : utilisent trois coordonnées int64 plutôt que 21 bits par axe ;
-  une scène étendue ou décalée de l'origine ne nécessite donc plus d'augmenter
-  `--strength` pour contourner l'ancienne limite.
-- Coût des clés : 24 octets par splat au lieu de 8, avec un coût mémoire/disque
-  accru lors du tri.
+- Clés de voxels : trois coordonnées int64, soit 24 octets par splat ;
+  prévoir leur coût mémoire/disque lors du tri.
 - Validation : les géométries non finies et les indices hors plage int64 restent refusés.
-- Après mise à jour, relancer uniquement la fusion, sans réentraîner les blocs.
+- Pour modifier la fusion, la relancer sans réentraîner les blocs.
 
-`scripts/run.sh` appelle les lanceurs Nerfstudio ;
-`scripts/run_spirula_block.sh` utilise `export_ply.py` par défaut, tout en conservant
-la surcharge `--export-script` / `EXPORT_SCRIPT`.
+- `scripts/run.sh` : appelle les lanceurs Nerfstudio.
+- `scripts/run_spirula_block.sh` : utilise `export_ply.py` par défaut ;
+  surcharge possible avec `--export-script` / `EXPORT_SCRIPT`.
 
 ## 4. Fonctionnement internes
 
-- Exporteur par défaut : le seuil global de taille et la suppression hors BBOX
-  COLMAP sont retirés. Aucun test de proximité aux points COLMAP n'est utilisé ;
+- Exporteur par défaut : sans seuil global de taille, suppression hors BBOX
+  COLMAP ni test de proximité aux points COLMAP ;
   les routes peu texturées peuvent avoir peu de points, mais des splats utiles.
 - Export PLY : les attributs non finis et rotations nulles sont toujours supprimés.
-- `MIN_OPACITY=0` : seuil d'opacité du lanceur, désormais désactivé.
+- `MIN_OPACITY=0` : désactive le seuil d'opacité du lanceur.
 - Seuil d'opacité explicite : reste possible indépendamment du filtre géométrique.
 
-Le nouveau filtre ne propose un rejet que si **les trois conditions** sont réunies :
+Le filtre contextuel ne propose un rejet que si **les trois conditions** sont réunies :
 
 1. Le plus grand demi-axe dépasse 10 fois la médiane locale des grands demi-axes.
 2. Le centre est périphérique dans le repère principal de la scène, calculé sur
