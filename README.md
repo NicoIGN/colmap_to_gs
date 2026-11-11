@@ -88,9 +88,12 @@ Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
 Depuis la racine du dépôt, copier puis adapter les configurations :
 
 ```bash
-cp tools/images_to_splat/config.sh.example /chemin/images.sh
-cp tools/panoramax/config.sh.example /chemin/panoramax.sh
+cp tools/images_to_splat/config.sh.example /chemin/config_image.sh
+cp tools/panoramax/config.sh.example /chemin/config_panoramax.sh
 ```
+
+Slurm (*Simple Linux Utility for Resource Management*) est un gestionnaire
+de ressources et de tâches de calcul utilisé sur les clusters.
 
 **Exécution directe, sans soumission Slurm** — les calculs tournent sur la
 machine courante et les blocs sont entraînés successivement. Ces commandes
@@ -99,10 +102,10 @@ paramètres `SLURM_*` :
 
 ```bash
 # Images locales → 3DGS
-bash script/images_to_3dgs.sh /chemin/images.sh
+bash script/images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
-bash script/panoramax_to_3dgs.sh /chemin/panoramax.sh
+bash script/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
 **Soumission à un cluster Slurm** — utiliser les lanceurs `launch_*` ci-dessous
@@ -115,10 +118,10 @@ la soumission Slurm.
 
 ```bash
 # Images locales → 3DGS
-bash script/launch_images_to_3dgs.sh /chemin/images.sh
+bash script/launch_images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
-bash script/launch_panoramax_to_3dgs.sh /chemin/panoramax.sh
+bash script/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
 Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
