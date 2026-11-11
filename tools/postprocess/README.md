@@ -17,7 +17,7 @@ maintenant directement leurs chemins sous `tools/postprocess/`.
 
 | Outil | Fonction |
 |---|---|
-| `export_splat_to_ply.sh` | Export Nerfstudio via `ns-export` |
+| `export_splat_to_ply.sh` | Export [Nerfstudio](../../README.md) via `ns-export` |
 | `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP |
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
 | `export_ply_legacy.py` | Sauvegarde exacte de l'ancien exporteur (BBOX et seuil global de taille) |
@@ -145,7 +145,7 @@ python3 tools/postprocess/filter_splats.py \
   appliqués partagent la limite de sécurité de 20 %.
 - Le JSON contient un compteur distinct `sparse_support.unsupported`.
 
-- Pipeline Panoramax : **les blocs sont exportés sans filtre géométrique** ;
+- [Pipeline Panoramax](../panoramax/README.md) : **les blocs sont exportés sans filtre géométrique** ;
   le nouveau filtre est évalué après fusion, sur l'ensemble de la scène, afin
   que les frontières internes des blocs ne soient pas traitées comme des bords de chantier.
 - `POSTPROCESS_FILTER_MODE="diagnostic"` : défaut ; valeurs alternatives

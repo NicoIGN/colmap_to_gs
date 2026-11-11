@@ -86,7 +86,7 @@ Les images ne sont jamais envoyées à un service ; seule l'installation
 télécharge les poids, l'inférence les charge ensuite sans accès réseau.
 
 
-Variables à ajouter dans la configuration Panoramax :
+Variables à ajouter dans la [configuration Panoramax](../panoramax/README.md) :
 
 
 L'installateur affiche les chemins exacts à reporter dans `config.sh` :

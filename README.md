@@ -21,7 +21,7 @@ Exemple :
 
 ## 1. Objectif
 
-Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi créer un dataset COLMAP à partir d'un dossier d'images et lancer un serveur local de visualisation.
+Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi [créer un dataset COLMAP à partir d'images](tools/preprocess/README.md) et lancer un [serveur local de visualisation](tools/viewer/README.md).
 
 Flux principal :
 
@@ -508,7 +508,7 @@ Tous les scripts peuvent être lancés depuis n'importe quel dossier : les chemi
 
 > ⚠️ Utilise des **chemins absolus** avec `run.sh`. Le script se place dans `scripts/` avant de résoudre les chemins : un chemin relatif est donc interprété depuis `scripts/`. C'est aussi le cas de la valeur par défaut `runs/default`.
 
-L'exécutable Spirula est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
+L'exécutable [Spirula](tools/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
 
 ### Visualisation locale
 

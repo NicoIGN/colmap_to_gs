@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Pipeline Spirula pour produire un Gaussian Splat `.splat` à partir d’images :
+Pipeline [Spirula](../spirula/README.md) pour produire un Gaussian Splat `.splat` à partir d’images :
 
 ```text
 Images
@@ -11,7 +11,8 @@ Images
   → recadrage bbox → fusion → fichier .splat
 ```
 
-Les masques et le recalage sur une trajectoire GPS sont optionnels.
+Les [masques](../segmentation_masks/README.md) et le
+[recalage sur une trajectoire GPS](../preprocess/README.md) sont optionnels.
 
 Exemple d’invocation :
 
@@ -41,7 +42,7 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
   lues.
 - Environnement Python : activer l'environnement habituel (par exemple
   `mamba activate gsplat`).
-- Spirula : doit disposer du SfM et de l'entraînement ; SAM/Vulkan est
+- [Spirula](../spirula/README.md) : doit disposer du SfM et de l'entraînement ; SAM/Vulkan est
   nécessaire si un backend de masques `spirula` est activé.
 - Dépendances réutilisées : notamment numpy, scipy, tqdm, Pillow et plyfile.
 
@@ -71,7 +72,7 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 ### Masques, budgets et repères
 
 - `SFM_MASKS_*` : paramètres de masques pour l'extraction, selon les variables
-  de `tools/panoramax`.
+  du [pipeline Panoramax](../panoramax/README.md).
 - `TRAIN_MASKS_*` : paramètres de masques pour l'entraînement.
 - Héritage : une valeur SfM vide hérite de la valeur train correspondante, sauf
   `SFM_MASKS_DILATE` (défaut `0.002`).
@@ -239,7 +240,7 @@ Slurm sont décrits dans la section « Configuration et utilisation » ci-dessus
 SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
 ```
 
-Le filtre expérimental de `tools/preprocess/filter_sparse_density.py` s'exécute
+Le filtre expérimental de [`tools/preprocess/filter_sparse_density.py`](../preprocess/README.md) s'exécute
 sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
 ses seuils par défaut et écrit deux modèles COLMAP binaires : `sparse_clean`
 (points conservés) et `sparse_rejected` (points retirés), chacun avec son

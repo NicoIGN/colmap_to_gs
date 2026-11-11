@@ -46,7 +46,7 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ### Contrôles géométriques du pipeline SfM
 
-- Les pipelines Panoramax et images locales exposent les mêmes réglages :
+- Les pipelines Panoramax et [images locales](../images_to_splat/README.md) exposent les mêmes réglages :
   - `SFM_MAX_ERROR=2` : seuil en pixels d'extraction.
   - `SFM_MIN_INLIERS=30` : minimum par paire.
   - `SFM_MIN_TRI_ANGLE=3` : angle minimum en degrés.
@@ -57,7 +57,8 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 - `scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
   `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
   `--ba-loss-param`.
-- Vérifier la disponibilité de ces options dans la version installée de Spirula.
+- Vérifier la disponibilité de ces options dans la version installée de
+  [Spirula](../spirula/README.md).
 
 
 
@@ -125,7 +126,7 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
 ```
 
 - Sortie : les splats alignés des blocs sont fusionnés en un unique fichier final.
-- Variante : le nettoyage expérimental Clean-GS peut remplacer le filtre
+- Variante : le [nettoyage expérimental Clean-GS](../clean_gs/README.md) peut remplacer le filtre
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans

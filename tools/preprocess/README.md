@@ -32,12 +32,14 @@ python3 tools/preprocess/images_to_colmap.py --help
 - Les dépendances restent celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-- Les composants internes de Nerfstudio `colmap_to_transforms.py` et
+- Les composants internes de [Nerfstudio](../../README.md) `colmap_to_transforms.py` et
   `estimate_planes.py` restent dans `python/` et sont appelés par `scripts/run.sh`.
 
 ## 3. Configuration et utilisation
 
 ### Découpage et entraînement Spirula par blocs
+
+Pour installer Spirula, consulter [son README](../spirula/README.md).
 
 Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
 
@@ -47,7 +49,7 @@ DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
 ```
 
 - **SfM :** réutilise `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ; sinon, lance
-  la reconstruction Panoramax.
+  la [reconstruction Panoramax](../panoramax/README.md).
 - **Découpage :** applique ce script à `sparse/0` et écrit les blocs dans
   `blocks-SPLIT_NUM_BLOCKS/`.
 - **Entraînement :** entraîne chaque bloc indépendamment dans
@@ -115,5 +117,5 @@ Les voisinages insuffisants sont conservés.
 ## 5. Notes et informations complémentaires
 
 Il s'agit d'un filtre à valider visuellement :
-tester le sparse original et sa sortie dans le viewer avant de l'utiliser pour
+tester le sparse original et sa sortie dans le [viewer](../viewer/README.md) avant de l'utiliser pour
 l'entraînement.

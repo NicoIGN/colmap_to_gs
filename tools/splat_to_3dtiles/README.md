@@ -18,7 +18,7 @@ Le convertisseur externe [`3dgs-ply-3dtiles-converter`](https://github.com/razor
 
 ## 2. Entrées et sorties
 
-Cette première version vise les `.splat` produits par `tools/postprocess/export_ply.py` après le géoréférencement GPX de `tools/preprocess/georef_colmap_from_gpx.py`. Les positions doivent être en repère **local ENU (Est, Nord, Haut), en mètres**, et l'origine WGS84 `[latitude, longitude, hauteur]` doit provenir du `georef_summary.json` du même traitement.
+Cette première version vise les `.splat` produits par [`tools/postprocess/export_ply.py`](../postprocess/README.md) après le géoréférencement GPX de [`tools/preprocess/georef_colmap_from_gpx.py`](../preprocess/README.md). Les positions doivent être en repère **local ENU (Est, Nord, Haut), en mètres**, et l'origine WGS84 `[latitude, longitude, hauteur]` doit provenir du `georef_summary.json` du même traitement.
 
 Le `georef_summary.json` de ce dépôt contient un tableau `models` et pointe vers un `georef_stats.json` par modèle. Le convertisseur lit l'origine ENU dans ce fichier de statistiques. Pour un résumé avec un seul modèle, celui-ci est sélectionné automatiquement ; s'il y en a plusieurs, indique le modèle avec `--model`.
 

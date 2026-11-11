@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Générer des masques locaux pour les images d'entraînement 3DGS/Spirula. Par défaut, le masque exclut le ciel.
+Générer des masques locaux pour les images d'entraînement 3DGS/[Spirula](../spirula/README.md). Par défaut, le masque exclut le ciel.
 
 Exemple d’invocation :
 
@@ -130,7 +130,7 @@ Un changement de moteur ou de paramètres de génération invalide les masques e
 ### Variables de configuration du pipeline
 
 
-À ajouter dans le fichier de configuration du pipeline Panoramax. Ces variables sont consommées par l'orchestration du pipeline, qui les transmet au script sous forme d'options de ligne de commande :
+À ajouter dans le fichier de configuration du [pipeline Panoramax](../panoramax/README.md). Ces variables sont consommées par l'orchestration du pipeline, qui les transmet au script sous forme d'options de ligne de commande :
 
 ```bash
 TRAIN_MASKS="on"                    # off par défaut
