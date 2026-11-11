@@ -102,7 +102,7 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
   `SFM_IMAGES_RECURSIVE` et `SFM_MASKS_*`/`TRAIN_MASKS_*`.
 - Si seuls les paramètres SfM sont définis, renseigner également ceux du train
   lorsque `TRAIN_MASKS=on`.
-- Signature de préparation : inclut désormais les deux politiques ; ne pas
+- Signature de préparation : enregistre les politiques SfM et entraînement ; ne pas
   effacer `inputs.json`.
 - Reprise explicite : permet d'adopter certaines signatures anciennes ; une
   politique connue incompatible reste refusée.
@@ -134,12 +134,10 @@ Cette cohérence de repère ne garantit pas des surfaces identiques aux frontiè
 les optimisations indépendantes peuvent produire des écarts de reconstruction.
 
 
-### GPX optionnel
+### Recalage sur une trajectoire GPS
 
-
-Sans `GEOREF_GPX_FILE` (absent ou vide), **aucun changement de comportement** :
-le pipeline n'appelle pas le recalage et ne nécessite ni fiona ni pyproj.
-Pour l'activer dans la même config Bash/Slurm :
+Le recalage utilise une trajectoire GPS fournie au format GPX. Pour l'activer,
+renseigner `GEOREF_GPX_FILE` dans le fichier de configuration :
 
 ```bash
 GEOREF_GPX_FILE="/chemin/absolu/parcours.gpx"
@@ -147,6 +145,9 @@ GEOREF_VIEW_PREFIX="h00_y0"  # vide : sélection automatique du dossier
 GEOREF_EPSG="2154"
 GEOREF_ALLOW_UNCERTAIN="false"
 ```
+
+Si `GEOREF_GPX_FILE` est absent ou vide, le recalage est désactivé ; fiona et
+pyproj ne sont alors pas nécessaires.
 
 Le pipeline réutilise `tools/preprocess/georef_colmap_from_gpx.py` : il recale
 la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,
@@ -197,9 +198,9 @@ l'annulation des jobs en cas d'échec. Les workers Spirula restent dans `scripts
 
 Ce dossier conserve la sélection des fichiers locaux, la disposition du
 workspace, ses signatures et le recalage GPX. Panoramax conserve l'acquisition,
-les métadonnées et le traitement GPS EXIF. Les commandes, configurations et
-chemins de sortie ne changent pas ; les options propres à chaque pipeline
-(repère, seuil de recadrage, nettoyage final) ne sont pas uniformisées.
+les métadonnées et le traitement GPS EXIF. Chaque pipeline possède sa
+configuration, ses chemins de sortie et ses options propres
+(repère, seuil de recadrage, nettoyage final).
 
 ## 5. Notes et informations complémentaires
 
@@ -290,7 +291,7 @@ tous ses paramètres enregistrés et ses images sont inchangés ; elle est
 sauvegardée dans `inputs.before_resume.json`. Les changements connus d'images,
 de paramètres ou de GPX restent bloquants. Sans métadonnées, la présence de
 fichiers valides ne prouve pas leur provenance : conserver les mêmes images
-et réglages. Le mode normal (`false`) reste inchangé.
+et réglages.
 
 En cas de différence de signature, l'erreur indique le chemin d'`inputs.json`,
 la valeur effective de `PIPELINE_RESUME` et jusqu'à 12 champs différents
