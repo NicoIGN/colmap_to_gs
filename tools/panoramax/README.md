@@ -1,8 +1,12 @@
 # Télécharger des photos Panoramax par bbox Lambert-93
 
-Ce lanceur recherche les photos du catalogue fédéré Panoramax via `/api/search`,
-pagine jusqu'au dernier résultat et télécharge les images HD disponibles.
-Il n'a pas besoin de compte Panoramax.
+Ce lanceur télécharge les images HD disponibles dans une bbox Lambert-93 depuis
+le catalogue fédéré Panoramax, sans compte utilisateur :
+
+```text
+Bbox Lambert-93 → recherche STAC/WGS84 → vérification des prises de vue
+                → pagination des résultats → téléchargement des images
+```
 
 ## 1. Objectif
 
@@ -102,9 +106,27 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Pipeline complet bbox → `.splat`
 
-- `run_pipeline.sh` : enchaîne le téléchargement Panoramax, le SfM géoréférencé,
-  le découpage COLMAP, l'entraînement Spirula de chaque bloc et la fusion
-  voxelisée des splats alignés en un unique fichier final.
+- `run_pipeline.sh` exécute :
+
+```text
+Bbox + configuration
+        ↓
+Téléchargement Panoramax → préparation des images
+        ↓
+[masques SfM optionnels] → [filtre optionnel des paires GPS]
+        ↓
+SfM géoréférencé par EXIF → découpage COLMAP
+        ↓
+Entraînement Spirula par bloc → recadrage bbox des blocs
+        ↓
+Fusion voxelisée → filtre contextuel (diagnostic par défaut)
+        ↓
+.splat + références .georef/
+```
+
+- Sortie : les splats alignés des blocs sont fusionnés en un unique fichier final.
+- Variante : le nettoyage expérimental Clean-GS peut remplacer le filtre
+  contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
   `tools/panoramax/config.sh.example`, organisé par étape du pipeline.
@@ -361,9 +383,17 @@ partiel doit être déplacé en sauvegarde avant de réessayer.
 
 #### Exécution GPU sur Slurm
 
-- `launch.sh` : soumet **le même pipeline complet** en trois étapes dépendantes :
-  un job GPU de téléchargement/SfM/découpage, un tableau Slurm (`--array`) avec
-  un GPU NVIDIA par bloc, puis un job CPU de fusion et de copie du géoréférencement.
+- `launch.sh` soumet le pipeline complet en trois étapes dépendantes :
+
+```text
+Job GPU : téléchargement → SfM → découpage
+                    ↓ afterok
+Tableau Slurm : entraînement GPU d'un bloc par tâche
+                    ↓ afterok
+Job CPU : fusion → copie du géoréférencement
+```
+
+- Le tableau Slurm réserve un GPU NVIDIA par bloc.
 - Entraînement : les blocs s'exécutent en parallèle, sous réserve des GPU disponibles.
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
 - Variables `SLURM_*` : ressources commentées dans `config.sh.example` :

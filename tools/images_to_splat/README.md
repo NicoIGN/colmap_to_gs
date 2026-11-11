@@ -21,8 +21,8 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 
 ## 2. Entrées et sorties
 
-- `SFM_IMAGES_DIR` : dossier source des images ; peut être remplacé dans les deux
-  modes par `--images /chemin/absolu/images`.
+- `SFM_IMAGES_DIR` : dossier source des images ; l'option
+  `--images /chemin/absolu/images` peut remplacer cette valeur à l'appel.
 - `SFM_IMAGES_RECURSIVE=true` : parcourt les sous-dossiers ordinaires.
 - Liens : les liens vers des fichiers sont acceptés, mais pas le parcours des
   dossiers symboliques.
@@ -43,7 +43,7 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
   nécessaire si un backend de masques `spirula` est activé.
 - Dépendances réutilisées : notamment numpy, scipy, tqdm, Pillow et plyfile.
 
-Depuis la racine du dépôt, **même configuration pour les deux modes** :
+Depuis la racine du dépôt :
 
 ```bash
 # Local : tous les blocs sont entraînés successivement.
@@ -195,9 +195,10 @@ ne pas mélanger des blocs entraînés dans des repères différents.
 
 ## 4. Fonctionnement internes
 
-Les deux pipelines utilisent `python/mask_policies.py` pour les politiques et
-l'appel du générateur de masques, ainsi que `scripts/pipeline_config.sh` pour les
-validations communes et les seuils SfM. `python/sfm_geometry_policy.py` protège
+Les pipelines **images locales** et **Panoramax** partagent certains scripts :
+`python/mask_policies.py` gère les politiques et l'appel du générateur de
+masques ; `scripts/pipeline_config.sh` porte les validations communes et les
+seuils SfM. `python/sfm_geometry_policy.py` protège
 la réutilisation des modèles du worker multi-blocs ; les images locales
 enregistrent ces paramètres dans leur signature `inputs.json`.
 `scripts/pipeline_postprocess.sh` partage le recadrage sparse et la fusion,

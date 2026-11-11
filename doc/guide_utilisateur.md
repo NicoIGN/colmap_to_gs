@@ -23,15 +23,19 @@ adapté.
 
 ### 1.2. Principe général
 
-1. **Photogrammétrie** : COLMAP met en correspondance les images et estime les
-   paramètres des caméras ainsi qu'un nuage de points 3D clairsemé.
-2. **Initialisation** : le nuage de points fournit une géométrie initiale aux
-   gaussiennes.
-3. **Entraînement** : Splatfacto ou Spirula ajuste itérativement les gaussiennes
-   pour rapprocher les vues synthétiques des images d'entrée. L'entraînement
-   utilise le GPU.
-4. **Export et post-traitement** : le modèle entraîné est exporté, puis peut
-   être filtré ou converti pour la visualisation.
+```text
+Images + modèle COLMAP
+        ↓
+Initialisation des gaussiennes avec le nuage de points
+        ↓
+Entraînement GPU (Splatfacto ou Spirula)
+        ↓
+Export → post-traitement éventuel → visualisation
+```
+
+COLMAP met en correspondance les images et estime les paramètres des caméras
+ainsi qu'un nuage de points 3D clairsemé. L'entraînement ajuste les gaussiennes
+pour rapprocher les vues synthétiques des images d'entrée.
 
 ![Reconstruction SfM](technopitch/images/sfm.jpg)
 
