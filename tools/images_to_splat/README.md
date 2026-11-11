@@ -3,8 +3,15 @@
 ## 1. Objectif
 
 Pipeline Spirula pour produire un Gaussian Splat `.splat` à partir d’images :
-sélection, masques optionnels, SfM global, recalage GPX optionnel, découpage
-en blocs, entraînement, recadrage bbox et fusion.
+
+```text
+Images
+  → sélection → [masques] → SfM global → [recalage GPX]
+  → découpage COLMAP → entraînement par blocs
+  → recadrage bbox → fusion → fichier .splat
+```
+
+Les masques et le recalage GPX sont optionnels.
 
 Exemple d’invocation :
 
