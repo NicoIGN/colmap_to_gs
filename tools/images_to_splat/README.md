@@ -73,7 +73,10 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 - Dépendances : les étapes suivantes ont une dépendance `afterok`.
 - Journaux : `OUTPUT_DIR/logs/`.
 
-### Masques, budgets et repères
+### Masques
+
+Les masques indiquent les zones d'image à exclure de la reconstruction ou à
+traiter séparément pendant l'entraînement.
 
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour l'extraction / l'entraînement ;
   réglages et héritage dans [`config.sh.example`](config.sh.example),
@@ -86,6 +89,13 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
   suffixe `.png`.
 - Labels `sky,cloud` : conservent les voitures et passants dans les images
   d'entraînement, sans garantir la reconstruction des objets mobiles.
+- Si seuls les paramètres SfM sont définis, renseigner également ceux du train
+  lorsque `TRAIN_MASKS=on`.
+
+### Budgets d'entraînement
+
+Les budgets fixent la durée de l'entraînement en itérations et le nombre maximal
+de splats pour chaque bloc.
 
 - `TRAIN_*` : budgets, croissance et arrêt de l'entraînement ; voir
   [`config.sh.example`](config.sh.example), section « 4. Entrainement de chaque bloc ».
@@ -94,20 +104,24 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 - `TRAIN_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
   une initialisation à 10 % du cap ; un nuage sparse plus fourni peut faire
   atteindre le cap plus tôt.
-- Si seuls les paramètres SfM sont définis, renseigner également ceux du train
-  lorsque `TRAIN_MASKS=on`.
+### Protection des résultats et reprise
+
+La signature de préparation permet de vérifier que les résultats réutilisés
+correspondent aux images et aux réglages choisis.
+
 - Signature de préparation : enregistre les politiques SfM et entraînement ; ne pas
   effacer `inputs.json`.
 - Reprise explicite : permet d'adopter certaines signatures anciennes ; une
   politique connue incompatible reste refusée.
 
+### Reconstruction des caméras et des points 3D
+
+Le SfM estime les positions des caméras et un nuage de points 3D à partir des
+images.
+
 - Images SfM : photos individuelles, sans filtrage des paires GPS.
 - Caméra : une caméra par sous-dossier par défaut ; vérifier que les images
   d'un même dossier partagent bien les mêmes caractéristiques optiques.
-- Sans GPX optionnel, l'alignement géographique et l'échelle métrique ne sont
-  pas garantis.
-- Tous les blocs restent alignés dans le même repère SfM.
-
 - `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
   [`config.sh.example`](config.sh.example), section « 2. Reconstruction SfM globale ».
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
@@ -118,14 +132,22 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 - Les matches sont revérifiés lors d'un nouveau calcul SfM, pour ne pas hériter
   d'anciens seuils.
 
-Le découpage conserve les poses caméra et les coordonnées des points ; il
-sélectionne les observations sans recentrer ni redimensionner les sous-modèles.
-Chaque entraînement peut utiliser sa propre normalisation interne :
-`scene_transform.json` est inversé lors de l'export `block_NNN.splat`, pour les
-centres, tailles et rotations des Gaussians. Les checkpoints PLY bruts ne doivent
-donc pas être mélangés directement aux splats exportés.
-Cette cohérence de repère ne garantit pas des surfaces identiques aux frontières :
-les optimisations indépendantes peuvent produire des écarts de reconstruction.
+### Coordonnées et alignement des blocs
+
+Les blocs utilisent un même système de coordonnées pour pouvoir être fusionnés
+sans déplacer ni redimensionner leurs reconstructions.
+
+- Sans recalage sur une trajectoire GPS, l'alignement géographique et l'échelle
+  métrique ne sont pas garantis.
+- Découpage : conserve les poses caméra et les coordonnées des points ;
+  sélectionne les observations sans recentrer ni redimensionner les sous-modèles.
+- Export `block_NNN.splat` : inverse la normalisation interne de chaque
+  entraînement, enregistrée dans `scene_transform.json`, pour les centres,
+  tailles et rotations des Gaussians.
+- Checkpoints PLY bruts : ne pas les mélanger directement aux splats exportés,
+  car leurs coordonnées peuvent être normalisées.
+- Frontières entre blocs : les optimisations indépendantes peuvent produire
+  des écarts de reconstruction, même avec des coordonnées cohérentes.
 
 
 ### Recalage sur une trajectoire GPS
