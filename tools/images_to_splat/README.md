@@ -46,13 +46,13 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 Depuis la racine du dépôt :
 
 ```bash
-# Local : tous les blocs sont entraînés successivement.
+# Exécution directe dans le shell : tous les blocs s'exécutent successivement.
 bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 
-# Slurm : préparation GPU, tableau de jobs GPU, puis recadrage/fusion CPU.
+# Soumission à Slurm : préparation GPU, tâches GPU, puis fusion CPU.
 bash tools/images_to_splat/launch.sh /chemin/config.sh
 
-# Attendre la fin et retourner une erreur si le calcul échoue.
+# Variante Slurm : attendre la fin et retourner un code d'erreur en cas d'échec.
 bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 ```
 
@@ -212,6 +212,24 @@ chemins de sortie ne changent pas ; les options propres à chaque pipeline
 (repère, seuil de recadrage, nettoyage final) ne sont pas uniformisées.
 
 ## 5. Notes et informations complémentaires
+
+#### Choisir comment lancer le pipeline
+
+Depuis la racine du dépôt, avec le même fichier de configuration :
+
+```bash
+# Directement dans le shell Bash ; les blocs sont exécutés successivement.
+bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
+
+# Soumettre les étapes au gestionnaire Slurm.
+bash tools/images_to_splat/launch.sh /chemin/config.sh
+```
+
+La première commande exécute le pipeline directement dans le shell. La seconde
+soumet les jobs à Slurm ; ne pas la préfixer avec `sbatch`. Pour attendre la fin
+des jobs et obtenir un code de retour non nul en cas d'échec, ajouter
+`--wait` à la commande Slurm. Les détails d'ordonnancement et de ressources
+Slurm sont décrits dans la section « Configuration et utilisation » ci-dessus.
 
 #### Filtrage optionnel du sparse
 
