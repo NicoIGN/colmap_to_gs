@@ -5,15 +5,100 @@ import argparse
 import hashlib
 from itertools import islice
 import json
+import math
 import os
 from pathlib import Path
 import shutil
 import sys
 
+from PIL import Image
+
 from prepare_masks import policies
 
 
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+GPS_IFD = 0x8825
+
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _gps_coordinate(gps, ref_tag, value_tag, positive_ref, negative_ref, limit):
+    reference = gps.get(ref_tag)
+    if isinstance(reference, bytes):
+        reference = reference.decode("ascii", errors="ignore")
+    if reference not in (positive_ref, negative_ref):
+        return None
+    values = gps.get(value_tag)
+    if not isinstance(values, (tuple, list)) or len(values) != 3:
+        return None
+    try:
+        degrees, minutes, seconds = (float(value) for value in values)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if (not all(math.isfinite(value) for value in (degrees, minutes, seconds))
+            or degrees < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60
+            or degrees > limit or (degrees == limit and (minutes or seconds))):
+        return None
+    coordinate = degrees + minutes / 60 + seconds / 3600
+    return -coordinate if reference == negative_ref else coordinate
+
+
+def gps_exif_metadata(images, gpx_configured):
+    if gpx_configured:
+        return {"status": "superseded_by_gpx"}
+
+    coordinates = []
+    altitude_images = 0
+    unreadable_images = 0
+    for relative, resolved, _, _ in images:
+        try:
+            with Image.open(resolved) as image:
+                gps = image.getexif().get_ifd(GPS_IFD)
+        except (OSError, ValueError):
+            unreadable_images += 1
+            continue
+        latitude = _gps_coordinate(gps, 1, 2, "N", "S", 90)
+        longitude = _gps_coordinate(gps, 3, 4, "E", "W", 180)
+        if latitude is None or longitude is None:
+            continue
+        altitude = None
+        try:
+            altitude_value = float(gps[6])
+            if math.isfinite(altitude_value):
+                altitude_ref = gps.get(5, 0)
+                if isinstance(altitude_ref, bytes):
+                    altitude_ref = int.from_bytes(altitude_ref, "big")
+                altitude = -altitude_value if altitude_ref == 1 else altitude_value
+        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+            pass
+        if altitude is not None:
+            altitude_images += 1
+        coordinates.append([
+            relative, format(latitude, ".12g"), format(longitude, ".12g"),
+            None if altitude is None else format(altitude, ".12g"),
+        ])
+
+    tagged_images = len(coordinates)
+    metric_gps = "none"
+    if tagged_images >= 2:
+        metric_gps = "full" if altitude_images == tagged_images else "horizontal"
+    digest = hashlib.sha256(
+        json.dumps(coordinates, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "status": "available" if tagged_images >= 2 else "insufficient",
+        "geotagged_images": tagged_images,
+        "altitude_images": altitude_images,
+        "metric_gps": metric_gps,
+        "coordinates_sha256": digest,
+        "unreadable_images": unreadable_images,
+    }
 
 
 def record_differences(previous, current, path=""):
@@ -41,7 +126,7 @@ def record_differences(previous, current, path=""):
 
 def compatible_record(previous, current):
     if any(previous.get(key) != current.get(key)
-           for key in ("source", "images", "georeference")):
+           for key in ("source", "images", "georeference", "gps_exif", "colmap_policy")):
         return False
     old_settings = previous.get("settings")
     if not isinstance(old_settings, dict):
@@ -84,6 +169,23 @@ def prepare(check=False):
             [str(path), path.stat().st_size, path.stat().st_mtime_ns] for path in files
         ]
     record = {"source": str(source), "images": images, "settings": settings}
+    record["gps_exif"] = gps_exif_metadata(
+        images, bool(os.environ.get("GEOREF_GPX_FILE"))
+    )
+    method = os.environ.get("COLMAP_METHOD", "spirula")
+    if method != "spirula":
+        record["colmap_policy"] = {
+            "method": method,
+            "matching": os.environ["COLMAP_MATCHING"],
+            "gpu": os.environ["COLMAP_USE_GPU"],
+        }
+        for key in ("ORIENTATIONS_JSON", "LIDAR_PLY"):
+            if method == "orientations":
+                path = Path(os.environ[key]).resolve()
+                record["colmap_policy"][key] = {
+                    "path": str(path),
+                    "sha256": file_sha256(path),
+                }
     if os.environ.get("GEOREF_GPX_FILE"):
         gpx = Path(os.environ["GEOREF_GPX_FILE"]).resolve()
         record["georeference"] = {
@@ -116,13 +218,13 @@ def prepare(check=False):
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
              ("images", "sfm", "masks", "feature_masks", "train_masks",
-              "sparse_filtered", "sparse_clean", "sparse_rejected", "blocks", "gs")):
+              "sparse_filtered", "sparse_clean", "sparse_rejected", "blocks", "gs", "gs-nerfstudio")):
         if not resume:
             raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
         adopted = True
     if adopted and any((output / name).exists()
                        for name in ("georef", "sparse_filtered", "sparse_clean",
-                                    "sparse_rejected", "blocks", "gs")):
+                                    "sparse_rejected", "blocks", "gs", "gs-nerfstudio")):
         raise ValueError(
             "Reprise sans signature actuelle refusée après recalage/découpage/entraînement "
             "ou filtrage sparse : "
@@ -170,6 +272,12 @@ def prepare(check=False):
         temporary.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
         temporary.replace(marker)
     print(f"[images] {len(images)} images sélectionnées ; récursif={recursive}", flush=True)
+    if record["gps_exif"].get("unreadable_images"):
+        print(
+            "[AVERTISSEMENT] GPS EXIF non lisible pour "
+            f"{record['gps_exif']['unreadable_images']} image(s).",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

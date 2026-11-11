@@ -32,9 +32,9 @@ python3 tools/preprocess/images_to_colmap.py --help
 - Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-- `python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
-  appelée par `scripts/run.sh`.
-- `python/estimate_planes.py` : estimation des plans, appelée par `scripts/run.sh`.
+- `tools/libs/python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
+  appelée par `tools/libs/scripts/run.sh`.
+- `tools/libs/python/estimate_planes.py` : estimation des plans, appelée par `tools/libs/scripts/run.sh`.
 
 ## 3. Configuration et utilisation
 
@@ -46,7 +46,7 @@ Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
 
 ```bash
 DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
-  bash /chemin/vers/colmap_to_gs/scripts/run_spirula_blocks.sh
+  bash /chemin/vers/colmap_to_gs/tools/libs/scripts/run_spirula_blocks.sh
 ```
 
 - **SfM :** réutilise `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ; sinon, lance

@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
 # Panoramax-specific validation, using shared pipeline primitives.
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/scripts/pipeline_config.sh"
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/tools/libs/scripts/pipeline_config.sh"
 
 validate_config() {
   local config_errors=0 name value
   reject_legacy_config || return 1
+  config_choice TRAIN_BACKEND "${TRAIN_BACKEND:-spirula}" 'spirula|nerfstudio'
+  if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
+    config_positive_integer NS_DOWNSCALE_FACTOR "${NS_DOWNSCALE_FACTOR:-1}"
+    case "${TRAIN_MASKS:-off}" in
+      on|true|1|yes)
+        [[ "${TRAIN_MASKS_MODE:-auto}" == ignore ]] ||
+          config_error "Nerfstudio exige TRAIN_MASKS_MODE=ignore."
+        [[ "${TRAIN_MASKS_BACKEND:-segmentation}" == segmentation ]] ||
+          config_error "Nerfstudio : utiliser TRAIN_MASKS_BACKEND=segmentation avec Mask2Former ou SegFormer." ;;
+    esac
+  fi
   validate_sfm_geometry_config
   for name in OUTPUT_DIR PANORAMAX_BBOX SPLIT_NUM_BLOCKS TRAIN_NUM_ITER TRAIN_CAP_MAX TRAIN_PRESET; do
     [[ -n "${!name:-}" ]] || config_error "$name doit être défini et non vide."

@@ -65,7 +65,7 @@ Expected layout:
   transforms.json est généré automatiquement depuis le modèle COLMAP.
 
 Options:
-  --output-dir, -o <dir>      Output root (default: scripts/runs/default)
+  --output-dir, -o <dir>      Output root (default: tools/libs/scripts/runs/default)
   --name <name>               Basename export PLY (default: gsplat_<timestamp>)
   --gsplat-profile <name>     fast | balanced | quality | quality_plus
   --use-defaults              ignoring all customized params
@@ -171,9 +171,9 @@ echo "🖥️ DEVICE     : $DEVICE"
 # =========================================
 
 NO_PROXY="$IGNORE_PROXY" MAX_JOBS="$MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
-    source "$SCRIPT_DIR/../config/config.sh"
+    source "$SCRIPT_DIR/../../../config/config.sh"
 
-DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../config/profiles"
+DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../../../config/profiles"
 
 if [[ "${USE_DEFAULTS:-false}" =~ ^(1|true|TRUE|True|yes|YES)$ ]]; then
     export USE_DEFAULTS=True
@@ -228,6 +228,8 @@ if [ "$SKIP_CONDA" = false ]; then
 else
   echo "⏩ Skipping conda setup"
 fi
+
+python "$SCRIPT_DIR/../python/nerfstudio_runtime.py"
 
 PY_VER=$(python --version 2>&1)
 [[ "$PY_VER" == *"3.10"* || "$PY_VER" == *"3.11"* ]] || die "Python 3.10/3.11 required, got: $PY_VER"
@@ -358,7 +360,7 @@ if [ "$SKIP_EXPORT" = false ]; then
   OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" \
   EXPORT_DIR="$OUTPUT_DIR" \
   ZIP_RUN=0 \
-    bash "$SCRIPT_DIR/../tools/postprocess/export_splat_to_ply.sh"
+    bash "$SCRIPT_DIR/../../../tools/postprocess/export_splat_to_ply.sh"
 
   PLY_FILE=$(find "$OUTPUT_DIR" -type f -name "*.ply" | head -n 1 || true)
 
@@ -379,7 +381,7 @@ CLEANED_PLY=""
 if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
 
-  CLEAN_SCRIPT="$SCRIPT_DIR/../tools/postprocess/clean_ply.sh"
+  CLEAN_SCRIPT="$SCRIPT_DIR/../../../tools/postprocess/clean_ply.sh"
   COLMAP_POINTS="$COLMAP_SPARSE_DIR/points3D.bin"
   CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
   TRANSFORM_SEARCH_DIR="$TRAIN_DIR/$EXPERIMENT_NAME"

@@ -16,9 +16,12 @@ spécialisés liés ci-dessous.
 La première étape consiste à reconstruire les caméras et les points 3D depuis
 les images, ou à réutiliser un modèle COLMAP existant avec ses images.
 
-- Images : les [outils de préparation](../tools/preprocess/README.md)
-  permettent notamment d'extraire des images d'une vidéo et de lancer
-  `images_to_colmap.py`.
+- Images : l'[outil images vers COLMAP](../tools/images_to_colmap/README.md)
+  propose `COLMAP_METHOD=spirula|colmap|nerfstudio|orientations`, avec une
+  configuration commune. Les [outils de préparation](../tools/preprocess/README.md)
+  permettent aussi d'extraire des images d'une vidéo.
+- Orientations et LiDAR : convertir les poses vers le JSON explicite documenté
+  et le nuage coloré vers PLY, puis utiliser `COLMAP_METHOD=orientations`.
 - Modèle existant : conserver les images associées, les paramètres des caméras,
   leurs poses et les points 3D.
 
@@ -38,15 +41,20 @@ Une fois les données COLMAP disponibles, choisir le moteur d'entraînement :
 
 Dans ce dépôt, les points d'entrée correspondants sont :
 
-- **Nerfstudio / Splatfacto** : `scripts/run.sh` prépare les données
-  Nerfstudio, entraîne et exporte en `.ply` ; voir le
+- **Pipeline commun** : `TRAIN_BACKEND=spirula|nerfstudio` dans la configuration
+  de `script/images_to_3dgs.sh` ou `script/panoramax_to_3dgs.sh`.
+  Le modèle COLMAP et le découpage restent communs ; chaque moteur dispose
+  de ses sorties d'entraînement. Nerfstudio exige PyTorch et NVIDIA/CUDA,
+  sans repli CPU/Metal. Ses masques sont en mode `ignore`, pas `empty`.
+- **Nerfstudio / Splatfacto** : `tools/libs/scripts/run.sh` prépare les données
+  Nerfstudio, entraîne et exporte en `.ply` (parcours historique) ; voir le
   [guide Nerfstudio](nerfstudio.md).
 - **Spirula** : installer l'outil suivant son
   [README](../tools/spirula/README.md), puis entraîner depuis le modèle COLMAP
-  et ses images avec `scripts/run_spirula_block.sh`. Exemple :
+  et ses images avec `tools/libs/scripts/run_spirula_block.sh`. Exemple :
 
 ```bash
-bash scripts/run_spirula_block.sh \
+bash tools/libs/scripts/run_spirula_block.sh \
   --sparse-dir /chemin/colmap/sparse/0 \
   --images-dir /chemin/images \
   --output-dir /chemin/resultats
@@ -57,9 +65,9 @@ est décrit dans le [README du post-traitement](../tools/postprocess/README.md).
 
 ### 2.3. Utiliser un pipeline complet
 
-Deux pipelines dans `tools/` enchaînent la production des données COLMAP,
-l'entraînement et l'export. Ils utilisent **uniquement Spirula**, sans choix
-Nerfstudio :
+Deux pipelines dans `script/` enchaînent la production des données COLMAP,
+l'entraînement et l'export. Spirula reste le moteur par défaut ; Nerfstudio
+peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 
 - **Bbox + flux Panoramax → splat** : recherche et téléchargement des images,
   reconstruction, entraînement par blocs et fusion ; voir le
@@ -76,10 +84,10 @@ Selon le parcours choisi, le dépôt peut préparer ce modèle ou réutiliser un
 dataset déjà constitué.
 
 Pour le pipeline Nerfstudio / Splatfacto, le point d'entrée est
-`scripts/run.sh`. Exemple :
+`tools/libs/scripts/run.sh`. Exemple :
 
 ```bash
-./scripts/run.sh \
+./tools/libs/scripts/run.sh \
   --dataset-dir /chemin/absolu/vers/mon_dataset \
   --output-dir /chemin/absolu/vers/mes_resultats \
   --gsplat-profile balanced \
@@ -100,6 +108,8 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
   [guide de lancement](lancement_bash_slurm.md).
 - **Préparation des données et sparse COLMAP** :
   [tools/preprocess](../tools/preprocess/README.md).
+- **Choix du producteur COLMAP et conversion orientations/LiDAR** :
+  [tools/images_to_colmap](../tools/images_to_colmap/README.md).
 - **Masques de segmentation** :
   [tools/segmentation_masks](../tools/segmentation_masks/README.md).
 - **Filtrage et fusion des splats** :
@@ -136,5 +146,5 @@ commandes de validation et particularités de chaque outil.
 
 Le pipeline Nerfstudio conserve un `transforms.json` déjà présent. Pour repartir
 des paramètres COLMAP courants, supprimer ce fichier avant de relancer
-`scripts/run.sh`. Les détails de ce comportement et des transformations sont
+`tools/libs/scripts/run.sh`. Les détails de ce comportement et des transformations sont
 dans le [guide Nerfstudio](nerfstudio.md#2-entrées-et-sorties).

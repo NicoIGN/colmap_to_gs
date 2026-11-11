@@ -20,8 +20,12 @@ Depuis la racine du dépôt, après adaptation de la configuration :
 
 | Pipeline | Exécution directe | Soumission Slurm |
 |---|---|---|
-| Images locales | `bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh` | `bash tools/images_to_splat/launch.sh /chemin/config.sh` |
-| Panoramax | `bash tools/panoramax/run_pipeline.sh /chemin/config.sh` | `bash tools/panoramax/launch.sh /chemin/config.sh` |
+| Images locales | `bash script/images_to_3dgs.sh /chemin/config.sh` | `bash script/launch_images_to_3dgs.sh /chemin/config.sh` |
+| Panoramax | `bash script/panoramax_to_3dgs.sh /chemin/config.sh` | `bash script/launch_panoramax_to_3dgs.sh /chemin/config.sh` |
+
+`TRAIN_BACKEND=nerfstudio` conserve ce découpage en jobs. Les tâches
+d'entraînement exigent PyTorch et une carte NVIDIA utilisable via CUDA ;
+la fusion reste une étape CPU sans lancement de Nerfstudio.
 
 Les lanceurs `launch.sh` se lancent avec **Bash, pas avec `sbatch`** :
 ils soumettent eux-mêmes les jobs. Ajouter `--wait` à leur commande pour attendre
@@ -105,7 +109,7 @@ Les options du calcul et un exemple de `config.sh` sont dans le
 
 ```bash
 # Exécution directe, avec l'environnement du projet activé :
-bash scripts/run.sh --dataset-dir /chemin/dataset \
+bash tools/libs/scripts/run.sh --dataset-dir /chemin/dataset \
   --output-dir /chemin/resultats --gsplat-profile balanced --name ma_scene
 
 # Soumission, avec les paramètres du pipeline définis dans config.sh :

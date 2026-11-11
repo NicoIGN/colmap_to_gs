@@ -302,7 +302,7 @@ fi
 case "$prepare" in
   1|true|yes|on)
     prepare_cmd=(
-      python3 "$script_dir/../tools/panoramax/prepare_sfm.py"
+      python3 "$script_dir/../../../tools/panoramax/prepare_sfm.py"
       --dataset "$dataset" --output-dir "$output_dir" --shell
     )
     [[ -z "$keep_size" ]] || prepare_cmd+=(--size "$keep_size")

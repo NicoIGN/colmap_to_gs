@@ -20,7 +20,7 @@ case "$phase" in
 esac
 : "${SLURM_JOB_ID:?Ce script doit être lancé dans une allocation Slurm}"
 [[ -f "$config_path" ]] || die "Configuration inaccessible sur le nœud : $config_path"
-[[ -f "$repo_root/tools/panoramax/run_pipeline.sh" ]] ||
+[[ -f "$repo_root/script/panoramax_to_3dgs.sh" ]] ||
   die "Dépôt inaccessible sur le nœud : $repo_root"
 source "$config_path"
 source "$repo_root/tools/panoramax/validate_config.sh"
@@ -79,7 +79,7 @@ srun --unbuffered --export=ALL bash -c '
   fi
   args=("$2" "$3")
   [[ "$3" != train-block ]] || args+=("$SLURM_ARRAY_TASK_ID")
-  bash "$1/tools/panoramax/run_pipeline.sh" "${args[@]}"
+  bash "$1/script/panoramax_to_3dgs.sh" "${args[@]}"
 ' bash "$repo_root" "$config_path" "$phase" || exec_status=$?
 if [[ "$exec_status" -ne 0 ]]; then
   printf '[ERREUR] Pipeline GPU en échec (job %s, hôte %s, code %s).\n' \

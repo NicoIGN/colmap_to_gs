@@ -7,7 +7,7 @@ load_config() {
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
   source "$config"
-  source "$repo_root/scripts/pipeline_config.sh"
+  source "$repo_root/tools/libs/scripts/pipeline_config.sh"
   init_sfm_geometry_config
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
@@ -26,6 +26,17 @@ load_config() {
   SPIRULA_BIN="${SPIRULA_BIN:-spirula}"
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+  COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
+  COLMAP_BIN="${COLMAP_BIN:-colmap}"
+  COLMAP_USE_GPU="${COLMAP_USE_GPU:-true}"
+  COLMAP_MATCHING="${COLMAP_MATCHING:-exhaustive}"
+  ORIENTATIONS_JSON="${ORIENTATIONS_JSON:-}"
+  LIDAR_PLY="${LIDAR_PLY:-}"
+  NS_PROCESS_DATA_BIN="${NS_PROCESS_DATA_BIN:-ns-process-data}"
+  TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
+  NS_TRAIN_BIN="${NS_TRAIN_BIN:-ns-train}"
+  NS_EXPORT_BIN="${NS_EXPORT_BIN:-ns-export}"
+  NS_DOWNSCALE_FACTOR="${NS_DOWNSCALE_FACTOR:-1}"
   SFM_FEATURES="${SFM_FEATURES:-aliked-n16rot}"
   SFM_MATCHER="${SFM_MATCHER:-bruteforce}"
   SFM_PAIRS="${SFM_PAIRS:-prefilter}"
@@ -40,12 +51,16 @@ load_config() {
   GEOREF_ALLOW_UNCERTAIN="${GEOREF_ALLOW_UNCERTAIN:-false}"
   SFM_MASKS="${SFM_MASKS:-on}"
   TRAIN_MASKS="${TRAIN_MASKS:-on}"
-  TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-spirula}"
+  local default_mask_backend=spirula
+  [[ "$TRAIN_BACKEND" != nerfstudio ]] || default_mask_backend=segmentation
+  TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-$default_mask_backend}"
   TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
   TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
   TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
   TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
-  TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky,cloud}"
+  local default_mask_labels="sky,cloud"
+  [[ "$TRAIN_BACKEND" != nerfstudio ]] || default_mask_labels=sky
+  TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-$default_mask_labels}"
   TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
   TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-0.002}"
   TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-1.0}"
@@ -103,6 +118,33 @@ load_config() {
   config_choice SFM_IMAGES_RECURSIVE "$SFM_IMAGES_RECURSIVE" 'true|false'
   config_choice PIPELINE_RESUME "$PIPELINE_RESUME" 'true|false'
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
+  config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
+  config_choice COLMAP_USE_GPU "$COLMAP_USE_GPU" 'true|false'
+  config_choice COLMAP_MATCHING "$COLMAP_MATCHING" 'exhaustive|sequential'
+  config_choice TRAIN_BACKEND "$TRAIN_BACKEND" 'spirula|nerfstudio'
+  config_positive_integer NS_DOWNSCALE_FACTOR "$NS_DOWNSCALE_FACTOR"
+  if [[ "$COLMAP_METHOD" == orientations ]]; then
+    for name in ORIENTATIONS_JSON LIDAR_PLY; do
+      [[ "${!name}" == /* && -s "${!name}" ]] ||
+        config_error "$name doit être un fichier existant avec un chemin absolu."
+    done
+  fi
+  if [[ "$COLMAP_METHOD" == nerfstudio && "$SFM_MASKS" == on ]]; then
+    config_error "ns-process-data ne transmet pas les masques SfM ; utiliser COLMAP_METHOD=colmap ou spirula, ou SFM_MASKS=off."
+  fi
+  if [[ "$COLMAP_METHOD" == nerfstudio ]]; then
+    config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'single'
+    config_choice SFM_CAMERA_MODEL "$SFM_CAMERA_MODEL" 'opencv|pinhole|simple_pinhole|opencv_fisheye'
+  fi
+  if [[ "$COLMAP_METHOD" == orientations && "$SFM_MASKS" == on ]]; then
+    config_error "La conversion d'orientations ne calcule pas de SfM : définir SFM_MASKS=off."
+  fi
+  if [[ "$TRAIN_BACKEND" == nerfstudio && "$TRAIN_MASKS" == on && "$TRAIN_MASKS_MODE" != ignore ]]; then
+    config_error "Nerfstudio prend en charge TRAIN_MASKS_MODE=ignore, pas empty/auto ; choisir ignore explicitement."
+  fi
+  if [[ "$TRAIN_BACKEND" == nerfstudio && "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" != segmentation ]]; then
+    config_error "Nerfstudio : utiliser TRAIN_MASKS_BACKEND=segmentation avec Mask2Former ou SegFormer."
+  fi
   config_choice GEOREF_ALLOW_UNCERTAIN "$GEOREF_ALLOW_UNCERTAIN" 'true|false'
   config_positive_integer GEOREF_EPSG "$GEOREF_EPSG"
   if [[ -n "$GEOREF_GPX_FILE" ]]; then

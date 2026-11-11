@@ -16,7 +16,7 @@ clean="${TRAIN_CLEAN:-false}"
 export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
-export_script="${EXPORT_SCRIPT:-$script_dir/../tools/postprocess/export_ply.py}"
+export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
 export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
 
 quality="${TRAIN_QUALITY:-}"
@@ -267,7 +267,7 @@ command -v "$python_bin" >/dev/null 2>&1 ||
   die "Python introuvable : $python_bin"
 
 [[ -f "$export_script" ]] || die "Script d'export introuvable : $export_script"
-default_export_script="$(canonical_path "$script_dir/../tools/postprocess/export_ply.py")"
+default_export_script="$(canonical_path "$script_dir/../../../tools/postprocess/export_ply.py")"
 if [[ "$export_script" == "$default_export_script" && -n "${MAX_WORLD_SCALE:-}" ]]; then
   die "MAX_WORLD_SCALE impose une limite absolue : le nouveau filtre ne l'accepte pas. Retirer cette variable ou utiliser export_ply_legacy.py via --export-script."
 fi

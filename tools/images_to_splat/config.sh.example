@@ -28,6 +28,28 @@ PYTHON_BIN="python3"
 # Laisser false normalement ; meme variable pour le local et Slurm.
 PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
 
+# Producteur du modele : spirula | colmap | nerfstudio | orientations.
+# Le mode nerfstudio appelle ns-process-data (COLMAP/SIFT) et exige NVIDIA/CUDA.
+COLMAP_METHOD="spirula"
+COLMAP_BIN="colmap"
+COLMAP_USE_GPU="true"                 # COLMAP direct seulement
+COLMAP_MATCHING="exhaustive"          # exhaustive | sequential, hors Spirula
+NS_PROCESS_DATA_BIN="ns-process-data"
+# Mode orientations : poses JSON explicites et PLY colore dans les memes coordonnees.
+ORIENTATIONS_JSON=""
+LIDAR_PLY=""
+
+# Moteur d'entrainement, independant du producteur COLMAP.
+TRAIN_BACKEND="spirula"              # spirula | nerfstudio
+NS_TRAIN_BIN="ns-train"
+NS_EXPORT_BIN="ns-export"
+NS_DOWNSCALE_FACTOR="1"
+# Nerfstudio exige PyTorch + GPU NVIDIA/CUDA ; aucun repli CPU/Metal.
+# Avec TRAIN_MASKS=on, definir explicitement TRAIN_MASKS_MODE=ignore.
+# Nerfstudio : TRAIN_MASKS_BACKEND=segmentation, modele local Mask2Former/SegFormer,
+# labels sky (pas cloud). Exemple complet : config.nerfstudio.sh.example.
+# Les options de cap/croissance/qualite Spirula ne sont pas transposees.
+
 # ============================================================================
 # 1. Masques SfM / train : memes variables que tools/panoramax
 # ============================================================================
@@ -94,15 +116,16 @@ SFM_CAMERA_MODEL="opencv"
 # Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.
 # Activer avant preparation ; changer apres decoupage exige un nouveau workspace.
 SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
-# Photos individuelles, sans sequence ni alignement GPS force.
-# Sans GPX ci-dessous, pas de georeferencement ; les sorties partagent le repere SfM.
+# Photos individuelles, sans sequence.
+# Sans GPX, les GPS EXIF de plusieurs images georeferencent automatiquement le SfM.
+# Un GPX configure ci-dessous reste prioritaire sur les coordonnees EXIF.
 
 # ============================================================================
 # 2b. Georeferencement GPX OPTIONNEL, avant decoupage
 # ============================================================================
-# Vide/absent : comportement habituel, pas de recalage ni de dependances GPX.
+# Vide/absent : GPS EXIF utilise automatiquement s'il est present sur plusieurs images.
 # Sinon chemin absolu de la trace ; le SfM brut est conserve dans sfm/sparse/0.
-# Le modele transforme est dans georef/0, repere local ENU en metres.
+# Le GPX est prioritaire sur l'EXIF ; le modele transforme est dans georef/0.
 GEOREF_GPX_FILE=""
 # Dossier de vues pour construire la trajectoire, ex. h00_y0 ; vide = auto.
 # Images ordonnees par _fXXXXX (ex. paris9_f002160.jpg), sans FPS ni horodatage.

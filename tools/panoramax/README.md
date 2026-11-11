@@ -2,6 +2,20 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
+**Entraînement.** Le pipeline global est `script/panoramax_to_3dgs.sh`.
+Le SfM géoréférencé reste celui de Spirula ; `TRAIN_BACKEND=nerfstudio` permet
+d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
+obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
+par le [tool de segmentation](../segmentation_masks/README.md), avec
+Mask2Former ou SegFormer : `TRAIN_MASKS_BACKEND=segmentation`, modèle local
+dans `TRAIN_MASKS_MODEL`, `TRAIN_MASKS_LABELS=sky` et
+`TRAIN_MASKS_MODE=ignore`. Les PNG sont référencés dans le dataset Nerfstudio ;
+le mode `empty` n'est pas transposé.
+Les résultats Nerfstudio ont un suffixe `-nerfstudio` pour ne pas réutiliser
+les checkpoints Spirula. La fusion reste en coordonnées COLMAP originales.
+Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfacto.
+`NS_TRAIN_BIN`, `NS_EXPORT_BIN` et `NS_DOWNSCALE_FACTOR` règlent ce moteur.
+
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
 
@@ -55,7 +69,7 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
   avec le pipeline [images locales](../images_to_splat/README.md).
 - Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
   `match` et `map` concernées.
-- `scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
+- `tools/libs/scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
   `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
   `--ba-loss-param`.
 - Vérifier la disponibilité de ces options dans la version installée de
@@ -101,7 +115,7 @@ altitude, cap). Spirula s'en sert directement pour placer le modèle dans un
 repère local est-nord-haut en mètres, sans recalage GPX a posteriori :
 
 ```bash
-bash scripts/run_spirula_sfm.sh \
+bash tools/libs/scripts/run_spirula_sfm.sh \
   --spirula-bin /chemin/vers/spirula \
   --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm \
@@ -151,7 +165,7 @@ n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 ```bash
 cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 # Éditer paris.sh : bbox et code EPSG, OUTPUT_DIR, nombre de blocs, TRAIN_CAP_MAX, etc.
-bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
+bash script/panoramax_to_3dgs.sh /chemin/vers/paris.sh
 ```
 
 - Validation de configuration : avant téléchargement et, avec `launch.sh`,
@@ -416,9 +430,9 @@ modèle ; les codes d'erreur de qualité ou de géoréférencement restent propa
 Les étapes sont également accessibles individuellement, avec la même config :
 
 ```bash
-bash tools/panoramax/run_pipeline.sh config.sh prepare
-bash tools/panoramax/run_pipeline.sh config.sh train-block 0  # indices 0 à N-1
-bash tools/panoramax/run_pipeline.sh config.sh merge
+bash script/panoramax_to_3dgs.sh config.sh prepare
+bash script/panoramax_to_3dgs.sh config.sh train-block 0  # indices 0 à N-1
+bash script/panoramax_to_3dgs.sh config.sh merge
 ```
 
 Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifie

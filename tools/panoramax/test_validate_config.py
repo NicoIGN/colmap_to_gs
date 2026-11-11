@@ -163,12 +163,12 @@ TRAIN_REFINE_STOP_NUM_ITER=""
         self.assertFalse(required - values.keys(), required - values.keys())
         block_defaults = dict(re.findall(
             r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
-            (ROOT.parents[1] / "scripts" / "run_spirula_blocks.sh").read_text(),
+            (ROOT.parents[1] / "tools/libs/scripts" / "run_spirula_blocks.sh").read_text(),
             re.MULTILINE))
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_CAP_MAX", "TRAIN_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
         self.assertIn('SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"',
-                      (ROOT / "run_pipeline.sh").read_text())
+                      (ROOT.parents[1] / "script/panoramax_to_3dgs.sh").read_text())
         self.assertEqual(values["SFM_THREADS"], "")
 
     def test_training_masks_require_model_and_labels(self):
@@ -272,7 +272,7 @@ SFM_MASKS_MAX_FRACTION=0
                            (ROOT / "config.sh.example").read_text(), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "PYTHON_BIN", "MVK_CONFIG_LOG_LEVEL"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
-                    "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_")
+                    "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_")
         for name in names:
             self.assertTrue(name in shared or name.startswith(prefixes), name)
 

@@ -42,8 +42,8 @@ bash tools/postprocess/clean_ply.sh --help
 - Validation : les géométries non finies et les indices hors plage int64 restent refusés.
 - Pour modifier la fusion, la relancer sans réentraîner les blocs.
 
-- `scripts/run.sh` : appelle les lanceurs Nerfstudio.
-- `scripts/run_spirula_block.sh` : utilise `export_ply.py` par défaut ;
+- `tools/libs/scripts/run.sh` : appelle les lanceurs Nerfstudio.
+- `tools/libs/scripts/run_spirula_block.sh` : utilise `export_ply.py` par défaut ;
   surcharge possible avec `--export-script` / `EXPORT_SCRIPT`.
 
 ## 4. Fonctionnement interne
@@ -150,7 +150,7 @@ Pour le réutiliser explicitement :
 
 ```bash
 EXPORT_SCRIPT="$PWD/tools/postprocess/export_ply_legacy.py" \
-  bash scripts/run_spirula_block.sh --sparse-dir ... --images-dir ... --output-dir ...
+  bash tools/libs/scripts/run_spirula_block.sh --sparse-dir ... --images-dir ... --output-dir ...
 ```
 
 L'ancien exporteur accepte toujours `MAX_WORLD_SCALE` via le lanceur. Cette

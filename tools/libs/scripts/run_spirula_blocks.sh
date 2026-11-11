@@ -2,7 +2,7 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd -- "$script_dir/.." && pwd)"
+repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
@@ -263,9 +263,19 @@ SPARSE_DIR="$SFM_DIR/sparse/0"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
+if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
+  GS_ROOT="$GS_ROOT-nerfstudio"
+  if [[ "$mode" != prepare ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
+  fi
+  [[ "$TRAIN_MASKS" != on || "$TRAIN_MASKS_MODE" == ignore ]] ||
+    die "Nerfstudio exige TRAIN_MASKS_MODE=ignore."
+  [[ "$TRAIN_MASKS" != on || "$TRAIN_MASKS_BACKEND" == segmentation ]] ||
+    die "Nerfstudio exige les masques du tool segmentation (Mask2Former ou SegFormer)."
+fi
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
-"$PYTHON_BIN" "$repo_root/python/sfm_geometry_policy.py" "$SFM_DIR" \
+"$PYTHON_BIN" "$repo_root/tools/libs/python/sfm_geometry_policy.py" "$SFM_DIR" \
   "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
   "$SFM_BA_LOSS" "$SFM_BA_LOSS_PARAM"
 
@@ -464,7 +474,7 @@ for ((index = first_index; index < last_index; index++)); do
   printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
   [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
-  bash "$script_dir/run_spirula_block.sh" "${block_args[@]}"
+  bash "$script_dir/run_3dgs_block.sh" "${block_args[@]}"
 done
 
 printf '\n[pipeline] Terminé. Modèles par bloc : %s/block_*/splats/*.splat\n' "$GS_ROOT"

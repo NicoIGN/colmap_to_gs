@@ -2,6 +2,12 @@
 
 [Retour à la documentation générale](guide_utilisateur.md)
 
+**Pipeline commun.** Le [pipeline images](../tools/images_to_splat/README.md)
+et le [pipeline Panoramax](../tools/panoramax/README.md) proposent maintenant
+`TRAIN_BACKEND=nerfstudio`, avec export `.splat` dans les coordonnées COLMAP
+et fusion commune. Le contrôle PyTorch/NVIDIA-CUDA est obligatoire.
+La suite décrit le parcours historique autonome, qui conserve sa sortie `.ply`.
+
 Les commandes de ce document se lancent depuis la racine du dépôt.
 
 Ce dépôt entraîne un modèle Gaussian Splatting avec Nerfstudio / Splatfacto à partir d'un modèle COLMAP, l'exporte en `.ply`, puis le nettoie.
@@ -9,7 +15,7 @@ Ce dépôt entraîne un modèle Gaussian Splatting avec Nerfstudio / Splatfacto 
 Exemple :
 
 ```bash
-./scripts/run.sh \
+./tools/libs/scripts/run.sh \
   --dataset-dir /abs/path/to/dataset \
   --output-dir /abs/path/to/output \
   --gsplat-profile balanced
@@ -35,7 +41,7 @@ dossier d'images
    ▼
 <dataset-dir>/ : images/ + colmap/sparse/0/*.bin + sparse_pc.ply
    │
-   │  scripts/run.sh
+   │  tools/libs/scripts/run.sh
    ├─► colmap_to_transforms.py ─► transforms.json
    ├─► estimate_planes.py      ─► near / far
    ├─► train.sh (Splatfacto)   ─► model3d/splatfacto/<run>/
@@ -49,7 +55,7 @@ dossier d'images
 Étapes :
 
 1. *(Optionnel)* `tools/preprocess/images_to_colmap.py` convertit un dossier d'images en dataset COLMAP.
-2. `scripts/run.sh` génère `transforms.json`, estime `near` / `far`, entraîne Splatfacto, exporte le `.ply` et le nettoie.
+2. `tools/libs/scripts/run.sh` génère `transforms.json`, estime `near` / `far`, entraîne Splatfacto, exporte le `.ply` et le nettoie.
 3. *(Optionnel)* `tools/viewer/server.py` sert le résultat pour une visualisation locale.
 
 ## 2. Entrées et sorties
@@ -123,7 +129,7 @@ Les journaux SLURM sont écrits dans :
 
 ### Créer un dataset depuis des images
 
-Cette étape est optionnelle. Le dossier produit peut être passé directement à `scripts/run.sh --dataset-dir`.
+Cette étape est optionnelle. Le dossier produit peut être passé directement à `tools/libs/scripts/run.sh --dataset-dir`.
 
 Commande :
 
@@ -162,7 +168,7 @@ Dataset produit :
 └── sparse_pc.ply                  # PLY ASCII xyz + rgb issu de points3D
 ```
 
-### Lancer `scripts/run.sh`
+### Lancer `tools/libs/scripts/run.sh`
 
 Options (`option` : défaut ou valeurs possibles — description) :
 
@@ -300,7 +306,7 @@ mkdir -p /tmp/nerfstudio_poster
 cd /tmp/nerfstudio_poster
 ```
 
-Générer le dataset COLMAP compatible avec `scripts/run.sh` :
+Générer le dataset COLMAP compatible avec `tools/libs/scripts/run.sh` :
 
 ```bash
 python "$GIT_ROOT/tools/preprocess/images_to_colmap.py" \
@@ -396,7 +402,7 @@ Logs SLURM :
 Commande appelée par `run.sh` :
 
 ```bash
-python3 python/colmap_to_transforms.py \
+python3 tools/libs/python/colmap_to_transforms.py \
   --colmap-model <dataset-dir>/colmap/sparse/0 \
   --images-dir   <dataset-dir>/images \
   --output       <dataset-dir>/transforms.json \
@@ -458,14 +464,14 @@ Champs de transformation globale :
 
 ### Exécution et traitement
 
-`scripts/run.sh` effectue les opérations suivantes :
+`tools/libs/scripts/run.sh` effectue les opérations suivantes :
 
 1. Vérifie le dataset.
 2. Génère `transforms.json` avec `colmap_to_transforms.py`.
 3. Charge `config/config.sh`, puis le profil.
 4. Vérifie le GPU, active Conda si demandé et vérifie la version de Python.
 5. Estime `near` / `far` avec `estimate_planes.py`.
-6. Entraîne Splatfacto avec `scripts/train.sh`.
+6. Entraîne Splatfacto avec `tools/libs/scripts/train.sh`.
 7. Exporte le `.ply` avec `tools/postprocess/export_splat_to_ply.sh`.
 8. Nettoie le `.ply` avec `tools/postprocess/clean_ply.sh` et `tools/postprocess/clean_ply.py`.
 
@@ -513,7 +519,7 @@ Le fichier `transforms.json` requis par Nerfstudio est généré dans `<dataset-
 
 Tous les scripts peuvent être lancés depuis n'importe quel dossier : les chemins relatifs passés en argument sont résolus depuis le dossier courant, et les scripts du dépôt sont retrouvés à partir de leur propre emplacement.
 
-> ⚠️ Utilise des **chemins absolus** avec `run.sh`. Le script se place dans `scripts/` avant de résoudre les chemins : un chemin relatif est donc interprété depuis `scripts/`. C'est aussi le cas de la valeur par défaut `runs/default`.
+> ⚠️ Utilise des **chemins absolus** avec `run.sh`. Le script se place dans `tools/libs/scripts/` avant de résoudre les chemins : un chemin relatif est donc interprété depuis `tools/libs/scripts/`. C'est aussi le cas de la valeur par défaut `runs/default`.
 
 L'exécutable [Spirula](../tools/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
 
@@ -550,7 +556,7 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 │   └── ign.slurm
 │       ├── conda_env.yml          # environnement conda
 │       ├── launch.sh              # soumission SLURM + suivi des logs
-│       └── launch.slurm           # job SLURM (appelle scripts/run.sh)
+│       └── launch.slurm           # job SLURM (appelle tools/libs/scripts/run.sh)
 ├── python
 │   ├── colmap_to_transforms.py    # modèle COLMAP → transforms.json
 │   └── estimate_planes.py        # estimation near / far

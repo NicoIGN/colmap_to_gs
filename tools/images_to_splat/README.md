@@ -4,11 +4,12 @@
 
 ## 1. Objectif
 
-Pipeline [Spirula](../spirula/README.md) pour produire un Gaussian Splat `.splat` à partir d’images :
+Pipeline configurable pour produire un Gaussian Splat `.splat` à partir d’images,
+avec [Spirula](../spirula/README.md) ou Nerfstudio/Splatfacto :
 
 ```text
 Images
-  → sélection → [masques] → SfM global → [recalage sur une trajectoire GPS]
+  → sélection → [masques] → SfM global [GPS EXIF ou GPX prioritaire]
   → découpage COLMAP → entraînement par blocs
   → recadrage bbox → fusion → fichier .splat
 ```
@@ -16,10 +17,40 @@ Images
 Les [masques](../segmentation_masks/README.md) et le
 [recalage sur une trajectoire GPS](../preprocess/README.md) sont optionnels.
 
+**Préparation.** L'[outil images vers COLMAP](../images_to_colmap/README.md)
+est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
+`colmap`, `nerfstudio` (`ns-process-data`) ou `orientations` (poses + LiDAR).
+Il peut être lancé seul ; les résultats compatibles sont réutilisés.
+
+**Entraînement.** `TRAIN_BACKEND=spirula|nerfstudio` choisit le moteur sans
+changer le modèle COLMAP. Nerfstudio exige PyTorch et un GPU NVIDIA utilisable
+via CUDA ; sinon le calcul est refusé avant l'entraînement, sans repli CPU.
+Les résultats sont séparés dans `gs/` et `gs-nerfstudio/`.
+Le recadrage et la fusion utilisent des exports dans les coordonnées COLMAP
+originales, après inversion de la transformation de chaque entraînement.
+
+**Masques Nerfstudio.** Ils sont générés par
+[`tools/segmentation_masks`](../segmentation_masks/README.md), avec
+**Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et
+`TRAIN_MASKS_MODEL` pointant vers le modèle local). Définir explicitement
+`TRAIN_MASKS_MODE=ignore`. Le worker renseigne `mask_path` dans chaque vue
+du `transforms.json` transmis à Nerfstudio.
+Le mode `empty` de Spirula n'est pas transposé. Les paramètres Spirula de cap,
+qualité, croissance, flottants et distractions ne sont pas appliqués à Splatfacto ;
+`TRAIN_NUM_ITER` reste commun. `NS_DOWNSCALE_FACTOR` règle la réduction des images.
+`NS_TRAIN_BIN` et `NS_EXPORT_BIN` choisissent les exécutables de l'environnement
+correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
+
+**Exemple Nerfstudio.** Le fichier
+[`config.nerfstudio.sh.example`](config.nerfstudio.sh.example) montre une
+configuration avec masques sémantiques pour le SfM et l'entraînement.
+Les modèles ADE20K/Mapillary ont le label `sky`, pas de label `cloud` distinct.
+Les masques SfM peuvent aussi garder une politique indépendante.
+
 Exemple d’invocation :
 
 ```bash
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
+bash script/images_to_3dgs.sh /chemin/config.sh
 ```
 
 ## 2. Entrées et sorties
@@ -27,8 +58,8 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 - `SFM_IMAGES_DIR` : dossier source des images ; l'option
   `--images /chemin/absolu/images` peut remplacer cette valeur à l'appel.
 - `SFM_IMAGES_RECURSIVE=true` : parcourt les sous-dossiers ordinaires.
-- `GEOREF_GPX_FILE` : fichier au format GPX contenant la trajectoire GPS de
-  référence pour le recalage ; facultatif, absent ou vide pour ne pas recaler.
+- `GEOREF_GPX_FILE` : fichier GPX facultatif ; s'il est renseigné, il est
+  utilisé à la place du GPS EXIF pour géoréférencer le résultat.
 - Liens : les liens vers des fichiers sont acceptés, mais pas le parcours des
   dossiers symboliques.
 - Noms relatifs : préservés ; `h00_y0/photo.jpg` et `h01_y45/photo.jpg`
@@ -55,7 +86,7 @@ Depuis la racine du dépôt :
 
 ```bash
 # Exécution directe dans le shell : tous les blocs s'exécutent successivement.
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
+bash script/images_to_3dgs.sh /chemin/config.sh
 
 # Soumission à Slurm : préparation GPU, tâches GPU, puis fusion CPU.
 bash tools/images_to_splat/launch.sh /chemin/config.sh
@@ -117,6 +148,10 @@ images.
   [`config.sh.example`](config.sh.example), section « 2. Reconstruction SfM globale ».
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
   des bâtiments lointains valides et fragmenter la reconstruction.
+- Avec `COLMAP_METHOD=spirula`, sans GPX, Spirula utilise les coordonnées GPS EXIF valides
+  d'au moins deux images. Le mode est `full` si toutes les images géolocalisées
+  ont une altitude, sinon `horizontal` ; les paires d'images proches sont alors
+  ajoutées dans un rayon de 30 m. Si un GPX est configuré, l'EXIF est ignoré.
 - Ces réglages ne garantissent pas l'absence de faux points et ne filtrent pas
   un modèle déjà calculé. Leur modification exige un nouvel `OUTPUT_DIR` ;
   `TRAIN_CLEAN` ne recalcule pas le SfM.
@@ -128,8 +163,10 @@ images.
 Les blocs utilisent un même système de coordonnées pour pouvoir être fusionnés
 sans déplacer ni redimensionner leurs reconstructions.
 
-- Sans recalage sur une trajectoire GPS, l'alignement géographique et l'échelle
-  métrique ne sont pas garantis.
+- Sans GPX ni GPS EXIF exploitable, l'alignement géographique et l'échelle
+  métrique ne sont pas garantis. Avec un GPS EXIF, Spirula construit un repère
+  local métrique à partir des coordonnées des images ; si l'altitude manque sur
+  au moins une image géolocalisée, le recalage est horizontal seulement.
 - Découpage : conserve les poses caméra et les coordonnées des points ;
   sélectionne les observations sans recentrer ni redimensionner les sous-modèles.
 - Export `block_NNN.splat` : inverse la normalisation interne de chaque
@@ -166,8 +203,9 @@ GEOREF_EPSG="2154"
 GEOREF_ALLOW_UNCERTAIN="false"
 ```
 
-Si `GEOREF_GPX_FILE` est absent ou vide, le recalage est désactivé ; fiona et
-pyproj ne sont alors pas nécessaires.
+Si `GEOREF_GPX_FILE` est absent ou vide, les coordonnées EXIF GPS sont utilisées
+automatiquement lorsqu'au moins deux images en possèdent ; fiona et pyproj ne
+sont alors pas nécessaires.
 
 Le pipeline réutilise `tools/preprocess/georef_colmap_from_gpx.py` : il recale
 la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,
@@ -204,27 +242,33 @@ de relancer la préparation ; le SfM brut n'a pas à être recalculé.
 Modifier/ajouter/retirer le GPX après préparation exige un **nouvel OUTPUT_DIR** :
 ne pas mélanger des blocs entraînés dans des repères différents.
 
+Sans GPX, le GPS EXIF des images locales peut fournir le repère métrique
+directement pendant le SfM, comme dans le pipeline Panoramax. La détection et
+l'empreinte des coordonnées utilisées sont inscrites dans `inputs.json` ;
+modifier les métadonnées GPS impose donc un nouvel `OUTPUT_DIR`. Un GPX
+renseigné reste prioritaire et désactive entièrement cette voie EXIF.
+
 ## 4. Fonctionnement interne
 
 Le pipeline **Images locales vers Gaussian Splats** prépare les photos,
 reconstruit la scène et entraîne les blocs. Il partage avec le pipeline
 Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérente :
 
-- `python/mask_policies.py` : prépare les réglages de masques et leur génération.
-- `scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
-- `python/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
+- `tools/libs/python/mask_policies.py` : prépare les réglages de masques et leur génération.
+- `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
+- `tools/libs/python/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.
-- `scripts/pipeline_postprocess.sh` : recadre et fusionne les résultats.
-- `scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
-- `scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
+- `tools/libs/scripts/pipeline_postprocess.sh` : recadre et fusionne les résultats.
+- `tools/libs/scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
+- `tools/libs/scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
   et entraîner les blocs.
 - `inputs.json` garde une trace des images et réglages utilisés pour préparer
   le calcul.
 
 Les étapes qui diffèrent entre les deux pipelines sont :
 
-- **Images locales** : sélection des fichiers, organisation du dossier de
-  travail et, si demandé, recalage sur une trajectoire GPS.
+- **Images locales** : sélection des fichiers, choix du producteur COLMAP,
+  organisation du dossier de travail et, si demandé, recalage sur une trajectoire GPS.
 - **Panoramax** : recherche et téléchargement des photos, gestion de leurs
   métadonnées et utilisation de leur position GPS.
 
@@ -313,9 +357,9 @@ résolus et les dates des fichiers entrent aussi dans la comparaison.
 Ne pas supprimer `inputs.json` pour contourner ce diagnostic.
 
 ```bash
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase prepare
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase train-block --block 0
-bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh --phase merge
+bash script/images_to_3dgs.sh /chemin/config.sh --phase prepare
+bash script/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
+bash script/images_to_3dgs.sh /chemin/config.sh --phase merge
 ```
 
 La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers

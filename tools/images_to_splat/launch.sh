@@ -2,7 +2,7 @@
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
-source "$repo_root/scripts/pipeline_slurm.sh"
+source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
 usage() {
   echo "Usage : bash tools/images_to_splat/launch.sh CONFIG [--images DIR] [--wait]"
 }

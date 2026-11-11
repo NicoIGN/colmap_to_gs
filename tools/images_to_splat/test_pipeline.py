@@ -151,8 +151,11 @@ with open(os.environ["TEST_EVENTS"], "a") as log:
 if args[0] == "sfm":
     assert get("--data-type") == "individual"
     assert get("--camera-mode") == "folder"
-    assert get("--metric-gps") == "none"
-    assert "--sequence" not in args and "--sensor-pairs" not in args
+    assert get("--metric-gps") in ("none", "horizontal", "full")
+    assert ("--sensor-pairs" in args) == (get("--metric-gps") != "none")
+    if "--sensor-pairs" in args:
+        assert get("--sensor-pair-radius") == "30"
+    assert "--sequence" not in args
     for flag, variable in (
         ("--max-error", "SFM_MAX_ERROR"), ("--min-inliers", "SFM_MIN_INLIERS"),
         ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_BA_LOSS"),
@@ -260,6 +263,18 @@ if "--wait" in args:
         with self.config.open("a") as stream:
             stream.write(text + "\n")
 
+    def add_gps(self, altitude_images=()):
+        from PIL import Image
+
+        altitude_images = set(altitude_images)
+        for index, path in enumerate(sorted(self.images.rglob("*.jpg"))):
+            gps = {1: "N", 2: (40, 0, index), 3: "W", 4: (73, 0, index)}
+            if index in altitude_images:
+                gps.update({5: 0, 6: 100 + index})
+            exif = Image.Exif()
+            exif[34853] = gps
+            Image.new("RGB", (2, 2)).save(path, exif=exif)
+
     def run_pipeline(self, *args, slurm=False):
         return subprocess.run(
             ["bash", str(SOURCE / ("launch.sh" if slurm else "run_pipeline.sh")),
@@ -298,6 +313,69 @@ if "--wait" in args:
         self.assertEqual((self.output / "gs/block_000/splats/block_000.splat").read_bytes(),
                          b"raw-splat")
 
+    def test_exif_gps_enables_full_metric_reconstruction(self):
+        self.add_gps(altitude_images=(0, 1, 2))
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        sfm = next(command for command in self.commands() if command[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--metric-gps") + 1], "full")
+        self.assertEqual(sfm[sfm.index("--sensor-pair-radius") + 1], "30")
+        gps = json.loads((self.output / "inputs.json").read_text())["gps_exif"]
+        self.assertEqual(gps["status"], "available")
+        self.assertEqual(gps["geotagged_images"], 3)
+        self.assertEqual(gps["altitude_images"], 3)
+        self.assertEqual(gps["metric_gps"], "full")
+
+    def test_nerfstudio_missing_torch_stops_before_preparation(self):
+        (self.root / "torch.py").write_text('raise ImportError("test: torch absent")\n')
+        self.env["PYTHONPATH"] = str(self.root)
+        self.append("TRAIN_BACKEND=nerfstudio\nTRAIN_MASKS=off\nSFM_MASKS=off")
+        result = self.run_pipeline()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Nerfstudio exige PyTorch", result.stdout + result.stderr)
+        self.assertFalse((self.output / "inputs.json").exists())
+        self.assertFalse(self.events.exists())
+
+    def test_nerfstudio_empty_mask_mode_is_not_silently_changed(self):
+        self.append("TRAIN_BACKEND=nerfstudio")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("TRAIN_MASKS_MODE=ignore", result.stdout + result.stderr)
+        self.assertFalse((self.output / "inputs.json").exists())
+
+    def test_nerfstudio_prepares_semantic_train_masks_and_independent_native_sfm_masks(self):
+        semantic_model = self.root / "mask2former"
+        semantic_model.mkdir()
+        (semantic_model / "config.json").write_text('{"model_type":"mask2former"}')
+        self.append(
+            "TRAIN_BACKEND=nerfstudio\nTRAIN_MASKS_BACKEND=segmentation\n"
+            f'TRAIN_MASKS_MODEL="{semantic_model}"\n'
+            f'TRAIN_MASKS_PYTHON="{self.bin / "python"}"\n'
+            "TRAIN_MASKS_MODE=ignore\nTRAIN_MASKS_LABELS=sky\n"
+            "SFM_MASKS_BACKEND=spirula\n"
+        )
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        masks = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
+        self.assertEqual(len(masks), 2)
+        self.assertEqual({cmd[cmd.index("--backend") + 1] for cmd in masks},
+                         {"spirula", "segmentation"})
+        self.assertTrue((self.output / "train_masks/root.jpg.png").is_file())
+
+    def test_nerfstudio_refuses_native_sam_training_mask_configuration(self):
+        self.append("TRAIN_BACKEND=nerfstudio\nTRAIN_MASKS_BACKEND=spirula\n"
+                    "TRAIN_MASKS_MODE=ignore")
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Mask2Former ou SegFormer", result.stdout + result.stderr)
+        self.assertFalse((self.output / "inputs.json").exists())
+
+    def test_missing_exif_altitude_uses_horizontal_metric_mode(self):
+        self.add_gps(altitude_images=(0,))
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        sfm = next(command for command in self.commands() if command[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--metric-gps") + 1], "horizontal")
+        self.assertIn("GPS EXIF=horizontal",
+                      (self.output / "logs/prepare-all.log").read_text())
+
     def test_nonrecursive_and_input_override(self):
         self.append('SFM_IMAGES_RECURSIVE=false\nSFM_IMAGES_DIR="/does/not/exist"')
         self.assert_ok(self.run_pipeline("--images", str(self.images), "--phase", "prepare"))
@@ -323,11 +401,15 @@ if "--wait" in args:
         self.output = self.root / "filtered-gpx"
         gpx = self.root / "track.gpx"
         gpx.write_text("<gpx/>")
+        self.add_gps(altitude_images=(0, 1, 2))
         self.append(f'OUTPUT_DIR="{self.output}"\nGEOREF_GPX_FILE="{gpx}"\n'
                     'GEOREF_VIEW_PREFIX=h00')
         self.assert_ok(self.run_pipeline("--wait", slurm=True))
         self.assertTrue((self.output / "scene.splat").is_file())
         names = [cmd[0] for cmd in self.commands()]
+        sfm = next(cmd for cmd in self.commands() if cmd[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--metric-gps") + 1], "none")
+        self.assertNotIn("--sensor-pairs", sfm)
         georef = names.index("georef_colmap_from_gpx.py")
         self.assertLess(georef, names.index("filter_sparse_density.py", georef))
         self.assertTrue((self.output / "sparse_clean/.density_done").is_file())

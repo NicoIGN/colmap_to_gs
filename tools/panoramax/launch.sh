@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
-source "$repo_root/scripts/pipeline_slurm.sh"
+source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
 
 die() {
   printf '[ERREUR] %s\n' "$*" >&2
@@ -59,7 +59,7 @@ SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-$SPLIT_NUM_BLOCKS}"
 command -v sbatch >/dev/null 2>&1 || die "sbatch introuvable ; lancer depuis le cluster."
 command -v scancel >/dev/null 2>&1 || die "scancel introuvable."
 [[ -f "$script_dir/launch.slurm" ]] || die "launch.slurm introuvable."
-[[ -f "$script_dir/run_pipeline.sh" ]] || die "run_pipeline.sh introuvable."
+[[ -f "$repo_root/script/panoramax_to_3dgs.sh" ]] || die "script/panoramax_to_3dgs.sh introuvable."
 
 mkdir -p "$OUTPUT_DIR/logs"
 log_dir="$(cd -- "$OUTPUT_DIR/logs" && pwd)"

@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from prepare_sfm import main as prepare_images
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "python"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import enabled, generate, policy
 
 

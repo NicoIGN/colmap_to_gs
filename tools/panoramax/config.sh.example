@@ -1,6 +1,6 @@
 # Configuration complete du pipeline Panoramax (Bash de confiance).
 # Copier vers config.sh, puis adapter les deux champs obligatoires ci-dessous.
-# Execution locale : bash tools/panoramax/run_pipeline.sh config.sh
+# Execution locale : bash script/panoramax_to_3dgs.sh config.sh
 # Slurm : bash tools/panoramax/launch.sh config.sh [--wait]
 # Validation sans calcul : bash tools/panoramax/validate_config.sh config.sh slurm
 #
@@ -15,6 +15,14 @@
 # ============================================================================
 # 0. Chemins et environnement communs
 # ============================================================================
+
+TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
+NS_TRAIN_BIN="ns-train"
+NS_EXPORT_BIN="ns-export"
+NS_DOWNSCALE_FACTOR="1"
+# Nerfstudio : PyTorch + NVIDIA/CUDA requis, TRAIN_MASKS_MODE=ignore si masques.
+# Masques Nerfstudio : backend segmentation, modele local Mask2Former ou SegFormer.
+# Les budgets de croissance/cap Spirula ne sont pas des limites Splatfacto.
 
 # Obligatoire, aucun defaut. Dossier de sortie non vide, accessible en ecriture.
 # Contient panoramax/ (photos, SfM, blocs), le .splat final et les references GPS.

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Copier en conservant/adaptant ce chemin vers l'exemple commun du depot.
+source "/chemin/colmap_to_gs/tools/images_to_splat/config.sh.example"
+
+SFM_IMAGES_DIR="/chemin/images"
+OUTPUT_DIR="/chemin/resultats-nerfstudio"
+PYTHON_BIN="/chemin/conda/envs/nerfstudio/bin/python"
+SPIRULA_BIN="/chemin/spirula"
+COLMAP_METHOD="spirula" # ou colmap pour COLMAP/SIFT direct avec masques
+TRAIN_BACKEND="nerfstudio"
+
+# Le tool segmentation_masks genere les PNG charges par Nerfstudio.
+SFM_MASKS="on"
+TRAIN_MASKS="on"
+TRAIN_MASKS_BACKEND="segmentation"
+SFM_MASKS_BACKEND="segmentation"
+TRAIN_MASKS_PYTHON="/chemin/segmentation-masks/venv/bin/python"
+TRAIN_MASKS_MODEL="/chemin/segmentation-masks/models/facebook--mask2former-swin-large-mapillary-vistas-semantic"
+# Alternative SegFormer :
+# TRAIN_MASKS_MODEL="/chemin/segmentation-masks/models/nvidia--segformer-b5-finetuned-ade-640-640"
+TRAIN_MASKS_LABELS="sky" # pas de classe cloud dans ces deux modeles
+TRAIN_MASKS_MODE="ignore"
+TRAIN_MASKS_DEVICE="auto"
+TRAIN_MASKS_CONFIDENCE="0.5"
+
+NS_TRAIN_BIN="/chemin/conda/envs/nerfstudio/bin/ns-train"
+NS_EXPORT_BIN="/chemin/conda/envs/nerfstudio/bin/ns-export"
+NS_DOWNSCALE_FACTOR="1"
+TRAIN_NUM_ITER="30000"
+EXPORT_SPLAT_NAME="scene-nerfstudio.splat"

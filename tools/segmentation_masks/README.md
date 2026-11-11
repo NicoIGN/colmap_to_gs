@@ -4,7 +4,8 @@
 
 ## 1. Objectif
 
-Générer des masques locaux pour les images d'entraînement 3DGS/[Spirula](../spirula/README.md). Par défaut, le masque exclut le ciel.
+Générer des masques locaux pour le SfM et l'entraînement 3DGS avec
+[Spirula](../spirula/README.md) ou Nerfstudio. Par défaut, le masque exclut le ciel.
 
 Exemple d’invocation :
 
@@ -22,6 +23,17 @@ des masques par l'entraînement :
 
 - `segmentation` (défaut) : modèle Transformers de segmentation sémantique, notamment SegFormer ou Mask2Former ;
 - `spirula` : SAM natif exécuté par Spirula sur Vulkan.
+
+**Nerfstudio.** Le pipeline commun utilise le backend `segmentation` avec
+Mask2Former ou SegFormer pour ses masques d'entraînement. Définir
+`TRAIN_MASKS_BACKEND=segmentation`, `TRAIN_MASKS_MODEL` et
+`TRAIN_MASKS_PYTHON`, puis `TRAIN_MASKS_MODE=ignore`.
+Le worker ajoute les chemins PNG dans les champs `mask_path` de
+`transforms.json` : les masques sont donc réellement chargés par Nerfstudio,
+et pas seulement calculés. `sky` convient aux deux modèles ; `cloud` n'est pas
+une classe distincte. La politique de masques SfM reste indépendante.
+L'absence de transmission des masques SfM par `ns-process-data` ne concerne
+pas cette prise en charge des masques d'entraînement.
 
 ## 2. Entrées et sorties
 

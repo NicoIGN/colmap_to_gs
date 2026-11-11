@@ -52,7 +52,7 @@ def policy(prefix):
 def generate(settings, images, output):
     command = [
         settings["python"],
-        str(Path(__file__).resolve().parents[1] / "tools/segmentation_masks/generate_masks.py"),
+        str(Path(__file__).resolve().parents[3] / "tools/segmentation_masks/generate_masks.py"),
         "--backend", settings["backend"], "--model", settings["model"],
         "--images", str(images), "--output", str(output),
         "--labels", ",".join(settings["labels"]),

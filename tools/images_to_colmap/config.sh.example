@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Configuration Bash de confiance ; chemins absolus.
+SFM_IMAGES_DIR="/chemin/images"
+OUTPUT_DIR="/chemin/dataset-colmap"
+PYTHON_BIN="python3"
+COLMAP_METHOD="spirula" # spirula | colmap | nerfstudio | orientations
+SPIRULA_BIN="/chemin/spirula"
+COLMAP_BIN="colmap"
+COLMAP_USE_GPU="false"
+COLMAP_MATCHING="exhaustive"
+NS_PROCESS_DATA_BIN="ns-process-data"
+SFM_CAMERA_MODEL="opencv"
+SFM_CAMERA_MODE="single" # ns-process-data : single obligatoire
+SFM_MAX_IMAGE_SIZE="2048"
+SFM_ALIKED_MAX_FEATURES="4096"
+SFM_THREADS="4"
+# Pas d'entrainement ici ; sa preparation peut etre anticipee si souhaite.
+SFM_MASKS="off"
+TRAIN_MASKS="off"
+# Pour activer les masques SfM Spirula/COLMAP direct, voir l'exemple images_to_splat.
+ORIENTATIONS_JSON="/chemin/orientations.json"
+LIDAR_PLY="/chemin/points.ply"
+GEOREF_GPX_FILE="" # prioritaire sur EXIF ; noms _fXXXXX requis par le recalage GPX

@@ -4,7 +4,7 @@
 # `spirula` dans le PATH, sinon ../spirula-studio/build/spirula à côté du dépôt.
 default_spirula_bin() {
   local repo_root
-  repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+  repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
   if command -v spirula >/dev/null 2>&1; then
     printf 'spirula\n'
   else

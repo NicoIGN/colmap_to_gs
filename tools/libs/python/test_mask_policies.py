@@ -34,7 +34,7 @@ class SharedMaskGenerationTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[:2], [
             "mask-python",
-            str(Path(__file__).resolve().parents[1] /
+            str(Path(__file__).resolve().parents[3] /
                 "tools/segmentation_masks/generate_masks.py"),
         ])
         self.assertTrue(Path(command[1]).is_file())

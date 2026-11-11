@@ -66,7 +66,7 @@ exec > >(tee -a "$SUBMIT_LOG") 2>&1
 
 # Résolution des chemins après le chargement de config.sh
 LAUNCH_SLURM="${LAUNCH_SLURM:-$GIT_ROOT/environment/ign.slurm/launch.slurm}"
-RUN_SH="${RUN_SH:-$GIT_ROOT/scripts/run.sh}"
+RUN_SH="${RUN_SH:-$GIT_ROOT/tools/libs/scripts/run.sh}"
 
 log "========================"
 log "🚀 SUBMIT CHECK"

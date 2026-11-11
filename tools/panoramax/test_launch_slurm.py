@@ -22,10 +22,10 @@ class SlurmLaunchTest(unittest.TestCase):
         self.pipeline_dir.mkdir(parents=True)
         for name in ("launch.sh", "launch.slurm", "validate_config.sh"):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
-        shared_scripts = self.pipeline_dir.parents[1] / "scripts"
-        shared_scripts.mkdir()
+        shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
+        shared_scripts.mkdir(parents=True)
         for name in ("pipeline_config.sh", "pipeline_slurm.sh"):
-            shutil.copyfile(SOURCE.parents[1] / "scripts" / name, shared_scripts / name)
+            shutil.copyfile(SOURCE.parents[1] / "tools/libs/scripts" / name, shared_scripts / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"
         self.config.write_text(
@@ -34,7 +34,9 @@ class SlurmLaunchTest(unittest.TestCase):
             'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
             'PYTHON_BIN=job-python\n'
         )
-        (self.pipeline_dir / "run_pipeline.sh").write_text(
+        pipeline_script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.sh"
+        pipeline_script.parent.mkdir()
+        pipeline_script.write_text(
             '#!/usr/bin/env bash\nset -euo pipefail\nsource "$1"\n'
             'mkdir -p "$OUTPUT_DIR"\n'
             'phase="$2"; block="${3:-none}"\n'
