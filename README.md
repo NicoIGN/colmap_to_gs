@@ -33,7 +33,7 @@ Les deux moteurs proposés sont :
 - **[Spirula Studio](https://github.com/harry7557558/spirula-studio)** : outil
   de reconstruction et d'entraînement Gaussian Splatting intégrant notamment
   le SfM et les masques, avec un backend GPU Vulkan. Projet maintenu par
-  **harry7557558** et ses contributeurs.
+  **harry7557558**, ingénieur indépendant qui le développe seul.
 
 ## Utiliser un pipeline complet
 
