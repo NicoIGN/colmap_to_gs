@@ -130,7 +130,7 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
-  `tools/panoramax/config.sh.example`, organisé par étape du pipeline.
+  [`tools/panoramax/config.sh.example`](config.sh.example), organisé par étape du pipeline.
 - Défauts : le modèle reprend les défauts, sans préréglage de croissance sobre.
 - Valeurs d'exemple à remplacer : `OUTPUT_DIR` et `PANORAMAX_BBOX_LAMBERT93`.
 
@@ -237,6 +237,9 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   `SFM_MASKS_DEVICE`, `SFM_MASKS_CONFIDENCE`, `SFM_MASKS_MAX_FRACTION` :
   héritent chacun de leur équivalent `TRAIN_MASKS_*` si vide et peuvent être
   réglés indépendamment.
+- `SFM_MASKS_*` et `TRAIN_MASKS_*` : tous les réglages, valeurs possibles et
+  défauts sont commentés dans
+  [`config.sh.example`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](config.sh.example).
 - `SFM_MASKS_DILATE` : défaut `0.002` ; `auto` est équivalent.
 - `TRAIN_MASKS_MODE` : mode de perte propre au 3DGS.
 - `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
@@ -397,7 +400,8 @@ Job CPU : fusion → copie du géoréférencement
 - Le tableau Slurm réserve un GPU NVIDIA par bloc.
 - Entraînement : les blocs s'exécutent en parallèle, sous réserve des GPU disponibles.
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
-- Variables `SLURM_*` : ressources commentées dans `config.sh.example` :
+- Variables `SLURM_*` : ressources commentées dans
+  [`config.sh.example`, section « 7. Execution Slurm »](config.sh.example) :
   partition, CPU, RAM, durée, type GPU, compte et QoS.
 Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
 CPU, RAM et durée sont demandés **par job/tâche**, pas pour l'ensemble.

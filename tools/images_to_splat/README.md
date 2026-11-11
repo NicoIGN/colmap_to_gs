@@ -36,7 +36,7 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 
 ## 3. Configuration et utilisation
 
-- Configuration : copier `config.sh.example` vers un fichier personnel et
+- Configuration : copier [`config.sh.example`](config.sh.example) vers un fichier personnel et
   régler les chemins et les ressources.
 - `MASKS_ACCEPT_LICENSE=true` : accepte les conditions SAM 3 après les avoir
   lues.
@@ -45,6 +45,17 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
 - [Spirula](../spirula/README.md) : doit disposer du SfM et de l'entraînement ; SAM/Vulkan est
   nécessaire si un backend de masques `spirula` est activé.
 - Dépendances réutilisées : notamment numpy, scipy, tqdm, Pillow et plyfile.
+
+Les paramètres avancés, leurs valeurs possibles et leurs valeurs d'exemple
+sont commentés dans [`config.sh.example`](config.sh.example), par étape :
+
+- `SFM_*` : section « 2. Reconstruction SfM globale ».
+- `GEOREF_*` : section « 2b. Georeferencement GPX OPTIONNEL ».
+- `SPLIT_*` : section « 3. Decoupage ».
+- `TRAIN_*` hors masques : section « 4. Entrainement de chaque bloc ».
+- `POSTPROCESS_*` : section « 5. Recadrage AVANT fusion ».
+- Fusion et export : section « 6. Fusion et export ».
+- `SLURM_*` : section « 7. Slurm uniquement ».
 
 Depuis la racine du dépôt :
 
@@ -71,9 +82,11 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
 
 ### Masques, budgets et repères
 
-- `SFM_MASKS_*` : paramètres de masques pour l'extraction, selon les variables
-  du [pipeline Panoramax](../panoramax/README.md).
-- `TRAIN_MASKS_*` : paramètres de masques pour l'entraînement.
+- `SFM_MASKS_*` : paramètres de masques pour l'extraction ; détail des modèles,
+  backends, labels, seuils et périphériques dans
+  [`config.sh.example`, section « 1. Masques SfM / train »](config.sh.example).
+- `TRAIN_MASKS_*` : paramètres de masques pour l'entraînement ; documentés dans
+  la même section de [`config.sh.example`](config.sh.example).
 - Héritage : une valeur SfM vide hérite de la valeur train correspondante, sauf
   `SFM_MASKS_DILATE` (défaut `0.002`).
 - Les politiques peuvent différer par labels, modèle, seuils, périphérique et backend.
