@@ -46,12 +46,10 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ### Contrôles géométriques du pipeline SfM
 
-- Les pipelines Panoramax et [images locales](../images_to_splat/README.md) exposent les mêmes réglages :
-  - `SFM_MAX_ERROR=2` : seuil en pixels d'extraction.
-  - `SFM_MIN_INLIERS=30` : minimum par paire.
-  - `SFM_MIN_TRI_ANGLE=3` : angle minimum en degrés.
-  - `SFM_BA_LOSS=huber` : perte d'ajustement de faisceau.
-  - `SFM_BA_LOSS_PARAM=2` : échelle robuste en pixels d'extraction.
+- `SFM_*` : contrôles de reprojection, d'appariement et de triangulation ;
+  valeurs, unités et défauts dans [`config.sh.example`](config.sh.example),
+  section « 2. Reconstruction SfM et appariement ». Ces réglages sont partagés
+  avec le pipeline [images locales](../images_to_splat/README.md).
 - Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
   `match` et `map` concernées.
 - `scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
@@ -232,16 +230,9 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
 - Le téléchargement, les jobs Slurm et le reste du pipeline restent inchangés ;
   aucun script de calcul personnalisé n'est nécessaire.
-- `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`, `SFM_MASKS_SPIRULA_MODEL`,
-  `SFM_MASKS_SPIRULA_DEVICE`, `SFM_MASKS_MODEL`, `SFM_MASKS_PYTHON`,
-  `SFM_MASKS_DEVICE`, `SFM_MASKS_CONFIDENCE`, `SFM_MASKS_MAX_FRACTION` :
-  héritent chacun de leur équivalent `TRAIN_MASKS_*` si vide et peuvent être
-  réglés indépendamment.
-- `SFM_MASKS_*` et `TRAIN_MASKS_*` : tous les réglages, valeurs possibles et
-  défauts sont commentés dans
+- `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour le SfM / l'entraînement ;
+  réglages, héritage et défauts dans
   [`config.sh.example`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](config.sh.example).
-- `SFM_MASKS_DILATE` : défaut `0.002` ; `auto` est équivalent.
-- `TRAIN_MASKS_MODE` : mode de perte propre au 3DGS.
 - `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
   `--accept-license sam3=yes` pour les deux calculs SAM 3 non interactifs.
   Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.

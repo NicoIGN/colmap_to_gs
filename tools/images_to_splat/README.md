@@ -46,16 +46,8 @@ bash tools/images_to_splat/run_pipeline.sh /chemin/config.sh
   nécessaire si un backend de masques `spirula` est activé.
 - Dépendances réutilisées : notamment numpy, scipy, tqdm, Pillow et plyfile.
 
-Les paramètres avancés, leurs valeurs possibles et leurs valeurs d'exemple
-sont commentés dans [`config.sh.example`](config.sh.example), par étape :
-
-- `SFM_*` : section « 2. Reconstruction SfM globale ».
-- `GEOREF_*` : section « 2b. Georeferencement GPX OPTIONNEL ».
-- `SPLIT_*` : section « 3. Decoupage ».
-- `TRAIN_*` hors masques : section « 4. Entrainement de chaque bloc ».
-- `POSTPROCESS_*` : section « 5. Recadrage AVANT fusion ».
-- Fusion et export : section « 6. Fusion et export ».
-- `SLURM_*` : section « 7. Slurm uniquement ».
+Les valeurs possibles, défauts et exemples des réglages avancés sont documentés
+dans [`config.sh.example`](config.sh.example), organisé par étape du pipeline.
 
 Depuis la racine du dépôt :
 
@@ -75,52 +67,39 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
   pas de directives `#SBATCH` séparées.
 - Environnement Slurm : les jobs héritent de l'environnement actif ;
   `SLURM_ENV_SETUP` permet de charger les modules/activer l'environnement sur les nœuds.
-- `SLURM_BLOCK_PARALLELISM=4` : autorise quatre tâches GPU simultanées ;
-  le mode local reste séquentiel.
+- `SLURM_*` : ressources et parallélisme des jobs ; voir la section
+  « 7. Slurm uniquement » de [`config.sh.example`](config.sh.example).
+  L'exécution directe reste séquentielle.
 - Dépendances : les étapes suivantes ont une dépendance `afterok`.
 - Journaux : `OUTPUT_DIR/logs/`.
 
 ### Masques, budgets et repères
 
-- `SFM_MASKS_*` : paramètres de masques pour l'extraction ; détail des modèles,
-  backends, labels, seuils et périphériques dans
-  [`config.sh.example`, section « 1. Masques SfM / train »](config.sh.example).
-- `TRAIN_MASKS_*` : paramètres de masques pour l'entraînement ; documentés dans
-  la même section de [`config.sh.example`](config.sh.example).
-- Héritage : une valeur SfM vide hérite de la valeur train correspondante, sauf
-  `SFM_MASKS_DILATE` (défaut `0.002`).
-- Les politiques peuvent différer par labels, modèle, seuils, périphérique et backend.
-- `spirula` : utilise SAM 3 natif (défaut de ce pipeline).
-- `segmentation` : utilise le modèle Transformers local défini par `*_MODEL`
-  et l'interpréteur `*_PYTHON`.
+- `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour l'extraction / l'entraînement ;
+  réglages et héritage dans [`config.sh.example`](config.sh.example),
+  section « 1. Masques SfM / train ». Le fonctionnement des moteurs est décrit
+  dans le [README des masques](../segmentation_masks/README.md).
 - Partage des masques : si les politiques effectives sont identiques, les
   masques sont calculés une seule fois dans `masks/` ; sinon chaque étape activée
   reçoit son propre dossier `feature_masks/` ou `train_masks/`.
 - Fichiers de masque : les chemins relatifs des images sont conservés, avec le
   suffixe `.png`.
-- `MASKS_ACCEPT_LICENSE` : reste commun aux deux étapes, comme dans Panoramax.
 - Labels `sky,cloud` : conservent les voitures et passants dans les images
   d'entraînement, sans garantir la reconstruction des objets mobiles.
 
-- Exemple de budget : 4 blocs × 2 millions de splats, à 20000 itérations
-  **par bloc**.
+- `TRAIN_*` : budgets, croissance et arrêt de l'entraînement ; voir
+  [`config.sh.example`](config.sh.example), section « 4. Entrainement de chaque bloc ».
+  Les budgets s'appliquent **par bloc**.
 - Cap : maximum ; ni le nombre final ni la qualité ne sont garantis.
 - `TRAIN_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
   une initialisation à 10 % du cap ; un nuage sparse plus fourni peut faire
   atteindre le cap plus tôt.
 - Locale : le calcul utilise la locale `C` pour transmettre un point décimal à
   Spirula, y compris sur un système configuré en français.
-- Arrêt 14000/4000 : laisse 4000 pas sans croissance.
-- `TRAIN_MASKS_MODE=empty` : apprend le ciel comme vide.
-- `TRAIN_MASKS_MODE=ignore` : exclut la perte du ciel.
-- `TRAIN_MASKS_MODE=auto` : utilise la résolution du mode déjà implémentée par
-  le worker Panoramax.
 
 - Anciens noms refusés : `INPUT_IMAGES_DIR`, `INPUT_RECURSIVE` et paramètres de
   politique `MASKS_*` non préfixés. Les remplacer par `SFM_IMAGES_DIR`,
   `SFM_IMAGES_RECURSIVE` et `SFM_MASKS_*`/`TRAIN_MASKS_*`.
-- Politique commune : définir `TRAIN_MASKS_*` et laisser vides les valeurs
-  `SFM_MASKS_*` correspondantes.
 - Si seuls les paramètres SfM sont définis, renseigner également ceux du train
   lorsque `TRAIN_MASKS=on`.
 - Signature de préparation : inclut désormais les deux politiques ; ne pas
@@ -135,14 +114,9 @@ bash tools/images_to_splat/launch.sh /chemin/config.sh --wait
   pas garantis.
 - Tous les blocs restent alignés dans le même repère SfM.
 
-- `SFM_MAX_ERROR=2` : seuil en pixels d'extraction, pour l'extraction, la
-  vérification des paires et le mapping.
-- `SFM_MIN_INLIERS=30` : minimum par paire, pas par point.
-- `SFM_MIN_TRI_ANGLE=3` : angle minimum en degrés.
-- `SFM_BA_LOSS=huber` : fonction de perte BA.
-- `SFM_BA_LOSS_PARAM=2` : échelle robuste en pixels d'extraction.
-- Ces défauts stricts sont communs à Panoramax. Le seuil d'angle cible les
-  profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
+- `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
+  [`config.sh.example`](config.sh.example), section « 2. Reconstruction SfM globale ».
+  Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
   des bâtiments lointains valides et fragmenter la reconstruction.
 - Ces réglages ne garantissent pas l'absence de faux points et ne filtrent pas
   un modèle déjà calculé. Leur modification exige un nouvel `OUTPUT_DIR` ;
