@@ -15,7 +15,6 @@ le résultat et choisir un pipeline.
 - **Images locales avec Spirula** : [pipeline images vers splat](tools/images_to_splat/README.md).
 - **Images Panoramax avec Spirula** : [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
 - **Dataset COLMAP avec Nerfstudio / Splatfacto** : [guide du pipeline](doc/nerfstudio.md).
-- **Exécution directe ou sur cluster** : [lancement Bash / Slurm](doc/lancement_bash_slurm.md).
 
 ## Démarrer
 
