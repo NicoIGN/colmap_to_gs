@@ -405,12 +405,8 @@ les ressources `SLURM_*`, le parallélisme des blocs, l'environnement des nœuds
 les dépendances et le suivi des jobs.
 
 ```bash
-# Méthode 1 (lanceur) : préparation, tableau de blocs et fusion en jobs dépendants.
+# Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
 bash script/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
-
-# Méthode 2 (sbatch) : un seul job ; blocs en parallèle, un GPU par bloc.
-sbatch -p PARTITION --gres=gpu:4 --cpus-per-task=32 --mem=128G \
-  script/panoramax_to_3dgs.slurm /chemin/partage/config.sh
 ```
 
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.

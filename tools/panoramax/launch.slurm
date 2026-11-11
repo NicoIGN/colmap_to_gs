@@ -51,9 +51,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
 command -v srun >/dev/null 2>&1 || die "srun introuvable."
 export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS="${PIPELINE_STEP_CPUS:-${SLURM_CPUS_PER_TASK:-1}}"
-# Set by script/panoramax_to_3dgs.slurm to bind concurrent block steps to one GPU each.
-read -r -a step_opts <<< "${PIPELINE_SRUN_OPTIONS:-}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 runtime_parent="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
 XDG_RUNTIME_DIR="$(mktemp -d "$runtime_parent/panoramax-${SLURM_JOB_ID}-XXXXXXXX")"
 export XDG_RUNTIME_DIR
@@ -70,7 +68,7 @@ printf '[slurm] Python=%s\n' "$(command -v "$PYTHON_BIN")"
 printf '[slurm] Étape=%s bloc=%s\n' "$phase" "${SLURM_ARRAY_TASK_ID:-sans objet}"
 # Each array task inherits its own GPU allocation and device cgroup.
 exec_status=0
-srun ${step_opts[@]+"${step_opts[@]}"} --unbuffered --export=ALL bash -c '
+srun --unbuffered --export=ALL bash -c '
   set -euo pipefail
   if [[ "$3" != merge || "${POSTPROCESS_CLEANER:-contextual}" == cleangs ]]; then
     command -v nvidia-smi >/dev/null 2>&1 || {

@@ -88,12 +88,8 @@ Depuis la racine du dépôt :
 # Exécution directe dans le shell : tous les blocs s'exécutent successivement.
 bash script/images_to_3dgs.sh /chemin/config.sh
 
-# Slurm, méthode 1 (lanceur) : préparation GPU, tableau de tâches GPU, fusion CPU.
+# Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
 bash script/launch_images_to_3dgs.sh /chemin/config.sh
-
-# Slurm, méthode 2 (sbatch) : un seul job ; blocs en parallèle, un GPU par bloc.
-sbatch -p PARTITION --gres=gpu:4 --cpus-per-task=32 --mem=128G \
-  script/images_to_3dgs.slurm /chemin/config.sh [--images DIR]
 ```
 
 Les ressources, le parallélisme, l'environnement des nœuds et le suivi des jobs

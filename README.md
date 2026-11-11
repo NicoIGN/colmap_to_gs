@@ -102,16 +102,16 @@ bash script/images_to_3dgs.sh /chemin/images.sh
 bash script/panoramax_to_3dgs.sh /chemin/panoramax.sh
 ```
 
-**Avec `sbatch`** — sur un cluster Slurm, soumettre depuis le nœud de connexion
-en adaptant `PARTITION` et le nombre de GPU. Chaque job réserve une allocation ;
-les blocs y sont entraînés en parallèle, avec un GPU par bloc actif.
+**Sur Slurm** — depuis le nœud de connexion, les lanceurs appellent `sbatch`
+avec les ressources `SLURM_*` de la configuration. Les blocs sont des tâches
+GPU indépendantes ; `SLURM_BLOCK_PARALLELISM` fixe leur parallélisme maximal.
 
 ```bash
 # Images locales → 3DGS
-sbatch -p PARTITION --gres=gpu:4 script/images_to_3dgs.slurm /chemin/images.sh
+bash script/launch_images_to_3dgs.sh /chemin/images.sh
 
 # Panoramax → 3DGS
-sbatch -p PARTITION --gres=gpu:4 script/panoramax_to_3dgs.slurm /chemin/panoramax.sh
+bash script/launch_panoramax_to_3dgs.sh /chemin/panoramax.sh
 ```
 
 Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).

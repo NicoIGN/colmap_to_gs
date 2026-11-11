@@ -24,7 +24,7 @@ class SlurmLaunchTest(unittest.TestCase):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
         shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
         shared_scripts.mkdir(parents=True)
-        for name in ("pipeline_config.sh", "pipeline_slurm.sh", "pipeline_sbatch.sh"):
+        for name in ("pipeline_config.sh", "pipeline_slurm.sh"):
             shutil.copyfile(SOURCE.parents[1] / "tools/libs/scripts" / name, shared_scripts / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"
@@ -36,8 +36,6 @@ class SlurmLaunchTest(unittest.TestCase):
         )
         pipeline_script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.sh"
         pipeline_script.parent.mkdir()
-        shutil.copyfile(SOURCE.parents[1] / "script/panoramax_to_3dgs.slurm",
-                        pipeline_script.parent / "panoramax_to_3dgs.slurm")
         pipeline_script.write_text(
             '#!/usr/bin/env bash\nset -euo pipefail\nsource "$1"\n'
             'mkdir -p "$OUTPUT_DIR"\n'
@@ -148,48 +146,6 @@ if "--wait" in args:
             ["bash", str(self.pipeline_dir / "launch.sh"), str(self.config), *args],
             cwd=self.root, env=self.env, capture_output=True, text=True, timeout=15,
         )
-
-    def run_sbatch_script(self, **extra):
-        env = dict(self.env, SLURM_JOB_ID="777", SLURM_CPUS_PER_TASK="32",
-                   SLURM_MEM_PER_NODE="1000", SLURM_GPUS_ON_NODE="2",
-                   SLURM_SUBMIT_DIR=str(self.root),
-                   TEST_SRUN_RECORD=str(self.root / "srun.txt"), **extra)
-        script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.slurm"
-        return subprocess.run(["bash", str(script), str(self.config)], cwd=self.root,
-                              env=env, capture_output=True, text=True, timeout=15)
-
-    def test_sbatch_script_trains_blocks_concurrently_then_merges(self):
-        result = self.run_sbatch_script(TEST_REQUIRE_CONCURRENT="1")
-        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
-        for name in ("prepare-none", "train-block-0", "train-block-1", "merge-none"):
-            self.assertTrue((self.output / f"{name}.txt").exists(), name)
-        self.assertIn("parallèles=2", result.stdout)
-        steps = (self.root / "srun.txt").read_text()
-        self.assertIn("--exact --ntasks=1 --gres=gpu:1 --cpus-per-task=16 --mem=500M", steps)
-        self.assertIn("--exact --ntasks=1 --gres=gpu:1 --cpus-per-task=32 --mem=1000M", steps)
-        omp = (self.output / "train-block-0.txt").read_text().splitlines()[2]
-        self.assertEqual(omp, "16")
-        self.assertTrue((self.output / "logs/sbatch-block-777_1.out").exists())
-
-    def test_sbatch_script_block_failure_prevents_merge(self):
-        result = self.run_sbatch_script(TEST_FAIL_STAGE="train-block", TEST_FAIL_BLOCK="1")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertTrue((self.output / "train-block-0.txt").exists())
-        self.assertFalse((self.output / "merge-none.txt").exists())
-        self.assertIn("fusion non lancée", result.stderr)
-
-    def test_sbatch_script_prepare_failure_prevents_blocks(self):
-        result = self.run_sbatch_script(TEST_FAIL_STAGE="prepare")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse((self.output / "train-block-0.txt").exists())
-        self.assertFalse((self.output / "merge-none.txt").exists())
-
-    def test_sbatch_script_requires_allocation(self):
-        script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.slurm"
-        result = subprocess.run(["bash", str(script), str(self.config)], env=self.env,
-                                capture_output=True, text=True, timeout=15)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("sbatch", result.stderr)
 
     def jobs(self):
         return json.loads(self.record.read_text())

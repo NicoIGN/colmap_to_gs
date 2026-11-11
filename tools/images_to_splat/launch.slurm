@@ -9,15 +9,13 @@ if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
   [[ -f "$SLURM_ENV_SETUP" ]] || { echo "[ERREUR] SLURM_ENV_SETUP absent" >&2; exit 1; }
   source "$SLURM_ENV_SETUP"
 fi
-export OMP_NUM_THREADS="${PIPELINE_STEP_CPUS:-${SLURM_CPUS_PER_TASK:-16}}"
-# Set by script/images_to_3dgs.slurm to bind concurrent block steps to one GPU each.
-read -r -a step_opts <<< "${PIPELINE_SRUN_OPTIONS:-}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-16}"
 export PYTHONUNBUFFERED=1
 runtime="$(mktemp -d "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/images-${SLURM_JOB_ID}-XXXXXXXX")"
 export XDG_RUNTIME_DIR="$runtime"
 trap 'rmdir "$XDG_RUNTIME_DIR" || echo "[AVERTISSEMENT] Runtime conservé : $XDG_RUNTIME_DIR" >&2' EXIT
 if [[ "$phase" != merge ]]; then
-  srun ${step_opts[@]+"${step_opts[@]}"} --unbuffered --export=ALL nvidia-smi -L
+  srun --unbuffered --export=ALL nvidia-smi -L
 fi
 args=("$config" --phase "$phase")
 [[ -z "$images" ]] || args+=(--images "$images")
@@ -25,4 +23,4 @@ if [[ "$phase" == train-block ]]; then
   : "${SLURM_ARRAY_TASK_ID:?Indice du bloc requis}"
   args+=(--block "$SLURM_ARRAY_TASK_ID")
 fi
-srun ${step_opts[@]+"${step_opts[@]}"} --unbuffered --export=ALL bash "$repo_root/script/images_to_3dgs.sh" "${args[@]}"
+srun --unbuffered --export=ALL bash "$repo_root/script/images_to_3dgs.sh" "${args[@]}"
