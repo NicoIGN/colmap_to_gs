@@ -2,44 +2,11 @@
 
 [Accueil du projet](../README.md)
 
-Ce guide présente le principe des Gaussian Splats et les grandes étapes pour
-transformer des images en une scène 3D visualisable. Les commandes complètes,
-options, paramètres et détails de chaque outil sont documentés dans les README
+Ce guide aide à choisir comment produire les données COLMAP et entraîner une
+scène 3D. Le [README général](../README.md#1-comprendre-le-résultat) présente
+les Gaussian Splats et le principe général. Les commandes complètes, options,
+paramètres et détails de chaque outil sont documentés dans les README
 spécialisés liés ci-dessous.
-
-## 1. Comprendre le résultat
-
-### 1.1. Qu'est-ce qu'un Gaussian Splat ?
-
-Un Gaussian Splat représente une scène 3D par un ensemble de gaussiennes :
-des ellipsoïdes colorés dotés d'une position, d'une taille, d'une orientation
-et d'une opacité. Depuis un point de vue, elles sont projetées sur l'image puis
-compositées pour produire le rendu.
-
-Contrairement à un maillage composé de surfaces, cette représentation décrit
-directement l'apparence de la scène depuis plusieurs points de vue. Une fois
-entraîné, le modèle peut être rendu et exploré en temps réel sur un matériel
-adapté.
-
-![Exemple de gaussienne](technopitch/images/splat.png)
-
-### 1.2. Principe général
-
-```text
-Images + modèle COLMAP
-        ↓
-Initialisation des gaussiennes avec le nuage de points
-        ↓
-Entraînement GPU (Splatfacto ou Spirula)
-        ↓
-Export → post-traitement éventuel → visualisation
-```
-
-COLMAP met en correspondance les images et estime les paramètres des caméras
-ainsi qu'un nuage de points 3D clairsemé. L'entraînement ajuste les gaussiennes
-pour rapprocher les vues synthétiques des images d'entrée.
-
-![Reconstruction SfM](technopitch/images/sfm.jpg)
 
 ## 2. Choisir un parcours
 
