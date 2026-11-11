@@ -3,7 +3,7 @@
 [Accueil du projet](../README.md)
 
 Ce guide aide à choisir comment produire les données COLMAP et entraîner une
-scène 3D. Le [README général](../README.md#1-quest-ce-que-le-3d-gaussian-splatting)
+scène 3D. Le [README général](../README.md#1-quest-ce-que-le-3dgs)
 présente
 les Gaussian Splats et le principe général. Les commandes complètes, options,
 paramètres et détails de chaque outil sont documentés dans les README
