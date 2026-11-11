@@ -23,6 +23,18 @@ le résultat.
 Images → données COLMAP → Nerfstudio / Splatfacto ou Spirula → Gaussian Splat
 ```
 
+Les deux moteurs proposés sont :
+
+- **[Nerfstudio](https://github.com/nerfstudio-project/nerfstudio)** : framework
+  Python de reconstruction et de rendu 3D, dont **Splatfacto** est la méthode
+  Gaussian Splatting utilisée ici. Développé et maintenu par l'équipe
+  **Nerfstudio**, issue de **Berkeley / KAIR (BAIR)**, et les contributeurs
+  de la communauté.
+- **[Spirula Studio](https://github.com/harry7557558/spirula-studio)** : outil
+  de reconstruction et d'entraînement Gaussian Splatting intégrant notamment
+  le SfM et les masques, avec un backend GPU Vulkan. Projet maintenu par
+  **harry7557558** et ses contributeurs.
+
 ## Utiliser un pipeline complet
 
 Deux pipelines dans `tools/` enchaînent la préparation des données COLMAP,
