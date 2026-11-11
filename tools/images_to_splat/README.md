@@ -150,6 +150,19 @@ sans déplacer ni redimensionner leurs reconstructions.
   des écarts de reconstruction, même avec des coordonnées cohérentes.
 
 
+### Fusion et export
+
+La fusion rassemble les blocs déjà alignés en un seul fichier `.splat` et réduit
+les doublons dans leurs zones de recouvrement, sans modifier leurs coordonnées.
+
+- Sélection : l'espace est découpé en petites cellules (voxels) ; dans chacune,
+  les splats du bloc au meilleur score moyen sont conservés.
+- `MERGE_STRENGTH` : règle la taille des cellules et donc l'intensité de la
+  fusion ; `EXPORT_SPLAT_NAME` définit le nom du fichier final. Voir
+  [`config.sh.example`](config.sh.example), section « 6. Fusion et export ».
+- Nombre final : peut être inférieur à la somme des budgets des blocs.
+- Détails de l'algorithme : voir le [README du post-traitement](../postprocess/README.md).
+
 ### Recalage sur une trajectoire GPS
 
 Le recalage utilise une trajectoire GPS fournie au format GPX. Pour l'activer,
