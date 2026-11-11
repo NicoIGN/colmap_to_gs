@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Installer Spirula Studio et son backend SAM 3 afin de générer les masques natifs utilisés par le pipeline.
+Installer Spirula Studio avec le backend Vulkan/SAM 3 utilisé pour générer les masques natifs du pipeline.
 
 Exemple d’invocation :
 
@@ -17,6 +17,14 @@ Sortie : `spirula-studio/build/spirula` sur macOS,
 `export SPIRULA_BIN=...` et `export TRAIN_MASKS_SPIRULA_MODEL=...` à utiliser
 avec les scripts du pipeline. Pour le script autonome de masques, reporter le
 chemin du modèle affiché dans `SAM_MODEL`.
+
+Options de l'installateur :
+
+- `--repo-dir PATH` : dossier des sources ; défaut `<colmap_to_gs>/../spirula-studio`.
+- `--repo-url URL` : dépôt à cloner ; défaut, le dépôt officiel.
+- `--clean` : met à jour et recompile même si l'exécutable existe déjà.
+- `-- [OPTIONS CMAKE]` : transmet les options CMake ; elles ne s'appliquent qu'avec `--clean` si un exécutable existe.
+- `-h`, `--help` : affiche l'aide.
 
 
 ## 3. Configuration et utilisation

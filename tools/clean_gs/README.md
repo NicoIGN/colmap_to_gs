@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Nettoyer un `.splat` en segmentant le ciel dans toutes les vues COLMAP et en supprimant uniquement les centres qui satisfont le vote défini par le filtre.
+Filtrer les splats projetés dans le ciel à partir des masques générés pour toutes les vues COLMAP.
 
 Exemple d’invocation :
 
@@ -14,17 +14,7 @@ python tools/clean_gs/clean_sky.py \
   --model /chemin/segformer --mode diagnostic
 ```
 
-Cette adaptation expérimentale utilise le parseur COLMAP du projet
-[Clean-GS](https://github.com/smlab-niser/clean-gs) (MIT, parseur gsplat
-Apache-2.0) et la projection/rasterisation gsplat. Contrairement à Clean-GS
-officiel, elle ne sélectionne pas trois vues par Pareto et ne filtre pas un
-objet segmenté : elle analyse **toutes les vues enregistrées**, segmente le
-ciel et ne rejette que les centres projetés avec au moins deux votes de ciel
-et aucun vote de premier plan. Les splats non observés ou aux pixels incertains
-sont conservés. Une erreur de segmentation peut masquer des détails utiles.
-La visibilité est celle de projection de gsplat (frustum/rayon positif), pas
-un test d'occlusion exacte. Cela n'enlève pas nécessairement les flotteurs
-qui se projettent devant les bâtiments ou la végétation.
+Le mode `diagnostic` est utilisé par défaut. Examiner les masques et les rejets avant de lancer `apply`.
 
 ## 2. Entrées et sorties
 
@@ -41,9 +31,17 @@ que le SPLAT. Sont supportées les caméras COLMAP perspective PINHOLE,
 SIMPLE_PINHOLE, SIMPLE_RADIAL, RADIAL et OPENCV ; les images sont corrigées
 de leur distorsion avant segmentation et projection. Les masques PNG du ciel,
 le SPLAT des rejets et le rapport JSON sont enregistrés à côté de la sortie.
-Examiner les masques et les rejets avant `--mode apply` ; par défaut plus de
-20 % de suppressions appliquées sont refusées. Ce filtre n'est pas combiné
-automatiquement aux filtres contextuel et bbox.
+Par défaut, plus de 20 % de suppressions appliquées sont refusées. Ce filtre
+n'est pas combiné automatiquement aux filtres contextuel et bbox.
+
+Options du script `clean_sky.py` :
+
+- `--input PATH`, `--output PATH`, `--scene PATH`, `--model PATH` : entrées requises ; le modèle de segmentation doit déjà être téléchargé localement.
+- `--mode diagnostic|apply` : `diagnostic` par défaut ; `apply` applique les rejets.
+- `--sky-confidence FLOAT` : seuil du masque ciel, `0.9` par défaut.
+- `--min-views INT` : votes de ciel minimum, `2` par défaut.
+- `--max-removal-fraction FLOAT` : fraction maximale de suppressions appliquées, `0.2` par défaut.
+- `--overwrite` : autorise le remplacement des sorties existantes.
 
 ## 3. Configuration et utilisation
 
@@ -66,6 +64,11 @@ les nœuds GPU. Sans options, l'installation utilise
 Une relance réutilise le dossier ; une source modifiée ou à une autre révision
 est refusée. Aucun environnement existant n'est supprimé.
 
+Options de l'installateur : `--install-dir PATH` définit le dossier
+d'installation (défaut `$HOME/.local/share/colmap-to-gs/cleangs`) ;
+`--python PATH` choisit Python (défaut `python3`) ; `--check-gpu` compile et
+teste gsplat sur un GPU NVIDIA à la fin de l'installation.
+
 Le GPU n'est pas obligatoire sur le nœud d'installation. **Avant utilisation**,
 charger CUDA 12.8 (`nvcc`) et un compilateur C++ dans une allocation GPU NVIDIA,
 puis vérifier la compilation effective et un petit rendu :
@@ -83,7 +86,7 @@ Les images ne sont jamais envoyées à un service ; seule l'installation
 télécharge les poids, l'inférence les charge ensuite sans accès réseau.
 
 
-### Variables à ajouter dans la configuration Panoramax
+Variables à ajouter dans la configuration Panoramax :
 
 
 L'installateur affiche les chemins exacts à reporter dans `config.sh` :
@@ -114,23 +117,30 @@ Les options `SPLAT_FILTER_*` et `SPLAT_SPARSE_BBOX_*` n'agissent pas en mode
 `cleangs`. Le diagnostic produit le `.splat` final sans suppressions ;
 `CLEANGS_MODE="apply"` active le nettoyage avec la limite indiquée.
 
+Valeurs de configuration : `CLEANGS_PYTHON` et `CLEANGS_MODEL` sont les
+chemins de l'environnement et du modèle ; `CLEANGS_MODE` accepte `diagnostic`
+(défaut) ou `apply` ; `CLEANGS_MIN_VIEWS` vaut `2` par défaut ;
+`CLEANGS_SKY_CONFIDENCE` vaut `0.9` par défaut ;
+`CLEANGS_MAX_REMOVAL_FRACTION` vaut `0.2` par défaut.
+
 ## 4. Fonctionnement internes
 
 Cette adaptation expérimentale utilise le parseur COLMAP du projet
 [Clean-GS](https://github.com/smlab-niser/clean-gs) (MIT, parseur gsplat
-Apache-2.0) et la projection/rasterisation gsplat. Contrairement à Clean-GS
-officiel, elle ne sélectionne pas trois vues par Pareto et ne filtre pas un
-objet segmenté : elle analyse **toutes les vues enregistrées**, segmente le
-ciel et ne rejette que les centres projetés avec au moins deux votes de ciel
-et aucun vote de premier plan. Les splats non observés ou aux pixels incertains
-sont conservés. Une erreur de segmentation peut masquer des détails utiles.
-La visibilité est celle de projection de gsplat (frustum/rayon positif), pas
-un test d'occlusion exacte. Cela n'enlève pas nécessairement les flotteurs
-qui se projettent devant les bâtiments ou la végétation.
+Apache-2.0) et la projection/rasterisation gsplat. Elle analyse toutes les
+vues enregistrées, segmente le ciel et rejette seulement les centres projetés
+avec au moins deux votes de ciel et aucun vote de premier plan. Elle ne
+sélectionne pas trois vues par Pareto et ne filtre pas un objet segmenté.
+Les splats non observés ou aux pixels incertains sont conservés. La visibilité
+est déterminée par la projection gsplat (frustum et rayon positif), sans test
+d'occlusion exacte ; les flotteurs devant les bâtiments ou la végétation ne
+sont donc pas nécessairement supprimés.
 
 ## 5. Notes et informations complémentaires
 
 Le format `.splat` ne contient ni les harmoniques sphériques d'ordre supérieur
 ni l'apparence originale complète ; les enregistrements conservés sont copiés
 à l'identique. La méthode peut être coûteuse : chaque caméra est rasterisée
-sur GPU. Elle n'est pas adaptée au Mac sans CUDA.
+sur GPU. Une erreur de segmentation peut masquer des détails utiles. Elle
+n'enlève pas nécessairement les flotteurs qui se projettent devant les
+bâtiments ou la végétation. Elle n'est pas adaptée au Mac sans CUDA.

@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Convertir un `.splat` géoréférencé en repère ENU local en tileset 3D Tiles 1.1 contenant des Gaussian Splats.
+Convertir un `.splat` local géoréférencé en tileset 3D Tiles 1.1 contenant des Gaussian Splats.
 
 Exemple d’invocation :
 
@@ -14,7 +14,7 @@ python3 tools/splat_to_3dtiles/convert.py \
   --no-open-inspector
 ```
 
-Ce sous-outil convertit un `.splat` produit par ce dépôt en tileset 3D Tiles 1.1 contenant des Gaussian Splats. Il s'appuie sur le convertisseur externe [`3dgs-ply-3dtiles-converter`](https://github.com/razor-ai/3dgs-ply-3dtiles-converter), qui construit les LOD et compresse le contenu des tuiles en SPZ.
+Le convertisseur externe [`3dgs-ply-3dtiles-converter`](https://github.com/razor-ai/3dgs-ply-3dtiles-converter) construit les LOD et compresse le contenu des tuiles en SPZ.
 
 ## 2. Entrées et sorties
 
@@ -35,6 +35,14 @@ npm install --global 3dgs-ply-3dtiles-converter
 ```
 
 Le premier lancement du convertisseur peut ouvrir son inspecteur ; la commande ci-dessous le désactive pour un traitement batch.
+
+Options de `convert.py` :
+
+- `--input PATH`, `--georef-summary PATH`, `--output-dir PATH` : paramètres requis.
+- `--model NAME` : modèle du résumé géographique ; facultatif avec un seul modèle, requis s'il y en a plusieurs.
+- `--converter COMMAND` : commande du convertisseur installé ; défaut `3dgs-ply-3dtiles-converter`.
+- `--overwrite` : autorise le remplacement du dossier de sortie.
+- `--no-open-inspector` : désactive l'ouverture de l'inspecteur après conversion.
 
 
 ### Utilisation
@@ -63,7 +71,7 @@ Le résultat est `scene_tiles/tileset.json` et les contenus référencés sous `
 
 ## 4. Fonctionnement internes
 
-Le `.splat` compact est transformé en PLY 3DGS binaire temporaire, puis ce PLY est passé au convertisseur. Les positions et orientations sont préservées ; les couleurs DC et l'opacité sont décodées depuis le `.splat`. Le format `.splat` ne stocke pas les harmoniques sphériques d'ordre supérieur, elles ne peuvent donc pas être recréées par cette conversion.
+Le `.splat` compact est transformé en PLY 3DGS binaire temporaire, puis passé au convertisseur externe, qui construit les LOD et compresse le contenu des tuiles en SPZ. Les positions et orientations sont préservées ; les couleurs DC et l'opacité sont décodées depuis le `.splat`. Le format `.splat` ne stocke pas les harmoniques sphériques d'ordre supérieur, elles ne peuvent donc pas être recréées par cette conversion.
 
 Les commentaires `offsetx=0`, `offsety=0`, `offsetz=0` du PLY identifient le repère local Z-up au convertisseur. La coordonnée d'origine fournit son placement ENU dans le monde, sans ajouter artificiellement cette origine aux positions locales.
 

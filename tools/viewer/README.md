@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Visualiser localement des scènes `.splat` et des données COLMAP dans un navigateur, ou consulter des tilesets 3D Tiles avec CesiumJS.
+Visualiser dans un navigateur des scènes `.splat`, des données COLMAP ou des tilesets 3D Tiles.
 
 Exemple d’invocation :
 
@@ -28,8 +28,15 @@ Le serveur ouvre le visualiseur dans le navigateur. Les ressources de l'interfac
 sont dans `html/`, résolues par rapport au script, indépendamment du dossier courant.
 Le serveur écoute uniquement sur `127.0.0.1` ; arrêt avec `Ctrl+C`.
 
-Options utiles : `--port 8080`, `--no-browser`, `--flip-up`,
-`--camera-pos="px,py,pz,tx,ty,tz"` et `--data-directory /chemin/vers/datasets`.
+Options du serveur :
+
+- `splat` : fichier local à charger ; facultatif.
+- `--data-directory PATH` : dossier servi sous `/__datasets__/` ; facultatif.
+- `--port PORT` : port HTTP, `8000` par défaut, valeurs de `1` à `65535` (par exemple `8080`).
+- `--no-browser` : désactive l'ouverture automatique du navigateur.
+- `--flip-up` : active `flipUp` dans l'URL ouverte au lancement.
+- `--camera-pos px,py,pz,tx,ty,tz[,ux,uy,uz]` : position et cible caméra, avec vecteur haut optionnel ; 6 ou 9 nombres.
+
 Voir `--help` pour les options complètes.
 
 ### 3D Tiles avec fond OpenStreetMap
@@ -39,7 +46,9 @@ bash tools/viewer/3dtiles/view.sh /chemin/vers/tileset.json
 ```
 
 Ce deuxième visualiseur utilise CesiumJS avec un fond OSM sans jeton Cesium ion.
-Options : `--port 8080`, `--no-open`. Internet est requis pour CesiumJS et OSM ;
+Options : `tileset` (requis), `--port PORT` (défaut `8000`, valeurs de `0` à
+`65535`, `0` choisit un port automatique ; par exemple `8080`) et `--no-open`
+(désactive l'ouverture du navigateur). Internet est requis pour CesiumJS et OSM ;
 le fond est sans relief. Les contenus référencés par le tileset doivent être
 dans son dossier ou ses sous-dossiers.
 

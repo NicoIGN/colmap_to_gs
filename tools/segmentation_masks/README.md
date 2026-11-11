@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Générer des masques locaux pour les images utilisées à l’entraînement 3DGS/Spirula ; le comportement par défaut masque le ciel.
+Générer des masques locaux pour les images d'entraînement 3DGS/Spirula. Par défaut, le masque exclut le ciel.
 
 Exemple d’invocation :
 
@@ -11,14 +11,15 @@ Exemple d’invocation :
   --model mapillary --list-labels
 ```
 
-Outil optionnel : un segmenteur local produit, pour chaque image, un masque transmis à l'entraînement Spirula. Par défaut, il masque le **ciel**. Les nuages font partie de la classe `sky` : ADE20K et Mapillary Vistas ne fournissent pas de classe « nuage » distincte. D'autres objets peuvent être masqués en indiquant leurs labels.
+Le générateur local produit un masque par image. Les nuages appartiennent à la
+classe `sky` : ADE20K et Mapillary Vistas n'ont pas de classe « nuage »
+distincte. D'autres objets peuvent être masqués en indiquant leurs labels.
 
-Deux moteurs sont disponibles via `TRAIN_MASKS_BACKEND` :
+`TRAIN_MASKS_BACKEND` choisit le moteur de calcul, sans changer l'utilisation
+des masques par l'entraînement :
 
 - `segmentation` (défaut) : modèle Transformers de segmentation sémantique, notamment SegFormer ou Mask2Former ;
 - `spirula` : SAM natif exécuté par Spirula sur Vulkan.
-
-Ce choix change le **calcul** des masques, pas leur utilisation par l'entraînement.
 
 ## 2. Entrées et sorties
 
@@ -169,6 +170,7 @@ Sur Slurm, la génération a lieu dans le job de préparation, qui dispose déj�
 | `--device` | `auto` | Périphérique Transformers : `auto`, `cuda`, `cuda:N`, `mps` ou `cpu`. |
 | `--spirula-bin` | `spirula` | Exécutable Spirula utilisé avec le backend natif. |
 | `--spirula-device` | `auto` | Périphérique Vulkan : `auto`, index, nom ou UUID. |
+| `--accept-spirula-license` | désactivé | Accepte explicitement la licence SAM 3 pour le lancement natif de Spirula. |
 | `--verbose` | désactivé | Affiche les étapes, une barre de progression et les diagnostics d'image dans `tmp_labels/`. |
 | `--list-labels` | désactivé | Affiche les classes du modèle Transformers et quitte. Non disponible avec le backend Spirula. |
 

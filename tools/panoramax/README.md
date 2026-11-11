@@ -42,14 +42,18 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ### Contrôles géométriques du pipeline SfM
 
-Les pipelines Panoramax et images locales exposent les mêmes réglages :
-`SFM_MAX_ERROR=2` (pixels d'extraction), `SFM_MIN_INLIERS=30` (par paire),
-`SFM_MIN_TRI_ANGLE=3` (degrés), `SFM_BA_LOSS=huber` et `SFM_BA_LOSS_PARAM=2`
-(échelle robuste en pixels d'extraction). Ils sont transmis au SfM natif et,
-si le filtre GPS est activé, aux étapes `match` et `map` concernées.
-Le wrapper direct `scripts/run_spirula_sfm.sh` expose les options CLI équivalentes
-`--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`, `--ba-loss-param`.
-Vérifier leur disponibilité dans la version installée de Spirula.
+- Les pipelines Panoramax et images locales exposent les mêmes réglages :
+  - `SFM_MAX_ERROR=2` : seuil en pixels d'extraction.
+  - `SFM_MIN_INLIERS=30` : minimum par paire.
+  - `SFM_MIN_TRI_ANGLE=3` : angle minimum en degrés.
+  - `SFM_BA_LOSS=huber` : perte d'ajustement de faisceau.
+  - `SFM_BA_LOSS_PARAM=2` : échelle robuste en pixels d'extraction.
+- Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
+  `match` et `map` concernées.
+- `scripts/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
+  `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
+  `--ba-loss-param`.
+- Vérifier la disponibilité de ces options dans la version installée de Spirula.
 
 
 
@@ -98,14 +102,14 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Pipeline complet bbox → `.splat`
 
-Le lanceur `run_pipeline.sh` enchaîne le téléchargement Panoramax, le SfM
-géoréférencé, le découpage COLMAP, l'entraînement Spirula de chaque bloc et la
-fusion voxelisée de leurs splats alignés en un unique fichier final. Il prend
-un fichier de configuration Bash (fichier de code de confiance) ; chaque
-variable, ses valeurs possibles et son défaut sont commentés dans
-`tools/panoramax/config.sh.example`, organisé par étape du pipeline.
-Le modèle reprend les défauts, sans préréglage de croissance sobre ; seuls
-`OUTPUT_DIR` et `PANORAMAX_BBOX_LAMBERT93` sont des exemples obligatoires à remplacer.
+- `run_pipeline.sh` : enchaîne le téléchargement Panoramax, le SfM géoréférencé,
+  le découpage COLMAP, l'entraînement Spirula de chaque bloc et la fusion
+  voxelisée des splats alignés en un unique fichier final.
+- Configuration : fichier Bash (code de confiance) ; chaque variable, ses
+  valeurs possibles et son défaut sont commentés dans
+  `tools/panoramax/config.sh.example`, organisé par étape du pipeline.
+- Défauts : le modèle reprend les défauts, sans préréglage de croissance sobre.
+- Valeurs d'exemple à remplacer : `OUTPUT_DIR` et `PANORAMAX_BBOX_LAMBERT93`.
 
 Le découpage privilégie les séparations de faible covisibilité et vise des
 blocs d'environ `N / SPLIT_NUM_BLOCKS` images principales (tolérance de 20 %,
@@ -119,13 +123,14 @@ cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
 bash tools/panoramax/run_pipeline.sh /chemin/vers/paris.sh
 ```
 
-Les valeurs sont vérifiées avant téléchargement et, avec `launch.sh`, avant
-toute soumission Slurm. Les erreurs sont regroupées et indiquent le paramètre,
-sa valeur et les valeurs attendues (par exemple `lightblue` est refusé pour
-`SFM_MATCHER`, sans correction automatique). Les listes Spirula correspondent
-aux options prises en charge par ce lanceur ; elles devront être actualisées
-si une future version ajoute des extracteurs, apparieurs ou préréglages.
-La validation seule ne nécessite ni GPU, ni Python, ni Slurm :
+- Validation de configuration : avant téléchargement et, avec `launch.sh`,
+  avant toute soumission Slurm.
+- Erreurs : regroupées et indiquent le paramètre, sa valeur et les valeurs
+  attendues (par exemple `lightblue` est refusé pour `SFM_MATCHER`, sans
+  correction automatique).
+- Listes Spirula : correspondent aux options prises en charge par ce lanceur ;
+  les actualiser si une future version ajoute des extracteurs, apparieurs ou préréglages.
+- Validation seule : ne nécessite ni GPU, ni Python, ni Slurm.
 
 ```bash
 bash tools/panoramax/validate_config.sh /chemin/vers/paris.sh slurm
@@ -141,156 +146,181 @@ Spirula, aligné sur le GPS EXIF ; ce n'est pas un fichier de coordonnées EPSG
 directes. Ces éléments latéraux conservent les références nécessaires pour
 retrouver/interpréter ce repère.
 
-Le filtre géométrique est maintenant **global, après fusion**, sans seuil en
-mètres. Par défaut `POSTPROCESS_FILTER_MODE="diagnostic"` conserve la scène et exporte
-les grands splats périphériques sans support de surface dans
-`NOM.rejected.splat`. `NOM.unfiltered.splat` conserve la fusion d'origine et
-`NOM.filter.json` donne les compteurs. Après examen, `"apply"` retire les
-candidats ; `"off"` désactive le test. Le rapport de taille local se règle par
-`POSTPROCESS_FILTER_SIZE_FACTOR` (défaut 10).
+- Filtre géométrique : **global, après fusion**, sans seuil en mètres.
+- `POSTPROCESS_FILTER_MODE="diagnostic"` : défaut ; valeurs alternatives
+  `"apply"` ou `"off"`.
+  Le mode `diagnostic` conserve la scène et exporte les grands splats
+  périphériques sans support de surface dans `NOM.rejected.splat` ; `apply`
+  retire les candidats après examen ; `off` désactive le test.
+- Sorties : `NOM.unfiltered.splat` conserve la fusion d'origine ;
+  `NOM.filter.json` donne les compteurs.
+- `POSTPROCESS_FILTER_SIZE_FACTOR="10"` : règle le rapport de taille locale ;
+  défaut `10`.
 Voir [la description et les limites du filtre](../postprocess/README.md).
 
-Pour remplacer ce filtre par le nettoyage expérimental du ciel multivues,
-définir `POSTPROCESS_CLEANER="cleangs"` et `CLEANGS_MODEL` (dossier local de
-segmentation). `CLEANGS_MODE="diagnostic"` conserve les splats et exporte les
-rejets ; `apply` les retire. La fusion Slurm demande alors un GPU NVIDIA.
-installation, dépendances et précautions sont décrites dans
-[tools/clean_gs](../clean_gs/README.md).
-L'installation complète se fait avec `bash tools/clean_gs/install.sh
---install-dir /chemin/partage/cleangs --python python3` ; le script affiche
-`CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
+- `POSTPROCESS_CLEANER="cleangs"` : remplace le filtre par le
+  nettoyage expérimental du ciel multivues.
+- `CLEANGS_MODEL` : dossier local de segmentation requis par ce nettoyeur.
+- `CLEANGS_MODE="diagnostic"` : conserve les splats et exporte les rejets ;
+  `apply` les retire.
+- Slurm avec Clean-GS : la fusion demande alors un GPU NVIDIA.
+- Installation, dépendances et précautions :
+  [tools/clean_gs](../clean_gs/README.md).
+- Installation complète : `bash tools/clean_gs/install.sh
+  --install-dir /chemin/partage/cleangs --python python3` ; le script affiche
+  `CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
 
-Masques d'entraînement optionnels (`TRAIN_MASKS="on"`, défaut `off`) :
-`TRAIN_MASKS_BACKEND="segmentation"` utilise SegFormer/Mask2Former ;
-`TRAIN_MASKS_BACKEND="spirula"` utilise SAM 3 natif sur Vulkan, avec
-`TRAIN_MASKS_SPIRULA_MODEL` pointant vers un checkpoint GGML local. Avant
-le découpage, un segmenteur local génère un masque par image dans
-`sfm-*/train_masks/`, transmis à Spirula. Par défaut seul le ciel (nuages
-compris) est masqué et appris comme vide ; d'autres labels (`person`, `car`…)
-peuvent être ajoutés via `TRAIN_MASKS_LABELS`. Installation, variables et
-limites : [tools/segmentation_masks](../segmentation_masks/README.md).
+- `TRAIN_MASKS="on"` : active les masques d'entraînement ; défaut `off`.
+- `TRAIN_MASKS_BACKEND="segmentation"` : utilise SegFormer/Mask2Former.
+- `TRAIN_MASKS_BACKEND="spirula"` : utilise SAM 3 natif sur Vulkan.
+- `TRAIN_MASKS_SPIRULA_MODEL` : checkpoint GGML local utilisé par le backend `spirula`.
+- Génération : avant le découpage, un segmenteur local génère un masque par
+  image dans `sfm-*/train_masks/`, transmis à Spirula.
+- Défaut des labels : seul le ciel (nuages compris) est masqué et appris comme vide.
+- `TRAIN_MASKS_LABELS` : permet d'ajouter d'autres labels (`person`, `car`…).
+- Installation, variables et limites :
+  [tools/segmentation_masks](../segmentation_masks/README.md).
 
 #### Qualité d'entraînement
 
-`TRAIN_DISTRACTION_ROBUSTNESS="off"` transmet `--distraction-robustness`
-à Spirula, en local et sous Slurm. `mild` et `strong` modifient les scores
-de densification pour limiter l'influence des incohérences entre photos.
-Commencer par `mild` ; `strong` peut aussi atténuer des détails peu observés.
-Ce réglage ne remplace ni les masques ni `TRAIN_FLOATER_SUPPRESSION`.
-Il faut réentraîner avec `TRAIN_CLEAN=true` pour l'appliquer à un bloc terminé.
+- `TRAIN_DISTRACTION_ROBUSTNESS="off"` : défaut ; valeurs possibles `mild` et
+  `strong` également ;
+  transmet `--distraction-robustness` à Spirula en local et sous Slurm.
+- `mild` et `strong` modifient les scores de densification pour limiter
+  l'influence des incohérences entre photos. Commencer par `mild` ; `strong`
+  peut aussi atténuer des détails peu observés.
+- Ce réglage ne remplace ni les masques ni `TRAIN_FLOATER_SUPPRESSION`.
+- Appliquer à un bloc terminé : réentraîner avec `TRAIN_CLEAN=true`.
 
-Le paramètre optionnel `TRAIN_QUALITY=""` transmet `--quality` à
-`spirula train` lorsqu'il vaut `low`, `medium`, `high` ou `ultra`, en local
-comme sous Slurm. Vide conserve le comportement précédent. Dans Spirula,
-cette macro propose un budget de splats et une durée ; ce n'est pas un
-réglage de résolution. Les valeurs explicites `TRAIN_CAP_MAX` (éventuellement
-limité par `TRAIN_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires :
-changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
+- `TRAIN_QUALITY=""` : défaut ; valeurs possibles `low`, `medium`, `high` ou
+  `ultra`. Vide conserve le comportement précédent. Une valeur renseignée transmet
+  `--quality` à `spirula train`, en local comme sous Slurm.
+- Dans Spirula, cette macro propose un budget de splats et une durée ; ce n'est
+  pas un réglage de résolution.
+- Priorité : les valeurs explicites `TRAIN_CAP_MAX` (éventuellement limité par
+  `TRAIN_SPLATS_PER_IMAGE`) et `TRAIN_NUM_ITER` du pipeline restent prioritaires ;
+  changer uniquement `TRAIN_QUALITY` ne relève donc pas ces deux valeurs.
 
 #### Masques avant SfM et partage avec l'entraînement
 
-`SFM_MASKS="on"` prépare les images puis calcule les masques **avant**
-l'extraction/appariement. Le lanceur transmet `--feature-masks` à Spirula
-(y compris avec le filtre GPS), et force la réextraction lorsqu'un nouveau
-SfM est nécessaire. Le téléchargement, les jobs Slurm et le reste du pipeline
-restent inchangés ; aucun script de calcul personnalisé n'est nécessaire.
+- `SFM_MASKS="on"` : prépare les images puis calcule les masques **avant**
+  l'extraction/appariement.
+- Transmission : le lanceur passe `--feature-masks` à Spirula (y compris avec
+  le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
+- Le téléchargement, les jobs Slurm et le reste du pipeline restent inchangés ;
+  aucun script de calcul personnalisé n'est nécessaire.
+- `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`, `SFM_MASKS_SPIRULA_MODEL`,
+  `SFM_MASKS_SPIRULA_DEVICE`, `SFM_MASKS_MODEL`, `SFM_MASKS_PYTHON`,
+  `SFM_MASKS_DEVICE`, `SFM_MASKS_CONFIDENCE`, `SFM_MASKS_MAX_FRACTION` :
+  héritent chacun de leur équivalent `TRAIN_MASKS_*` si vide et peuvent être
+  réglés indépendamment.
+- `SFM_MASKS_DILATE` : défaut `0.002` ; `auto` est équivalent.
+- `TRAIN_MASKS_MODE` : mode de perte propre au 3DGS.
+- `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
+  `--accept-license sam3=yes` pour les deux calculs SAM 3 non interactifs.
+  Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.
+- Partage des masques : si les labels (ordre/casse ignorés), le backend, le
+  modèle, le périphérique, le Python et les seuils de génération sont identiques,
+  le pipeline calcule une seule série dans `sfm-*/train_masks/` puis crée le
+  lien symbolique `sfm-*/feature_masks -> train_masks`. Sinon, il calcule les
+  deux séries.
+- Des labels identiques avec des seuils différents ne doivent pas partager les
+  mêmes PNG.
+- `TRAIN_MASKS=off` : permet aussi de masquer uniquement le SfM.
 
-Les paramètres `SFM_MASKS_BACKEND`, `SFM_MASKS_LABELS`,
-`SFM_MASKS_SPIRULA_MODEL`, `SFM_MASKS_SPIRULA_DEVICE`, `SFM_MASKS_MODEL`,
-`SFM_MASKS_PYTHON`, `SFM_MASKS_DEVICE`, `SFM_MASKS_CONFIDENCE` et
-`SFM_MASKS_MAX_FRACTION` héritent de leurs équivalents `TRAIN_MASKS_*` si vides.
-`SFM_MASKS_DILATE` vaut 0.002 par défaut (ou `auto`, équivalent).
-Ils peuvent tous être réglés indépendamment. Le mode de perte
-`TRAIN_MASKS_MODE` reste propre au 3DGS.
+- Signature : la politique SfM est enregistrée dans `sfm_mask_policy.json`.
+  Un SfM ou des caractéristiques déjà présents sans signature compatible sont
+  refusés ; choisir un nouvel `OUTPUT_DIR` ou déplacer le workspace en sauvegarde.
+- `TRAIN_CLEAN=true` : ne recalcule **pas** le SfM.
+- Ne pas modifier les fichiers de masques manuellement pendant les calculs.
+- Si `feature_masks` est déjà un dossier réel et qu'un nouveau réglage demande
+  un partage, le pipeline refuse de le remplacer par un lien ; utiliser un
+  nouveau workspace. Inversement, séparer des masques précédemment partagés
+  préserve une copie des masques SfM avant de changer ceux d'entraînement.
+- `SFM_MASKS_LABELS="sky"` : peut réduire les correspondances parasites dans
+  les nuages. Ajouter `person,car` retire également des points sur les voitures
+  stationnées et peut réduire le nombre de vues enregistrées.
+- Les résultats avec SAM/Spirula réels restent à contrôler sur votre matériel.
+- Les blocs déjà entraînés ne sont pas recalculés ; utiliser
+  `TRAIN_CLEAN=true`.
 
-Pour les appels SAM 3 non interactifs, `MASKS_ACCEPT_LICENSE="true"` transmet
-explicitement `--accept-license sam3=yes` pour les deux calculs. Ne l'activer
-qu'après lecture et acceptation des conditions Meta ; défaut `false`.
+- `POSTPROCESS_SPARSE_BBOX_MODE="apply"` : recadre chaque bloc avant la fusion
+  dans une copie `.bbox.splat`, sans modifier les splats bruts ; défaut `apply`.
+  Valeurs alternatives : `diagnostic` ou `off`.
+- Bbox de recadrage : provient du **modèle COLMAP global**, pas du sous-modèle
+  du bloc, afin de préserver les recouvrements. Seules les copies sont indexées
+  en voxels.
+- En mode `diagnostic` ou `off`, la fusion utilise les blocs bruts. Le recadrage
+  s'applique aussi avant une finition Clean-GS.
+- Le filtre final conserve son diagnostic bbox global ; chaque recadrage garde
+  la sécurité de 20 % de rejets.
+- Bbox du filtre contextuel : les splats dont le **centre** sort de la bbox des
+  points 3D sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats)
+  sont retirés en mode `apply`.
+- La boîte est orientée sur les axes principaux des points, bornée aux
+  quantiles 0,5 %/99,5 %, puis élargie de `POSTPROCESS_SPARSE_BBOX_MARGIN` ×
+  son plus grand côté.
+- `POSTPROCESS_SPARSE_BBOX_MARGIN` : marge sans unité ; défaut `0.05`.
+- Le filtre contextuel n'est ensuite évalué que sur les splats restants ; la
+  limite de 20 % de rejets appliqués reste active.
 
-Si les labels (ordre/casse ignorés), le backend, le modèle, le périphérique,
-le Python et les seuils de génération sont identiques, le pipeline calcule
-une seule série dans `sfm-*/train_masks/` puis crée le lien symbolique
-`sfm-*/feature_masks -> train_masks`. Sinon, il calcule les deux séries.
-Des labels identiques avec des seuils différents ne doivent pas partager
-les mêmes PNG. Mettre `TRAIN_MASKS=off` permet aussi de masquer uniquement le SfM.
+- Spirula (MCMC) augmente le nombre de splats jusqu'à `cap_max` ; atteindre le
+  plafond est donc attendu.
+- `TRAIN_CAP_MAX` : plafond dur **par bloc** ; valeur initiale `1500000`.
+- `TRAIN_SPLATS_PER_IMAGE` : défaut vide ; le budget reste `TRAIN_CAP_MAX`.
+- `TRAIN_GROWTH_FACTOR` : défaut vide ; le facteur de croissance est estimé
+  automatiquement. Une valeur explicite reste prioritaire et n'est pas bornée
+  automatiquement.
+- `TRAIN_REFINE_STOP_ITER` : défaut vide ; valeur d'arrêt effective par défaut
+  déterminée avec `TRAIN_REFINE_STOP_NUM_ITER`.
+- `TRAIN_REFINE_STOP_NUM_ITER` : défaut vide ; paramètres d'arrêt par défaut
+  `14000/2500`.
+- Avec ces variables vides, le budget reste `TRAIN_CAP_MAX`, la croissance est
+  estimée automatiquement et les paramètres d'arrêt utilisés sont `14000/2500`.
+- Estimation automatique : si `TRAIN_GROWTH_FACTOR` est absent ou vide, chaque
+  worker local ou Slurm estime le facteur pour approcher le plafond **à la fin
+  de la croissance** avec `facteur = (plafond / nombre_initial_estimé)^(1 / cycles)`,
+  borné à **[1.001, 1.05]**.
+- Initialisation estimée : `10 %` du budget (rapport égal à 10 quel que soit
+  le plafond, y compris avec `TRAIN_SPLATS_PER_IMAGE`). L'option worker
+  `--min-init-fraction`, si utilisée, remplace cette fraction.
+- Cycles : tous les 100 pas, strictement après 500 et strictement avant
+  `min(TRAIN_NUM_ITER, arrêt_effectif)`, selon le calendrier natif Spirula.
+- Exemple : avec 20000 itérations et un arrêt 14000/4000, cela fait 154 cycles
+  et un facteur d'environ **1.015064**, laissant 4000 pas sans croissance.
+- Logs : facteur estimé, nombre de cycles et hypothèses affichés ; un bornage
+  déclenche un avertissement.
+- Si aucun cycle n'est disponible ou si la fraction initiale est nulle,
+  l'estimation échoue explicitement : modifier le calendrier ou fournir un
+  facteur explicite.
+- L'estimation est une approximation, pas une garantie d'atteindre le plafond :
+  le nombre initial peut dépasser 10 % si le nuage sparse est plus fourni, et
+  la dynamique réelle de densification/relocalisation peut modifier la trajectoire.
+- Exemple de réglage sobre :
+  - `TRAIN_SPLATS_PER_IMAGE="2000"` : budget
+    `min(TRAIN_CAP_MAX, images × TRAIN_SPLATS_PER_IMAGE)`.
+  - `TRAIN_GROWTH_FACTOR="1.03"`.
+  - `TRAIN_REFINE_STOP_ITER="18000"`.
+  - `TRAIN_REFINE_STOP_NUM_ITER="12000"`.
+  Avec 30000 itérations, la croissance s'arrête à 60 % du calcul.
+- Arrêt effectif : `max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)`.
+- Calibrer `TRAIN_SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas
+  sur le PSNR d'une étape isolée.
+- Réexport des blocs : sans filtre de BBOX/taille lors de leur relance et sans
+  réentraînement si le checkpoint final existe et `TRAIN_CLEAN=false` ; c'est
+  nécessaire pour récupérer les splats supprimés par un ancien export.
 
-La politique SfM est enregistrée dans `sfm_mask_policy.json`. Un SfM ou des
-caractéristiques déjà présents sans signature compatible sont refusés :
-choisir un nouvel `OUTPUT_DIR` ou déplacer le workspace en sauvegarde.
-`TRAIN_CLEAN=true` ne recalcule **pas** le SfM. Ne pas modifier les fichiers
-de masques manuellement pendant les calculs.
-Si `feature_masks` est déjà un dossier réel et qu'un nouveau réglage demande
-un partage, le pipeline refuse de le remplacer par un lien : utiliser un
-nouveau workspace. Inversement, séparer des masques précédemment partagés
-préserve une copie des masques SfM avant de changer ceux d'entraînement.
-
-Pour les nuages, `SFM_MASKS_LABELS="sky"` peut réduire les correspondances
-parasites. Ajouter `person,car` retire également des points sur les voitures
-stationnées et peut réduire le nombre de vues enregistrées. Les résultats
-avec SAM/Spirula réels restent à contrôler sur votre matériel.
-Les blocs déjà entraînés ne sont pas recalculés : utiliser `TRAIN_CLEAN=true`.
-
-Avant la fusion (si `POSTPROCESS_SPARSE_BBOX_MODE="apply"`), chaque bloc est
-recadré dans une copie `.bbox.splat`, sans modifier les splats bruts.
-La bbox provient du **modèle COLMAP global**, pas du sous-modèle du bloc,
-afin de préserver les recouvrements. Seules ces copies sont indexées en voxels.
-Le recadrage s'applique aussi avant une finition Clean-GS ; en mode `diagnostic`
-ou `off`, la fusion utilise les blocs bruts. Le filtre final conserve son
-diagnostic bbox global. Chaque recadrage garde la sécurité de 20 % de rejets.
-
-Avant le filtre contextuel, les splats dont le **centre** sort de la bbox des points 3D
-sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats) sont retirés
-(`POSTPROCESS_SPARSE_BBOX_MODE="apply"` par défaut ; `diagnostic` ou `off`). La boîte
-est orientée sur les axes principaux des points, bornée aux quantiles
-0,5 %/99,5 %, et élargie de `POSTPROCESS_SPARSE_BBOX_MARGIN` × son plus grand côté
-(défaut 0.05, sans unité). Le filtre contextuel n'est ensuite évalué que sur les
-splats restants. La limite de 20 % de rejets appliqués reste active.
-
-Budget d'entraînement : Spirula (MCMC) augmente le nombre de splats jusqu'à
-`cap_max`, donc atteindre le plafond est attendu. `TRAIN_CAP_MAX` est un plafond dur
-**par bloc** (valeur initiale 1500000). Par défaut `TRAIN_SPLATS_PER_IMAGE`,
-`TRAIN_GROWTH_FACTOR`, `TRAIN_REFINE_STOP_ITER` et `TRAIN_REFINE_STOP_NUM_ITER` restent vides :
-budget `TRAIN_CAP_MAX`, croissance estimée automatiquement et paramètres d'arrêt 14000/2500.
-Si `TRAIN_GROWTH_FACTOR` est absent ou vide, chaque worker, local ou Slurm,
-estime le facteur pour approcher le plafond **à la fin de la croissance** :
-`facteur = (plafond / nombre_initial_estimé)^(1 / cycles)`, borné à **[1.001, 1.05]**.
-L'initialisation supposée est 10 % du budget (donc le rapport vaut 10, quel que
-soit le plafond, y compris avec `TRAIN_SPLATS_PER_IMAGE`). Une éventuelle option
-worker `--min-init-fraction` remplace cette fraction.
-Les cycles ont lieu tous les 100 pas, strictement après 500 et strictement avant
-`min(TRAIN_NUM_ITER, arrêt_effectif)`, selon le calendrier natif Spirula.
-Avec 20000 itérations et un arrêt 14000/4000, cela fait 154 cycles et un facteur
-d'environ **1.015064**, laissant 4000 pas sans croissance.
-Une valeur explicite reste prioritaire et n'est pas bornée automatiquement.
-Le facteur estimé, le nombre de cycles et les hypothèses sont affichés dans les
-logs du worker ; un bornage déclenche un avertissement. Sans cycle disponible,
-ou avec une fraction initiale nulle, l'estimation échoue explicitement :
-modifier le calendrier ou fournir un facteur explicite.
-C'est une approximation, pas une garantie d'atteindre le plafond : le nombre
-initial peut dépasser 10 % si le nuage sparse est plus fourni, et la dynamique
-réelle de densification/relocalisation peut modifier la trajectoire.
-Pour un réglage plus sobre, définir par exemple `TRAIN_SPLATS_PER_IMAGE="2000"`
-(budget `min(TRAIN_CAP_MAX, images × TRAIN_SPLATS_PER_IMAGE)`), `TRAIN_GROWTH_FACTOR="1.03"`,
-`TRAIN_REFINE_STOP_ITER="18000"` et `TRAIN_REFINE_STOP_NUM_ITER="12000"` : avec 30000
-itérations, la croissance s'arrête à 60 % du calcul. L'arrêt effectif est
-`max(TRAIN_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_REFINE_STOP_NUM_ITER)`.
-Calibrer
-`TRAIN_SPLATS_PER_IMAGE` en comparant des rendus de même vue, pas sur le PSNR d'une
-étape isolée.
-Les blocs sont réexportés sans filtre de BBOX/taille lors de leur relance,
-sans réentraîner si le checkpoint final existe et `TRAIN_CLEAN=false` ; c'est
-nécessaire pour récupérer les splats supprimés par un ancien export.
-
-Un OUTPUT_DIR existant ne peut être repris qu'avec les mêmes bbox, dates,
-qualité et limite d'images. Pour changer la sélection, choisir un nouveau
-OUTPUT_DIR afin de ne pas mélanger des images de plusieurs requêtes.
-Avec `PANORAMAX_REPLACE_REQUEST="true"`, l'ancien `OUTPUT_DIR/panoramax` est
-renommé en `panoramax.replaced-AAAAMMJJ-HHMMSS` (rien n'est supprimé), puis la
-nouvelle requête est téléchargée dans un dossier vide.
+- Reprise : un `OUTPUT_DIR` existant ne peut être repris qu'avec les mêmes bbox,
+  dates, qualité et limite d'images. Pour changer la sélection, choisir un
+  nouveau `OUTPUT_DIR` afin de ne pas mélanger des images de plusieurs requêtes.
+- `PANORAMAX_REPLACE_REQUEST="true"` : renomme l'ancien `OUTPUT_DIR/panoramax`
+  en `panoramax.replaced-AAAAMMJJ-HHMMSS` (rien n'est supprimé), puis la
+  nouvelle requête est téléchargée dans un dossier vide.
 
 #### Filtre exclusif des paires par distance GPS
 
-Dans le fichier de configuration :
+- `SFM_PAIR_MAX_DISTANCE` : rayon en mètres ; valeur `""` désactive le filtre
+  (défaut).
 
 ```bash
 SFM_PAIR_MAX_DISTANCE="30"  # mètres ; "" désactive le filtre (défaut)
@@ -331,19 +361,20 @@ partiel doit être déplacé en sauvegarde avant de réessayer.
 
 #### Exécution GPU sur Slurm
 
-`launch.sh` soumet **le même pipeline complet** en trois étapes dépendantes :
-un job GPU de téléchargement/SfM/découpage, un tableau Slurm (`--array`) avec
-un GPU NVIDIA par bloc, puis un job CPU de fusion et de copie du géoréférencement.
-Les blocs sont entraînés en parallèle, sous réserve des GPU disponibles.
-Le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
-Les ressources sont définies par les variables `SLURM_*` commentées dans
-`config.sh.example` : partition, CPU, RAM, durée, type GPU, compte et QoS.
+- `launch.sh` : soumet **le même pipeline complet** en trois étapes dépendantes :
+  un job GPU de téléchargement/SfM/découpage, un tableau Slurm (`--array`) avec
+  un GPU NVIDIA par bloc, puis un job CPU de fusion et de copie du géoréférencement.
+- Entraînement : les blocs s'exécutent en parallèle, sous réserve des GPU disponibles.
+- Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
+- Variables `SLURM_*` : ressources commentées dans `config.sh.example` :
+  partition, CPU, RAM, durée, type GPU, compte et QoS.
 Contrairement aux paramètres d'entraînement, la RAM Slurm n'est pas la VRAM.
 CPU, RAM et durée sont demandés **par job/tâche**, pas pour l'ensemble.
-`SLURM_BLOCK_PARALLELISM` limite les blocs simultanés (défaut : `SPLIT_NUM_BLOCKS`,
-`1` pour les entraîner successivement). Quatre blocs simultanés réservent
-jusqu'à quatre GPU et quatre fois les CPU/RAM configurés.
-La partition choisie doit aussi autoriser le job de fusion sans GPU.
+- `SLURM_BLOCK_PARALLELISM` : limite les blocs simultanés ; défaut
+  `SPLIT_NUM_BLOCKS`, `1` pour les entraîner successivement.
+- Quatre blocs simultanés réservent jusqu'à quatre GPU et quatre fois les
+  CPU/RAM configurés.
+- La partition choisie doit aussi autoriser le job de fusion sans GPU.
 
 ```bash
 # Sur le nœud de connexion, après adaptation de la configuration au cluster :
@@ -352,20 +383,23 @@ bash tools/panoramax/launch.sh /chemin/partage/config.sh
 bash tools/panoramax/launch.sh /chemin/partage/config.sh --wait
 ```
 
-Sans `--wait`, le lanceur confirme uniquement les trois soumissions et affiche
-leurs ID, les commandes `squeue`/`sacct`/`scancel` et les chemins des journaux :
-`OUTPUT_DIR/logs/submit.log`, `panoramax-prepare-JOBID.{out,err}`,
-`panoramax-block-ARRAYID_INDICE.{out,err}` et `panoramax-merge-JOBID.{out,err}`.
-Les dépendances `afterok` empêchent d'entraîner sans préparation réussie et de
-fusionner si un bloc échoue. Les jobs dont la dépendance échoue sont annulés
-(`--kill-on-invalid-dep=yes`), sans rester indéfiniment en attente.
-`--wait` attend la fusion et renvoie un échec si elle échoue ou ne peut pas
-démarrer. Une soumission partiellement refusée annule les jobs déjà soumis.
-Le dépôt, la configuration, les exécutables et les données doivent être
-accessibles sur le nœud de calcul aux mêmes chemins. Les chemins relatifs sont
-interprétés depuis le dossier de soumission ; préférer des chemins absolus.
-Ne pas modifier la configuration tant que le job est en attente ou en cours.
-Le nœud doit avoir accès à l'API Panoramax pour le téléchargement.
+- Sans `--wait` : le lanceur confirme uniquement les trois soumissions et
+  affiche leurs ID, les commandes `squeue`/`sacct`/`scancel` et les journaux
+  `OUTPUT_DIR/logs/submit.log`, `panoramax-prepare-JOBID.{out,err}`,
+  `panoramax-block-ARRAYID_INDICE.{out,err}` et
+  `panoramax-merge-JOBID.{out,err}`.
+- Dépendances `afterok` : empêchent l'entraînement sans préparation réussie et
+  la fusion si un bloc échoue.
+- `--kill-on-invalid-dep=yes` : annule les jobs dont la dépendance échoue, sans
+  attente indéfinie.
+- `--wait` : attend la fusion et renvoie un échec si elle échoue ou ne peut pas démarrer.
+- Soumission partiellement refusée : annule les jobs déjà soumis.
+- Accès requis : dépôt, configuration, exécutables et données accessibles sur
+  le nœud de calcul aux mêmes chemins.
+- Chemins relatifs : interprétés depuis le dossier de soumission ; préférer des
+  chemins absolus.
+- Ne pas modifier la configuration tant que le job est en attente ou en cours.
+- Le nœud doit avoir accès à l'API Panoramax pour le téléchargement.
 
 Spirula doit être compilé pour **Vulkan sous Linux** (par exemple
 `spirula-studio/build_vulkan/spirula`, à renseigner dans `SPIRULA_BIN`) ;
@@ -374,13 +408,14 @@ ICD Vulkan doivent être installés sur les nœuds. Slurm doit isoler les
 périphériques du job (cgroups) : `CUDA_VISIBLE_DEVICES` seul ne sélectionne
 pas un GPU Vulkan. Les GPU MIG ne sont pas pris en charge par ce lanceur.
 
-Pour charger les modules du site ou configurer Vulkan, renseigner
-`SLURM_ENV_SETUP` avec un script Bash de confiance. Pour activer Conda,
-renseigner `SLURM_CONDA_ENV` (par exemple `gsplat`) et, si nécessaire,
-`SLURM_CONDA_BASE`. Sinon l'environnement est hérité de la soumission.
-Python doit contenir `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
-Chaque job vérifie ces imports ; les jobs GPU vérifient aussi `nvidia-smi` ;
-toute erreur de préparation ou de calcul est propagée à Slurm.
+- `SLURM_ENV_SETUP` : script Bash de confiance pour charger les modules du site
+  ou configurer Vulkan.
+- `SLURM_CONDA_ENV` : environnement Conda à activer (par exemple `gsplat`).
+- `SLURM_CONDA_BASE` : chemin de base Conda, si nécessaire.
+- Sans configuration Conda, l'environnement est hérité de la soumission.
+- Dépendances Python : `numpy`, `scipy`, `tqdm`, `pyproj` et `plyfile`.
+- Vérifications : chaque job vérifie ces imports ; les jobs GPU vérifient aussi
+  `nvidia-smi`. Toute erreur de préparation ou de calcul est propagée à Slurm.
 En cas d'arrêt du pipeline, un message précise l'étape concernée ; le bilan
 Slurm indique le job, le code de sortie et les chemins des journaux. Les lignes
 `srun: error` relaient cet arrêt et ne sont pas, à elles seules, sa cause.

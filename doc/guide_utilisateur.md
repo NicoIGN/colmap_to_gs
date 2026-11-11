@@ -148,7 +148,7 @@ Puis ouvrez `http://127.0.0.1:8000/` dans un navigateur. Le serveur n'écoute qu
 
 ### 3.5. Exécution sur SLURM
 
-Pour soumettre un calcul au cluster, le dépôt fournit `environment/ign.slurm/launch.sh` et `launch.slurm`. Le lanceur attend notamment les variables `GIT_ROOT`, `OUTPUT_DIR`, `DATASET_DIR`, `GSPLAT_PROFILE` et `BASENAME`. Les détails et exemples de soumission sont décrits dans la section « Exécution sur SLURM » du [README](../README.md#6-exécution-sur-slurm).
+Pour soumettre un calcul au cluster, le dépôt fournit `environment/ign.slurm/launch.sh` et `launch.slurm`. Le lanceur attend notamment les variables `GIT_ROOT`, `OUTPUT_DIR`, `DATASET_DIR`, `GSPLAT_PROFILE` et `BASENAME`. Les détails et exemples de soumission sont décrits dans la section « Configuration et utilisation » du [README](../README.md#3-configuration-et-utilisation).
 
 ## 4. Limites et conseils pratiques
 

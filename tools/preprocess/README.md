@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Préparer les données d’images pour COLMAP, géoréférencer ou découper les reconstructions, et proposer un filtre expérimental du sparse.
+Outils de préparation d’images pour COLMAP, géoréférencement et découpage de reconstructions, et filtrage expérimental du sparse.
 
 Exemple d’invocation :
 
@@ -12,7 +12,8 @@ python3 tools/preprocess/images_to_colmap.py --help
 
 ## 2. Entrées et sorties
 
-Ces outils autonomes étaient dans `python/`. Depuis la racine du dépôt :
+- Ces outils autonomes se trouvaient dans `python/`.
+- Exécuter les scripts depuis la racine du dépôt :
 
 ```bash
 python3 tools/preprocess/images_to_colmap.py --help
@@ -27,12 +28,12 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
 
-Les arguments et formats ne changent pas ; seul le chemin des scripts change.
-Les dépendances restent celles de l'environnement du projet, et les outils
-externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
+- Les arguments et formats ne changent pas ; seul le chemin des scripts change.
+- Les dépendances restent celles de l'environnement du projet.
+- Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-Les composants internes de Nerfstudio `colmap_to_transforms.py` et
-`estimate_planes.py` restent dans `python/` et sont appelés par `scripts/run.sh`.
+- Les composants internes de Nerfstudio `colmap_to_transforms.py` et
+  `estimate_planes.py` restent dans `python/` et sont appelés par `scripts/run.sh`.
 
 ## 3. Configuration et utilisation
 
@@ -45,14 +46,18 @@ DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
   bash /chemin/vers/colmap_to_gs/scripts/run_spirula_blocks.sh
 ```
 
-Le lanceur réutilise le SfM existant `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ;
-sinon il lance la reconstruction Panoramax. Il découpe ensuite `sparse/0`
-avec ce script dans `blocks-SPLIT_NUM_BLOCKS/`, puis entraîne chaque bloc
-indépendamment dans `DIR/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/block_NNN/`.
-Le manifeste et les blocs COLMAP complets sont réutilisés à la relance.
-Les sorties de découpage partielles ou incohérentes ne sont jamais supprimées
-automatiquement. `SPLIT_NUM_BLOCKS`, `TRAIN_NUM_ITER`, `TRAIN_CAP_MAX` et les paramètres SfM
-sont configurables par variables d'environnement ; voir `--help`.
+- **SfM :** réutilise `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ; sinon, lance
+  la reconstruction Panoramax.
+- **Découpage :** applique ce script à `sparse/0` et écrit les blocs dans
+  `blocks-SPLIT_NUM_BLOCKS/`.
+- **Entraînement :** entraîne chaque bloc indépendamment dans
+  `DIR/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/block_NNN/`.
+- **Reprise :** réutilise le manifeste et les blocs COLMAP complets. Les sorties
+  de découpage partielles ou incohérentes ne sont jamais supprimées automatiquement.
+- `SPLIT_NUM_BLOCKS` : nombre de blocs, défini par variable d'environnement.
+- `TRAIN_NUM_ITER` : nombre d'itérations, défini par variable d'environnement.
+- `TRAIN_CAP_MAX` : plafond d'entraînement, défini par variable d'environnement.
+- Paramètres SfM : définis par variables d'environnement ; voir `--help`.
 
 Le découpage spectral recherche les séparations de faible covisibilité
 (peu de points 3D partagés, pondérés par la distance entre caméras).
@@ -64,8 +69,8 @@ les tailles inégales sont acceptées avec un avertissement : l'équilibrage
 n'arrête plus le pipeline. Le recouvrement est ajouté après cet ajustement
 et peut augmenter les effectifs finaux.
 
-`TRAIN_CAP_MAX` s'applique à chaque bloc séparément : le plafond cumulé peut donc
-atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
+- `TRAIN_CAP_MAX` s'applique à chaque bloc séparément ; le plafond cumulé peut
+  donc atteindre `SPLIT_NUM_BLOCKS × TRAIN_CAP_MAX` Gaussians.
 
 ## 4. Fonctionnement internes
 
@@ -78,11 +83,12 @@ python3 tools/preprocess/filter_sparse_density.py \
   --verbose
 ```
 
-Les barres de progression sont actives par défaut : lecture, analyse des vues
-et des points de chaque vue, écriture des deux modèles binaires. `--verbose` détaille
-les étapes, paramètres et nombres de points ; `--no-progress` désactive les
-barres (utile dans les logs de batch). Ces messages vont sur stderr, tandis que
-stdout reste le rapport JSON. Dépendances Python : `numpy`, `scipy`, `tqdm`.
+- `--verbose` : détaille les étapes, paramètres et nombres de points.
+- `--no-progress` : désactive les barres de progression (utile dans les logs de batch).
+- Les barres de progression sont actives par défaut pendant la lecture, l'analyse
+  des vues et des points de chaque vue, et l'écriture des deux modèles binaires.
+- Les messages de progression vont sur stderr ; stdout reste le rapport JSON.
+- Dépendances Python : `numpy`, `scipy`, `tqdm`.
 
 Le filtre analyse, pour chaque image, les profondeurs des points observés dans
 un cône angulaire (5° et jusqu'à 128 voisins par défaut). Une KDE gaussienne
@@ -92,18 +98,19 @@ est derrière tous les paquets soutenus, en dehors de leur enveloppe à 3σ et �
 faible densité, avec confirmation par au moins 75 % de deux vues évaluables.
 Les voisinages insuffisants sont conservés.
 
-`--output` est un **préfixe**, pas un dossier de modèle : l'exemple produit
-`essai_clean` (points conservés) et `essai_rejected` (points retirés).
-Sans `--output`, le chemin d'entrée sert de préfixe : `sparse/0` donne
-`sparse/0_clean` et `sparse/0_rejected`.
-Chaque dossier contient `cameras.bin`, `images.bin`, `points3D.bin` et
-`density_report.json`. Aucun PLY n'est produit. Les identifiants, les tracks
-des points inclus et les indices des observations 2D sont conservés ; les
-références aux points exclus de chaque modèle deviennent `-1`.
-Le modèle d'entrée reste intact. Le modèle rejeté est vide si aucun point
-n'est supprimé (en-tête binaire à zéro point, caméras/images conservées).
-Les éventuels `rigs.bin` et `frames.bin` sont également conservés.
-Le rapport récapitule les paramètres, les points rejetés et leurs votes.
+- `--output` : préfixe, et non dossier de modèle ; l'exemple produit
+  `essai_clean` (points conservés) et `essai_rejected` (points retirés).
+- Sans `--output`, le chemin d'entrée sert de préfixe : `sparse/0` produit
+  `sparse/0_clean` et `sparse/0_rejected`.
+- Chaque dossier contient `cameras.bin`, `images.bin`, `points3D.bin` et
+  `density_report.json` ; aucun PLY n'est produit.
+- Les identifiants, les tracks des points inclus et les indices des observations
+  2D sont conservés ; les références aux points exclus de chaque modèle deviennent `-1`.
+- Le modèle d'entrée reste intact.
+- Si aucun point n'est supprimé, le modèle rejeté est vide (en-tête binaire à
+  zéro point, caméras/images conservées).
+- Les éventuels `rigs.bin` et `frames.bin` sont également conservés.
+- Le rapport récapitule les paramètres, les points rejetés et leurs votes.
 
 ## 5. Notes et informations complémentaires
 

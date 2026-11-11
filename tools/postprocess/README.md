@@ -2,7 +2,7 @@
 
 ## 1. Objectif
 
-Fournir les outils d’export, de nettoyage, de filtrage contextuel et de fusion des résultats Gaussian Splatting.
+Outils d’export, de nettoyage, de filtrage contextuel et de fusion des résultats Gaussian Splatting.
 
 Exemple d’invocation :
 
@@ -34,16 +34,17 @@ bash tools/postprocess/clean_ply.sh --help
 
 ## 3. Configuration et utilisation
 
-`merge_splats.py` fusionne des blocs déjà alignés sans modifier leurs coordonnées.
-`--strength` multiplie la taille médiane des grands demi-axes pour fixer la taille
-des voxels : 0.5 est prudent, 1 normal, 2 plus agressif. Dans chaque voxel,
-les splats du bloc au meilleur score moyen sont conservés.
-Les clés utilisent trois coordonnées int64, plutôt que 21 bits par axe :
-une scène étendue ou décalée de l'origine ne nécessite plus d'augmenter
-`--strength` pour contourner cette ancienne limite. Les clés prennent 24 octets
-par splat au lieu de 8, avec un coût mémoire/disque accru lors du tri.
-Les géométries non finies et les indices hors plage int64 restent refusés.
-Après mise à jour, relancer uniquement la fusion, sans réentraîner les blocs.
+- `merge_splats.py` : fusionne des blocs déjà alignés sans modifier leurs coordonnées.
+- `--strength` : multiplie la taille médiane des grands demi-axes pour fixer la
+  taille des voxels ; `0.5` est prudent, `1` normal, `2` plus agressif.
+- Sélection : dans chaque voxel, conserve les splats du bloc au meilleur score moyen.
+- Clés de voxels : utilisent trois coordonnées int64 plutôt que 21 bits par axe ;
+  une scène étendue ou décalée de l'origine ne nécessite donc plus d'augmenter
+  `--strength` pour contourner l'ancienne limite.
+- Coût des clés : 24 octets par splat au lieu de 8, avec un coût mémoire/disque
+  accru lors du tri.
+- Validation : les géométries non finies et les indices hors plage int64 restent refusés.
+- Après mise à jour, relancer uniquement la fusion, sans réentraîner les blocs.
 
 `scripts/run.sh` appelle les lanceurs Nerfstudio ;
 `scripts/run_spirula_block.sh` utilise `export_ply.py` par défaut, tout en conservant
@@ -51,12 +52,12 @@ la surcharge `--export-script` / `EXPORT_SCRIPT`.
 
 ## 4. Fonctionnement internes
 
-Le seuil global de taille et la suppression hors BBOX COLMAP sont retirés de
-l'exporteur par défaut. Aucun test de proximité aux points COLMAP n'est utilisé :
-les routes peu texturées peuvent avoir peu de points, mais des splats utiles.
-Les attributs non finis et rotations nulles sont toujours supprimés à l'export
-PLY ; le seuil d'opacité du lanceur est désormais désactivé (`MIN_OPACITY=0`).
-Un seuil d'opacité explicite reste possible, indépendamment du filtre géométrique.
+- Exporteur par défaut : le seuil global de taille et la suppression hors BBOX
+  COLMAP sont retirés. Aucun test de proximité aux points COLMAP n'est utilisé ;
+  les routes peu texturées peuvent avoir peu de points, mais des splats utiles.
+- Export PLY : les attributs non finis et rotations nulles sont toujours supprimés.
+- `MIN_OPACITY=0` : seuil d'opacité du lanceur, désormais désactivé.
+- Seuil d'opacité explicite : reste possible indépendamment du filtre géométrique.
 
 Le nouveau filtre ne propose un rejet que si **les trois conditions** sont réunies :
 
@@ -70,13 +71,14 @@ Le nouveau filtre ne propose un rejet que si **les trois conditions** sont réun
    ou l'axe mince du splat n'est pas aligné sur la normale (tolérance 30°),
    ou le splat n'est pas aplati (petit/grand demi-axe > 0,2).
 
-L'écart au plan est rapporté à la dispersion des voisins dans le plan
-(seuil 0,25 fois l'écart-type suivant le deuxième axe principal).
-Le voisinage utilise un KD-tree sur au plus 100 000 centres échantillonnés
-avec une graine fixe ; calcul par lots, sans matrice de distances tous-à-tous.
-Ces seuils sont sans unité : changer uniformément l'échelle, translater ou
-tourner la scène ne change pas la règle, aux arrondis numériques près.
-La taille seule ne provoque jamais de rejet.
+- Écart au plan : rapporté à la dispersion des voisins dans le plan, avec un
+  seuil de `0,25` fois l'écart-type suivant le deuxième axe principal.
+- Voisinage : KD-tree sur au plus `100 000` centres échantillonnés avec une
+  graine fixe ; calcul par lots, sans matrice de distances tous-à-tous.
+- Invariance : ces seuils sans unité ne changent pas la règle si l'échelle est
+  uniformément modifiée, ou si la scène est translatée ou tournée, aux arrondis
+  numériques près.
+- Taille seule : ne provoque jamais de rejet.
 
 Cela reste une heuristique, pas une reconnaissance de routes ni une mesure
 de visibilité dans les images. Elle peut manquer des parasites intérieurs ou
@@ -102,54 +104,66 @@ python3 tools/postprocess/filter_splats.py \
   --input scene.splat --output essai-nettoye.splat --mode apply
 ```
 
-L'entrée n'est jamais écrasée. `--size-factor` règle le rapport de taille local
-(défaut 10) ; `--neighbors`, `--reference-limit`, `--seed` et `--batch-size`
-pilotent le voisinage et le coût mémoire. `--mode off` copie simplement l'entrée.
-Plus de 20 % de rejets en mode `apply` provoque une erreur sans remplacer les
-sorties ; examiner le diagnostic avant de modifier `--max-removal-fraction`. Un rejet de tous les splats est toujours refusé.
-Le filtre ne désactive pas silencieusement une règle trop destructive.
+- L'entrée n'est jamais écrasée.
+- `--size-factor` : rapport de taille local ; défaut `10`.
+- `--neighbors`, `--reference-limit`, `--seed`, `--batch-size` : pilotent le
+  voisinage et le coût mémoire.
+- `--mode off` : copie simplement l'entrée.
+- Plus de 20 % de rejets en mode `apply` provoque une erreur sans remplacer les
+  sorties ; examiner le diagnostic avant de modifier `--max-removal-fraction`.
+- Un rejet de tous les splats est toujours refusé ; le filtre ne désactive pas
+  silencieusement une règle trop destructive.
 
-`--sparse-points sparse/0/points3D.bin` ajoute un recadrage sur la bbox des
-points COLMAP (même repère monde que le `.splat`). La boîte est orientée sur
-leurs axes principaux, bornée par `--sparse-bbox-quantile` (0.005 de chaque
-côté) et élargie de `--sparse-bbox-margin` (0.05) × son plus grand côté : test
-invariant par rotation, translation et échelle. Seul le centre du splat est
-testé. `--sparse-bbox-mode apply` (défaut), `diagnostic` ou `off` est
-indépendant de `--mode` ; les splats hors bbox sont exclus du filtre contextuel
-et comptés dans `sparse_bbox.outside_sparse_bbox` du JSON. Si aucun centre
-n'est dans la boîte, le filtre échoue (repère probablement différent).
+- `--sparse-points sparse/0/points3D.bin` : ajoute un recadrage sur la bbox des
+  points COLMAP, dans le même repère monde que le `.splat`.
+- Bbox sparse : orientée sur les axes principaux, bornée par
+  `--sparse-bbox-quantile` (défaut `0.005` de chaque côté), puis élargie de
+  `--sparse-bbox-margin` (défaut `0.05`) × son plus grand côté ; test invariant
+  par rotation, translation et échelle.
+- Test bbox : seul le centre du splat est testé.
+- `--sparse-bbox-mode` : valeurs `apply` (défaut), `diagnostic` ou `off` ;
+  indépendant de `--mode`.
+- Rejets bbox : les splats hors bbox sont exclus du filtre contextuel et
+  comptés dans `sparse_bbox.outside_sparse_bbox` du JSON.
+- Si aucun centre n'est dans la boîte, le filtre échoue (repère probablement différent).
 
-Filtre expérimental des amas flottants : `--sparse-support-mode diagnostic`
-(défaut `off`) teste neuf positions sur le plan central du splat, jusqu'à une
-échelle gaussienne le long de ses deux plus grands axes. Une position est
-supportée si sa distance au sparse est inférieure à
-`--sparse-support-distance-factor` (3) fois l'espacement local, estimé par la
-distance au huitième voisin divisée par sqrt(8). Au moins
-`--sparse-support-min-fraction` (0.5) des positions doivent être supportées.
-Les rapports restent invariants à l'échelle, rotation et translation.
-Le test ne dépend ni de la couleur ni de la hauteur et préserve les grandes
-surfaces correctement couvertes par le sparse ; il peut néanmoins retirer des
-routes, toitures ou végétations peu couvertes. Examiner les rejets avant
-`--sparse-support-mode apply`. Ce mode est indépendant du filtre contextuel et
-de la bbox ; tous les rejets appliqués partagent la limite de sécurité de 20 %.
-Le JSON contient un compteur distinct `sparse_support.unsupported`.
+- `--sparse-support-mode` : filtre expérimental des amas flottants ; valeurs
+  `off` (défaut), `diagnostic` ou `apply`.
+- Positions testées : neuf points sur le plan central du splat, jusqu'à une
+  échelle gaussienne le long de ses deux plus grands axes.
+- `--sparse-support-distance-factor` : distance sparse maximale en multiples
+  de l'espacement local ; facteur `3`, espacement estimé par la distance au
+  huitième voisin divisée par `sqrt(8)`.
+- `--sparse-support-min-fraction` : fraction minimale de positions supportées ;
+  défaut `0.5`.
+- Invariance : les rapports restent invariants à l'échelle, rotation et translation.
+- Le test ne dépend ni de la couleur ni de la hauteur et préserve les grandes
+  surfaces correctement couvertes par le sparse ; il peut néanmoins retirer
+  des routes, toitures ou végétations peu couvertes.
+- Examiner les rejets avant `--sparse-support-mode apply`.
+- Ce mode est indépendant du filtre contextuel et de la bbox ; tous les rejets
+  appliqués partagent la limite de sécurité de 20 %.
+- Le JSON contient un compteur distinct `sparse_support.unsupported`.
 
-Dans le pipeline Panoramax, **les blocs sont exportés sans filtre géométrique**
-et le nouveau filtre est évalué après fusion, sur l'ensemble de la scène :
-les frontières internes des blocs ne sont pas traitées comme des bords de
-chantier. Configurer `POSTPROCESS_FILTER_MODE="diagnostic"` (défaut), `"apply"` ou
-`"off"` et `POSTPROCESS_FILTER_SIZE_FACTOR="10"`. La fusion avant filtre est conservée
-dans `NOM.unfiltered.splat`, les candidats dans `NOM.rejected.splat`, et le
-résumé dans `NOM.filter.json`. En diagnostic, `NOM.splat` est identique à la
-fusion non filtrée. La fusion conserve ses propres règles de déduplication.
+- Pipeline Panoramax : **les blocs sont exportés sans filtre géométrique** ;
+  le nouveau filtre est évalué après fusion, sur l'ensemble de la scène, afin
+  que les frontières internes des blocs ne soient pas traitées comme des bords de chantier.
+- `POSTPROCESS_FILTER_MODE="diagnostic"` : défaut ; valeurs alternatives
+  `"apply"` ou `"off"`.
+- `POSTPROCESS_FILTER_SIZE_FACTOR="10"` : règle le rapport de taille locale ;
+  valeur de configuration `10`.
+- Sorties : fusion avant filtre dans `NOM.unfiltered.splat`, candidats dans
+  `NOM.rejected.splat`, résumé dans `NOM.filter.json`.
+- En mode diagnostic, `NOM.splat` est identique à la fusion non filtrée.
+- La fusion conserve ses propres règles de déduplication.
 
-En usage autonome, `export_ply.py` utilise aussi le mode diagnostic par défaut
-(`--filter-mode diagnostic|apply|off`), sur la scène fournie. Il produit les mêmes
-diagnostics et conserve le PLY d'entrée. Les anciens arguments `--points`,
-`--dist`, `--radius-factor`, `--outlier-percent` et `--max-points` restent acceptés
-pour compatibilité, mais ne servent plus à retirer des splats ; un message le
-précise. `--max-world-scale` est refusé avec le nouveau filtre, car il impose
-un seuil absolu.
+- `export_ply.py` autonome : utilise le mode diagnostic par défaut
+  (`--filter-mode diagnostic|apply|off`) sur la scène fournie ; produit les
+  mêmes diagnostics et conserve le PLY d'entrée.
+- Anciens arguments `--points`, `--dist`, `--radius-factor`, `--outlier-percent`
+  et `--max-points` : restent acceptés pour compatibilité, mais ne servent plus
+  à retirer des splats ; un message le précise.
+- `--max-world-scale` : refusé avec le nouveau filtre, car il impose un seuil absolu.
 
 ## 5. Notes et informations complémentaires
 
