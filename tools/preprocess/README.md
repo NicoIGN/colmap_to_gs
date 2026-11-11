@@ -77,43 +77,20 @@ et peut augmenter les effectifs finaux.
 
 ## 4. Fonctionnement internes
 
-### Filtrage expérimental du sparse par densité
+Les outils de `tools/preprocess/` préparent les images et les reconstructions
+COLMAP. En particulier, `filter_sparse_density.py` cherche les points 3D
+manifestement isolés ou incohérents en les comparant à ce qui est observé
+depuis plusieurs images.
 
-```bash
-python3 tools/preprocess/filter_sparse_density.py \
-  --input /chemin/vers/sparse/0 \
-  --output /chemin/vers/essai \
-  --verbose
-```
-
-- `--verbose` : détaille les étapes, paramètres et nombres de points.
-- `--no-progress` : désactive les barres de progression (utile dans les logs de batch).
-- Les barres de progression sont actives par défaut pendant la lecture, l'analyse
-  des vues et des points de chaque vue, et l'écriture des deux modèles binaires.
-- Les messages de progression vont sur stderr ; stdout reste le rapport JSON.
-- Dépendances Python : `numpy`, `scipy`, `tqdm`.
-
-Le filtre analyse, pour chaque image, les profondeurs des points observés dans
-un cône angulaire (5° et jusqu'à 128 voisins par défaut). Une KDE gaussienne
-repère les paquets de profondeur ; un paquet doit représenter au moins
-`max(5 points, 5 % du voisinage)`. Un point n'est proposé au retrait que s'il
-est derrière tous les paquets soutenus, en dehors de leur enveloppe à 3σ et à
-faible densité, avec confirmation par au moins 75 % de deux vues évaluables.
-Les voisinages insuffisants sont conservés.
-
-- `--output` : préfixe, et non dossier de modèle ; l'exemple produit
-  `essai_clean` (points conservés) et `essai_rejected` (points retirés).
-- Sans `--output`, le chemin d'entrée sert de préfixe : `sparse/0` produit
-  `sparse/0_clean` et `sparse/0_rejected`.
-- Chaque dossier contient `cameras.bin`, `images.bin`, `points3D.bin` et
-  `density_report.json` ; aucun PLY n'est produit.
-- Les identifiants, les tracks des points inclus et les indices des observations
-  2D sont conservés ; les références aux points exclus de chaque modèle deviennent `-1`.
-- Le modèle d'entrée reste intact.
-- Si aucun point n'est supprimé, le modèle rejeté est vide (en-tête binaire à
-  zéro point, caméras/images conservées).
-- Les éventuels `rigs.bin` et `frames.bin` sont également conservés.
-- Le rapport récapitule les paramètres, les points rejetés et leurs votes.
+- Le filtre est expérimental : examiner visuellement les points conservés et
+  écartés avant d'utiliser le résultat pour l'entraînement.
+- Le modèle d'entrée est conservé. Le script produit deux modèles COLMAP :
+  `*_clean` avec les points retenus et `*_rejected` avec ceux écartés.
+- Chaque résultat conserve les caméras et les images ; le rapport
+  `density_report.json` résume le filtrage.
+- La progression s'affiche par défaut ; `--verbose` ajoute des détails et
+  `--no-progress` désactive les barres de progression.
+- Dépendances du filtre : `numpy`, `scipy`, `tqdm`.
 
 ## 5. Notes et informations complémentaires
 

@@ -71,18 +71,15 @@ exécutable existe déjà. Le script amont choisit le parallélisme selon la RAM
 
 ## 4. Fonctionnement internes
 
-Sinon, le script clone le dépôt officiel dans `../spirula-studio` à côté de
-`colmap_to_gs`, ou met à jour la branche courante du checkout avec
-`git pull --ff-only`. Il refuse les modifications locales et les divergences,
-initialise les sous-modules et lance `build_develop.bash` avec Vulkan, SAM et
-le mode Release. Il vérifie ensuite l'exécutable avec `--version`.
+Le script `install_spirula.sh` récupère les sources de Spirula Studio,
+le compile pour le système visé et vérifie que l'exécutable démarre. Il
+réutilise une installation existante, sauf si `--clean` est demandé.
 
-Un modèle déjà présent est réutilisé après contrôle de l'en-tête SAM 3 et d'une
-taille minimale de 600 Mio. Ce contrôle détecte notamment les pages d'erreur
-et les fichiers très incomplets, mais **ne vérifie pas une empreinte
-cryptographique**. Si le fichier existant est invalide, il n'est pas écrasé :
-le déplacer puis relancer l'installation. Le téléchargement est écrit dans
-un fichier temporaire, puis publié seulement s'il passe ces contrôles.
+Pour le backend SAM 3, le script télécharge aussi le modèle nécessaire. Il
+vérifie que le fichier téléchargé semble complet avant de le conserver ; cette
+vérification ne garantit pas son intégrité cryptographique. Un modèle présent
+mais incomplet n'est pas écrasé automatiquement : le déplacer puis relancer
+l'installation.
 
 ## 5. Notes et informations complémentaires
 

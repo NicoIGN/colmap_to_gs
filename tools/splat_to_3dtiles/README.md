@@ -73,9 +73,15 @@ Le résultat est `scene_tiles/tileset.json` et les contenus référencés sous `
 
 ## 4. Fonctionnement internes
 
-Le `.splat` compact est transformé en PLY 3DGS binaire temporaire, puis passé au convertisseur externe, qui construit les LOD et compresse le contenu des tuiles en SPZ. Les positions et orientations sont préservées ; les couleurs DC et l'opacité sont décodées depuis le `.splat`. Le format `.splat` ne stocke pas les harmoniques sphériques d'ordre supérieur, elles ne peuvent donc pas être recréées par cette conversion.
+Le convertisseur `tools/splat_to_3dtiles/convert.py` prépare le `.splat` dans
+un format que le convertisseur 3D Tiles peut lire. Celui-ci découpe ensuite
+la scène en tuiles de plusieurs niveaux de détail pour qu'elle puisse être
+affichée progressivement dans un visualiseur.
 
-Les commentaires `offsetx=0`, `offsety=0`, `offsetz=0` du PLY identifient le repère local Z-up au convertisseur. La coordonnée d'origine fournit son placement ENU dans le monde, sans ajouter artificiellement cette origine aux positions locales.
+Les positions et orientations des splats sont conservées. Le placement
+géographique utilise l'origine et le système de coordonnées fournis avec le
+résumé de géoréférencement ; ils ne sont pas ajoutés une seconde fois aux
+positions locales.
 
 ## 5. Notes et informations complémentaires
 

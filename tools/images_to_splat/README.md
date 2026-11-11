@@ -206,23 +206,27 @@ ne pas mélanger des blocs entraînés dans des repères différents.
 
 ## 4. Fonctionnement internes
 
-Les pipelines **images locales** et **Panoramax** partagent certains scripts :
+Le pipeline **Images locales vers Gaussian Splats** prépare les photos,
+reconstruit la scène et entraîne les blocs. Il partage avec le pipeline
+Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérente :
 
-- `python/mask_policies.py` : politiques et appel du générateur de masques.
-- `scripts/pipeline_config.sh` : validations communes et seuils SfM.
-- `python/sfm_geometry_policy.py` : contrôle de compatibilité des modèles SfM
-  avant réutilisation par le worker multi-blocs.
-- `scripts/pipeline_postprocess.sh` : recadrage sparse et fusion.
-- `scripts/pipeline_slurm.sh` : soumission des jobs, contrôle des réponses et
-  annulation en cas d'échec.
-- `scripts/` : workers Spirula pour le SfM et l'entraînement.
-- `inputs.json` : signature des images et paramètres de préparation.
+- `python/mask_policies.py` : prépare les réglages de masques et leur génération.
+- `scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
+- `python/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
+  convient aux réglages avant de la réutiliser.
+- `scripts/pipeline_postprocess.sh` : recadre et fusionne les résultats.
+- `scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
+- `scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
+  et entraîner les blocs.
+- `inputs.json` garde une trace des images et réglages utilisés pour préparer
+  le calcul.
 
-Les étapes propres à chaque pipeline sont :
+Les étapes qui diffèrent entre les deux pipelines sont :
 
-- **Images locales** : sélection des fichiers, préparation du workspace,
-  signatures et recalage sur une trajectoire GPS.
-- **Panoramax** : acquisition des images, métadonnées et traitement GPS EXIF.
+- **Images locales** : sélection des fichiers, organisation du dossier de
+  travail et, si demandé, recalage sur une trajectoire GPS.
+- **Panoramax** : recherche et téléchargement des photos, gestion de leurs
+  métadonnées et utilisation de leur position GPS.
 
 Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 (repère, seuil de recadrage, nettoyage final).

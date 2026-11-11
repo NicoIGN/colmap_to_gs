@@ -58,36 +58,19 @@ Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtile
 
 ## 4. Fonctionnement internes
 
-### Taille des frustums COLMAP
+Le visualiseur web affiche les scènes `.splat`, les modèles COLMAP et les
+trajectoires GPS dans un même espace. Il permet de contrôler les reconstructions,
+de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
 
-Les points sparse (2 px par défaut) et centres caméra (4 px) sont des disques
-de taille écran, indépendants de l'échelle SfM et du GPX. Deux curseurs dans
-la section COLMAP permettent d'ajuster leur diamètre sans recharger le modèle.
-La densité de pixels de l'écran est prise en compte (facteur maximal 2).
-
-Un dossier COLMAP peut aussi être glissé directement dans la vue : le viewer
-parcourt le dossier et charge tous les sous-dossiers contenant
-`cameras.bin`, `images.bin` et `points3D.bin`. Les imports successifs
-s'ajoutent à la vue. Chaque modèle apparaît comme un groupe de couches avec
-des cases de masquage en ligne pour les points 3D, les centres caméra et les
-frustums ; la case du groupe masque ou réaffiche toutes ses couches.
-Les dépôts de scène, JSON et GPX gardent leur comportement existant.
-Dans une vue vide, le modèle COLMAP est automatiquement cadré et permet la
-navigation sans charger de splat. Le bouton de cadrage et la touche `R`
-permettent de retrouver sa vue d'ensemble. Ajouter un COLMAP à une scène splat
-existante ne déplace pas la caméra.
-Le clic gauche-glisser fait orbiter la vue autour de la cible. Ctrl + clic
-droit-glisser déplace latéralement ; le clic milieu-glisser reste une autre
-commande de translation. Maj + clic reste réservé aux mesures.
-Ctrl + clic gauche-glisser trace une zone : au relâchement du bouton,
-la caméra se rapproche et centre cette zone au plan de la cible, sans rotation.
-Le cadrage conserve les proportions de la vue et inclut tout le rectangle.
-
-Glisser un fichier `.splat` ou `.ply` dans la vue l'ajoute aux scènes déjà
-chargées sans recadrer ni déplacer la caméra. Le bouton d'ouverture conserve
-son comportement de remplacement. Le panneau d'informations regroupe les
-cases de visibilité des scènes splat, des groupes COLMAP et de la trajectoire
-GPS.
+- Un modèle COLMAP peut être ajouté par glisser-déposer ; ses points et caméras
+  apparaissent comme un groupe que l'on peut masquer ou afficher.
+- Les fichiers `.splat` et `.ply` ajoutés par glisser-déposer s'ajoutent à la
+  scène déjà ouverte. Le bouton d'ouverture remplace la scène.
+- Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.
+- Les commandes de souris permettent d'orbiter, déplacer et cadrer la vue ;
+  les mesures restent accessibles avec Maj + clic.
+- L'affichage des points et caméras conserve une taille lisible à l'écran,
+  même si l'échelle du modèle COLMAP est inconnue.
 
 ## 5. Notes et informations complémentaires
 

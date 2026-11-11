@@ -206,12 +206,21 @@ Pour Mapillary sur le Mac testé dans ce projet, le traitement CPU a reconnu 4 %
 
 ## 4. Fonctionnement internes
 
+Le script `generate_masks.py` traite les images une par une et produit, pour
+chacune, une carte indiquant les zones à garder ou à masquer.
+
 | Modèle | Données | Intérêt |
 |---|---|---|
 | `nvidia/segformer-b5-finetuned-ade-640-640` (`ade20k`) | ADE20K, 150 classes | Généraliste ; classes `sky`, `person`, `car`, `bicycle`, `truck`, `bus`, `tree`… ; plus léger. |
 | `facebook/mask2former-swin-large-mapillary-vistas-semantic` (`mapillary`) | Mapillary Vistas | Spécialisé dans les scènes urbaines extérieures et les vues de rue, proches des images Panoramax ; plus lourd. |
 
-Les deux familles (SegFormer et Mask2Former) sont gérées. Le traitement Mask2Former utilise le post-traitement sémantique du processeur Hugging Face pour produire la carte de classes. Les scores de la classe demandée sont calculés séparément pour appliquer éventuellement le seuil complémentaire `--confidence`.
+Avec les modèles Transformers, le script classe les pixels de chaque image,
+puis garde les classes demandées dans le masque. Le paramètre `--confidence`
+peut écarter les pixels dont la détection est trop incertaine.
+
+Avec le backend Spirula, SAM 3 produit directement les zones correspondant
+aux mots-clés demandés. Ce backend produit un masque combiné, pas une classe
+différente pour chaque mot-clé.
 
 Les noms exacts des labels dépendent du modèle. Consulter le `labels.txt` du modèle ou afficher les classes depuis le script :
 

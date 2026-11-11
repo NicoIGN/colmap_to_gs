@@ -127,16 +127,15 @@ chemins de l'environnement et du modèle ; `CLEANGS_MODE` accepte `diagnostic`
 
 ## 4. Fonctionnement internes
 
-Cette adaptation expérimentale utilise le parseur COLMAP du projet
-[Clean-GS](https://github.com/smlab-niser/clean-gs) (MIT, parseur gsplat
-Apache-2.0) et la projection/rasterisation gsplat. Elle analyse toutes les
-vues enregistrées, segmente le ciel et rejette seulement les centres projetés
-avec au moins deux votes de ciel et aucun vote de premier plan. Elle ne
-sélectionne pas trois vues par Pareto et ne filtre pas un objet segmenté.
-Les splats non observés ou aux pixels incertains sont conservés. La visibilité
-est déterminée par la projection gsplat (frustum et rayon positif), sans test
-d'occlusion exacte ; les flotteurs devant les bâtiments ou la végétation ne
-sont donc pas nécessairement supprimés.
+L'outil **Clean-GS** parcourt les vues de la scène, repère les splats qui se
+projettent dans le ciel et retire ceux qui sont identifiés comme parasites.
+Cette adaptation expérimentale s'appuie sur le parseur COLMAP de
+[Clean-GS](https://github.com/smlab-niser/clean-gs) et sur gsplat pour projeter
+les splats dans les images.
+
+La décision s'appuie sur plusieurs vues : les splats sans preuve suffisante
+sont conservés. L'outil ne détecte pas les occlusions exactes ; un parasite
+placé devant un bâtiment ou un arbre peut donc rester dans le résultat.
 
 ## 5. Notes et informations complémentaires
 

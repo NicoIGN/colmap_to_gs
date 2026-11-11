@@ -48,40 +48,21 @@ bash tools/postprocess/clean_ply.sh --help
 
 ## 4. Fonctionnement internes
 
-- Exporteur par défaut : sans seuil global de taille, suppression hors BBOX
-  COLMAP ni test de proximité aux points COLMAP ;
-  les routes peu texturées peuvent avoir peu de points, mais des splats utiles.
-- Export PLY : les attributs non finis et rotations nulles sont toujours supprimés.
-- `MIN_OPACITY=0` : désactive le seuil d'opacité du lanceur.
-- Seuil d'opacité explicite : reste possible indépendamment du filtre géométrique.
+Les scripts de `tools/postprocess/` exportent les modèles, fusionnent les blocs
+et proposent des filtres pour retirer certains splats indésirables.
 
-Le filtre contextuel ne propose un rejet que si **les trois conditions** sont réunies :
+- `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides,
+  mais ne supprime pas automatiquement les splats éloignés des points COLMAP.
+- `filter_splats.py` repère les splats anormalement grands, situés en bordure
+  de scène et sans support clair sur une surface voisine.
+- Ce filtre est une heuristique, pas une reconnaissance d'objets ni une mesure
+  directe de ce qui est visible dans les photos. Il peut manquer des parasites
+  ou proposer des rejets incorrects, notamment sur des surfaces courbes ou des
+  scènes peu denses.
+- `merge_splats.py` rassemble les blocs déjà alignés et choisit les splats à
+  conserver dans les zones où ils se chevauchent.
 
-1. Le plus grand demi-axe dépasse 10 fois la médiane locale des grands demi-axes.
-2. Le centre est périphérique dans le repère principal de la scène, calculé sur
-   une référence robuste : bornes aux quantiles 2/98 %, bande à partir de 90 %
-   des demi-étendues. Les dimensions quasi dégénérées sont ignorées pour ne pas
-   considérer toute une route plane comme périphérique.
-3. Le splat n'a pas de support de surface local : les 24 voisins ne forment pas
-   un plan suffisamment bidimensionnel et mince, ou le centre en est éloigné,
-   ou l'axe mince du splat n'est pas aligné sur la normale (tolérance 30°),
-   ou le splat n'est pas aplati (petit/grand demi-axe > 0,2).
-
-- Écart au plan : rapporté à la dispersion des voisins dans le plan, avec un
-  seuil de `0,25` fois l'écart-type suivant le deuxième axe principal.
-- Voisinage : KD-tree sur au plus `100 000` centres échantillonnés avec une
-  graine fixe ; calcul par lots, sans matrice de distances tous-à-tous.
-- Invariance : ces seuils sans unité ne changent pas la règle si l'échelle est
-  uniformément modifiée, ou si la scène est translatée ou tournée, aux arrondis
-  numériques près.
-- Taille seule : ne provoque jamais de rejet.
-
-Cela reste une heuristique, pas une reconnaissance de routes ni une mesure
-de visibilité dans les images. Elle peut manquer des parasites intérieurs ou
-des groupes parasites cohérents et peut proposer de faux rejets sur des
-surfaces courbes, des scènes à plusieurs niveaux ou des quartiers peu denses.
-L'échantillonnage peut manquer des détails locaux. Les scènes trop petites ou
-dégénérées sont conservées avec un avertissement explicite.
+Le mode diagnostic permet d'examiner les candidats avant leur suppression.
 
 Pour un `.splat` fusionné existant, sans réentraîner :
 

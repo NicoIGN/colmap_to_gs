@@ -449,26 +449,22 @@ géographique, la reprise, les erreurs de téléchargement et les nouvelles tent
 
 ## 4. Fonctionnement internes
 
-`pyproj` est déjà présent dans l'environnement Conda fourni par ce dépôt.
+Le pipeline **Panoramax** recherche et télécharge les photos, puis prépare
+la reconstruction, entraîne les blocs et rassemble le résultat. Il partage
+avec le pipeline images locales des outils pour gérer les masques, vérifier
+les réglages, recadrer les résultats et les fusionner.
 
+- Les scripts communs de configuration vérifient les réglages avant le calcul.
+- Les scripts communs de masques appliquent les mêmes règles à la reconstruction
+  et à l'entraînement.
+- Les scripts communs de post-traitement recadrent et fusionnent les blocs.
+- En mode Slurm, les scripts communs soumettent les étapes et arrêtent les
+  calculs dépendants lorsqu'une étape échoue.
 
-
-### Socle commun avec les images locales
-
-Les scripts partagés avec le pipeline images locales sont :
-
-- `python/mask_policies.py` : politiques et appel du générateur de masques.
-- `python/sfm_geometry_policy.py` : signature géométrique SfM.
-- `scripts/pipeline_config.sh` : validations communes.
-- `scripts/pipeline_postprocess.sh` : recadrage et fusion.
-- `scripts/pipeline_slurm.sh` : soumission et annulation des jobs Slurm.
-- `scripts/` : workers SfM et entraînement.
-
-Les étapes propres à chaque pipeline sont :
-
-- **Panoramax** : téléchargement, préparation des images et métadonnées,
-  signatures, filtrage des paires GPS et export de la référence géographique.
-- **Images locales** : recalage sur une trajectoire GPS fournie au format GPX.
+Les étapes propres à Panoramax sont la recherche et le téléchargement des photos,
+la gestion de leurs métadonnées et l'utilisation de leur position GPS. Le
+pipeline images locales sélectionne les fichiers fournis par l'utilisateur et
+peut recaler la reconstruction sur une trajectoire GPS au format GPX.
 
 ## 5. Notes et informations complémentaires
 
