@@ -135,6 +135,26 @@ class SparseDensityTest(unittest.TestCase):
         self.assertTrue(np.all(votes[:-1] == 0))
         self.assertEqual(votes[-1], 2)
 
+    def test_far_packet_needs_increasing_support_relative_to_near_packet(self):
+        rng = np.random.default_rng(42)
+        angles = rng.uniform(-0.02, 0.02, (25, 2))
+        directions = np.column_stack((angles, np.ones(25)))
+        directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+        positions = np.vstack((
+            directions[:20] * 10,
+            directions[20:] * 40,
+        ))
+        votes, evaluated = density_votes(
+            positions,
+            [image_view(len(positions)), image_view(len(positions), (0.1, 0, 0))],
+            min_neighbors=12,
+            min_cluster_points=5,
+            min_cluster_fraction=0.05,
+        )
+        self.assertTrue(np.all(evaluated == 2))
+        self.assertTrue(np.all(votes[:20] == 0))
+        self.assertTrue(np.all(votes[20:] == 2))
+
     def test_parallel_angular_queries_preserve_votes(self):
         rng = np.random.default_rng(23)
         positions = rng.normal(size=(500, 3))

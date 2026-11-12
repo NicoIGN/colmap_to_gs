@@ -19,6 +19,7 @@ from tqdm import tqdm
 POINT_HEADER = struct.Struct("<QdddBBBdQ")
 IMAGE_HEADER = struct.Struct("<I7dI")
 OBSERVATION = struct.Struct("<ddq")
+ALGORITHM_VERSION = 2
 
 
 def read_exact(stream, size, context):
@@ -131,12 +132,14 @@ def _supported_depth_intervals(
         min_cluster_points, math.ceil(min_cluster_fraction * count)
     )
     if count < minimum_support:
-        return [], 0, minimum_support
+        return 0, minimum_support, [], None
     bandwidth = _depth_bandwidth(log_depths)
     low = float(ordered[0])
     high = float(ordered[-1])
     if high - low <= 1e-12:
-        return [(low - 3 * bandwidth, high + 3 * bandwidth)], count, minimum_support
+        cluster = (low - 3 * bandwidth, high + 3 * bandwidth,
+                   count, float(np.mean(ordered)))
+        return count, minimum_support, [cluster], cluster
 
     valley_gap = (
         2 * bandwidth * math.sqrt(-2 * math.log(low_density_fraction))
@@ -150,19 +153,48 @@ def _supported_depth_intervals(
         segments.append((start, cut + 1))
         start = cut + 1
     segments.append((start, count))
-    intervals = []
+    clusters = []
     target_density = 0
+    target_cluster = None
     target_index = int(np.searchsorted(ordered, target, side="left"))
     for start, stop in segments:
         members = ordered[start:stop]
         if start <= target_index < stop:
             target_density = len(members)
-        if len(members) < minimum_support:
-            continue
         mean = float(np.mean(members))
         sigma = max(float(np.std(members)), bandwidth)
-        intervals.append((mean - 3 * sigma, mean + 3 * sigma))
-    return intervals, target_density, minimum_support
+        cluster = (mean - 3 * sigma, mean + 3 * sigma, len(members), mean)
+        clusters.append(cluster)
+        if start <= target_index < stop:
+            target_cluster = cluster
+    return target_density, minimum_support, clusters, target_cluster
+
+
+def _far_support_threshold(
+    target,
+    clusters,
+    target_cluster,
+    minimum_support,
+    far_support_rate,
+):
+    """Require more support for a depth packet as it recedes behind a dense one."""
+    foreground = [
+        cluster for cluster in clusters
+        if cluster is not target_cluster
+        and cluster[3] < target_cluster[3]
+        and cluster[2] >= minimum_support
+    ]
+    if not foreground:
+        return None
+    nearest = max(foreground, key=lambda cluster: cluster[3])
+    depth_ratio = math.exp(target - nearest[3])
+    if depth_ratio <= 1:
+        return minimum_support
+    required_fraction = min(1.0, far_support_rate * math.log2(depth_ratio))
+    return max(
+        minimum_support,
+        math.ceil(nearest[2] * required_fraction),
+    )
 
 
 def _depth_bandwidth(log_depths):
@@ -184,6 +216,7 @@ def density_votes(
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
+    far_support_rate=0.25,
     workers=1,
     progress=False,
     verbose=False,
@@ -197,6 +230,8 @@ def density_votes(
         raise ValueError("Seuil de paquet invalide.")
     if not 0 < low_density_fraction < 1:
         raise ValueError("Le seuil de densité doit être dans ]0, 1[.")
+    if not 0 < far_support_rate <= 1:
+        raise ValueError("Le taux de support distant doit être dans ]0, 1].")
     if workers < 1:
         raise ValueError("Le nombre de workers doit être supérieur ou égal à 1.")
 
@@ -249,26 +284,23 @@ def density_votes(
             local_depths = depths[selected]
             log_depths = np.log(local_depths)
             target = math.log(depths[local_index])
-            intervals, density, minimum_support = _supported_depth_intervals(
+            density, minimum_support, clusters, target_cluster = _supported_depth_intervals(
                 log_depths,
                 min_cluster_points,
                 min_cluster_fraction,
                 low_density_fraction,
                 target,
             )
-            if not intervals:
-                continue
-
-            if any(lower <= target <= upper for lower, upper in intervals):
-                evaluable_votes[point_index] += 1
-                continue
-
-            evaluable_votes[point_index] += 1
-            is_farther_than_packets = target > max(upper for _, upper in intervals)
-            if (
-                is_farther_than_packets
-                and density < minimum_support
+            if target_cluster is None or not any(
+                cluster[2] >= minimum_support for cluster in clusters
             ):
+                continue
+
+            required_support = _far_support_threshold(
+                target, clusters, target_cluster, minimum_support, far_support_rate
+            )
+            evaluable_votes[point_index] += 1
+            if required_support is not None and density < required_support:
                 suspicious_votes[point_index] += 1
 
     return suspicious_votes, evaluable_votes
@@ -329,6 +361,7 @@ def filter_sparse_model(
     low_density_fraction=0.2,
     min_views=2,
     vote_fraction=0.75,
+    far_support_rate=0.25,
     workers=1,
     progress=False,
     verbose=False,
@@ -360,7 +393,7 @@ def filter_sparse_model(
         tqdm.write(
             f"[sparse] {len(point_ids)} points, {len(images)} vues ; "
             f"{neighbors} voisins maximum, cône {max_angle_deg}°, "
-            f"{workers} workers, "
+            f"{workers} workers, support distant {far_support_rate:.0%} par doublement, "
             f"rejet confirmé par {min_views} vues minimum et {vote_fraction:.0%} des votes.",
             file=sys.stderr,
         )
@@ -373,6 +406,7 @@ def filter_sparse_model(
         min_cluster_points=min_cluster_points,
         min_cluster_fraction=min_cluster_fraction,
         low_density_fraction=low_density_fraction,
+        far_support_rate=far_support_rate,
         workers=workers,
         progress=progress,
         verbose=verbose,
@@ -392,6 +426,7 @@ def filter_sparse_model(
             file=sys.stderr,
         )
     report = {
+        "algorithm_version": ALGORITHM_VERSION,
         "input": str(input_dir),
         "output_clean": str(clean_dir),
         "output_rejected": str(rejected_dir),
@@ -415,6 +450,7 @@ def filter_sparse_model(
             "min_cluster_points": min_cluster_points,
             "min_cluster_fraction": min_cluster_fraction,
             "low_density_fraction": low_density_fraction,
+            "far_support_rate": far_support_rate,
             "min_views": min_views,
             "vote_fraction": vote_fraction,
         },
@@ -431,6 +467,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Filtre les points COLMAP lointains et isolés par densité angulaire."
     )
+    parser.add_argument("--version", action="version", version=str(ALGORITHM_VERSION))
     parser.add_argument("--input", type=Path, required=True,
                         help="Sparse COLMAP d'entrée, contenant les trois fichiers .bin.")
     parser.add_argument("--output", type=Path,
@@ -448,6 +485,9 @@ def main():
                         help="Support relatif minimum d'un paquet (défaut : 0.05).")
     parser.add_argument("--low-density-fraction", type=float, default=0.2,
                         help="Densité maximale relative d'un point isolé (défaut : 0.2).")
+    parser.add_argument("--far-support-rate", type=float, default=0.25,
+                        help="Hausse du support requis par doublement de profondeur "
+                             "(défaut : 0.25).")
     parser.add_argument("--min-views", type=int, default=2,
                         help="Nombre de vues évaluables requis (défaut : 2).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
@@ -471,6 +511,7 @@ def main():
             low_density_fraction=args.low_density_fraction,
             min_views=args.min_views,
             vote_fraction=args.vote_fraction,
+            far_support_rate=args.far_support_rate,
             workers=args.workers,
             progress=not args.no_progress,
             verbose=args.verbose,

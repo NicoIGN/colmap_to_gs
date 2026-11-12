@@ -59,6 +59,8 @@ with open(os.environ["TEST_EVENTS"], "a") as log:
 if os.environ.get("TEST_FAIL_TOOL") == name:
     sys.exit(7)
 if name == "filter_sparse_density.py":
+    if "--version" in args:
+        os.execv(sys.executable, [sys.executable, *args])
     expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"
     assert get("--input").endswith(expected)
     os.execv(sys.executable, [sys.executable, *args])
@@ -411,14 +413,18 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
+        self.assertEqual((filtered / ".density_done").read_text().strip(), "2")
         self.assertTrue((filtered / "density_report.json").is_file())
+        report = json.loads((filtered / "density_report.json").read_text())
+        self.assertEqual(report["algorithm_version"], 2)
+        self.assertEqual(report["parameters"]["far_support_rate"], 0.25)
         filter_commands = [cmd for cmd in self.commands()
-                           if cmd[0] == "filter_sparse_density.py"]
+                           if cmd[0] == "filter_sparse_density.py" and "--input" in cmd]
         self.assertEqual(len(filter_commands), 1)
         self.assertEqual(filter_commands[0][filter_commands[0].index("--workers") + 1], "8")
         raw = (self.output / "sfm/sparse/0/points3D.bin").read_bytes()
         self.assert_ok(self.run_pipeline())
-        self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"
+        self.assertEqual(sum(cmd[0] == "filter_sparse_density.py" and "--input" in cmd
                              for cmd in self.commands()), 1)
         self.assertEqual((self.output / "sfm/sparse/0/points3D.bin").read_bytes(), raw)
         # A separate Slurm workspace exercises GPX -> filter -> split -> bbox.

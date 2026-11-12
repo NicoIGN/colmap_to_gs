@@ -89,6 +89,12 @@ depuis plusieurs images.
   `*_clean` avec les points retenus et `*_rejected` avec ceux écartés.
 - Chaque résultat conserve les caméras et les images ; le rapport
   `density_report.json` résume le filtrage.
+- Un paquet plus lointain doit désormais avoir davantage de support que le
+  paquet dense le plus proche : le seuil augmente de 25 % de ce support par
+  doublement de profondeur, jusqu'à exiger un support comparable. C'est une
+  heuristique volontairement plus stricte ; elle peut aussi écarter des détails
+  ou arrière-plans réels mais peu reconstruits. Le rapport enregistre
+  `far_support_rate`.
 - Le pipeline parallélise les requêtes de voisinage angulaire selon
   `SFM_THREADS` ; augmenter cette valeur peut accélérer cette étape si autant
   de CPU sont alloués au job.
