@@ -5,7 +5,7 @@ script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
 
 usage() {
-  echo "Usage : bash script/images_to_3dgs.sh CONFIG [--images DIR] [--phase all|prepare|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--phase all|prepare|train-block|merge] [--block INDEX]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
