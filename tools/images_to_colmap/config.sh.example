@@ -21,6 +21,11 @@ SFM_THREADS="4"
 SFM_MASKS="off"
 TRAIN_MASKS="off"
 # Pour activer les masques SfM Spirula/COLMAP direct, voir l'exemple images_to_splat.
+# Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
+# avertissements/erreurs et la progression du pipeline. 0 = silencieux,
+# 2 = informations et temps (defaut Spirula), 3 = detaille.
+# S'applique aux processus Spirula, pas seulement aux masques.
+export SS_NN_LOG=1
 ORIENTATIONS_JSON="/chemin/orientations.json"
 LIDAR_PLY="/chemin/points.ply"
 GEOREF_GPX_FILE="" # prioritaire sur EXIF ; noms _fXXXXX requis par le recalage GPX

@@ -125,6 +125,14 @@ Lire les conditions de la licence SAM 3 Meta avant de l'accepter. Pour un lancem
 
 On peut aussi accepter sur un terminal avec `"$SPIRULA_BIN" sam devices --accept-license sam3`, avec le même compte et le même `HOME` que les jobs. Les messages et erreurs de Spirula sont transmis aux journaux, même sans `--verbose`.
 
+Dans une version de Spirula prenant en charge `SS_NN_LOG`, `export SS_NN_LOG=1`
+masque les temps SAM et les messages `[pcs]` tout en conservant les
+avertissements et erreurs. La barre du pipeline reste affichée. Les niveaux
+Spirula sont 0 (silencieux), 1 (avertissements et erreurs), 2 (informations et
+temps, défaut) et 3 (détaillé). Cette variable affecte tous les processus
+Spirula qui en héritent, pas uniquement SAM ; un processus déjà lancé ne sera
+pas modifié.
+
 La progression `fait/total` est affichée sans `--verbose`, pour les deux
 backends et les masques réutilisés. Avec SAM, `Calcul SAM` compte les PNG
 écrits pendant l'inférence ; `Génération des masques` suit ensuite leur
