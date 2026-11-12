@@ -107,28 +107,40 @@ done
 
 echo "[VULKAN] Vérification des bibliothèques"
 
-REQUIRED_LIBRARIES=(
+REQUIRED_PACKAGES=(
     vulkan
-    X11
-    Xinerama
-    Xcursor
-    Xi
-    Xrandr
-    GL
-    GLX
-    OpenGL
-    EGL
+    x11
+    xinerama
+    xcursor
+    xi
+    xrandr
+    gl
+    glx
+    egl
 )
 
-for library in "${REQUIRED_LIBRARIES[@]}"; do
-    if ! ldconfig -p | grep -Eq "lib${library}\.so"; then
-        echo "[ERROR] Bibliothèque manquante : lib${library}.so"
+for package in "${REQUIRED_PACKAGES[@]}"; do
+    if ! pkg-config --exists "${package}"; then
+        echo "[ERROR] Dépendance manquante : ${package}"
         exit 1
     fi
 
-    echo "[OK] lib${library}.so"
+    echo "[OK] ${package}: $(pkg-config --libs "${package}")"
 done
 
+# Vérification du loader Vulkan
+if ! dpkg -L libvulkan1 | grep -Eq '/libvulkan\.so\.1$'; then
+    echo "[ERROR] Loader Vulkan libvulkan.so.1 absent."
+    exit 1
+fi
+
+# Vérification de la bibliothèque de développement
+if ! dpkg -L libvulkan-dev | grep -Eq '/libvulkan\.so$'; then
+    echo "[ERROR] Bibliothèque de développement Vulkan absente."
+    exit 1
+fi
+
+echo "[OK] Loader et bibliothèque de développement Vulkan présents."
 # ===============================================================
 # ICD Vulkan
 # ===============================================================
