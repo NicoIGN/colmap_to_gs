@@ -231,142 +231,117 @@ find_system_library() {
 # DEPENDANCES LINUX
 # ===============================================================
 
+
 install_linux_dependencies() {
 
     [[ "$(uname -s)" == Linux ]] || return 0
 
     log "==============================================================="
-    log "VERIFICATION DES DEPENDANCES LINUX"
+    log "DEPENDANCES LINUX / CONDA"
     log "==============================================================="
 
-    diagnose_environment
+    local prefix="${CONDA_PREFIX:-}"
 
-    command -v apt-get >/dev/null 2>&1 ||
-        die "apt-get indisponible : installation automatique impossible."
+    [[ -n "$prefix" ]] ||
+        die "CONDA_PREFIX absent : lancer le script dans l'environnement gsplat."
 
-    [[ "$(id -u)" -eq 0 ]] ||
-        die "Les dépendances système doivent être installées avec les droits root."
+    log "Environnement actif : $prefix"
 
-    local multiarch
-    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
-
-    log "Architecture Debian : ${multiarch:-inconnue}"
-
-    local opengl_lib
-    local glx_lib
-
-    opengl_lib="$(find_system_library libOpenGL.so)"
-    glx_lib="$(find_system_library libGLX.so)"
-
-    log "OpenGL avant installation : ${opengl_lib:-INTROUVABLE}"
-    log "GLX avant installation : ${glx_lib:-INTROUVABLE}"
+    local x11_header="$prefix/include/X11/X.h"
+    local xlib_header="$prefix/include/X11/Xlib.h"
 
     # -----------------------------------------------------------
-    # Contrôle réel des bibliothèques de développement.
-    # Les fichiers .so.0 ne suffisent pas.
+    # Diagnostic initial
     # -----------------------------------------------------------
 
-    local need_install=false
+    log "Vérification des headers X11..."
 
-    [[ -n "$opengl_lib" && -n "$glx_lib" ]] ||
-        need_install=true
+    for header in \
+        "$prefix/include/X11/X.h" \
+        "$prefix/include/X11/Xlib.h" \
+        "$prefix/include/X11/keysym.h" \
+        "$prefix/include/X11/extensions/Xrandr.h" \
+        "$prefix/include/GL/gl.h"
+    do
+        if [[ -f "$header" ]]; then
+            log "OK      $header"
+        else
+            log "ABSENT  $header"
+        fi
+    done
 
-    [[ -f /usr/include/X11/X.h ]] ||
-        need_install=true
+    # -----------------------------------------------------------
+    # Installation dans le même environnement que le compilateur
+    # -----------------------------------------------------------
 
-    [[ -f /usr/include/GL/gl.h ]] ||
-        need_install=true
+    if [[ ! -f "$x11_header" ]]; then
 
-    if [[ "$need_install" == true ]]; then
+        log "Installation de xorg-xorgproto dans gsplat..."
 
-        log "Installation des dépendances de développement X11/OpenGL..."
+        local mamba="${MAMBA_EXE:-}"
 
-        apt-get update
+        if [[ -z "$mamba" ]]; then
+            mamba="$(command -v micromamba || true)"
+        fi
 
-        apt-get install -y \
-            xorgproto \
-            libx11-dev \
-            libxext-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libgl-dev \
-            libglx-dev \
-            libopengl-dev \
-            libgl1-mesa-dev \
-            libegl1-mesa-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            pkg-config
+        [[ -n "$mamba" ]] ||
+            die "Micromamba introuvable pour installer les headers X11."
 
-    else
-
-        log "Dépendances de développement déjà présentes."
+        "$mamba" install -y \
+            -p "$prefix" \
+            -c conda-forge \
+            xorg-xorgproto \
+            xorg-libx11 \
+            xorg-libxext
 
     fi
 
     # -----------------------------------------------------------
-    # Nouvelle détection
+    # Vérification stricte
     # -----------------------------------------------------------
 
-    opengl_lib="$(find_system_library libOpenGL.so)"
-    glx_lib="$(find_system_library libGLX.so)"
+    [[ -f "$x11_header" ]] ||
+        die "Header manquant dans Conda : $x11_header"
 
-    log "OpenGL après installation : ${opengl_lib:-INTROUVABLE}"
-    log "GLX après installation : ${glx_lib:-INTROUVABLE}"
+    [[ -f "$xlib_header" ]] ||
+        die "Header manquant dans Conda : $xlib_header"
 
-    [[ -n "$opengl_lib" ]] ||
-        die "libOpenGL.so de développement introuvable."
-
-    [[ -n "$glx_lib" ]] ||
-        die "libGLX.so de développement introuvable."
-
-    [[ -f /usr/include/GL/gl.h ]] ||
-        die "GL/gl.h introuvable."
-
-    [[ -f /usr/include/X11/X.h ]] ||
-        die "X11/X.h introuvable."
+    log "Headers X11 Conda correctement installés."
 
     # -----------------------------------------------------------
-    # Informations sur les fichiers trouvés
+    # Vérification OpenGL
     # -----------------------------------------------------------
 
-    log "Détails OpenGL :"
-    ls -l "$opengl_lib"
+    local opengl="$prefix/lib/libOpenGL.so"
+    local glx="$prefix/lib/libGLX.so"
 
-    log "Détails GLX :"
-    ls -l "$glx_lib"
+    if [[ ! -f "$opengl" || ! -f "$glx" ]]; then
 
-    log "Headers OpenGL :"
-    ls -l /usr/include/GL/gl.h
+        log "Vérification des bibliothèques OpenGL Conda..."
 
-    log "Headers X11 :"
-    ls -l /usr/include/X11/X.h
+        local mamba="${MAMBA_EXE:-$(command -v micromamba || true)}"
 
-    log "Bibliothèques runtime :"
+        [[ -n "$mamba" ]] ||
+            die "Micromamba introuvable."
 
-    ldconfig -p 2>/dev/null |
-        grep -E 'lib(OpenGL|GLX|GL|EGL)\.so' || true
+        "$mamba" install -y \
+            -p "$prefix" \
+            -c conda-forge \
+            libgl-devel \
+            libglx-devel \
+            libopengl-devel
 
-    # -----------------------------------------------------------
-    # Variables CMake explicites
-    # -----------------------------------------------------------
+    fi
 
-    OPENGL_CMAKE_ARGS=(
-        "-DOPENGL_opengl_LIBRARY=$opengl_lib"
-        "-DOPENGL_glx_LIBRARY=$glx_lib"
-        "-DOPENGL_INCLUDE_DIR=/usr/include"
-        "-DOpenGL_GL_PREFERENCE=GLVND"
-    )
+    log "Bibliothèques OpenGL :"
 
-    log "Arguments OpenGL transmis à CMake :"
-
-    printf '  %s\n' "${OPENGL_CMAKE_ARGS[@]}"
+    find "$prefix/lib" -maxdepth 1 \
+        \( -name 'libOpenGL.so*' -o -name 'libGLX.so*' \) \
+        -print
 
     log "Dépendances Linux vérifiées."
-
 }
+
 
 # ===============================================================
 # INSTALLATION / COMPILATION
