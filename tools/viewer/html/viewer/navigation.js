@@ -518,6 +518,8 @@ export function createNavigationSystem({
 
       if (event.button === 0 && event.ctrlKey) {
         mode = "zoom";
+      } else if (event.button === 2 && event.ctrlKey) {
+        mode = "look";
       } else if (
         event.button === lookBinding.button &&
         (!lookBinding.modifier || event[lookBinding.modifier])
@@ -540,6 +542,7 @@ export function createNavigationSystem({
         id: event.pointerId,
         button: event.button,
         mode,
+        requiresControl: mode === "look",
         x: event.clientX,
         y: event.clientY,
         moved: false,
@@ -577,6 +580,7 @@ export function createNavigationSystem({
         event.shiftKey ||
         event.altKey ||
         event.metaKey ||
+        (drag.requiresControl && !event.ctrlKey) ||
         (
           drag.mode === "orbit" &&
           lookBinding.modifier &&
@@ -610,6 +614,8 @@ export function createNavigationSystem({
         return;
       } else if (drag.mode === "orbit") {
         orbitScene(dx, dy);
+      } else if (drag.mode === "look") {
+        orbitLook(-dx * 0.005, -dy * 0.005);
       } else {
         navigateWithCollision(() => {
           panPixels(dx, dy, canvas.clientHeight);
@@ -828,9 +834,12 @@ export function createNavigationSystem({
       // Arrêter le geste dès le relâchement du modificateur éventuel,
       // même si la souris ne bouge pas ensuite.
       if (
-        mouseDrag?.mode === "look" &&
-        lookBinding.modifier &&
-        !event[lookBinding.modifier]
+        (mouseDrag?.requiresControl && !event.ctrlKey) ||
+        (
+          mouseDrag?.mode === "orbit" &&
+          lookBinding.modifier &&
+          !event[lookBinding.modifier]
+        )
       ) {
         finishMouseDrag();
       }

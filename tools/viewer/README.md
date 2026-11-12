@@ -69,7 +69,8 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
 - Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.
 - Le clic gauche-glisser orbite autour de la cible ; le clic droit-glisser ou
   milieu-glisser déplace la vue sans touche supplémentaire. Ctrl + clic
-  gauche-glisser zoome sur une zone ; Maj + clic permet de mesurer.
+  droit-glisser pivote le regard sur place ; Ctrl + clic gauche-glisser zoome
+  sur une zone ; Maj + clic permet de mesurer.
 - L'affichage des points et caméras conserve une taille lisible à l'écran,
   même si l'échelle du modèle COLMAP est inconnue.
 

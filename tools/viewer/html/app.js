@@ -193,6 +193,7 @@ function updateKeyboardHelp() {
       "Clic gauche-glisser : tourner autour de la cible · " +
       "Flèches ou ZQSD/WASD : se déplacer · " +
       "Clic droit-glisser : déplacement latéral · " +
+      "Ctrl + clic droit-glisser : regarder sur place · " +
       "Clic milieu-glisser : déplacement latéral · " +
       "Ctrl + clic gauche-glisser : zoom sur une zone · " +
       "Molette : avancer/reculer · Maj + clic : mesurer · R : cadrer";
