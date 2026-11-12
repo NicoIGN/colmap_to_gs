@@ -1,6 +1,10 @@
 
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+# ===============================================================
+# CONFIGURATION
+# ===============================================================
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
@@ -13,10 +17,30 @@ clean=false
 
 model_url="https://huggingface.co/PABannier/sam3.cpp/resolve/main/sam3-q4_0.ggml"
 
+build_dir=""
+binary=""
+log_file=""
+
+# ===============================================================
+# LOGGING
+# ===============================================================
+
+timestamp="$(date +%Y%m%d_%H%M%S)"
+log_file="${TMPDIR:-/tmp}/spirula_install_${timestamp}.log"
+
+exec > >(tee -a "$log_file") 2>&1
+
+log() {
+    printf '[Spirula] %s\n' "$*"
+}
+
 die() {
-    printf 'Erreur : %s\n' "$*" >&2
+    printf '\n[Spirula][ERREUR] %s\n' "$*" >&2
+    printf '[Spirula] Journal complet : %s\n' "$log_file" >&2
     exit 1
 }
+
+trap 'rc=$?; printf "\n[Spirula][ERREUR] Ligne %s, code %s\n" "$LINENO" "$rc" >&2; printf "[Spirula] Journal : %s\n" "$log_file" >&2; exit "$rc"' ERR
 
 usage() {
     cat <<'EOF'
@@ -25,22 +49,20 @@ Usage :
 
 Installe Spirula Studio (Vulkan/SAM) et le checkpoint SAM 3 GGML.
 
-Un exécutable existant est réutilisé sans mise à jour ni compilation.
-
   --repo-dir PATH   Sources (défaut : <colmap_to_gs>/../spirula-studio)
-  --repo-url URL    Dépôt à cloner (défaut : dépôt officiel)
-  --clean           Mettre à jour et recompiler proprement
+  --repo-url URL    Dépôt Git
+  --clean           Nettoyage complet et recompilation
   -h, --help        Afficher cette aide
+
+Un exécutable existant est réutilisé sans mise à jour ni compilation.
 
 Le modèle est téléchargé dans :
   <repo-dir>/models/sam3-q4_0.ggml
 
-Avec --clean, un dépôt existant conserve sa branche et son remote
-de suivi. La mise à jour est fast-forward uniquement.
-
-Linux nécessite le SDK Vulkan et les dépendances X11/Wayland.
+Linux nécessite le SDK Vulkan et les dépendances X11/OpenGL.
 macOS utilise MoltenVK via CMake.
 
+Un journal détaillé est créé dans /tmp.
 EOF
 }
 
@@ -49,8 +71,11 @@ EOF
 # ===============================================================
 
 while [[ $# -gt 0 ]]; do
+
     case "$1" in
+
         --repo-dir|--repo-url)
+
             [[ $# -ge 2 && -n "$2" && "$2" != --* ]] ||
                 die "Valeur manquante pour $1"
 
@@ -82,6 +107,7 @@ while [[ $# -gt 0 ]]; do
             die "Argument inconnu : $1"
             ;;
     esac
+
 done
 
 # ===============================================================
@@ -89,6 +115,7 @@ done
 # ===============================================================
 
 case "$(uname -s)" in
+
     Darwin)
         build_dir=build
         ;;
@@ -98,116 +125,252 @@ case "$(uname -s)" in
         ;;
 
     *)
-        die "Ce lanceur prend en charge macOS et Linux uniquement"
+        die "Plateforme non prise en charge"
         ;;
+
 esac
 
+binary="$repo_dir/$build_dir/spirula"
+
 # ===============================================================
-# VALIDATION OPTIONS CMAKE
+# VALIDATION CMAKE
 # ===============================================================
 
 if [[ ${#cmake_args[@]} -gt 0 ]]; then
+
     for arg in "${cmake_args[@]}"; do
+
         case "$arg" in
             -B*|--build*|-DSS_BACKEND*|-DSSPLAT_BACKEND*)
                 die "Le dossier de build et le backend Vulkan sont fixés par le lanceur"
                 ;;
         esac
+
     done
+
 fi
 
 # ===============================================================
-# DEPENDANCES LINUX : X11 / WAYLAND
+# DIAGNOSTIC ENVIRONNEMENT
 # ===============================================================
 
+diagnose_environment() {
+
+    log "==============================================================="
+    log "ENVIRONNEMENT"
+    log "==============================================================="
+
+    log "OS : $(uname -a)"
+    log "Utilisateur : $(id)"
+    log "CONDA_PREFIX : ${CONDA_PREFIX:-non défini}"
+    log "CC : ${CC:-non défini}"
+    log "CXX : ${CXX:-non défini}"
+    log "CMAKE_PREFIX_PATH : ${CMAKE_PREFIX_PATH:-non défini}"
+    log "LD_LIBRARY_PATH : ${LD_LIBRARY_PATH:-non défini}"
+    log "PKG_CONFIG_PATH : ${PKG_CONFIG_PATH:-non défini}"
+
+    for tool in cmake ninja gcc g++ pkg-config; do
+        if command -v "$tool" >/dev/null 2>&1; then
+            log "$tool : $(command -v "$tool")"
+        else
+            log "$tool : absent"
+        fi
+    done
+
+    if [[ -n "${CONDA_PREFIX:-}" ]]; then
+        log "Bibliothèques Conda :"
+        ls -ld "$CONDA_PREFIX/lib" || true
+    fi
+
+    log "==============================================================="
+}
+
+# ===============================================================
+# LOCALISATION DES BIBLIOTHEQUES
+# ===============================================================
+
+find_system_library() {
+
+    local name="$1"
+    local multiarch=""
+
+    if command -v dpkg-architecture >/dev/null 2>&1; then
+        multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
+    fi
+
+    local candidates=()
+
+    if [[ -n "$multiarch" ]]; then
+        candidates+=(
+            "/usr/lib/$multiarch/$name"
+            "/lib/$multiarch/$name"
+        )
+    fi
+
+    candidates+=(
+        "/usr/lib/$name"
+        "/lib/$name"
+    )
+
+    local path
+
+    for path in "${candidates[@]}"; do
+        if [[ -e "$path" ]]; then
+            printf '%s\n' "$path"
+            return 0
+        fi
+    done
+
+    # Recherche complémentaire.
+    find /usr/lib /lib \
+        -name "$name" \
+        -print -quit 2>/dev/null || true
+}
+
+# ===============================================================
+# DEPENDANCES LINUX
+# ===============================================================
 
 install_linux_dependencies() {
 
     [[ "$(uname -s)" == Linux ]] || return 0
 
-    printf '[Spirula] Vérification des dépendances Linux...\n'
+    log "==============================================================="
+    log "VERIFICATION DES DEPENDANCES LINUX"
+    log "==============================================================="
 
-    local conda_prefix="${CONDA_PREFIX:-}"
-    local missing=false
+    diagnose_environment
 
-    # -----------------------------------------------------------
-    # Dépendances système Debian / Ubuntu
-    # -----------------------------------------------------------
+    command -v apt-get >/dev/null 2>&1 ||
+        die "apt-get indisponible : installation automatique impossible."
 
-    if command -v apt-get >/dev/null 2>&1; then
+    [[ "$(id -u)" -eq 0 ]] ||
+        die "Les dépendances système doivent être installées avec les droits root."
 
-        if [[ ! -f /usr/include/X11/X.h ]] &&
-           [[ -z "$conda_prefix" || ! -f "$conda_prefix/include/X11/X.h" ]]; then
-            missing=true
-        fi
+    local multiarch
+    multiarch="$(dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || true)"
 
-        if [[ ! -f /usr/include/GL/gl.h ]] &&
-           [[ -z "$conda_prefix" || ! -f "$conda_prefix/include/GL/gl.h" ]]; then
-            missing=true
-        fi
+    log "Architecture Debian : ${multiarch:-inconnue}"
 
-        if [[ "$missing" == true ]]; then
+    local opengl_lib
+    local glx_lib
 
-            if [[ "$(id -u)" -ne 0 ]]; then
-                die "Dépendances système manquantes et droits root indisponibles."
-            fi
+    opengl_lib="$(find_system_library libOpenGL.so)"
+    glx_lib="$(find_system_library libGLX.so)"
 
-            printf '[Spirula] Installation des dépendances X11/OpenGL...\n'
-
-            apt-get update
-
-            apt-get install -y \
-                xorgproto \
-                libx11-dev \
-                libxext-dev \
-                libxrandr-dev \
-                libxinerama-dev \
-                libxcursor-dev \
-                libxi-dev \
-                libgl1-mesa-dev \
-                libglx-dev \
-                libegl1-mesa-dev \
-                libwayland-dev \
-                libxkbcommon-dev
-        fi
-    fi
+    log "OpenGL avant installation : ${opengl_lib:-INTROUVABLE}"
+    log "GLX avant installation : ${glx_lib:-INTROUVABLE}"
 
     # -----------------------------------------------------------
-    # Vérification des bibliothèques OpenGL / GLX
+    # Contrôle réel des bibliothèques de développement.
+    # Les fichiers .so.0 ne suffisent pas.
     # -----------------------------------------------------------
 
-    if command -v ldconfig >/dev/null 2>&1; then
+    local need_install=false
 
-        ldconfig -p | grep -q 'libOpenGL\.so' ||
-            die "libOpenGL.so introuvable après installation."
+    [[ -n "$opengl_lib" && -n "$glx_lib" ]] ||
+        need_install=true
 
-        ldconfig -p | grep -q 'libGLX\.so' ||
-            die "libGLX.so introuvable après installation."
+    [[ -f /usr/include/X11/X.h ]] ||
+        need_install=true
 
-    fi
+    [[ -f /usr/include/GL/gl.h ]] ||
+        need_install=true
 
-    # -----------------------------------------------------------
-    # Vérification des headers X11
-    # -----------------------------------------------------------
+    if [[ "$need_install" == true ]]; then
 
-    if [[ -f /usr/include/X11/X.h ]]; then
-        printf '[Spirula] Headers X11 système disponibles.\n'
-    elif [[ -n "$conda_prefix" && -f "$conda_prefix/include/X11/X.h" ]]; then
-        printf '[Spirula] Headers X11 Conda disponibles.\n'
+        log "Installation des dépendances de développement X11/OpenGL..."
+
+        apt-get update
+
+        apt-get install -y \
+            xorgproto \
+            libx11-dev \
+            libxext-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl-dev \
+            libglx-dev \
+            libopengl-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            pkg-config
+
     else
-        die "X11/X.h introuvable."
+
+        log "Dépendances de développement déjà présentes."
+
     fi
 
-    printf '[Spirula] Dépendances Linux vérifiées.\n'
+    # -----------------------------------------------------------
+    # Nouvelle détection
+    # -----------------------------------------------------------
+
+    opengl_lib="$(find_system_library libOpenGL.so)"
+    glx_lib="$(find_system_library libGLX.so)"
+
+    log "OpenGL après installation : ${opengl_lib:-INTROUVABLE}"
+    log "GLX après installation : ${glx_lib:-INTROUVABLE}"
+
+    [[ -n "$opengl_lib" ]] ||
+        die "libOpenGL.so de développement introuvable."
+
+    [[ -n "$glx_lib" ]] ||
+        die "libGLX.so de développement introuvable."
+
+    [[ -f /usr/include/GL/gl.h ]] ||
+        die "GL/gl.h introuvable."
+
+    [[ -f /usr/include/X11/X.h ]] ||
+        die "X11/X.h introuvable."
+
+    # -----------------------------------------------------------
+    # Informations sur les fichiers trouvés
+    # -----------------------------------------------------------
+
+    log "Détails OpenGL :"
+    ls -l "$opengl_lib"
+
+    log "Détails GLX :"
+    ls -l "$glx_lib"
+
+    log "Headers OpenGL :"
+    ls -l /usr/include/GL/gl.h
+
+    log "Headers X11 :"
+    ls -l /usr/include/X11/X.h
+
+    log "Bibliothèques runtime :"
+
+    ldconfig -p 2>/dev/null |
+        grep -E 'lib(OpenGL|GLX|GL|EGL)\.so' || true
+
+    # -----------------------------------------------------------
+    # Variables CMake explicites
+    # -----------------------------------------------------------
+
+    OPENGL_CMAKE_ARGS=(
+        "-DOPENGL_opengl_LIBRARY=$opengl_lib"
+        "-DOPENGL_glx_LIBRARY=$glx_lib"
+        "-DOPENGL_INCLUDE_DIR=/usr/include"
+        "-DOpenGL_GL_PREFERENCE=GLVND"
+    )
+
+    log "Arguments OpenGL transmis à CMake :"
+
+    printf '  %s\n' "${OPENGL_CMAKE_ARGS[@]}"
+
+    log "Dépendances Linux vérifiées."
+
 }
 
-install_linux_dependencies
-
 # ===============================================================
-# EXECUTABLE
+# INSTALLATION / COMPILATION
 # ===============================================================
-
-binary="$repo_dir/$build_dir/spirula"
 
 if [[ -f "$binary" && "$clean" == false ]]; then
 
@@ -217,21 +380,19 @@ if [[ -f "$binary" && "$clean" == false ]]; then
     [[ ${#cmake_args[@]} -eq 0 ]] ||
         die "Options CMake ignorées avec un exécutable existant : utiliser --clean."
 
-    printf '[Spirula] Exécutable existant réutilisé, sans mise à jour ni compilation : %s\n' "$binary"
+    log "Exécutable existant réutilisé : $binary"
 
 else
-
-    # -----------------------------------------------------------
-    # OUTILS DE BUILD
-    # -----------------------------------------------------------
 
     for tool in git cmake ninja; do
         command -v "$tool" >/dev/null 2>&1 ||
             die "Prérequis manquant : $tool"
     done
 
+    install_linux_dependencies
+
     # -----------------------------------------------------------
-    # DEPOT GIT
+    # DEPOT
     # -----------------------------------------------------------
 
     if [[ -e "$repo_dir" ]]; then
@@ -244,18 +405,18 @@ else
                 --porcelain \
                 --untracked-files=all \
                 -- . ':(top,exclude)models/'
-        )" || die "Impossible de vérifier l'état Git de $repo_dir"
+        )" || die "Impossible de vérifier l'état Git."
 
         [[ -z "$status" ]] ||
-            die "Modifications locales dans $repo_dir : les conserver ou les committer avant la mise à jour"
+            die "Modifications locales dans $repo_dir."
 
-        printf '[Spirula] Mise à jour : %s\n' "$repo_dir"
+        log "Mise à jour : $repo_dir"
 
         git -C "$repo_dir" pull --ff-only
 
     else
 
-        printf '[Spirula] Clonage : %s\n' "$repo_dir"
+        log "Clonage : $repo_dir"
 
         git clone --recurse-submodules -- "$repo_url" "$repo_dir"
 
@@ -269,30 +430,36 @@ else
     # SUBMODULES
     # -----------------------------------------------------------
 
-    printf '[Spirula] Vérification des sous-modules...\n'
+    log "Vérification des sous-modules..."
 
     git submodule update --init --recursive
 
     [[ -f build_develop.bash ]] ||
-        die "Script officiel build_develop.bash introuvable"
+        die "Script officiel build_develop.bash introuvable."
 
     # -----------------------------------------------------------
-    # NETTOYAGE
+    # NETTOYAGE COMPLET
     # -----------------------------------------------------------
 
     if [[ "$clean" == true ]]; then
 
-        printf '[Spirula] Nettoyage complet : %s/%s\n' "$PWD" "$build_dir"
+        log "Nettoyage complet : $PWD/$build_dir"
 
         rm -rf -- "$build_dir"
 
     fi
 
     # -----------------------------------------------------------
-    # COMPILATION VULKAN
+    # CONFIGURATION CMAKE
     # -----------------------------------------------------------
 
-    printf '[Spirula] Compilation Vulkan dans %s/%s\n' "$PWD" "$build_dir"
+    log "==============================================================="
+    log "COMPILATION SPIRULA"
+    log "==============================================================="
+
+    log "Backend : Vulkan"
+    log "Build : $build_dir"
+    log "SAM : activé"
 
     build_cmd=(
         bash build_develop.bash
@@ -301,11 +468,63 @@ else
         -DCMAKE_BUILD_TYPE=Release
     )
 
+    if [[ "$(uname -s)" == Linux ]]; then
+        build_cmd+=("${OPENGL_CMAKE_ARGS[@]}")
+    fi
+
     if [[ ${#cmake_args[@]} -gt 0 ]]; then
         build_cmd+=("${cmake_args[@]}")
     fi
 
-    "${build_cmd[@]}"
+    log "Commande de compilation :"
+    printf '  %q' "${build_cmd[@]}"
+    printf '\n'
+
+    # -----------------------------------------------------------
+    # BUILD ET CAPTURE DU CODE RETOUR
+    # -----------------------------------------------------------
+
+    set +e
+
+    "${build_cmd[@]}" 2>&1 | tee -a "$log_file"
+
+    build_status=${PIPESTATUS[0]}
+
+    set -e
+
+    if [[ "$build_status" -ne 0 ]]; then
+
+        log "==============================================================="
+        log "ECHEC DE COMPILATION : DIAGNOSTIC CMAKE"
+        log "==============================================================="
+
+        cache="$repo_dir/$build_dir/CMakeCache.txt"
+
+        if [[ -f "$cache" ]]; then
+
+            log "Variables OpenGL dans CMakeCache :"
+
+            grep -Ei \
+                'OPENGL_|OpenGL_|CMAKE_PREFIX_PATH|CMAKE_LIBRARY_PATH' \
+                "$cache" || true
+
+        else
+
+            log "CMakeCache.txt absent."
+
+        fi
+
+        log "Bibliothèques OpenGL disponibles :"
+
+        find /usr/lib /lib \
+            \( -name 'libOpenGL.so*' -o -name 'libGLX.so*' \) \
+            -ls 2>/dev/null || true
+
+        log "Fin du diagnostic."
+
+        die "Compilation échouée (code $build_status). Voir $log_file"
+
+    fi
 
 fi
 
@@ -319,7 +538,7 @@ binary="$repo_dir/$build_dir/spirula"
 [[ -x "$binary" ]] ||
     die "Compilation terminée mais exécutable introuvable : $binary"
 
-printf '[Spirula] Vérification de l'exécutable...\n'
+log "Vérification de l'exécutable..."
 
 "$binary" --version
 
@@ -347,32 +566,30 @@ mkdir -p "$model_dir"
 if [[ -e "$model" ]]; then
 
     valid_model "$model" ||
-        die "Modèle existant invalide ou incomplet : $model ; le déplacer avant de relancer."
+        die "Modèle existant invalide ou incomplet : $model"
 
-    printf '[Spirula] Modèle SAM 3 existant réutilisé : %s\n' "$model"
+    log "Modèle SAM 3 existant réutilisé : $model"
 
 else
 
     command -v curl >/dev/null 2>&1 ||
-        die "Prérequis manquant pour le téléchargement du modèle : curl"
+        die "Prérequis manquant : curl"
 
-    printf '[Spirula] Téléchargement SAM 3 q4_0 (~707 Mio) : %s\n' "$model_url"
+    log "Téléchargement SAM 3 q4_0 (~707 Mio) : $model_url"
 
-    printf '[Spirula] Licence Meta SAM 3 : https://huggingface.co/PABannier/sam3.cpp\n'
-    printf '[Spirula] Aucune acceptation automatique de licence.\n'
+    log "Licence Meta SAM 3 : https://huggingface.co/PABannier/sam3.cpp"
 
     tmp_model="$(mktemp "$model_dir/.sam3-q4_0.XXXXXXXX")"
 
-    trap 'rm -f -- "$tmp_model"' EXIT
+    trap 'rm -f -- "$tmp_model"; printf "\n[Spirula] Journal : %s\n" "$log_file"' EXIT
 
     curl --fail --location --progress-bar \
         --output "$tmp_model" "$model_url" ||
         die "Téléchargement SAM 3 échoué."
 
     valid_model "$tmp_model" ||
-        die "Modèle téléchargé invalide ou incomplet ; aucun fichier final écrit."
+        die "Modèle téléchargé invalide ou incomplet."
 
-    # Ne pas écraser un modèle créé pendant le téléchargement.
     ln -- "$tmp_model" "$model" ||
         die "Impossible de publier le modèle sans écraser $model."
 
@@ -386,7 +603,10 @@ fi
 # FIN
 # ===============================================================
 
-printf '[Spirula] Prêt : %s\n' "$binary"
+log "Installation terminée."
+log "Binaire : $binary"
+log "Modèle : $model"
+log "Journal : $log_file"
 
-printf 'export SPIRULA_BIN=%q\n' "$binary"
+printf '\nexport SPIRULA_BIN=%q\n' "$binary"
 printf 'export TRAIN_MASKS_SPIRULA_MODEL=%q\n' "$model"
