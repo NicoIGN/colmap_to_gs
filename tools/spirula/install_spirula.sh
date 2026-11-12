@@ -120,6 +120,7 @@ fi
 # DEPENDANCES LINUX : X11 / WAYLAND
 # ===============================================================
 
+
 install_linux_dependencies() {
 
     [[ "$(uname -s)" == Linux ]] || return 0
@@ -127,83 +128,77 @@ install_linux_dependencies() {
     printf '[Spirula] Vérification des dépendances Linux...\n'
 
     local conda_prefix="${CONDA_PREFIX:-}"
-    local x11_header=""
-    local installed=false
-
-    if [[ -n "$conda_prefix" ]]; then
-        x11_header="$conda_prefix/include/X11/X.h"
-    fi
-
-    # X.h peut aussi être fourni par le système.
-    if [[ -f "$x11_header" || -f /usr/include/X11/X.h ]]; then
-        printf '[Spirula] En-têtes X11 présents.\n'
-        return 0
-    fi
-
-    printf '[Spirula] En-tête X11/X.h manquant.\n'
+    local missing=false
 
     # -----------------------------------------------------------
-    # Priorité à l'environnement Conda/Micromamba actif.
-    # xorg-xorgproto fournit notamment X11/X.h.
+    # Dépendances système Debian / Ubuntu
     # -----------------------------------------------------------
 
-    if [[ -n "$conda_prefix" ]]; then
+    if command -v apt-get >/dev/null 2>&1; then
 
-        if command -v micromamba >/dev/null 2>&1; then
-
-            printf '[Spirula] Installation xorg-xorgproto via Micromamba...\n'
-
-            micromamba install -y \
-                -p "$conda_prefix" \
-                -c conda-forge \
-                xorg-xorgproto
-
-            installed=true
-
-        elif command -v conda >/dev/null 2>&1; then
-
-            printf '[Spirula] Installation xorg-xorgproto via Conda...\n'
-
-            conda install -y \
-                -p "$conda_prefix" \
-                -c conda-forge \
-                xorg-xorgproto
-
-            installed=true
+        if [[ ! -f /usr/include/X11/X.h ]] &&
+           [[ -z "$conda_prefix" || ! -f "$conda_prefix/include/X11/X.h" ]]; then
+            missing=true
         fi
-    fi
 
-    # -----------------------------------------------------------
-    # Fallback système Debian / Ubuntu (Colab).
-    # -----------------------------------------------------------
+        if [[ ! -f /usr/include/GL/gl.h ]] &&
+           [[ -z "$conda_prefix" || ! -f "$conda_prefix/include/GL/gl.h" ]]; then
+            missing=true
+        fi
 
-    if [[ "$installed" == false ]]; then
+        if [[ "$missing" == true ]]; then
 
-        if command -v apt-get >/dev/null 2>&1 &&
-           [[ "$(id -u)" -eq 0 ]]; then
+            if [[ "$(id -u)" -ne 0 ]]; then
+                die "Dépendances système manquantes et droits root indisponibles."
+            fi
 
-            printf '[Spirula] Installation des en-têtes X11 système...\n'
+            printf '[Spirula] Installation des dépendances X11/OpenGL...\n'
 
             apt-get update
-            apt-get install -y xorgproto
 
-            installed=true
+            apt-get install -y \
+                xorgproto \
+                libx11-dev \
+                libxext-dev \
+                libxrandr-dev \
+                libxinerama-dev \
+                libxcursor-dev \
+                libxi-dev \
+                libgl1-mesa-dev \
+                libglx-dev \
+                libegl1-mesa-dev \
+                libwayland-dev \
+                libxkbcommon-dev
         fi
     fi
 
     # -----------------------------------------------------------
-    # Vérification finale.
+    # Vérification des bibliothèques OpenGL / GLX
     # -----------------------------------------------------------
 
-    if [[ -n "$conda_prefix" ]]; then
-        x11_header="$conda_prefix/include/X11/X.h"
+    if command -v ldconfig >/dev/null 2>&1; then
+
+        ldconfig -p | grep -q 'libOpenGL\.so' ||
+            die "libOpenGL.so introuvable après installation."
+
+        ldconfig -p | grep -q 'libGLX\.so' ||
+            die "libGLX.so introuvable après installation."
+
     fi
 
-    if [[ -f "$x11_header" || -f /usr/include/X11/X.h ]]; then
-        printf '[Spirula] Dépendances X11 correctement installées.\n'
+    # -----------------------------------------------------------
+    # Vérification des headers X11
+    # -----------------------------------------------------------
+
+    if [[ -f /usr/include/X11/X.h ]]; then
+        printf '[Spirula] Headers X11 système disponibles.\n'
+    elif [[ -n "$conda_prefix" && -f "$conda_prefix/include/X11/X.h" ]]; then
+        printf '[Spirula] Headers X11 Conda disponibles.\n'
     else
-        die "X11/X.h introuvable. Installer xorg-xorgproto dans l'environnement actif."
+        die "X11/X.h introuvable."
     fi
+
+    printf '[Spirula] Dépendances Linux vérifiées.\n'
 }
 
 install_linux_dependencies
