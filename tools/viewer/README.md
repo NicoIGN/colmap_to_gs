@@ -67,8 +67,9 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
 - Les fichiers `.splat` et `.ply` ajoutés par glisser-déposer s'ajoutent à la
   scène déjà ouverte. Le bouton d'ouverture remplace la scène.
 - Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.
-- Les commandes de souris permettent d'orbiter, déplacer et cadrer la vue ;
-  les mesures restent accessibles avec Maj + clic.
+- Le clic gauche-glisser orbite autour de la cible ; le clic droit-glisser ou
+  milieu-glisser déplace la vue sans touche supplémentaire. Ctrl + clic
+  gauche-glisser zoome sur une zone ; Maj + clic permet de mesurer.
 - L'affichage des points et caméras conserve une taille lisible à l'écran,
   même si l'échelle du modèle COLMAP est inconnue.
 

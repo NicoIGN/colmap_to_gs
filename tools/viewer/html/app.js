@@ -192,7 +192,7 @@ function updateKeyboardHelp() {
     $("help").textContent =
       "Clic gauche-glisser : tourner autour de la cible · " +
       "Flèches ou ZQSD/WASD : se déplacer · " +
-      "Ctrl + clic droit-glisser : déplacement latéral · " +
+      "Clic droit-glisser : déplacement latéral · " +
       "Clic milieu-glisser : déplacement latéral · " +
       "Ctrl + clic gauche-glisser : zoom sur une zone · " +
       "Molette : avancer/reculer · Maj + clic : mesurer · R : cadrer";

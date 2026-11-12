@@ -523,10 +523,7 @@ export function createNavigationSystem({
         (!lookBinding.modifier || event[lookBinding.modifier])
       ) {
         mode = "orbit";
-      } else if (
-        (event.button === 2 && event.ctrlKey) ||
-        event.button === 1
-      ) {
+      } else if (event.button === 2 || event.button === 1) {
         mode = "pan";
       }
 
@@ -543,7 +540,6 @@ export function createNavigationSystem({
         id: event.pointerId,
         button: event.button,
         mode,
-        requiresControl: event.button === 2 && mode === "pan",
         x: event.clientX,
         y: event.clientY,
         moved: false,
@@ -581,7 +577,6 @@ export function createNavigationSystem({
         event.shiftKey ||
         event.altKey ||
         event.metaKey ||
-        (drag.requiresControl && !event.ctrlKey) ||
         (
           drag.mode === "orbit" &&
           lookBinding.modifier &&
