@@ -89,7 +89,8 @@ prepare() {
       [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" && ! -e "$OUTPUT_DIR/gs-nerfstudio" ]] ||
         die "Filtrage absent mais blocs/train présents : choisir un nouvel OUTPUT_DIR."
       "$PYTHON_BIN" "$repo_root/tools/preprocess/filter_sparse_density.py" \
-        --input "$filter_input" --output "$OUTPUT_DIR/sparse" --verbose --no-progress
+        --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
+        --workers "$SFM_THREADS" --verbose --no-progress
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
       touch "$sparse/.density_done"
     else

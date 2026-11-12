@@ -89,6 +89,9 @@ depuis plusieurs images.
   `*_clean` avec les points retenus et `*_rejected` avec ceux écartés.
 - Chaque résultat conserve les caméras et les images ; le rapport
   `density_report.json` résume le filtrage.
+- Le pipeline parallélise les requêtes de voisinage angulaire selon
+  `SFM_THREADS` ; augmenter cette valeur peut accélérer cette étape si autant
+  de CPU sont alloués au job.
 - La progression s'affiche par défaut ; `--verbose` ajoute des détails et
   `--no-progress` désactive les barres de progression.
 - Dépendances du filtre : `numpy`, `scipy`, `tqdm`.

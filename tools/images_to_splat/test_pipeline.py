@@ -407,13 +407,15 @@ if "--wait" in args:
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
 
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
-        self.append("SFM_FILTER_DENSITY=true")
+        self.append("SFM_FILTER_DENSITY=true\nSFM_THREADS=8")
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
         self.assertTrue((filtered / "density_report.json").is_file())
-        self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"
-                             for cmd in self.commands()), 1)
+        filter_commands = [cmd for cmd in self.commands()
+                           if cmd[0] == "filter_sparse_density.py"]
+        self.assertEqual(len(filter_commands), 1)
+        self.assertEqual(filter_commands[0][filter_commands[0].index("--workers") + 1], "8")
         raw = (self.output / "sfm/sparse/0/points3D.bin").read_bytes()
         self.assert_ok(self.run_pipeline())
         self.assertEqual(sum(cmd[0] == "filter_sparse_density.py"

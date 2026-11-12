@@ -184,6 +184,7 @@ def density_votes(
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
+    workers=1,
     progress=False,
     verbose=False,
 ):
@@ -196,6 +197,8 @@ def density_votes(
         raise ValueError("Seuil de paquet invalide.")
     if not 0 < low_density_fraction < 1:
         raise ValueError("Le seuil de densité doit être dans ]0, 1[.")
+    if workers < 1:
+        raise ValueError("Le nombre de workers doit être supérieur ou égal à 1.")
 
     suspicious_votes = np.zeros(len(positions), dtype=np.uint32)
     evaluable_votes = np.zeros(len(positions), dtype=np.uint32)
@@ -227,7 +230,9 @@ def density_votes(
         directions = vectors / depths[:, None]
         tree = cKDTree(directions)
         k = min(neighbors, len(observed))
-        angular_distances, angular_indices = tree.query(directions, k=k)
+        angular_distances, angular_indices = tree.query(
+            directions, k=k, workers=workers
+        )
         if k == 1:
             angular_distances = angular_distances[:, None]
             angular_indices = angular_indices[:, None]
@@ -324,6 +329,7 @@ def filter_sparse_model(
     low_density_fraction=0.2,
     min_views=2,
     vote_fraction=0.75,
+    workers=1,
     progress=False,
     verbose=False,
 ):
@@ -354,6 +360,7 @@ def filter_sparse_model(
         tqdm.write(
             f"[sparse] {len(point_ids)} points, {len(images)} vues ; "
             f"{neighbors} voisins maximum, cône {max_angle_deg}°, "
+            f"{workers} workers, "
             f"rejet confirmé par {min_views} vues minimum et {vote_fraction:.0%} des votes.",
             file=sys.stderr,
         )
@@ -366,6 +373,7 @@ def filter_sparse_model(
         min_cluster_points=min_cluster_points,
         min_cluster_fraction=min_cluster_fraction,
         low_density_fraction=low_density_fraction,
+        workers=workers,
         progress=progress,
         verbose=verbose,
     )
@@ -444,6 +452,8 @@ def main():
                         help="Nombre de vues évaluables requis (défaut : 2).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Workers parallèles pour les requêtes angulaires (défaut : 1).")
     parser.add_argument("--verbose", action="store_true",
                         help="Afficher les étapes, paramètres et détails par vue sur stderr.")
     parser.add_argument("--no-progress", action="store_true",
@@ -461,6 +471,7 @@ def main():
             low_density_fraction=args.low_density_fraction,
             min_views=args.min_views,
             vote_fraction=args.vote_fraction,
+            workers=args.workers,
             progress=not args.no_progress,
             verbose=args.verbose,
         )

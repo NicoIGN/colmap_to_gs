@@ -135,6 +135,15 @@ class SparseDensityTest(unittest.TestCase):
         self.assertTrue(np.all(votes[:-1] == 0))
         self.assertEqual(votes[-1], 2)
 
+    def test_parallel_angular_queries_preserve_votes(self):
+        rng = np.random.default_rng(23)
+        positions = rng.normal(size=(500, 3))
+        images = [image_view(len(positions)), image_view(len(positions), (0.2, 0, 0))]
+        serial = density_votes(positions, images, workers=1)
+        parallel = density_votes(positions, images, workers=2)
+        np.testing.assert_array_equal(parallel[0], serial[0])
+        np.testing.assert_array_equal(parallel[1], serial[1])
+
     def test_insufficient_camera_views_do_not_make_a_removal_decision(self):
         positions = np.vstack((np.tile([0, 0, 10.0], (20, 1)), [[0, 0, 100]]))
         with tempfile.TemporaryDirectory() as temporary:
