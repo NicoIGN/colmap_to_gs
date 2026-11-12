@@ -1,5 +1,6 @@
 
 #!/usr/bin/env bash
+
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,16 +33,22 @@ echo "[VULKAN] Mise à jour des dépôts"
 
 apt-get update
 
-echo "[VULKAN] Installation Vulkan, GLFW, X11, Wayland et OpenGL"
+echo "[VULKAN] Installation Vulkan, X11, Wayland et OpenGL"
 
 apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     cmake \
-    libvulkan-dev \
+    ninja-build \
+    \
+    # Vulkan
     libvulkan1 \
-    vulkan-tools \
+    libvulkan-dev \
     mesa-vulkan-drivers \
+    vulkan-tools \
+    \
+    # X11 / Xorg
+    xorgproto \
     libx11-dev \
     libxext-dev \
     libxrender-dev \
@@ -50,9 +57,14 @@ apt-get install -y --no-install-recommends \
     libxi-dev \
     libxrandr-dev \
     libxfixes-dev \
+    \
+    # Wayland
     libwayland-dev \
     libwayland-egl1 \
     wayland-protocols \
+    libxkbcommon-dev \
+    \
+    # OpenGL / GLX / EGL
     libgl1-mesa-dev \
     libglx-dev \
     libopengl-dev \
@@ -68,6 +80,7 @@ echo "[VULKAN] Vérification des headers"
 
 REQUIRED_HEADERS=(
     /usr/include/vulkan/vulkan.h
+    /usr/include/X11/X.h
     /usr/include/X11/Xlib.h
     /usr/include/X11/extensions/Xinerama.h
     /usr/include/X11/extensions/Xrandr.h
@@ -75,6 +88,8 @@ REQUIRED_HEADERS=(
     /usr/include/GL/gl.h
     /usr/include/GL/glx.h
     /usr/include/EGL/egl.h
+    /usr/include/wayland-client.h
+    /usr/include/xkbcommon/xkbcommon.h
 )
 
 for header in "${REQUIRED_HEADERS[@]}"; do
@@ -92,9 +107,23 @@ done
 
 echo "[VULKAN] Vérification pkg-config"
 
-for package in xinerama x11 gl glx egl; do
+REQUIRED_PC_PACKAGES=(
+    vulkan
+    x11
+    xinerama
+    xcursor
+    xi
+    xrandr
+    gl
+    egl
+    wayland-client
+    wayland-egl
+    xkbcommon
+)
+
+for package in "${REQUIRED_PC_PACKAGES[@]}"; do
     if pkg-config --exists "${package}"; then
-        echo "[OK] ${package}"
+        echo "[OK] ${package}: $(pkg-config --modversion "${package}")"
     else
         echo "[ERROR] Package pkg-config manquant : ${package}"
         exit 1
@@ -105,59 +134,50 @@ done
 # Vérification des bibliothèques
 # ===============================================================
 
-echo "[VULKAN] Vérification des bibliothèques"
+echo "[VULKAN] Vérification des bibliothèques système"
 
-REQUIRED_PACKAGES=(
-    vulkan
-    x11
-    xinerama
-    xcursor
-    xi
-    xrandr
-    gl
-    glx
-    egl
+REQUIRED_LIBRARIES=(
+    libvulkan.so.1
+    libvulkan.so
+    libX11.so
+    libXinerama.so
+    libXcursor.so
+    libXi.so
+    libXrandr.so
+    libGL.so
+    libGLX.so
+    libOpenGL.so
+    libEGL.so
+    libwayland-client.so
+    libwayland-egl.so
 )
 
-for package in "${REQUIRED_PACKAGES[@]}"; do
-    if ! pkg-config --exists "${package}"; then
-        echo "[ERROR] Dépendance manquante : ${package}"
+for library in "${REQUIRED_LIBRARIES[@]}"; do
+    if ldconfig -p | grep -Fq "${library}"; then
+        echo "[OK] ${library}"
+    else
+        echo "[ERROR] Bibliothèque absente : ${library}"
         exit 1
     fi
-
-    echo "[OK] ${package}: $(pkg-config --libs "${package}")"
 done
 
-# Vérification du loader Vulkan
-if ! dpkg -L libvulkan1 | grep -Eq '/libvulkan\.so\.1$'; then
-    echo "[ERROR] Loader Vulkan libvulkan.so.1 absent."
-    exit 1
-fi
-
-# Vérification de la bibliothèque de développement
-if ! dpkg -L libvulkan-dev | grep -Eq '/libvulkan\.so$'; then
-    echo "[ERROR] Bibliothèque de développement Vulkan absente."
-    exit 1
-fi
-
-echo "[OK] Loader et bibliothèque de développement Vulkan présents."
 # ===============================================================
 # ICD Vulkan
 # ===============================================================
 
-echo "=== ICD Vulkan ==="
+echo "[VULKAN] Vérification des ICD"
 
 if compgen -G "/usr/share/vulkan/icd.d/*.json" > /dev/null; then
     ls -l /usr/share/vulkan/icd.d/*.json
 else
-    echo "[WARNING] Aucun ICD détecté."
+    echo "[WARNING] Aucun ICD Vulkan détecté."
 fi
 
 # ===============================================================
 # Runtime Vulkan
 # ===============================================================
 
-echo "=== Runtime Vulkan ==="
+echo "[VULKAN] Vérification du runtime Vulkan"
 
 if command -v vulkaninfo >/dev/null 2>&1; then
     vulkaninfo --summary || \

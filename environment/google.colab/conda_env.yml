@@ -24,12 +24,6 @@ dependencies:
   - gcc_linux-64=11
   - gxx_linux-64=11
 
-  ########################################
-  # SPIRULA - VULKAN
-  ########################################
-
-  - vulkan-headers
-  - vulkan-loader
 
   ########################################
   # SPIRULA - OPENGL / GLX / EGL
