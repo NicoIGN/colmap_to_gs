@@ -107,27 +107,27 @@ done
 
 echo "[VULKAN] Vérification des bibliothèques"
 
-for library in \
-    libvulkan.so.1 \
-    libX11.so \
-    libXinerama.so \
-    libXcursor.so \
-    libXi.so \
-    libXrandr.so \
-    libGL.so \
-    libGLX.so \
-    libOpenGL.so \
-    libEGL.so
-do
-    if ! ldconfig -p | grep -Fq "${library}"; then
-        echo "[ERROR] Bibliothèque manquante : ${library}"
+REQUIRED_LIBRARIES=(
+    vulkan
+    X11
+    Xinerama
+    Xcursor
+    Xi
+    Xrandr
+    GL
+    GLX
+    OpenGL
+    EGL
+)
+
+for library in "${REQUIRED_LIBRARIES[@]}"; do
+    if ! ldconfig -p | grep -Eq "lib${library}\.so"; then
+        echo "[ERROR] Bibliothèque manquante : lib${library}.so"
         exit 1
     fi
 
-    echo "[OK] ${library}"
+    echo "[OK] lib${library}.so"
 done
-
-echo "[VULKAN] Toutes les dépendances de compilation sont disponibles."
 
 # ===============================================================
 # ICD Vulkan
