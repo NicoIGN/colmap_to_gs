@@ -1,3 +1,4 @@
+
 name: gsplat
 
 channels:
@@ -6,20 +7,67 @@ channels:
   - conda-forge
 
 dependencies:
+
   - python=3.10
   - pip
 
   ########################################
   # BUILD TOOLS
   ########################################
+
   - cmake
   - ninja
+  - make
+  - pkg-config
+  - git
+  - curl
   - gcc_linux-64=11
   - gxx_linux-64=11
 
   ########################################
+  # SPIRULA - VULKAN
+  ########################################
+
+  - vulkan-headers
+  - vulkan-loader
+
+  ########################################
+  # SPIRULA - OPENGL / GLX / EGL
+  ########################################
+
+  - libgl-devel
+  - libglx-devel
+  - libopengl-devel
+  - libegl-devel
+
+  ########################################
+  # SPIRULA - X11 / GLFW
+  ########################################
+
+  - xorg-libx11
+  - xorg-libxext
+  - xorg-libxinerama
+  - xorg-libxcursor
+  - xorg-libxi
+  - xorg-libxrandr
+  - xorg-libxfixes
+  - xorg-libxrender
+  - xorg-libxau
+  - xorg-libxdmcp
+  - xorg-libxcb
+
+  ########################################
+  # SPIRULA - WAYLAND / GLFW
+  ########################################
+
+  - wayland
+  - wayland-protocols
+  - libxkbcommon
+
+  ########################################
   # PYTORCH CUDA 12.1
   ########################################
+
   - pytorch::pytorch=2.3.1
   - pytorch::torchvision=0.18.1
   - pytorch::torchaudio=2.3.1
@@ -28,6 +76,7 @@ dependencies:
   ########################################
   # CUDA BUILD COMPONENTS ONLY
   ########################################
+
   - nvidia::cuda-nvcc=12.1
   - nvidia::cuda-cudart-dev=12.1
   - nvidia::cuda-cccl=12.1
@@ -35,12 +84,14 @@ dependencies:
   ########################################
   # SCIENTIFIC STACK
   ########################################
+
   - "numpy<2"
   - scipy
 
   ########################################
   # UTILITIES
   ########################################
+
   - tqdm
   - matplotlib
   - ffmpeg
@@ -57,6 +108,7 @@ dependencies:
   ########################################
   # GEOMETRY / SFM
   ########################################
+
   - colmap=3.8
   - faiss-cpu
   - pycolmap
@@ -64,12 +116,14 @@ dependencies:
   ########################################
   # OPTIONAL UTILS
   ########################################
+
   - tree
   - rclone
 
   ########################################
   # PIP PACKAGES
   ########################################
+
   - pip:
       - nerfstudio==1.1.5
       - fpsample
