@@ -6,6 +6,8 @@ import sys
 import tempfile
 import unittest
 
+from PIL import Image
+
 
 SOURCE = Path(__file__).resolve().parent
 
@@ -19,7 +21,7 @@ class ImagesPipelineTest(unittest.TestCase):
         for name in ("root.jpg", "h00/photo.jpg", "h01/photo.jpg"):
             path = self.images / name
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"jpeg")
+            Image.new("RGB", (2, 2)).save(path)
         (self.images / "notes.txt").write_text("not an image")
         self.output = self.root / "output with spaces"
         self.bin = self.root / "bin"
@@ -32,6 +34,7 @@ class ImagesPipelineTest(unittest.TestCase):
         self.config.write_text(
             f'SFM_IMAGES_DIR="{self.images}"\nOUTPUT_DIR="{self.output}"\n'
             f'SPIRULA_BIN="{self.bin / "spirula"}"\nPYTHON_BIN="{self.bin / "python"}"\n'
+            'COLMAP_METHOD="spirula"\n'
             f'TRAIN_MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
             'SLURM_BLOCK_PARALLELISM=2\n'
         )
@@ -60,6 +63,7 @@ if name == "filter_sparse_density.py":
     assert get("--input").endswith(expected)
     os.execv(sys.executable, [sys.executable, *args])
 if name == "generate_masks.py":
+    from PIL import Image
     source, output = Path(get("--images")), Path(get("--output"))
     prefix = "SFM_MASKS" if output.name == "feature_masks" else "TRAIN_MASKS"
     expected_labels = ",".join(sorted(os.environ[prefix + "_LABELS"].split(",")))
@@ -80,7 +84,8 @@ if name == "generate_masks.py":
     for relative in names:
         target = output / (relative + ".png")
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(b"mask")
+        with Image.open(source / relative) as image:
+            Image.new("L", image.size, 255).save(target)
     (output / "masks.json").write_text(json.dumps({
         "status": "complete", "settings": {"labels": get("--labels")}, "images": names}))
 elif name == "georef_colmap_from_gpx.py":
@@ -223,12 +228,19 @@ if os.environ.get("TEST_SUBMIT_FAIL_AT") == str(len(jobs) + 1):
 jobs.append(args)
 record.write_text(json.dumps(jobs))
 print(job + ";cluster", flush=True)
+results = {}
 def execute(index):
+    if index in results:
+        return results[index]
     args = jobs[index]
     flags = dict(arg[2:].split("=", 1) for arg in args if arg.startswith("--") and "=" in arg)
     if "dependency" in flags:
-        status = execute(int(flags["dependency"].split(":")[1]) - 100)
-        if status: return status
+        dependencies = flags["dependency"].split(":")[1:]
+        for dependency in dependencies:
+            status = execute(int(dependency) - 100)
+            if status:
+                results[index] = status
+                return status
     def run(task=None):
         env = dict(os.environ, SLURM_JOB_ID=str(index + 100),
                    SLURM_CPUS_PER_TASK=flags["cpus-per-task"])
@@ -248,8 +260,11 @@ def execute(index):
         span, limit = flags["array"].split("%")
         end = int(span.split("-")[1])
         with concurrent.futures.ThreadPoolExecutor(max_workers=int(limit)) as pool:
-            return max(pool.map(run, range(end + 1)))
-    return run()
+            status = max(pool.map(run, range(end + 1)))
+    else:
+        status = run()
+    results[index] = status
+    return status
 if "--wait" in args:
     sys.exit(execute(len(jobs) - 1))
 ''')
@@ -277,7 +292,7 @@ if "--wait" in args:
 
     def run_pipeline(self, *args, slurm=False):
         return subprocess.run(
-            ["bash", str(SOURCE / "launch.sh" if slurm else SOURCE.parents[1] / "script" / "images_to_3dgs.sh"),
+            ["bash", str(SOURCE / "launch.sh" if slurm else SOURCE.parents[1] / "scripts" / "images_to_3dgs.sh"),
              str(self.config), *args],
             env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
 
@@ -287,7 +302,14 @@ if "--wait" in args:
     def assert_ok(self, result):
         logs = ""
         if (self.output / "logs").exists():
-            logs = "\n".join(p.read_text() for p in (self.output / "logs").glob("*.err"))
+            logs = "\n".join(
+                f"--- {path.name} ---\n{path.read_text()}"
+                for path in (self.output / "logs").glob("*.err")
+            )
+            logs += "\n".join(
+                f"--- {path.name} ---\n{path.read_text()}"
+                for path in (self.output / "logs").glob("*.out")
+            )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr + logs)
 
     def test_local_full_run_reuse_and_merge_only(self):
@@ -711,6 +733,26 @@ if "--wait" in args:
         self.assertEqual(len(generated), 1)
         self.assertTrue((self.output / "masks/masks.json").exists())
 
+    def test_external_masks_are_reused_for_new_sfm_workspace(self):
+        self.append('SFM_MASKS_LABELS="sky"\nTRAIN_MASKS_LABELS="sky"')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        source_masks = self.output / "masks"
+        new_output = self.root / "new-sfm-output"
+        self.append(
+            f'OUTPUT_DIR="{new_output}"\n'
+            f'SFM_MASKS_DIR="{source_masks}"\nTRAIN_MASKS_DIR="{source_masks}"\n'
+            'SFM_THREADS="8"'
+        )
+        before = len(self.commands())
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        commands = self.commands()[before:]
+        self.assertFalse(any(command[0] == "generate_masks.py" for command in commands))
+        self.assertTrue((new_output / "masks").is_symlink())
+        self.assertEqual((new_output / "masks").resolve(), source_masks.resolve())
+        sfm = next(command for command in commands if command[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(new_output / "masks"))
+        self.assertEqual(sfm[sfm.index("--threads") + 1], "8")
+
     def test_segmentation_backend_reuses_panoramax_variables(self):
         model = self.root / "transformers-model"
         model.mkdir()
@@ -813,6 +855,53 @@ if "--wait" in args:
         self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
         self.assertEqual([cmd[0] for cmd in self.commands()][-5:],
                          ["filter_splats.py"] * 4 + ["merge_splats.py"])
+
+    def test_slurm_prepare_only_stops_after_sfm_and_split(self):
+        self.assert_ok(self.run_pipeline("--prepare-only", "--wait", slurm=True))
+        jobs = json.loads(self.jobs.read_text())
+        self.assertEqual(len(jobs), 1)
+        flags = dict(arg[2:].split("=", 1) for arg in jobs[0]
+                     if arg.startswith("--") and "=" in arg)
+        self.assertEqual(flags["job-name"], "images-prepare")
+        self.assertFalse(any(command[:2] == ["spirula", "train"] for command in self.commands()))
+        self.assertFalse(any(command[0] == "merge_splats.py" for command in self.commands()))
+
+    def test_slurm_parallelizes_distinct_mask_policies_on_separate_gpus(self):
+        self.append('SFM_MASKS_LABELS="sky"\nTRAIN_MASKS_LABELS="sky,cloud"')
+        self.assert_ok(self.run_pipeline("--wait", slurm=True))
+        jobs = json.loads(self.jobs.read_text())
+        self.assertEqual(len(jobs), 6)
+        flags = [
+            dict(arg[2:].split("=", 1) for arg in job
+                 if arg.startswith("--") and "=" in arg)
+            for job in jobs
+        ]
+        self.assertEqual(flags[0]["gres"], "none")
+        self.assertEqual(flags[0]["job-name"], "images-mask-setup")
+        self.assertEqual(flags[1]["gres"], "gpu:1")
+        self.assertEqual(flags[1]["dependency"], "afterok:100")
+        self.assertEqual(flags[1]["job-name"], "images-mask-sfm")
+        self.assertEqual(flags[2]["gres"], "gpu:1")
+        self.assertEqual(flags[2]["dependency"], "afterok:100")
+        self.assertEqual(flags[2]["job-name"], "images-mask-train")
+        self.assertEqual(flags[3]["dependency"], "afterok:101:102")
+        self.assertEqual(flags[3]["job-name"], "images-prepare")
+        commands = self.commands()
+        mask_generators = [
+            command for command in commands
+            if command[0] == "generate_masks.py"
+        ]
+        self.assertEqual(len(mask_generators), 2)
+
+    def test_slurm_mask_failure_blocks_sfm_and_training(self):
+        self.append('SFM_MASKS_LABELS="sky"\nTRAIN_MASKS_LABELS="sky,cloud"')
+        self.env["TEST_FAIL_TOOL"] = "generate_masks.py"
+        result = self.run_pipeline("--wait", slurm=True)
+        self.assertNotEqual(result.returncode, 0)
+        commands = self.commands()
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in commands))
+        self.assertFalse(any(command[:2] == ["spirula", "train"] for command in commands))
+        self.assertFalse((self.output / "scene.splat").exists())
 
     def test_slurm_failure_prevents_merge_and_is_reported(self):
         self.env["TEST_FAIL_BLOCK"] = "block_001"

@@ -57,6 +57,9 @@ TRAIN_BACKEND="spirula"              # spirula | nerfstudio
 # on|off pour chaque etape. Politiques identiques : un seul calcul reutilise.
 SFM_MASKS="on"
 TRAIN_MASKS="on"
+# Dossiers optionnels de masques PNG deja calcules. Chemin vide = generation
+# normale ; renseigner un dossier complet pour le reutiliser sans modele/GPU.
+TRAIN_MASKS_DIR=""
 TRAIN_MASKS_BACKEND="spirula" # spirula|segmentation ; defaut local : spirula
 TRAIN_MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
 # auto, indice Vulkan, nom du GPU (ex. NVIDIA A40), uuid:...
@@ -80,6 +83,7 @@ TRAIN_MASKS_DEVICE="auto"
 # Vide : heriter du TRAIN_MASKS_* correspondant, comme dans Panoramax.
 # SFM_MASKS_DILATE a son propre defaut 0.002.
 SFM_MASKS_BACKEND=""
+SFM_MASKS_DIR=""
 SFM_MASKS_SPIRULA_MODEL=""
 SFM_MASKS_SPIRULA_DEVICE=""
 SFM_MASKS_LABELS=""
@@ -237,6 +241,9 @@ SLURM_TIME_LIMIT="48:00:00"   # limite PAR job, pas duree garantie
 SLURM_GPU_TYPE=""           # vide : gpu:1 ; sinon type Slurm, ex. a40
 # Un GPU PAR bloc actif. 1 : successifs ; 4 : jusqu'a 4 GPU sur 4 taches.
 SLURM_BLOCK_PARALLELISM="1"
+# Si SFM_MASKS et TRAIN_MASKS sont actives avec des politiques differentes,
+# Slurm soumet un job par politique (un GPU chacun) ; ils tournent en parallele
+# si deux GPU sont disponibles. La preparation SfM attend les deux resultats.
 SLURM_ACCOUNT=""
 SLURM_QOS=""
 # Script optionnel source sur chaque noeud (modules, activation mamba/conda).

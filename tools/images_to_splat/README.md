@@ -109,6 +109,9 @@ bash script/images_to_3dgs.sh /chemin/config.sh
 
 # Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
 bash script/launch_images_to_3dgs.sh /chemin/config.sh
+
+# Slurm : recalculer seulement le SfM et les blocs COLMAP.
+bash script/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 ```
 
 Les ressources, le parallélisme, l'environnement des nœuds et le suivi des jobs
@@ -123,9 +126,17 @@ traiter séparément pendant l'entraînement.
   réglages et héritage dans [`config.sh.example`](config.sh.example),
   section « 1. Masques SfM / train ». Le fonctionnement des moteurs est décrit
   dans le [README des masques](../segmentation_masks/README.md).
+- `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier optionnel de masques déjà
+  calculés ; chaque image doit avoir son PNG monochrome binaire de mêmes
+  dimensions. Le pipeline vérifie les fichiers, crée un lien dans le workspace
+  et ne charge pas de modèle ni ne relance la segmentation.
 - Partage des masques : si les politiques effectives sont identiques, les
   masques sont calculés une seule fois dans `masks/` ; sinon chaque étape activée
   reçoit son propre dossier `feature_masks/` ou `train_masks/`.
+- En Slurm, si les deux politiques sont activées et différentes, deux jobs
+  GPU indépendants calculent les masques simultanément lorsque deux GPU sont
+  disponibles. La préparation SfM attend les deux ; avec moins de ressources,
+  Slurm les exécute à la suite. Les masques complets déjà présents sont réutilisés.
 - Fichiers de masque : les chemins relatifs des images sont conservés, avec le
   suffixe `.png`.
 - Labels `sky,cloud` : conservent les voitures et passants dans les images
@@ -215,6 +226,8 @@ les doublons dans leurs zones de recouvrement, sans modifier leurs coordonnées.
 Le recalage utilise une trajectoire GPS fournie au format GPX. Pour l'activer,
 renseigner `GEOREF_GPX_FILE` dans le fichier de configuration :
 
+# Refaire seulement le SfM et le découpage sur Slurm :
+bash script/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 ```bash
 GEOREF_GPX_FILE="/chemin/absolu/parcours.gpx"
 GEOREF_VIEW_PREFIX="h00_y0"  # vide : sélection automatique du dossier

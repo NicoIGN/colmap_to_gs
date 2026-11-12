@@ -163,6 +163,16 @@ def prepare(check=False):
     for prefix, mask in settings["mask_policies"].items():
         if mask is None:
             continue
+        if "external_dir" in mask:
+            directory = Path(mask["external_dir"])
+            settings[f"{prefix}_external_mask_stamps"] = [
+                [relative, (directory / (relative + ".png")).stat().st_size,
+                 (directory / (relative + ".png")).stat().st_mtime_ns,
+                 file_sha256(directory / (relative + ".png"))]
+                for relative, _, _, _ in images
+                if (directory / (relative + ".png")).is_file()
+            ]
+            continue
         model = Path(mask["model"])
         files = [model] if model.is_file() else sorted(p for p in model.rglob("*") if p.is_file())
         settings[f"{prefix}_model_stamp"] = [

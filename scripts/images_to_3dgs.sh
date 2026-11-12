@@ -5,7 +5,7 @@ script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
 
 usage() {
-  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--phase all|prepare|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
@@ -23,7 +23,7 @@ while (($#)); do
 done
 source "$script_dir/common.sh"
 load_config "$config" "$images"
-case "$phase" in all|prepare|train-block|merge) ;; *) die "Étape inconnue : $phase" ;; esac
+case "$phase" in all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge) ;; *) die "Étape inconnue : $phase" ;; esac
 if [[ "$phase" == train-block ]]; then
   [[ "$block" =~ ^(0|[1-9][0-9]*)$ ]] && ((block < SPLIT_NUM_BLOCKS)) ||
     die "--block doit être compris entre 0 et $((SPLIT_NUM_BLOCKS - 1))."
@@ -95,6 +95,18 @@ PY
 
 if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare
+elif [[ "$phase" == mask-setup ]]; then
+  stage="préparation des entrées pour les masques"
+  "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
+  exit 0
+elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
+  stage="vérification des entrées pour les masques"
+  [[ -f "$OUTPUT_DIR/inputs.json" && -d "$selected" ]] ||
+    die "Entrées des masques non préparées : relancer le lanceur Slurm."
+  stage="calcul des masques ${phase#mask-}"
+  policy="${phase#mask-}"
+  "$PYTHON_BIN" "$script_dir/prepare_masks.py" --policy "$policy"
+  exit 0
 else
   stage="vérification du workspace"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check

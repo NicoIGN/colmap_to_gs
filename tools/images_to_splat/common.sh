@@ -3,7 +3,7 @@
 die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
 
 load_config() {
-  local config="$1" images="${2:-}" name replacement
+  local config="$1" images="${2:-}" name replacement directory
   local config_errors=0
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
@@ -60,6 +60,8 @@ load_config() {
   GEOREF_ALLOW_UNCERTAIN="${GEOREF_ALLOW_UNCERTAIN:-false}"
   SFM_MASKS="${SFM_MASKS:-on}"
   TRAIN_MASKS="${TRAIN_MASKS:-on}"
+  SFM_MASKS_DIR="${SFM_MASKS_DIR:-}"
+  TRAIN_MASKS_DIR="${TRAIN_MASKS_DIR:-}"
   local default_mask_backend=spirula
   [[ "$TRAIN_BACKEND" != nerfstudio ]] || default_mask_backend=segmentation
   TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-$default_mask_backend}"
@@ -213,6 +215,14 @@ load_config() {
   local prefix backend model_key
   for prefix in SFM_MASKS TRAIN_MASKS; do
     [[ "${!prefix}" == on ]] || continue
+    directory="${prefix}_DIR"
+    if [[ -n "${!directory}" ]]; then
+      [[ "${!directory}" == /* && -d "${!directory}" ]] ||
+        config_error "$directory doit être un dossier existant avec un chemin absolu."
+      printf -v "$directory" '%s' "$(realpath -e -- "${!directory}")"
+      export "$directory"
+      continue
+    fi
     name="${prefix}_BACKEND"; backend="${!name}"
     config_choice "$name" "$backend" 'spirula|segmentation'
     if [[ "$backend" == spirula ]]; then

@@ -14,7 +14,7 @@ export PYTHONUNBUFFERED=1
 runtime="$(mktemp -d "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/images-${SLURM_JOB_ID}-XXXXXXXX")"
 export XDG_RUNTIME_DIR="$runtime"
 trap 'rmdir "$XDG_RUNTIME_DIR" || echo "[AVERTISSEMENT] Runtime conservé : $XDG_RUNTIME_DIR" >&2' EXIT
-if [[ "$phase" != merge ]]; then
+if [[ "$phase" != merge && "$phase" != mask-setup ]]; then
   srun --unbuffered --export=ALL nvidia-smi -L
 fi
 args=("$config" --phase "$phase")

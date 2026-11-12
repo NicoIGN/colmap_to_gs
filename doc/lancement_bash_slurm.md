@@ -34,6 +34,20 @@ réussi confirme seulement la soumission. Chaque bloc actif dispose de son GPU ;
 `SLURM_BLOCK_PARALLELISM` fixe le nombre maximal de blocs simultanés.
 Aucune partition ni ressource CPU/RAM n'est à répéter dans la commande.
 
+Pour les images locales, si les masques SfM et entraînement sont activés avec
+des politiques différentes, deux jobs GPU indépendants calculent les masques
+en parallèle quand deux GPU sont disponibles. La préparation SfM attend les
+deux jobs ; s'il n'y a qu'un GPU libre, Slurm les exécute en série.
+`--prepare-only` soumet uniquement la préparation (masques, SfM, découpage),
+sans jobs d'entraînement ni fusion ; avec `--wait`, il attend la fin de cette
+étape.
+
+Les configurations locales peuvent aussi définir `SFM_MASKS_DIR` et
+`TRAIN_MASKS_DIR` vers des dossiers de masques externes déjà calculés. Le
+pipeline valide leur couverture, format, dimensions et valeurs binaires, les
+référence dans le workspace et saute leur génération. Les chemins doivent être
+accessibles depuis tous les nœuds Slurm.
+
 `TRAIN_BACKEND=nerfstudio` utilise le même découpage en jobs. Les étapes
 d'entraînement exigent PyTorch et une carte NVIDIA utilisable via CUDA ;
 la fusion n'exécute pas Nerfstudio.
@@ -52,6 +66,10 @@ journaux de soumission et d'exécution.
 - Journaux : `OUTPUT_DIR/logs/`, avec `submit.log`.
 - Images locales : `prepare-JOBID.{out,err}`, `block-ARRAYID_INDICE.{out,err}`
   et `merge-JOBID.{out,err}`.
+- Masques distincts des images locales : `mask-sfm-JOBID.{out,err}` et
+  `mask-train-JOBID.{out,err}` ; chacun demande un GPU.
+- Préparation seulement des images locales : `prepare-JOBID.{out,err}` ;
+  aucune tâche d'entraînement ni de fusion n'est soumise.
 - Panoramax : `panoramax-prepare-JOBID.{out,err}`,
   `panoramax-block-ARRAYID_INDICE.{out,err}` et
   `panoramax-merge-JOBID.{out,err}`.
@@ -150,6 +168,16 @@ Tableau de tâches GPU : un bloc par tâche, un GPU par bloc actif
                               ↓ réussite de tous les blocs requise
 Fusion CPU → export final
 ```
+
+Lorsque les politiques de masques locales sont distinctes et toutes deux
+activées, deux jobs GPU de génération sont soumis avant la préparation. Ils
+peuvent s'exécuter simultanément, chacun sur un GPU ; Slurm les met en file si
+les ressources ne sont pas disponibles. Des politiques identiques continuent
+d'utiliser un seul calcul partagé.
+
+Pour refaire seulement le SfM sur Slurm, `--prepare-only` évite de soumettre
+les blocs et la fusion. Les dossiers de masques externes configurés sont
+réutilisés après validation, sans réserver de GPU pour leur génération.
 
 - Panoramax avec `POSTPROCESS_CLEANER=cleangs` : la fusion demande aussi un
   GPU NVIDIA ; sinon la partition doit permettre la fusion sans GPU.
