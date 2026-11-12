@@ -151,18 +151,25 @@ done
 
 check_header() {
     local header="$1"
-    local compiler="${CXX:-c++}"
+    local prefix="${CONDA_PREFIX:-}"
 
-    command -v "${compiler}" >/dev/null 2>&1 ||
-        die "Compilateur C++ introuvable : ${compiler}"
+    local search_dirs=(
+        "${prefix}/include"
+        "/usr/include"
+        "/usr/local/include"
+    )
 
-    if printf '#include <%s>\n' "${header}" |
-        "${compiler}" -E -x c++ - >/dev/null 2>&1; then
-        log "Header OK : ${header}"
-    else
-        echo "[Spirula][ERREUR] Header manquant : ${header}"
-        return 1
-    fi
+    for dir in "${search_dirs[@]}"; do
+        [[ -n "${dir}" ]] || continue
+
+        if [[ -f "${dir}/${header}" ]]; then
+            log "Header OK : ${header} (${dir})"
+            return 0
+        fi
+    done
+
+    echo "[Spirula][ERREUR] Header manquant : ${header}"
+    return 1
 }
 
 check_library() {
