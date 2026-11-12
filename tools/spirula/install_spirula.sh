@@ -1,333 +1,446 @@
 
 #!/usr/bin/env bash
+
 set -Eeuo pipefail
 
-# ===============================================================
-# CONFIGURATION
-# ===============================================================
+###############################################################################
+# PATHS AND DEFAULTS
+###############################################################################
 
-script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-repo_root="$(cd -- "$script_dir/../.." && pwd)"
-repo_dir="$(dirname -- "$repo_root")/spirula-studio"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd)"
 
-repo_url="https://github.com/harry7557558/spirula-studio.git"
-model_url="https://huggingface.co/PABannier/sam3.cpp/resolve/main/sam3-q4_0.ggml"
+REPO_DIR="$(dirname -- "${REPO_ROOT}")/spirula-studio"
+REPO_URL="https://github.com/harry7557558/spirula-studio.git"
 
-cmake_args=()
-clean=false
+MODEL_URL="https://huggingface.co/PABannier/sam3.cpp/resolve/main/sam3-q4_0.ggml"
+MODEL_NAME="sam3-q4_0.ggml"
+
+CMAKE_ARGS=()
+CLEAN=false
+
+###############################################################################
+# LOGGING
+###############################################################################
+
+TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+LOG_FILE="/tmp/spirula_install_${TIMESTAMP}.log"
+
+exec > >(tee -a "${LOG_FILE}") 2>&1
+
+log() {
+    echo "[Spirula] $*"
+}
 
 die() {
-    printf '[Spirula][ERREUR] %s\n' "$*" >&2
+    echo "[Spirula][ERREUR] $*" >&2
     exit 1
 }
 
-log() {
-    printf '[Spirula] %s\n' "$*"
-}
+trap 'status=$?; echo "[Spirula][ERREUR] Échec ligne ${LINENO} (code ${status}). Log : ${LOG_FILE}" >&2; exit "${status}"' ERR
+
+###############################################################################
+# HELP
+###############################################################################
 
 usage() {
-    cat <<'EOF'
-Usage :
-  bash install_spirula.sh [options] [-- options CMake]
+    cat <<EOF
+Usage:
+  bash install_spirula.sh [options] [-- arguments CMake]
 
-Options :
-  --repo-dir PATH   Sources Spirula
-  --repo-url URL    Dépôt Git
-  --clean           Supprimer le build et recompiler proprement
-  -h, --help        Afficher cette aide
+Options:
+  --repo-dir PATH    Répertoire du dépôt Spirula
+  --repo-url URL     URL Git du dépôt Spirula
+  --clean            Supprime et reconstruit le répertoire de compilation
+  --help             Affiche cette aide
 
-Un exécutable existant est réutilisé sans mise à jour ni compilation.
+Arguments après -- :
+  Arguments supplémentaires transmis à build_develop.bash
 
-Le modèle SAM 3 est téléchargé dans :
-  <repo-dir>/models/sam3-q4_0.ggml
+Exemple :
+  bash install_spirula.sh --clean
 
-Linux nécessite les dépendances Vulkan, X11 et OpenGL dans Conda.
-macOS utilise MoltenVK via CMake.
+  bash install_spirula.sh -- -DSS_BUILD_SAM=ON
 
-Avec --clean, le dépôt conserve sa branche et son remote de suivi.
-Les modifications locales empêchent la mise à jour.
 EOF
 }
 
-# ===============================================================
-# ARGUMENTS
-# ===============================================================
+###############################################################################
+# ARGUMENT PARSING
+###############################################################################
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --repo-dir|--repo-url)
-            [[ $# -ge 2 && -n "$2" && "$2" != --* ]] ||
-                die "Valeur manquante pour $1"
-
-            case "$1" in
-                --repo-dir) repo_dir="$2" ;;
-                --repo-url) repo_url="$2" ;;
-            esac
+        --repo-dir)
+            [[ $# -ge 2 ]] || die "Argument manquant pour --repo-dir"
+            REPO_DIR="$2"
             shift 2
             ;;
-        --)
-            shift
-            cmake_args=("$@")
-            break
+
+        --repo-url)
+            [[ $# -ge 2 ]] || die "Argument manquant pour --repo-url"
+            REPO_URL="$2"
+            shift 2
             ;;
+
         --clean)
-            clean=true
+            CLEAN=true
             shift
             ;;
-        -h|--help)
+
+        --help|-h)
             usage
             exit 0
             ;;
+
+        --)
+            shift
+            CMAKE_ARGS+=("$@")
+            break
+            ;;
+
         *)
-            die "Argument inconnu : $1"
+            die "Option inconnue : $1"
             ;;
     esac
 done
 
-# ===============================================================
-# PLATEFORME
-# ===============================================================
+###############################################################################
+# PLATFORM
+###############################################################################
 
-case "$(uname -s)" in
-    Darwin) build_dir=build ;;
-    Linux)  build_dir=build_vulkan ;;
-    *) die "Plateforme non prise en charge" ;;
+OS="$(uname -s)"
+
+case "${OS}" in
+    Linux)
+        BUILD_DIR="build_vulkan"
+        ;;
+
+    Darwin)
+        BUILD_DIR="build"
+        ;;
+
+    *)
+        die "Système non pris en charge : ${OS}"
+        ;;
 esac
 
-binary="$repo_dir/$build_dir/spirula"
+BINARY="${REPO_DIR}/${BUILD_DIR}/spirula"
 
-# ===============================================================
-# VALIDATION CMAKE
-# ===============================================================
+log "Projet : ${REPO_ROOT}"
+log "Dépôt Spirula : ${REPO_DIR}"
+log "Système : ${OS}"
+log "Répertoire de compilation : ${BUILD_DIR}"
+log "Log : ${LOG_FILE}"
 
-for arg in "${cmake_args[@]}"; do
-    case "$arg" in
+###############################################################################
+# CMAKE ARGUMENT VALIDATION
+###############################################################################
+
+for arg in "${CMAKE_ARGS[@]}"; do
+    case "${arg}" in
         -B*|--build*|-DSS_BACKEND*|-DSSPLAT_BACKEND*)
-            die "Le dossier de build et le backend sont fixés par le lanceur"
+            die "Argument CMake interdit : ${arg}"
             ;;
     esac
 done
 
-# ===============================================================
-# DEPENDANCES LINUX
-# ===============================================================
+###############################################################################
+# DEPENDENCY CHECKS
+###############################################################################
 
-check_linux_dependencies() {
-    [[ "$(uname -s)" == Linux ]] || return 0
+check_header() {
+    local header="$1"
+    local compiler="${CXX:-c++}"
 
-    local prefix="${CONDA_PREFIX:-}"
-    [[ -n "$prefix" ]] ||
-        die "CONDA_PREFIX absent : utiliser l'environnement Conda gsplat."
+    command -v "${compiler}" >/dev/null 2>&1 ||
+        die "Compilateur C++ introuvable : ${compiler}"
 
-    log "Vérification des dépendances Linux : $prefix"
-
-    local headers=(
-        X11/X.h
-        X11/Xlib.h
-        X11/keysym.h
-        X11/Xatom.h
-        X11/Xresource.h
-        X11/extensions/Xrandr.h
-        X11/extensions/Xinerama.h
-        X11/extensions/XInput2.h
-        X11/Xcursor/Xcursor.h
-        GL/gl.h
-        vulkan/vulkan.h
-    )
-
-    local libraries=(
-        libX11.so
-        libXext.so
-        libXrandr.so
-        libXinerama.so
-        libXcursor.so
-        libXi.so
-        libOpenGL.so
-        libGLX.so
-        libvulkan.so
-    )
-
-    local item
-    local missing=0
-
-    for item in "${headers[@]}"; do
-        if [[ ! -f "$prefix/include/$item" ]]; then
-            log "HEADER MANQUANT : $item"
-            missing=1
-        fi
-    done
-
-    for item in "${libraries[@]}"; do
-        if [[ ! -e "$prefix/lib/$item" ]]; then
-            log "BIBLIOTHEQUE MANQUANTE : $item"
-            missing=1
-        fi
-    done
-
-    [[ "$missing" -eq 0 ]] ||
-        die "Dépendances Linux incomplètes dans l'environnement Conda."
-
-    log "Dépendances Linux vérifiées."
+    if printf '#include <%s>\n' "${header}" |
+        "${compiler}" -E -x c++ - >/dev/null 2>&1; then
+        log "Header OK : ${header}"
+    else
+        echo "[Spirula][ERREUR] Header manquant : ${header}"
+        return 1
+    fi
 }
 
-# ===============================================================
-# INSTALLATION / COMPILATION
-# ===============================================================
+check_library() {
+    local library="$1"
+    local found=false
+    local prefix="${CONDA_PREFIX:-}"
 
-if [[ -f "$binary" && "$clean" == false ]]; then
+    # Environnement Conda
+    if [[ -n "${prefix}" ]] &&
+       compgen -G "${prefix}/lib/${library}" >/dev/null; then
+        found=true
+    fi
 
-    [[ -x "$binary" ]] ||
-        die "Exécutable existant mais non exécutable : $binary"
+    # Bibliothèques système
+    if [[ "${found}" == false ]]; then
+        if command -v ldconfig >/dev/null 2>&1 &&
+           ldconfig -p 2>/dev/null | grep -Fq "${library%.so}"; then
+            found=true
+        fi
+    fi
 
-    [[ ${#cmake_args[@]} -eq 0 ]] ||
-        die "Options CMake ignorées avec un exécutable existant : utiliser --clean."
+    # Recherche dans les emplacements système usuels
+    if [[ "${found}" == false ]]; then
+        for dir in /usr/lib /usr/lib64 /usr/lib/x86_64-linux-gnu \
+                   /lib /lib64 /lib/x86_64-linux-gnu; do
+            if compgen -G "${dir}/${library}" >/dev/null; then
+                found=true
+                break
+            fi
+        done
+    fi
 
-    log "Exécutable existant réutilisé : $binary"
+    if [[ "${found}" == true ]]; then
+        log "Bibliothèque OK : ${library}"
+    else
+        echo "[Spirula][ERREUR] Bibliothèque manquante : ${library}"
+        return 1
+    fi
+}
 
-else
+check_linux_dependencies() {
+    log "Vérification des dépendances Linux"
 
-    for tool in git cmake ninja; do
-        command -v "$tool" >/dev/null 2>&1 ||
-            die "Prérequis manquant : $tool"
+    if [[ -n "${CONDA_PREFIX:-}" ]]; then
+        log "Environnement Conda : ${CONDA_PREFIX}"
+    else
+        log "Aucun environnement Conda détecté"
+    fi
+
+    local failed=0
+
+    # En-têtes X11 nécessaires à GLFW.
+    local headers=(
+        "X11/X.h"
+        "X11/Xlib.h"
+        "X11/Xatom.h"
+        "X11/Xresource.h"
+        "X11/keysym.h"
+        "X11/extensions/Xrandr.h"
+        "X11/extensions/Xinerama.h"
+        "X11/extensions/XInput2.h"
+        "X11/Xcursor/Xcursor.h"
+        "GL/gl.h"
+    )
+
+    for header in "${headers[@]}"; do
+        check_header "${header}" || failed=1
     done
 
+    # Vulkan-Headers peut être récupéré par la configuration CMake
+    # de Spirula. On ne l'impose donc pas dans l'environnement Conda.
+
+    # Bibliothèques nécessaires aux backends X11/OpenGL/Vulkan.
+    local libraries=(
+        "libX11.so"
+        "libXext.so"
+        "libXrandr.so"
+        "libXi.so"
+        "libXcursor.so"
+        "libOpenGL.so"
+        "libGLX.so"
+        "libvulkan.so"
+    )
+
+    for library in "${libraries[@]}"; do
+        check_library "${library}" || failed=1
+    done
+
+    # libXinerama est optionnelle : ne pas confondre avec libxcb-xinerama.
+    if check_library "libXinerama.so"; then
+        log "Xinerama Xlib disponible"
+    else
+        log "libXinerama.so absente : fonctionnalité Xinerama optionnelle"
+    fi
+
+    [[ "${failed}" -eq 0 ]] ||
+        die "Certaines dépendances Linux obligatoires sont absentes."
+
+    log "Vérification des dépendances terminée"
+}
+
+if [[ "${OS}" == "Linux" ]]; then
     check_linux_dependencies
+fi
 
-    # -----------------------------------------------------------
-    # DEPOT GIT
-    # -----------------------------------------------------------
+###############################################################################
+# REQUIRED BUILD TOOLS
+###############################################################################
 
-    if [[ -e "$repo_dir" ]]; then
+for tool in git cmake ninja; do
+    command -v "${tool}" >/dev/null 2>&1 ||
+        die "Commande indispensable introuvable : ${tool}"
+done
 
-        [[ -d "$repo_dir/.git" || -f "$repo_dir/.git" ]] ||
-            die "Le dossier existe mais n'est pas un checkout Git : $repo_dir"
+###############################################################################
+# EXISTING BINARY
+###############################################################################
 
-        status="$(
-            git -C "$repo_dir" status \
-                --porcelain \
-                --untracked-files=all \
-                -- . ':(top,exclude)models/'
-        )" || die "Impossible de vérifier l'état Git."
+if [[ -x "${BINARY}" && "${CLEAN}" == false ]]; then
+    log "Binaire déjà présent : ${BINARY}"
+    log "Utilisation de la compilation existante"
+else
 
-        [[ -z "$status" ]] ||
-            die "Modifications locales dans $repo_dir."
+    ###########################################################################
+    # REPOSITORY
+    ###########################################################################
 
-        log "Mise à jour : $repo_dir"
-        git -C "$repo_dir" pull --ff-only
+    if [[ -d "${REPO_DIR}/.git" ]]; then
+        log "Dépôt Git existant"
+
+        if [[ "${CLEAN}" == false ]]; then
+            if ! git -C "${REPO_DIR}" diff --quiet ||
+               ! git -C "${REPO_DIR}" diff --cached --quiet ||
+               [[ -n "$(git -C "${REPO_DIR}" ls-files --others --exclude-standard -- ':!models' ':!models/**')" ]]; then
+                die "Le dépôt Spirula contient des modifications locales. Nettoie-les ou utilise un autre --repo-dir."
+            fi
+        fi
+
+        log "Mise à jour du dépôt"
+        git -C "${REPO_DIR}" pull --ff-only
 
     else
-        log "Clonage : $repo_dir"
-        git clone --recurse-submodules -- "$repo_url" "$repo_dir"
+        log "Clonage de Spirula"
+        mkdir -p "$(dirname -- "${REPO_DIR}")"
+
+        git clone --recurse-submodules \
+            "${REPO_URL}" \
+            "${REPO_DIR}"
     fi
 
-    repo_dir="$(cd -- "$repo_dir" && pwd)"
-    cd -- "$repo_dir"
+    log "Mise à jour des sous-modules"
+    git -C "${REPO_DIR}" submodule update --init --recursive
 
-    git submodule update --init --recursive
+    ###########################################################################
+    # BUILD SCRIPT
+    ###########################################################################
 
-    [[ -f build_develop.bash ]] ||
-        die "Script officiel build_develop.bash introuvable."
+    [[ -f "${REPO_DIR}/build_develop.bash" ]] ||
+        die "Script build_develop.bash introuvable dans ${REPO_DIR}"
 
-    # -----------------------------------------------------------
-    # NETTOYAGE
-    # -----------------------------------------------------------
+    ###########################################################################
+    # CLEAN BUILD
+    ###########################################################################
 
-    if [[ "$clean" == true ]]; then
-        log "Nettoyage complet : $PWD/$build_dir"
-        rm -rf -- "$build_dir"
+    if [[ "${CLEAN}" == true ]]; then
+        log "Suppression du répertoire de compilation"
+        rm -rf -- "${REPO_DIR:?}/${BUILD_DIR}"
     fi
 
-    # -----------------------------------------------------------
-    # COMPILATION
-    # -----------------------------------------------------------
+    ###########################################################################
+    # BUILD
+    ###########################################################################
 
-    log "Compilation Vulkan : $build_dir"
+    log "Compilation de Spirula"
 
-    build_cmd=(
+    BUILD_CMD=(
         bash build_develop.bash
         -DSS_BACKEND=vulkan
         -DSS_BUILD_SAM=ON
         -DCMAKE_BUILD_TYPE=Release
-        "${cmake_args[@]}"
     )
 
-    "${build_cmd[@]}"
+    BUILD_CMD+=("${CMAKE_ARGS[@]}")
+
+    (
+        cd "${REPO_DIR}"
+        "${BUILD_CMD[@]}"
+    )
+
+    [[ -x "${BINARY}" ]] ||
+        die "Compilation terminée mais exécutable introuvable : ${BINARY}"
 
 fi
 
-# ===============================================================
-# VERIFICATION EXECUTABLE
-# ===============================================================
+###############################################################################
+# BINARY VALIDATION
+###############################################################################
 
-repo_dir="$(cd -- "$repo_dir" && pwd)"
-binary="$repo_dir/$build_dir/spirula"
+[[ -x "${BINARY}" ]] ||
+    die "Exécutable Spirula introuvable : ${BINARY}"
 
-[[ -x "$binary" ]] ||
-    die "Exécutable introuvable : $binary"
+log "Exécutable : ${BINARY}"
 
-log "Vérification de l'exécutable..."
-"$binary" --version
+log "Version de Spirula :"
+"${BINARY}" --version
 
-# ===============================================================
-# MODELE SAM 3
-# ===============================================================
+###############################################################################
+# SAM3 MODEL
+###############################################################################
 
-model_dir="$repo_dir/models"
-model="$model_dir/sam3-q4_0.ggml"
+MODEL_DIR="${REPO_DIR}/models"
+MODEL_FILE="${MODEL_DIR}/${MODEL_NAME}"
 
-valid_model() {
-    local magic size
+mkdir -p "${MODEL_DIR}"
 
-    [[ -f "$1" ]] || return 1
+validate_model() {
+    local file="$1"
 
-    magic="$(LC_ALL=C od -An -tx1 -N4 "$1" | tr -d '[:space:]')"
-    size="$(wc -c < "$1" | tr -d '[:space:]')"
+    [[ -f "${file}" ]] || return 1
 
-    [[ "$magic" == 336d6173 && "$size" -ge 629145600 ]]
+    local size
+    size="$(stat -c '%s' "${file}" 2>/dev/null || stat -f '%z' "${file}" 2>/dev/null)"
+
+    # Taille minimale attendue : 600 MiB
+    [[ "${size}" -ge 629145600 ]] || return 1
+
+    # Magic bytes attendus par sam3.cpp
+    local magic
+    magic="$(od -An -tx1 -N4 "${file}" | tr -d ' \n')"
+
+    [[ "${magic}" == "336d6173" ]]
 }
 
-mkdir -p "$model_dir"
+if [[ -f "${MODEL_FILE}" ]]; then
+    log "Modèle SAM3 existant : ${MODEL_FILE}"
 
-if [[ -e "$model" ]]; then
-
-    valid_model "$model" ||
-        die "Modèle existant invalide ou incomplet : $model"
-
-    log "Modèle SAM 3 existant réutilisé : $model"
-
+    if ! validate_model "${MODEL_FILE}"; then
+        die "Le modèle SAM3 existant est invalide : ${MODEL_FILE}"
+    fi
 else
+    log "Téléchargement du modèle SAM3"
+    log "URL : ${MODEL_URL}"
 
     command -v curl >/dev/null 2>&1 ||
-        die "Prérequis manquant : curl"
+        die "curl est nécessaire pour télécharger le modèle SAM3"
 
-    log "Téléchargement SAM 3 q4_0 : $model_url"
-    log "Licence Meta : https://huggingface.co/PABannier/sam3.cpp"
+    TMP_MODEL="$(mktemp "${MODEL_DIR}/.sam3-download.XXXXXX")"
 
-    tmp_model="$(mktemp "$model_dir/.sam3-q4_0.XXXXXXXX")"
-    trap 'rm -f -- "$tmp_model"' EXIT
+    cleanup() {
+        [[ -n "${TMP_MODEL:-}" ]] && rm -f -- "${TMP_MODEL}"
+    }
 
-    curl --fail --location --progress-bar \
-        --output "$tmp_model" "$model_url" ||
-        die "Téléchargement SAM 3 échoué."
+    trap cleanup EXIT
 
-    valid_model "$tmp_model" ||
-        die "Modèle téléchargé invalide ou incomplet."
+    curl --fail --location --retry 3 \
+        --output "${TMP_MODEL}" \
+        "${MODEL_URL}"
 
-    ln -- "$tmp_model" "$model" ||
-        die "Impossible de publier le modèle sans écraser $model."
+    if ! validate_model "${TMP_MODEL}"; then
+        die "Le modèle téléchargé est invalide (taille ou magic bytes incorrects)"
+    fi
 
-    rm -f -- "$tmp_model"
-    trap - EXIT
+    mv -- "${TMP_MODEL}" "${MODEL_FILE}"
+    TMP_MODEL=""
 
+    log "Modèle SAM3 installé : ${MODEL_FILE}"
 fi
 
-# ===============================================================
-# FIN
-# ===============================================================
+###############################################################################
+# EXPORTS
+###############################################################################
 
-log "Installation terminée."
-log "Binaire : $binary"
-log "Modèle : $model"
+log "Installation terminée"
 
-printf '\nexport SPIRULA_BIN=%q\n' "$binary"
-printf 'export TRAIN_MASKS_SPIRULA_MODEL=%q\n' "$model"
+echo
+echo "Pour utiliser Spirula, configure les variables suivantes :"
+echo
+printf 'export SPIRULA_BIN="%s"\n' "${BINARY}"
+printf 'export TRAIN_MASKS_SPIRULA_MODEL="%s"\n' "${MODEL_FILE}"
+echo
+log "Log complet : ${LOG_FILE}"
