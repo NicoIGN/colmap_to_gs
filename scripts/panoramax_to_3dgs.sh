@@ -8,7 +8,7 @@ source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  bash script/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
+  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
 The config is a trusted Bash file. Start from tools/panoramax/config.sh.example.
 It defines the Panoramax bbox and its EPSG code, output directory, SfM/block/training parameters,

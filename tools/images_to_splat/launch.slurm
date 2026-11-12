@@ -23,4 +23,4 @@ if [[ "$phase" == train-block ]]; then
   : "${SLURM_ARRAY_TASK_ID:?Indice du bloc requis}"
   args+=(--block "$SLURM_ARRAY_TASK_ID")
 fi
-srun --unbuffered --export=ALL bash "$repo_root/script/images_to_3dgs.sh" "${args[@]}"
+srun --unbuffered --export=ALL bash "$repo_root/scripts/images_to_3dgs.sh" "${args[@]}"
