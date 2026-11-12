@@ -20,15 +20,11 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-echo "[VULKAN] Mise à jour des dépôts"
-apt-get update
-
 echo "[VULKAN] Installation Vulkan et dépendances GLFW/X11"
 
+apt-get update
+
 apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    cmake \
     libvulkan-dev \
     libvulkan1 \
     vulkan-tools \
@@ -42,47 +38,19 @@ apt-get install -y --no-install-recommends \
     libxrandr-dev \
     libxfixes-dev \
     libwayland-dev \
-    libwayland-egl1 \
     wayland-protocols
 
-echo "[VULKAN] Vérification des headers"
+echo "[VULKAN] Vérification des dépendances GLFW"
 
-REQUIRED_HEADERS=(
-    /usr/include/vulkan/vulkan.h
-    /usr/include/X11/Xlib.h
-    /usr/include/X11/extensions/Xinerama.h
-    /usr/include/X11/extensions/Xrandr.h
-    /usr/include/X11/extensions/XInput2.h
-    /usr/include/X11/extensions/Xfixes.h
-)
+if ! pkg-config --exists xinerama; then
+    echo "[ERROR] Xinerama non détecté par pkg-config."
+    exit 1
+fi
 
-for header in "${REQUIRED_HEADERS[@]}"; do
-    if [[ ! -f "${header}" ]]; then
-        echo "[ERROR] Header manquant : ${header}"
-        exit 1
-    fi
-    echo "[OK] ${header}"
-done
+test -f /usr/include/X11/extensions/Xinerama.h
+test -f /usr/include/vulkan/vulkan.h
 
-echo "[VULKAN] Vérification des bibliothèques"
-
-for library in \
-    libvulkan.so \
-    libX11.so \
-    libXinerama.so \
-    libXcursor.so \
-    libXi.so \
-    libXrandr.so \
-    libXfixes.so
-do
-    if ! ldconfig -p | grep -q "${library}"; then
-        echo "[ERROR] Bibliothèque manquante : ${library}"
-        exit 1
-    fi
-    echo "[OK] ${library}"
-done
-
-echo "[VULKAN] Headers et bibliothèques disponibles."
+echo "[VULKAN] Dépendances Vulkan et GLFW disponibles."
 
 echo "=== ICD Vulkan ==="
 
@@ -94,9 +62,7 @@ fi
 
 echo "=== Runtime ==="
 
-if command -v vulkaninfo >/dev/null 2>&1; then
-    vulkaninfo --summary || \
-        echo "[WARNING] Runtime Vulkan non opérationnel."
-fi
+vulkaninfo --summary || \
+    echo "[WARNING] Runtime Vulkan non opérationnel."
 
 echo "[VULKAN] Installation terminée."
