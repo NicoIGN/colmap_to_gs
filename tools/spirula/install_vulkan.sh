@@ -1,11 +1,4 @@
 
-%%bash
-set -Eeuo pipefail
-
-cd /content/colmap_to_gs
-
-# Création du script d'installation Vulkan
-cat > tools/spirula/install_vulkan.sh <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -27,9 +20,15 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
+echo "[VULKAN] Mise à jour des dépôts"
 apt-get update
 
+echo "[VULKAN] Installation Vulkan et dépendances GLFW/X11"
+
 apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    cmake \
     libvulkan-dev \
     libvulkan1 \
     vulkan-tools \
@@ -40,30 +39,50 @@ apt-get install -y --no-install-recommends \
     libxinerama-dev \
     libxcursor-dev \
     libxi-dev \
-    libxrandr-dev
+    libxrandr-dev \
+    libxfixes-dev \
+    libwayland-dev \
+    libwayland-egl1 \
+    wayland-protocols
 
-# Vérification des headers Vulkan
-test -f /usr/include/vulkan/vulkan.h
+echo "[VULKAN] Vérification des headers"
 
-# Vérification des headers X11 requis par GLFW
-for header in \
-    X11/Xlib.h \
-    X11/extensions/Xinerama.h \
-    X11/extensions/Xrandr.h \
-    X11/extensions/XInput2.h \
-    X11/extensions/Xfixes.h
-do
-    if [[ ! -f "/usr/include/${header}" ]]; then
-        echo "[ERROR] Header manquant : /usr/include/${header}"
+REQUIRED_HEADERS=(
+    /usr/include/vulkan/vulkan.h
+    /usr/include/X11/Xlib.h
+    /usr/include/X11/extensions/Xinerama.h
+    /usr/include/X11/extensions/Xrandr.h
+    /usr/include/X11/extensions/XInput2.h
+    /usr/include/X11/extensions/Xfixes.h
+)
+
+for header in "${REQUIRED_HEADERS[@]}"; do
+    if [[ ! -f "${header}" ]]; then
+        echo "[ERROR] Header manquant : ${header}"
         exit 1
     fi
+    echo "[OK] ${header}"
 done
 
-# Vérification du loader Vulkan
-ldconfig -p | grep -q 'libvulkan.so.1'
+echo "[VULKAN] Vérification des bibliothèques"
 
-echo "[VULKAN] Headers Vulkan et X11 disponibles."
-echo "[VULKAN] Loader Vulkan disponible."
+for library in \
+    libvulkan.so \
+    libX11.so \
+    libXinerama.so \
+    libXcursor.so \
+    libXi.so \
+    libXrandr.so \
+    libXfixes.so
+do
+    if ! ldconfig -p | grep -q "${library}"; then
+        echo "[ERROR] Bibliothèque manquante : ${library}"
+        exit 1
+    fi
+    echo "[OK] ${library}"
+done
+
+echo "[VULKAN] Headers et bibliothèques disponibles."
 
 echo "=== ICD Vulkan ==="
 
@@ -74,12 +93,10 @@ else
 fi
 
 echo "=== Runtime ==="
-vulkaninfo --summary || echo "[WARNING] Runtime Vulkan non opérationnel."
+
+if command -v vulkaninfo >/dev/null 2>&1; then
+    vulkaninfo --summary || \
+        echo "[WARNING] Runtime Vulkan non opérationnel."
+fi
 
 echo "[VULKAN] Installation terminée."
-EOF
-
-chmod +x tools/spirula/install_vulkan.sh
-
-# Exécution
-bash tools/spirula/install_vulkan.sh
