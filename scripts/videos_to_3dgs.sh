@@ -42,6 +42,10 @@ frames_dir="$(resolve_path "$frames_dir")"
 
 python_bin="$(bash -c 'set -a; source "$1" >/dev/null 2>&1; echo "${PYTHON_BIN:-python3}"' _ "$config")"
 command -v "$python_bin" >/dev/null || die "Python introuvable : $python_bin"
+for module in cv2 numpy tqdm; do
+  "$python_bin" -c "import $module" 2>/dev/null ||
+    die "Module Python manquant pour l'extraction vidéo : $module (Python : $python_bin). Installer avec : $python_bin -m pip install opencv-python-headless numpy tqdm"
+done
 
 extract_args=(--out "$frames_dir" --num-frames "$num_frames" --reset --video "${videos[@]}")
 if ((width > 0)); then extract_args+=(--width "$width" --height "$height"); fi
