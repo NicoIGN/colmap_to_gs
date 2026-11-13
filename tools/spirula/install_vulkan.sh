@@ -6,21 +6,28 @@ set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-echo "[VULKAN] Installation des dépendances"
-echo "[VULKAN] Projet : ${PROJECT_ROOT}"
+log() {
+    echo "[VULKAN] $*"
+}
+
+die() {
+    echo "[ERROR] $*" >&2
+    exit 1
+}
+
+log "Installation des dépendances"
+log "Projet : ${PROJECT_ROOT}"
 
 # ===============================================================
 # Contrôle de l'environnement
 # ===============================================================
 
 if ! command -v apt-get >/dev/null 2>&1; then
-    echo "[ERROR] apt-get requis."
-    exit 1
+    die "apt-get requis."
 fi
 
 if [[ "${EUID}" -ne 0 ]]; then
-    echo "[ERROR] Exécution root obligatoire."
-    exit 1
+    die "Exécution root obligatoire."
 fi
 
 export DEBIAN_FRONTEND=noninteractive
@@ -29,83 +36,96 @@ export DEBIAN_FRONTEND=noninteractive
 # Installation des dépendances
 # ===============================================================
 
-echo "[VULKAN] Mise à jour des dépôts"
+log "Mise à jour des dépôts"
 
 apt-get update
 
-echo "[VULKAN] Installation Vulkan, X11, Wayland et OpenGL"
+log "Installation Vulkan, X11, Wayland et OpenGL"
 
-apt-get install -y --no-install-recommends \
-    build-essential \
-    pkg-config \
-    cmake \
-    ninja-build \
-    \
+PACKAGES=(
+    # Build tools
+    build-essential
+    pkg-config
+    cmake
+    ninja-build
+
     # Vulkan
-    libvulkan1 \
-    libvulkan-dev \
-    mesa-vulkan-drivers \
-    vulkan-tools \
-    \
+    libvulkan1
+    libvulkan-dev
+    mesa-vulkan-drivers
+    vulkan-tools
+
     # X11 / Xorg
-    xorgproto \
-    libx11-dev \
-    libxext-dev \
-    libxrender-dev \
-    libxinerama-dev \
-    libxcursor-dev \
-    libxi-dev \
-    libxrandr-dev \
-    libxfixes-dev \
-    \
+    xorgproto
+    libx11-dev
+    libxext-dev
+    libxrender-dev
+    libxinerama-dev
+    libxcursor-dev
+    libxi-dev
+    libxrandr-dev
+    libxfixes-dev
+
     # Wayland
-    libwayland-dev \
-    libwayland-egl1 \
-    wayland-protocols \
-    libxkbcommon-dev \
-    \
+    libwayland-dev
+    libwayland-egl1
+    wayland-protocols
+    libxkbcommon-dev
+
     # OpenGL / GLX / EGL
-    libgl1-mesa-dev \
-    libglx-dev \
-    libopengl-dev \
-    libegl-dev \
-    libgl-dev \
+    libgl1-mesa-dev
+    libglx-dev
+    libopengl-dev
+    libegl-dev
+    libgl-dev
     libglu1-mesa-dev
+)
+
+apt-get install -y --no-install-recommends "${PACKAGES[@]}"
+
+# ===============================================================
+# Actualisation du cache des bibliothèques
+# ===============================================================
+
+ldconfig
 
 # ===============================================================
 # Vérification des headers
 # ===============================================================
 
-echo "[VULKAN] Vérification des headers"
+log "Vérification des headers"
 
 REQUIRED_HEADERS=(
     /usr/include/vulkan/vulkan.h
+
     /usr/include/X11/X.h
     /usr/include/X11/Xlib.h
     /usr/include/X11/extensions/Xinerama.h
     /usr/include/X11/extensions/Xrandr.h
     /usr/include/X11/extensions/XInput2.h
+
     /usr/include/GL/gl.h
     /usr/include/GL/glx.h
+
     /usr/include/EGL/egl.h
+
     /usr/include/wayland-client.h
     /usr/include/xkbcommon/xkbcommon.h
 )
 
 for header in "${REQUIRED_HEADERS[@]}"; do
     if [[ ! -f "${header}" ]]; then
-        echo "[ERROR] Header manquant : ${header}"
-        exit 1
+        die "Header manquant : ${header}"
     fi
 
-    echo "[OK] ${header}"
+    log "Header OK : ${header}"
 done
 
 # ===============================================================
 # Vérification pkg-config
 # ===============================================================
 
-echo "[VULKAN] Vérification pkg-config"
+log "Vérification pkg-config"
 
 REQUIRED_PC_PACKAGES=(
     vulkan
@@ -123,10 +143,9 @@ REQUIRED_PC_PACKAGES=(
 
 for package in "${REQUIRED_PC_PACKAGES[@]}"; do
     if pkg-config --exists "${package}"; then
-        echo "[OK] ${package}: $(pkg-config --modversion "${package}")"
+        log "pkg-config OK : ${package} ($(pkg-config --modversion "${package}"))"
     else
-        echo "[ERROR] Package pkg-config manquant : ${package}"
-        exit 1
+        die "Package pkg-config manquant : ${package}"
     fi
 done
 
@@ -134,7 +153,7 @@ done
 # Vérification des bibliothèques
 # ===============================================================
 
-echo "[VULKAN] Vérification des bibliothèques système"
+log "Vérification des bibliothèques système"
 
 REQUIRED_LIBRARIES=(
     libvulkan.so.1
@@ -154,10 +173,9 @@ REQUIRED_LIBRARIES=(
 
 for library in "${REQUIRED_LIBRARIES[@]}"; do
     if ldconfig -p | grep -Fq "${library}"; then
-        echo "[OK] ${library}"
+        log "Bibliothèque OK : ${library}"
     else
-        echo "[ERROR] Bibliothèque absente : ${library}"
-        exit 1
+        die "Bibliothèque absente : ${library}"
     fi
 done
 
@@ -165,25 +183,28 @@ done
 # ICD Vulkan
 # ===============================================================
 
-echo "[VULKAN] Vérification des ICD"
+log "Vérification des ICD Vulkan"
 
-if compgen -G "/usr/share/vulkan/icd.d/*.json" > /dev/null; then
-    ls -l /usr/share/vulkan/icd.d/*.json
+ICD_FILES=(/usr/share/vulkan/icd.d/*.json)
+
+if [[ -f "${ICD_FILES[0]}" ]]; then
+    ls -l "${ICD_FILES[@]}"
 else
-    echo "[WARNING] Aucun ICD Vulkan détecté."
+    log "WARNING : aucun ICD Vulkan détecté."
 fi
 
 # ===============================================================
 # Runtime Vulkan
 # ===============================================================
 
-echo "[VULKAN] Vérification du runtime Vulkan"
+log "Vérification du runtime Vulkan"
 
 if command -v vulkaninfo >/dev/null 2>&1; then
-    vulkaninfo --summary || \
-        echo "[WARNING] Runtime Vulkan non opérationnel."
+    if ! vulkaninfo --summary; then
+        log "WARNING : runtime Vulkan non opérationnel."
+    fi
 else
-    echo "[WARNING] vulkaninfo indisponible."
+    log "WARNING : vulkaninfo indisponible."
 fi
 
-echo "[VULKAN] Installation terminée."
+log "Installation et vérifications terminées."
