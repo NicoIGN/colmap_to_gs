@@ -131,6 +131,14 @@ def record_differences(previous, current, path=""):
         yield f"{path} : enregistré={old[:200]} ; actuel={new[:200]}"
 
 
+def _comparable_setting(key, value):
+    """Drop mtime_ns from external masks: the sha256 already identifies the content."""
+    if key.endswith("_external_mask_stamps") and isinstance(value, list):
+        return [[mask[0], mask[1], mask[3]] if isinstance(mask, list) and len(mask) == 4
+                else mask for mask in value]
+    return value
+
+
 def compatible_record(previous, current):
     if any(previous.get(key) != current.get(key)
            for key in ("source", "images", "georeference", "gps_exif", "colmap_policy")):
@@ -139,7 +147,8 @@ def compatible_record(previous, current):
     if not isinstance(old_settings, dict):
         return False
     return all(
-        key in current["settings"] and current["settings"][key] == value
+        key in current["settings"]
+        and _comparable_setting(key, current["settings"][key]) == _comparable_setting(key, value)
         for key, value in old_settings.items()
     )
 
@@ -219,7 +228,7 @@ def prepare(check=False):
         if not isinstance(previous, dict):
             raise ValueError(f"Signature de workspace invalide : {marker}")
         if previous != record:
-            if not resume or check or not compatible_record(previous, record):
+            if not resume or not compatible_record(previous, record):
                 differences = list(islice(record_differences(previous, record), 13))
                 details = "\n".join(f"  - {item}" for item in differences[:12])
                 if len(differences) > 12:

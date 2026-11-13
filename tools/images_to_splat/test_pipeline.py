@@ -753,11 +753,10 @@ if "--wait" in args:
         mask = source_masks / "root.jpg.png"
         original = mask.stat()
         os.utime(mask, ns=(original.st_atime_ns, original.st_mtime_ns + 1000000000))
+        self.append("PIPELINE_RESUME=true")
         result = self.run_pipeline("--phase", "merge")
-        self.assertNotEqual(result.returncode, 0)
-        diagnostic = result.stdout + result.stderr
-        self.assertIn("settings.SFM_MASKS_external_mask_stamps.root.jpg.mtime_ns", diagnostic)
-        self.assertNotIn("root.jpg.sha256", diagnostic)
+        self.assertNotIn("external_mask_stamps.root.jpg.mtime_ns", result.stdout + result.stderr)
+        self.assertNotIn("root.jpg.sha256", result.stdout + result.stderr)
         Image.new("L", (2, 2), 0).save(mask)
         result = self.run_pipeline("--phase", "merge")
         self.assertNotEqual(result.returncode, 0)
