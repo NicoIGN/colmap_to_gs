@@ -74,13 +74,13 @@ VERBOSE=${VERBOSE:-False}
 
 TRAIN_VIS_MODE=${TRAIN_VIS_MODE:-tensorboard}
 
-STEPS_PER_SAVE=${STEPS_PER_SAVE:-5000}
+TRAIN_NS_STEPS_PER_SAVE=${TRAIN_NS_STEPS_PER_SAVE:-5000}
 
-STEPS_PER_EVAL_ALL_IMAGES=${STEPS_PER_EVAL_ALL_IMAGES:-1000}
+TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES=${TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES:-1000}
 
-REFINE_EVERY=${REFINE_EVERY:-500}
+TRAIN_NS_REFINE_EVERY=${TRAIN_NS_REFINE_EVERY:-500}
 
-STEPS_PER_LOG=${STEPS_PER_LOG:-250}
+TRAIN_NS_STEPS_PER_LOG=${TRAIN_NS_STEPS_PER_LOG:-250}
 
 # ======================
 # DEVICE CONFIG
@@ -103,11 +103,11 @@ else
 fi
 
 export MACHINE_DEVICE_TYPE
-export MODEL_IMPLEMENTATION
-export MAX_JOBS
+export TRAIN_NS_MODEL_IMPLEMENTATION
+export TRAIN_NS_MAX_JOBS
 export NUM_DEVICES=1
 export NUM_MACHINES=1
-export CMAKE_BUILD_PARALLEL_LEVEL="$MAX_JOBS"
+export CMAKE_BUILD_PARALLEL_LEVEL="$TRAIN_NS_MAX_JOBS"
 
 export TORCH_DISABLE_ADDR2LINE=1
 export TORCHINDUCTOR_DISABLE=1
@@ -153,20 +153,20 @@ echo "────────────────────────�
 echo "📁 DATA                     : $DATA"
 echo "📁 OUTPUTDIR                : $OUTPUTDIR"
 echo "🧪 MODEL                    : $MODEL"
-echo "🧪 MODEL_IMPLEMENTATION     : $MODEL_IMPLEMENTATION"
+echo "🧪 TRAIN_NS_MODEL_IMPLEMENTATION : $TRAIN_NS_MODEL_IMPLEMENTATION"
 echo "🧪 EXPERIMENT_NAME          : $EXPERIMENT_NAME"
 
 echo "⚙️ DEVICE                   : $DEVICE"
-echo "⚙️ MIXED PRECISION          : $MIXED_PRECISION"
-echo "⚙️ USE GRAD SCALER          : $USE_GRAD_SCALER"
+echo "⚙️ MIXED PRECISION          : $TRAIN_NS_MIXED_PRECISION"
+echo "⚙️ USE GRAD SCALER          : $TRAIN_NS_USE_GRAD_SCALER"
 echo "⚙️ USE DEFAULTS             : $USE_DEFAULTS"
 echo "⚙️ RELOAD FROM CHECKPOINT   : $RELOAD_FROM_CHECKPOINT"
 
-echo "🔁 MAX ITERATIONS           : $MAX_ITER"
-echo "🔁 MAX JOBS                 : $MAX_JOBS"
-echo "💾 STEPS PER SAVE           : $STEPS_PER_SAVE"
-echo "🖼️ STEPS PER EVAL ALL IMG   : $STEPS_PER_EVAL_ALL_IMAGES"
-echo "🧪 REFINE EVERY             : $REFINE_EVERY"
+echo "🔁 MAX ITERATIONS           : $TRAIN_NS_MAX_ITER"
+echo "🔁 MAX JOBS                 : $TRAIN_NS_MAX_JOBS"
+echo "💾 STEPS PER SAVE           : $TRAIN_NS_STEPS_PER_SAVE"
+echo "🖼️ STEPS PER EVAL ALL IMG   : $TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES"
+echo "🧪 REFINE EVERY             : $TRAIN_NS_REFINE_EVERY"
 
 echo "📊 VIS MODE                 : $TRAIN_VIS_MODE"
 
@@ -174,51 +174,51 @@ echo "────────────────────────�
 echo "🧠 DATA PIPELINE"
 
 echo "  - train rays per batch    : $TRAIN_RAYS_PER_BATCH"
-echo "  - camera resolution scale : $CAMERA_RES_SCALE_FACTOR"
+echo "  - camera resolution scale : $TRAIN_NS_CAMERA_RES_SCALE_FACTOR"
 
 echo "────────────────────────────────────────────"
 echo "🧠 MODEL CONFIG"
 
-echo "  - implementation          : $MODEL_IMPLEMENTATION"
-echo "  - max iterations          : $MAX_ITER"
+echo "  - implementation          : $TRAIN_NS_MODEL_IMPLEMENTATION"
+echo "  - max iterations          : $TRAIN_NS_MAX_ITER"
 
-echo "  - NeRF samples per ray    : $NUM_NERF_SAMPLES_PER_RAY"
-echo "  - proposal samples/ray    : $NUM_PROPOSAL_SAMPLES_PER_RAY"
+echo "  - NeRF samples per ray    : $TRAIN_NS_NUM_NERF_SAMPLES_PER_RAY"
+echo "  - proposal samples/ray    : $TRAIN_NS_NUM_PROPOSAL_SAMPLES_PER_RAY"
 
-echo "  - max resolution          : $MAX_RES"
+echo "  - max resolution          : $TRAIN_NS_MAX_RES"
 echo "  - max gaussians           : $MAX_GAUSSIANS"
 
 echo "────────────────────────────────────────────"
 echo "✨ GAUSSIAN SPLATTING"
 
-echo "  - refine every            : $REFINE_EVERY"
+echo "  - refine every            : $TRAIN_NS_REFINE_EVERY"
 
-echo "  - densify grad threshold  : $DENSIFY_GRAD_THRESH"
-echo "  - densify size threshold  : $DENSIFY_SIZE_THRESH"
+echo "  - densify grad threshold  : $TRAIN_NS_DENSIFY_GRAD_THRESH"
+echo "  - densify size threshold  : $TRAIN_NS_DENSIFY_SIZE_THRESH"
     
-echo "  - cull alpha threshold    : $CULL_ALPHA_THRESH"
-echo "  - cull scale threshold    : $CULL_SCALE_THRESH"
-echo "  - cull screen size        : $CULL_SCREEN_SIZE"
+echo "  - cull alpha threshold    : $TRAIN_NS_CULL_ALPHA_THRESH"
+echo "  - cull scale threshold    : $TRAIN_NS_CULL_SCALE_THRESH"
+echo "  - cull screen size        : $TRAIN_NS_CULL_SCREEN_SIZE"
 
-echo "  - split screen size       : $SPLIT_SCREEN_SIZE"
-echo "  - stop split at           : $STOP_SPLIT_AT"
+echo "  - split screen size       : $TRAIN_NS_SPLIT_SCREEN_SIZE"
+echo "  - stop split at           : $TRAIN_NS_STOP_SPLIT_AT"
 
-echo "  - reset alpha every       : $RESET_ALPHA_EVERY"
+echo "  - reset alpha every       : $TRAIN_NS_RESET_ALPHA_EVERY"
 
-echo "  - max gauss ratio         : $MAX_GAUSS_RATIO"
+echo "  - max gauss ratio         : $TRAIN_NS_MAX_GAUSS_RATIO"
 
-echo "  - scale regularization    : $USE_SCALE_REGULARIZATION"
+echo "  - scale regularization    : $TRAIN_NS_USE_SCALE_REGULARIZATION"
 
-echo "  - bilateral grid          : $USE_BILATERAL_GRID"
+echo "  - bilateral grid          : $TRAIN_NS_USE_BILATERAL_GRID"
 
-echo "  - ssim lambda             : $SSIM_LAMBDA"
+echo "  - ssim lambda             : $TRAIN_NS_SSIM_LAMBDA"
 
 echo "────────────────────────────────────────────"
 echo "🧱 COLLIDER"
 
-echo "  - enable collider         : $ENABLE_COLLIDER"
-echo "  - near plane              : $COLLIDER_NEAR"
-echo "  - far plane               : $COLLIDER_FAR"
+echo "  - enable collider         : $TRAIN_NS_ENABLE_COLLIDER"
+echo "  - near plane              : $TRAIN_NS_COLLIDER_NEAR"
+echo "  - far plane               : $TRAIN_NS_COLLIDER_FAR"
 
 echo "────────────────────────────────────────────"
 echo "🔥 STARTING TRAINING..."
@@ -312,9 +312,9 @@ COMMON_ARGS=()
 
 add_arg COMMON_ARGS --output-dir "$OUTPUTDIR"
 add_arg COMMON_ARGS --experiment-name "$EXPERIMENT_NAME"
-add_arg COMMON_ARGS --steps-per-save "$STEPS_PER_SAVE"
+add_arg COMMON_ARGS --steps-per-save "$TRAIN_NS_STEPS_PER_SAVE"
 add_arg COMMON_ARGS --vis "$TRAIN_VIS_MODE"
-add_arg COMMON_ARGS --logging.steps-per-log "$STEPS_PER_LOG"
+add_arg COMMON_ARGS --logging.steps-per-log "$TRAIN_NS_STEPS_PER_LOG"
 
 add_bool_arg COMMON_ARGS --save-only-latest-checkpoint True
 add_bool_arg COMMON_ARGS --logging.local-writer.enable True
@@ -336,10 +336,10 @@ PERF_ARGS=()
 add_arg PERF_ARGS --machine.device-type "$MACHINE_DEVICE_TYPE"
 add_arg PERF_ARGS --machine.num-devices "${NUM_DEVICES:-1}"
 add_arg PERF_ARGS --machine.num-machines "${NUM_MACHINES:-1}"
-add_arg PERF_ARGS --max-num-iterations "$MAX_ITER"
-add_arg PERF_ARGS --steps-per-eval-all-images "$STEPS_PER_EVAL_ALL_IMAGES"
-add_bool_arg PERF_ARGS --mixed-precision "$MIXED_PRECISION"
-add_bool_arg PERF_ARGS --use-grad-scaler "$USE_GRAD_SCALER"
+add_arg PERF_ARGS --max-num-iterations "$TRAIN_NS_MAX_ITER"
+add_arg PERF_ARGS --steps-per-eval-all-images "$TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES"
+add_bool_arg PERF_ARGS --mixed-precision "$TRAIN_NS_MIXED_PRECISION"
+add_bool_arg PERF_ARGS --use-grad-scaler "$TRAIN_NS_USE_GRAD_SCALER"
 
 # ======================
 # MODEL ARGS
@@ -348,35 +348,35 @@ add_bool_arg PERF_ARGS --use-grad-scaler "$USE_GRAD_SCALER"
 MODEL_ARGS=()
 
 if [[ "$DEVICE" == "gpu" ]]; then
-        add_arg MODEL_ARGS       --pipeline.datamanager.camera-res-scale-factor "$CAMERA_RES_SCALE_FACTOR"
-        add_arg MODEL_ARGS       --pipeline.model.num-downscales "$NUM_DOWNSCALES"
+        add_arg MODEL_ARGS       --pipeline.datamanager.camera-res-scale-factor "$TRAIN_NS_CAMERA_RES_SCALE_FACTOR"
+        add_arg MODEL_ARGS       --pipeline.model.num-downscales "$TRAIN_NS_NUM_DOWNSCALES"
         add_arg MODEL_ARGS       --pipeline.datamanager.cache-images cpu
         add_bool_arg MODEL_ARGS  --pipeline.datamanager.images-on-gpu False
         add_bool_arg MODEL_ARGS  --pipeline.datamanager.masks-on-gpu False
-        add_arg MODEL_ARGS       --pipeline.model.densify-grad-thresh "$DENSIFY_GRAD_THRESH"
-        add_arg MODEL_ARGS       --pipeline.model.densify-size-thresh "$DENSIFY_SIZE_THRESH"
-        add_arg MODEL_ARGS       --pipeline.model.cull-alpha-thresh "$CULL_ALPHA_THRESH"
-        add_arg MODEL_ARGS       --pipeline.model.cull-screen-size "$CULL_SCREEN_SIZE"
-        add_arg MODEL_ARGS       --pipeline.model.split-screen-size "$SPLIT_SCREEN_SIZE"
-        add_arg MODEL_ARGS       --pipeline.model.refine-every "$REFINE_EVERY"
-        add_bool_arg MODEL_ARGS  --pipeline.model.use-bilateral-grid "$USE_BILATERAL_GRID"
-        add_bool_arg MODEL_ARGS  --pipeline.model.use-scale-regularization "$USE_SCALE_REGULARIZATION"
-        add_arg MODEL_ARGS       --pipeline.model.max-gauss-ratio "$MAX_GAUSS_RATIO"
-        add_arg MODEL_ARGS       --pipeline.model.stop-split-at "$STOP_SPLIT_AT"
-        add_arg MODEL_ARGS       --pipeline.model.cull-scale-thresh "$CULL_SCALE_THRESH"
-        add_arg MODEL_ARGS       --pipeline.model.reset-alpha-every "$RESET_ALPHA_EVERY"
-        add_arg MODEL_ARGS       --pipeline.model.ssim-lambda "$SSIM_LAMBDA"
-        add_bool_arg MODEL_ARGS  --pipeline.model.enable-collider "$ENABLE_COLLIDER"
+        add_arg MODEL_ARGS       --pipeline.model.densify-grad-thresh "$TRAIN_NS_DENSIFY_GRAD_THRESH"
+        add_arg MODEL_ARGS       --pipeline.model.densify-size-thresh "$TRAIN_NS_DENSIFY_SIZE_THRESH"
+        add_arg MODEL_ARGS       --pipeline.model.cull-alpha-thresh "$TRAIN_NS_CULL_ALPHA_THRESH"
+        add_arg MODEL_ARGS       --pipeline.model.cull-screen-size "$TRAIN_NS_CULL_SCREEN_SIZE"
+        add_arg MODEL_ARGS       --pipeline.model.split-screen-size "$TRAIN_NS_SPLIT_SCREEN_SIZE"
+        add_arg MODEL_ARGS       --pipeline.model.refine-every "$TRAIN_NS_REFINE_EVERY"
+        add_bool_arg MODEL_ARGS  --pipeline.model.use-bilateral-grid "$TRAIN_NS_USE_BILATERAL_GRID"
+        add_bool_arg MODEL_ARGS  --pipeline.model.use-scale-regularization "$TRAIN_NS_USE_SCALE_REGULARIZATION"
+        add_arg MODEL_ARGS       --pipeline.model.max-gauss-ratio "$TRAIN_NS_MAX_GAUSS_RATIO"
+        add_arg MODEL_ARGS       --pipeline.model.stop-split-at "$TRAIN_NS_STOP_SPLIT_AT"
+        add_arg MODEL_ARGS       --pipeline.model.cull-scale-thresh "$TRAIN_NS_CULL_SCALE_THRESH"
+        add_arg MODEL_ARGS       --pipeline.model.reset-alpha-every "$TRAIN_NS_RESET_ALPHA_EVERY"
+        add_arg MODEL_ARGS       --pipeline.model.ssim-lambda "$TRAIN_NS_SSIM_LAMBDA"
+        add_bool_arg MODEL_ARGS  --pipeline.model.enable-collider "$TRAIN_NS_ENABLE_COLLIDER"
         add_arg MODEL_ARGS       --pipeline.model.resolution-schedule "1000"
 
 #        add_bool_arg MODEL_ARGS  --pipeline.model.continue_cull_post_densification "False"
 
-        if [[ "$ENABLE_COLLIDER" == "True" ]]; then
+        if [[ "$TRAIN_NS_ENABLE_COLLIDER" == "True" ]]; then
 
           ARGS=()
 
-          [[ -n "${COLLIDER_NEAR:-}" ]] && ARGS+=("near_plane" "$COLLIDER_NEAR")
-          [[ -n "${COLLIDER_FAR:-}"  ]] && ARGS+=("far_plane"  "$COLLIDER_FAR")
+          [[ -n "${TRAIN_NS_COLLIDER_NEAR:-}" ]] && ARGS+=("near_plane" "$TRAIN_NS_COLLIDER_NEAR")
+          [[ -n "${TRAIN_NS_COLLIDER_FAR:-}"  ]] && ARGS+=("far_plane"  "$TRAIN_NS_COLLIDER_FAR")
 
           if [[ ${#ARGS[@]} -gt 0 ]]; then
             add_multi_arg MODEL_ARGS --pipeline.model.collider-params "${ARGS[@]}"
@@ -384,7 +384,7 @@ if [[ "$DEVICE" == "gpu" ]]; then
 
         fi
         
-        if [[ "$STOP_SPLIT_AT" -eq 0 ]]; then
+        if [[ "$TRAIN_NS_STOP_SPLIT_AT" -eq 0 ]]; then
             add_arg MODEL_ARGS --optimizers.means.optimizer.lr 0.0001
             add_arg MODEL_ARGS --pipeline.model.camera-optimizer.mode off
         else
@@ -392,14 +392,14 @@ if [[ "$DEVICE" == "gpu" ]]; then
         fi
 
 elif [[ "$DEVICE" == "cpu" ]]; then
-    add_arg MODEL_ARGS --pipeline.datamanager.camera-res-scale-factor "$CAMERA_RES_SCALE_FACTOR"
-    add_arg MODEL_ARGS --pipeline.model.implementation "$MODEL_IMPLEMENTATION"
-    add_arg MODEL_ARGS --pipeline.model.num-nerf-samples-per-ray "$NUM_NERF_SAMPLES_PER_RAY"
-    add_arg MODEL_ARGS --pipeline.model.max-res "$MAX_RES"
+    add_arg MODEL_ARGS --pipeline.datamanager.camera-res-scale-factor "$TRAIN_NS_CAMERA_RES_SCALE_FACTOR"
+    add_arg MODEL_ARGS --pipeline.model.implementation "$TRAIN_NS_MODEL_IMPLEMENTATION"
+    add_arg MODEL_ARGS --pipeline.model.num-nerf-samples-per-ray "$TRAIN_NS_NUM_NERF_SAMPLES_PER_RAY"
+    add_arg MODEL_ARGS --pipeline.model.max-res "$TRAIN_NS_MAX_RES"
     add_bool_arg MODEL_ARGS --pipeline.model.predict-normals True
 
-    if [[ -n "${NUM_PROPOSAL_SAMPLES_PER_RAY:-}" ]]; then
-        add_multi_arg MODEL_ARGS --pipeline.model.num-proposal-samples-per-ray $NUM_PROPOSAL_SAMPLES_PER_RAY
+    if [[ -n "${TRAIN_NS_NUM_PROPOSAL_SAMPLES_PER_RAY:-}" ]]; then
+        add_multi_arg MODEL_ARGS --pipeline.model.num-proposal-samples-per-ray $TRAIN_NS_NUM_PROPOSAL_SAMPLES_PER_RAY
     fi
 fi
 

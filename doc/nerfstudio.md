@@ -190,29 +190,29 @@ Options (`option` : défaut ou valeurs possibles — description) :
 
 - `CONDA_ENV_NAME` : `gsplat`.
 - `EXPERIMENT_NAME` : `model3d`.
-- `MODEL_IMPLEMENTATION` : `torch` (`tcnn` possible si la stack le permet).
-- `MAX_ITER` : `3000`.
-- `REFINE_EVERY` : `100`.
-- `STEPS_PER_SAVE` : `5000`.
-- `STEPS_PER_EVAL_ALL_IMAGES` : `2000`.
-- `CAMERA_RES_SCALE_FACTOR` : `0.5`.
-- `NUM_DOWNSCALES` : `0`.
+- `TRAIN_NS_MODEL_IMPLEMENTATION` : `torch` (`tcnn` possible si la stack le permet).
+- `TRAIN_NS_MAX_ITER` : `3000`.
+- `TRAIN_NS_REFINE_EVERY` : `100`.
+- `TRAIN_NS_STEPS_PER_SAVE` : `5000`.
+- `TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES` : `2000`.
+- `TRAIN_NS_CAMERA_RES_SCALE_FACTOR` : `0.5`.
+- `TRAIN_NS_NUM_DOWNSCALES` : `0`.
 - `TRAIN_VIS_MODE` : `tensorboard`.
 
 Les paramètres de densification et de culling sont vides par défaut et sont définis par les profils :
 
-- `DENSIFY_GRAD_THRESH`
-- `CULL_ALPHA_THRESH`
-- `CULL_SCREEN_SIZE`
-- `SPLIT_SCREEN_SIZE`
-- `MAX_GAUSS_RATIO`
-- `STOP_SPLIT_AT`
-- `RESET_ALPHA_EVERY`
-- `CULL_SCALE_THRESH`
-- `USE_SCALE_REGULARIZATION`
-- `USE_BILATERAL_GRID`
-- `SSIM_LAMBDA`
-- `MAX_RES`
+- `TRAIN_NS_DENSIFY_GRAD_THRESH`
+- `TRAIN_NS_CULL_ALPHA_THRESH`
+- `TRAIN_NS_CULL_SCREEN_SIZE`
+- `TRAIN_NS_SPLIT_SCREEN_SIZE`
+- `TRAIN_NS_MAX_GAUSS_RATIO`
+- `TRAIN_NS_STOP_SPLIT_AT`
+- `TRAIN_NS_RESET_ALPHA_EVERY`
+- `TRAIN_NS_CULL_SCALE_THRESH`
+- `TRAIN_NS_USE_SCALE_REGULARIZATION`
+- `TRAIN_NS_USE_BILATERAL_GRID`
+- `TRAIN_NS_SSIM_LAMBDA`
+- `TRAIN_NS_MAX_RES`
 - etc.
 
 Profils fournis dans `config/profiles/` : `balanced`, `best`, `fast` et `quality`.
@@ -232,12 +232,12 @@ Le premier fichier trouvé est utilisé :
 4. <repo>/config/profiles/<profile>.sh
 ```
 
-`estimate_planes.py` analyse le modèle COLMAP avant l'entraînement. Cette étape est toujours exécutée et transmet à l'entraînement `COLLIDER_NEAR`, `COLLIDER_FAR` et `ENABLE_COLLIDER=True`.
+`estimate_planes.py` analyse le modèle COLMAP avant l'entraînement. Cette étape est toujours exécutée et transmet à l'entraînement `TRAIN_NS_COLLIDER_NEAR`, `TRAIN_NS_COLLIDER_FAR` et `TRAIN_NS_ENABLE_COLLIDER=True`.
 
 Mode deux passes (`--two-stages`) :
 
-- Première passe : `CAMERA_RES_SCALE_FACTOR=0.5`, `NUM_DOWNSCALES=2`, `MAX_RES=8192` et densification active.
-- Deuxième passe : reprise depuis le checkpoint, résolution du profil, `MAX_ITER + 1000` itérations et densification désactivée (`REFINE_EVERY=999999`, `STOP_SPLIT_AT=0`).
+- Première passe : `TRAIN_NS_CAMERA_RES_SCALE_FACTOR=0.5`, `TRAIN_NS_NUM_DOWNSCALES=2`, `TRAIN_NS_MAX_RES=8192` et densification active.
+- Deuxième passe : reprise depuis le checkpoint, résolution du profil, `TRAIN_NS_MAX_ITER + 1000` itérations et densification désactivée (`TRAIN_NS_REFINE_EVERY=999999`, `TRAIN_NS_STOP_SPLIT_AT=0`).
 
 ### Exécuter sur SLURM
 
