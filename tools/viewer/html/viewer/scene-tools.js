@@ -31,6 +31,7 @@ export function createSceneTools({
   let serial = 0;
   let georef = null;
   let track = null;
+  let trackReversed = false;
   let follow = false;
   let auto = false;
   let progress = 0;
@@ -202,11 +203,16 @@ export function createSceneTools({
     for (const id of [
       "gpsFollowEnabled",
       "gpsAutoEnabled",
+      "gpsReverse",
       "gpsAutoSpeed",
     ]) {
       if ($(id)) {
         $(id).disabled = state.blocked || !ready;
       }
+    }
+
+    if ($("gpsReverse")) {
+      $("gpsReverse").checked = trackReversed;
     }
 
     if ($("gpsFollowEnabled")) {
@@ -811,7 +817,9 @@ export function createSceneTools({
 
       if (!valid()) return;
 
-      const candidate = buildTrack(parseGpx(text));
+      const candidate = buildTrack(
+        trackReversed ? parseGpx(text).reverse() : parseGpx(text)
+      );
 
       // L’ancien suivi est arrêté avant de publier le nouveau.
       resetTrack();
@@ -992,6 +1000,39 @@ export function createSceneTools({
     } finally {
       event.target.value = "";
     }
+  });
+
+  listen($("gpsReverse"), "change", () => {
+    trackReversed = Boolean($("gpsReverse").checked);
+
+    if (track) {
+      try {
+        const candidate = buildTrack([...track.sourcePoints].reverse());
+
+        if (!validateTrack(candidate)) {
+          resetTrack({ diagnostic: false });
+          setStatus(
+            "Suivi GPS arrêté : aucun passage dans la bbox après inversion.",
+            "warning"
+          );
+        } else {
+          track = candidate;
+          progress = 1 - progress;
+          clearNavigation();
+          setStatus(
+            `Sens de la trajectoire : ${trackReversed ? "inversé" : "normal"}.`
+          );
+        }
+      } catch (error) {
+        resetTrack();
+        setStatus(
+          `Inversion GPX impossible : ${error?.message || error}`,
+          true
+        );
+      }
+    }
+
+    refreshUI();
   });
 
   listen($("gpsFollowEnabled"), "change", () => {

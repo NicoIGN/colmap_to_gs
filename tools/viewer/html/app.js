@@ -169,7 +169,7 @@ function getPrincipalAxis() {
 function updatePrincipalAxisHelp() {
   const axis = getPrincipalAxisName().toUpperCase();
 
-  $("principalAxisHelp").textContent =
+  $("principalAxisHelp").dataset.tip =
     `Axe ${axis} du monde, passant par le point visé au centre.`;
 
   $("orbitPrincipalNegative").title =
@@ -185,8 +185,9 @@ function updateKeyboardHelp() {
       ? "ZQSD : déplacer · A/E : descendre / monter"
       : "WASD : déplacer · Q/E : descendre / monter";
 
-  $("keyboardHelp").textContent =
-    `${layout} · Flèches : avancer / reculer / déplacement latéral`;
+  $("keyboardHelp").dataset.tip =
+    `${layout} · Flèches : avancer / reculer / déplacement latéral · ` +
+    "Maj : accélérer · R : cadrer";
 
   if ($("help")) {
     $("help").textContent =

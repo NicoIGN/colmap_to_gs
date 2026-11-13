@@ -31,6 +31,51 @@
       pointer-events: none;
     }
 
+    /* Info-bulle : texte dans data-tip, affiché au survol ou au focus. */
+    .info {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 1.1em;
+      height: 1.1em;
+      margin-left: 0.4em;
+      border: 1px solid currentColor;
+      border-radius: 50%;
+      font-size: 0.75em;
+      line-height: 1;
+      opacity: 0.75;
+      vertical-align: middle;
+      cursor: help;
+    }
+
+    .info::after {
+      content: attr(data-tip);
+      position: absolute;
+      left: 0;
+      bottom: calc(100% + 6px);
+      z-index: 30;
+      width: max-content;
+      max-width: 260px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      background: #111;
+      color: #fff;
+      font-size: 12px;
+      font-weight: normal;
+      line-height: 1.35;
+      text-align: left;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    .info:hover::after,
+    .info:focus::after {
+      opacity: 1;
+    }
+
     /* Encart d’informations repliable, en bas à droite. */
     #sceneInfo {
       position: fixed;
@@ -416,16 +461,12 @@
           </select>
         </div>
 
-        <p id="keyboardHelp" class="hint"></p>
-
-        <p class="hint">
-          Maj : accélérer · Flèches : se déplacer · R : cadrer
-        </p>
+        <span id="keyboardHelp" class="info" tabindex="0" data-tip="" role="img" aria-label="Aide clavier">ⓘ</span>
       </details>
 
       <!-- Axe principal -->
       <details open>
-        <summary>Axe principal · verrouillage</summary>
+        <summary>Axe principal · verrouillage<span class="info" tabindex="0" data-tip="Verrou actif : seules les rotations autour de l’axe principal sont autorisées. Le glissement vertical et les commandes de regard haut/bas sont ignorés. Les déplacements restent disponibles.">ⓘ</span></summary>
 
         <div class="section row">
           <label for="principalAxis" class="hint inline-hint">
@@ -444,42 +485,19 @@
           Verrouiller les rotations sur cet axe
         </label>
 
-        <p class="hint">
-          Verrou actif : seules les rotations autour de l’axe
-          principal sont autorisées. Le glissement vertical
-          et les commandes de regard haut/bas sont ignorés.
-          Les déplacements restent disponibles.
-        </p>
-
         <div class="section">
           <button
             type="button"
             id="alignPrincipalUp"
             class="wide"
-            title="Remettre l’axe principal vers le haut sans déplacer la caméra ni changer la direction du regard"
-            aria-describedby="alignPrincipalUpHelp"
+            title="Remet l’axe principal sélectionné vers le haut de l’écran, sans déplacer la caméra. Disponible même avec le verrou actif."
           >↑ Redresser la vue</button>
-
-          <p id="alignPrincipalUpHelp" class="hint">
-            Remet l’axe principal sélectionné vers le haut de l’écran,
-            sans déplacer la caméra. Disponible même avec le verrou actif.
-          </p>
         </div>
       </details>
 
       <!-- Orbite -->
       <details open>
-        <summary>Tourner autour d’une cible</summary>
-
-        <p class="hint">
-          Ces commandes déplacent la caméra autour d’une cible,
-          comme le clic gauche-glisser.
-        </p>
-
-        <p class="hint">
-          Au début de l’appui, le point visé au centre de l’image
-          est sélectionné comme pivot.
-        </p>
+        <summary>Tourner autour d’une cible<span class="info" tabindex="0" data-tip="Ces commandes déplacent la caméra autour d’une cible, comme le clic gauche-glisser. Au début de l’appui, le point visé au centre de l’image est sélectionné comme pivot.">ⓘ</span></summary>
 
         <div class="section row">
           <button
@@ -501,9 +519,7 @@
           >↷ Sens +</button>
         </div>
 
-        <p id="principalAxisHelp" class="hint">
-          Axe Z du monde, passant par le point visé au centre.
-        </p>
+        <span id="principalAxisHelp" class="info" tabindex="0" data-tip="Axe Z du monde, passant par le point visé au centre." role="img" aria-label="Aide sur l’axe principal">ⓘ</span>
 
         <div class="section">
           <button
@@ -517,7 +533,7 @@
 
       <!-- Anticollision -->
       <details>
-        <summary>Anticollision</summary>
+        <summary>Anticollision<span class="info" tabindex="0" data-tip="Nombre minimal de centres de splats par cellule : un seuil bas bloque davantage, un seuil haut laisse passer plus facilement. Détection approximative fondée sur les centres des splats : elle ne remplace pas un maillage physique et peut ignorer certaines surfaces. La marge de sécurité est sans effet dans la version actuelle.">ⓘ</span></summary>
 
         <label class="check">
           <input type="checkbox" id="collisionEnabled" />
@@ -539,11 +555,6 @@
           >50</output>
         </label>
 
-        <p class="hint">
-          Nombre minimal de centres de splats par cellule.
-          Un seuil bas bloque davantage ; un seuil haut
-          laisse passer plus facilement.
-        </p>
 
         <label class="slider" for="collisionMargin">
           Marge de sécurité — réservée
@@ -554,7 +565,6 @@
             max="3"
             step="0.25"
             value="0.5"
-            aria-describedby="collisionMarginHelp"
           />
           <output
             id="collisionMarginValue"
@@ -562,21 +572,11 @@
           >0.5</output>
         </label>
 
-        <p id="collisionMarginHelp" class="hint">
-          Sans effet dans la version actuelle du test ponctuel
-          par cellule. Ce réglage est conservé pour compatibilité.
-        </p>
-
-        <p class="hint">
-          Détection approximative fondée sur les centres des splats :
-          elle ne remplace pas un maillage physique et peut ignorer
-          certaines surfaces ou bloquer des espaces visuellement libres.
-        </p>
       </details>
 
       <!-- Import COLMAP sparse binaire -->
       <details id="colmapSection" open>
-        <summary>COLMAP sparse · points et caméras</summary>
+        <summary>COLMAP sparse · points et caméras<span class="info" tabindex="0" data-tip="Sélectionner le dossier contenant cameras.bin, images.bin et points3D.bin, par exemple sparse/0. Les modèles trouvés dans les sous-dossiers sont tous ajoutés et peuvent être masqués séparément. Le modèle doit utiliser le même repère que les splats : importer le modèle transformé par le géoréférencement, pas le modèle d’origine.">ⓘ</span></summary>
 
         <div class="section">
             <label class="file-button">
@@ -591,12 +591,6 @@
             </label>
         </div>
 
-        <p id="colmapImportHelp" class="hint">
-          Sélectionner le dossier contenant cameras.bin,
-          images.bin et points3D.bin, par exemple sparse/0.
-          Les modèles sparse trouvés dans les sous-dossiers sont tous ajoutés
-          à la vue et peuvent être masqués séparément.
-        </p>
 
         <label class="slider" for="colmapPointSize">
           Taille des points sparse
@@ -610,11 +604,6 @@
           <output id="colmapCameraSizeValue" for="colmapCameraSize">4 px</output>
         </label>
 
-        <p class="hint">
-          Le modèle COLMAP doit utiliser le même repère que les splats.
-          Pour une scène issue du modèle géoréférencé,
-          importer ce modèle transformé, pas le modèle d’origine.
-        </p>
 
         <div class="section">
           <button
@@ -649,6 +638,12 @@
           <input type="checkbox" id="gpsAutoEnabled" disabled />
           Auto : début → fin
         </label>
+
+        <label class="check">
+          <input type="checkbox" id="gpsReverse" disabled />
+          Inverser le sens de la trajectoire
+          <span class="info" tabindex="0" data-tip="Inverse l’ordre de parcours du GPX : le suivi et le mode auto vont de la fin vers le début. La position actuelle est conservée.">ⓘ</span>
+        </label>
         <label class="slider" for="gpsAutoSpeed">
           Vitesse auto
           <input
@@ -665,11 +660,7 @@
 
       <!-- Caméra -->
       <details id="cameraSection">
-        <summary>Caméra · copier / restaurer</summary>
-
-        <p class="hint">
-          Position X,Y,Z · cible X,Y,Z · axe vertical X,Y,Z.
-        </p>
+        <summary>Caméra · copier / restaurer<span class="info" tabindex="0" data-tip="Format : position X,Y,Z · cible X,Y,Z · axe vertical X,Y,Z. Fichier chargé par URL : copie du lien complet. Fichier ouvert localement : copie des coordonnées. Pour restaurer, coller les coordonnées numériques dans le champ.">ⓘ</span></summary>
 
         <textarea
           id="cameraValue"
@@ -684,26 +675,11 @@
           <button type="button" id="importCam">Restaurer</button>
         </div>
 
-        <p class="hint">
-          Fichier chargé par URL : copie du lien complet.
-          Fichier ouvert localement : copie des coordonnées caméra.
-        </p>
-
-        <p class="hint">
-          Pour restaurer une vue, coller les coordonnées numériques
-          dans le champ ci-dessus.
-        </p>
       </details>
 
       <!-- GIF -->
       <details id="gifSection" open>
-        <summary>Capture GIF animée</summary>
-
-        <p class="hint">
-          Seule la vue 3D est enregistrée.
-          Une image est ajoutée après chaque arrêt de la caméra
-          pendant 600 ms.
-        </p>
+        <summary>Capture GIF animée<span class="info" tabindex="0" data-tip="Seule la vue 3D est enregistrée. Une image est ajoutée après chaque arrêt de la caméra pendant 600 ms. Export en boucle, limité à 640 × 480 px et 60 images, proportions conservées.">ⓘ</span></summary>
 
         <div class="section row">
           <label for="gifDelay" class="hint inline-hint">
@@ -742,10 +718,6 @@
           Télécharger le GIF
         </a>
 
-        <p class="hint">
-          Export en boucle, limité à 640 × 480 px et 60 images.
-          Les proportions de la vue sont conservées.
-        </p>
       </details>
     </div>
   </aside>
