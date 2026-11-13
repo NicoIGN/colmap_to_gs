@@ -101,7 +101,7 @@ class SparseDensityTest(unittest.TestCase):
                 self.assertEqual(report["points_removed"], 1)
                 if name == "progress":
                     for message in ("Lecture points 3D", "Lecture images",
-                                    "Analyse densité", "Points vue", "Écriture sparse",
+                                    "Analyse densité", "Écriture sparse",
                                     "progress_clean", "progress_rejected",
                                     "[sparse] Terminé"):
                         self.assertIn(message, result.stderr)

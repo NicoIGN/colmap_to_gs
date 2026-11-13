@@ -4,6 +4,7 @@
 import argparse
 import json
 import math
+import multiprocessing
 import os
 from pathlib import Path
 import shutil
@@ -206,6 +207,76 @@ def _depth_bandwidth(log_depths):
     return max(1e-3, 1.06 * robust_spread * len(log_depths) ** (-0.2))
 
 
+_DENSITY_STATE = {}
+
+
+def _view_votes(image_number, image):
+    """Return the evaluable and suspicious point indices of one view."""
+    positions = _DENSITY_STATE["positions"]
+    params = _DENSITY_STATE["params"]
+    min_neighbors = params["min_neighbors"]
+    empty = np.empty(0, dtype=np.int64)
+    observed = np.unique(image["indices"][image["indices"] >= 0])
+    if len(observed) < min_neighbors:
+        return image_number, len(observed), empty, empty
+    vectors = positions[observed] - image["center"]
+    depths = np.linalg.norm(vectors, axis=1)
+    valid = np.isfinite(depths) & (depths > 0)
+    observed = observed[valid]
+    vectors = vectors[valid]
+    depths = depths[valid]
+    if len(observed) < min_neighbors:
+        return image_number, len(observed), empty, empty
+
+    directions = vectors / depths[:, None]
+    tree = cKDTree(directions)
+    k = min(params["neighbors"], len(observed))
+    angular_distances, angular_indices = tree.query(directions, k=k)
+    if k == 1:
+        angular_distances = angular_distances[:, None]
+        angular_indices = angular_indices[:, None]
+
+    evaluable = []
+    suspicious = []
+    for local_index, point_index in enumerate(observed):
+        selected = angular_indices[local_index][
+            angular_distances[local_index] <= params["chord_limit"]
+        ]
+        if len(selected) < min_neighbors:
+            continue
+        log_depths = np.log(depths[selected])
+        target = math.log(depths[local_index])
+        density, minimum_support, clusters, target_cluster = _supported_depth_intervals(
+            log_depths,
+            params["min_cluster_points"],
+            params["min_cluster_fraction"],
+            params["low_density_fraction"],
+            target,
+        )
+        if target_cluster is None or not any(
+            cluster[2] >= minimum_support for cluster in clusters
+        ):
+            continue
+
+        required_support = _far_support_threshold(
+            target, clusters, target_cluster, minimum_support,
+            params["far_support_rate"],
+        )
+        evaluable.append(point_index)
+        if required_support is not None and density < required_support:
+            suspicious.append(point_index)
+    return (
+        image_number,
+        len(observed),
+        np.asarray(evaluable, dtype=np.int64),
+        np.asarray(suspicious, dtype=np.int64),
+    )
+
+
+def _view_votes_task(item):
+    return _view_votes(*item)
+
+
 def density_votes(
     positions,
     images,
@@ -237,71 +308,43 @@ def density_votes(
 
     suspicious_votes = np.zeros(len(positions), dtype=np.uint32)
     evaluable_votes = np.zeros(len(positions), dtype=np.uint32)
-    chord_limit = 2 * math.sin(math.radians(max_angle_deg) / 2)
-
-    for image_number, image in enumerate(tqdm(
-        images, desc="Analyse densité", unit="vue", disable=not progress,
-    ), start=1):
-        observed = np.unique(image["indices"][image["indices"] >= 0])
-        if verbose:
-            tqdm.write(
-                f"[densité] Vue {image_number}/{len(images)} : "
-                f"{len(observed)} points observés ; construction du voisinage angulaire.",
-                file=sys.stderr,
-            )
-        if len(observed) < min_neighbors:
+    _DENSITY_STATE.clear()
+    _DENSITY_STATE.update(
+        positions=positions,
+        params={
+            "neighbors": neighbors,
+            "min_neighbors": min_neighbors,
+            "min_cluster_points": min_cluster_points,
+            "min_cluster_fraction": min_cluster_fraction,
+            "low_density_fraction": low_density_fraction,
+            "far_support_rate": far_support_rate,
+            "chord_limit": 2 * math.sin(math.radians(max_angle_deg) / 2),
+        },
+    )
+    numbered_images = enumerate(images, start=1)
+    pool = None
+    try:
+        if workers > 1:
+            pool = multiprocessing.get_context("fork").Pool(workers)
+            results = pool.imap(_view_votes_task, numbered_images)
+        else:
+            results = map(_view_votes_task, numbered_images)
+        for image_number, observed_count, evaluable, suspicious in tqdm(
+            results, total=len(images), desc="Analyse densité", unit="vue",
+            disable=not progress,
+        ):
             if verbose:
-                tqdm.write("[densité] Vue ignorée : voisinage insuffisant.", file=sys.stderr)
-            continue
-        vectors = positions[observed] - image["center"]
-        depths = np.linalg.norm(vectors, axis=1)
-        valid = np.isfinite(depths) & (depths > 0)
-        observed = observed[valid]
-        vectors = vectors[valid]
-        depths = depths[valid]
-        if len(observed) < min_neighbors:
-            continue
-
-        directions = vectors / depths[:, None]
-        tree = cKDTree(directions)
-        k = min(neighbors, len(observed))
-        angular_distances, angular_indices = tree.query(
-            directions, k=k, workers=workers
-        )
-        if k == 1:
-            angular_distances = angular_distances[:, None]
-            angular_indices = angular_indices[:, None]
-
-        for local_index, point_index in enumerate(tqdm(
-            observed, desc=f"Points vue {image_number}", unit="pt",
-            position=1, leave=False, disable=not progress,
-        )):
-            selected = angular_indices[local_index][
-                angular_distances[local_index] <= chord_limit
-            ]
-            if len(selected) < min_neighbors:
-                continue
-            local_depths = depths[selected]
-            log_depths = np.log(local_depths)
-            target = math.log(depths[local_index])
-            density, minimum_support, clusters, target_cluster = _supported_depth_intervals(
-                log_depths,
-                min_cluster_points,
-                min_cluster_fraction,
-                low_density_fraction,
-                target,
-            )
-            if target_cluster is None or not any(
-                cluster[2] >= minimum_support for cluster in clusters
-            ):
-                continue
-
-            required_support = _far_support_threshold(
-                target, clusters, target_cluster, minimum_support, far_support_rate
-            )
-            evaluable_votes[point_index] += 1
-            if required_support is not None and density < required_support:
-                suspicious_votes[point_index] += 1
+                tqdm.write(
+                    f"[densité] Vue {image_number}/{len(images)} : "
+                    f"{observed_count} points observés, {len(evaluable)} évaluables.",
+                    file=sys.stderr,
+                )
+            np.add.at(evaluable_votes, evaluable, 1)
+            np.add.at(suspicious_votes, suspicious, 1)
+    finally:
+        _DENSITY_STATE.clear()
+        if pool is not None:
+            pool.terminate()
 
     return suspicious_votes, evaluable_votes
 
