@@ -123,7 +123,10 @@ export function createNavigationSystem({
           .applyQuaternion(camera.quaternion);
         target.add(delta);
         camera.position.add(delta);
-        camera.position.sub(target).multiplyScalar(box.scale).add(target);
+        // Glisser vers le bas : zoom avant ; vers le haut : dézoom.
+        const zoomIn = drag.y > drag.start.y;
+        const factor = zoomIn ? box.scale : 1 / box.scale;
+        camera.position.sub(target).multiplyScalar(factor).add(target);
         syncCamera();
         requestGifCapture();
       }

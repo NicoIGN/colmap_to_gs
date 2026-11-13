@@ -195,7 +195,7 @@ function updateKeyboardHelp() {
       "Clic droit-glisser : déplacement latéral · " +
       "Ctrl + clic droit-glisser : regarder sur place · " +
       "Clic milieu-glisser : déplacement latéral · " +
-      "Ctrl + clic gauche-glisser : zoom sur une zone · " +
+      "Ctrl + clic gauche-glisser : zoom sur une zone (vers le bas = zoom, vers le haut = dézoom) · " +
       "Molette : avancer/reculer · Maj + clic : mesurer · R : cadrer";
   }
 }
