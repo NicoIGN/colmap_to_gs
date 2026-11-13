@@ -229,6 +229,42 @@ def load_gaussians(path):
     return splats
 
 
+def shape_isolation_mask(means, log_scales, *, max_aspect_ratio, isolation_factor,
+                         neighbors=8, batch_size=20000):
+    """Flag Gaussians that are both elongated and isolated (needle-like floaters).
+
+    Elongation: largest / smallest semi-axis. Isolation: mean distance to the
+    `neighbors` nearest Gaussian centres, relative to the scene median.
+    """
+    count = len(means)
+    rejected = np.zeros(count, dtype=bool)
+    report = dict(total=count, elongated=0, isolated=0, proposed_rejections=0,
+                  max_aspect_ratio=max_aspect_ratio, isolation_factor=isolation_factor,
+                  neighbors=neighbors)
+    if count <= neighbors:
+        report["warning"] = "Trop peu de splats pour estimer l'isolement ; aucun rejet de forme."
+        return rejected, report
+
+    tree = cKDTree(means)
+    mean_distance = np.empty(count, dtype=np.float64)
+    for start in range(0, count, batch_size):
+        stop = min(start + batch_size, count)
+        distances, _ = tree.query(means[start:stop], k=neighbors + 1)
+        mean_distance[start:stop] = distances[:, 1:].mean(axis=1)
+    reference = np.median(mean_distance)
+    if not np.isfinite(reference) or reference <= 0:
+        report["warning"] = "Distance de référence indéterminable ; aucun rejet de forme."
+        return rejected, report
+
+    scales = np.exp(log_scales)
+    elongated = scales.max(axis=1) / scales.min(axis=1) > max_aspect_ratio
+    isolated = mean_distance > isolation_factor * reference
+    rejected = elongated & isolated
+    report.update(elongated=int(elongated.sum()), isolated=int(isolated.sum()),
+                  proposed_rejections=int(rejected.sum()))
+    return rejected, report
+
+
 def clean_gaussians(
     splats,
     colmap,
@@ -240,6 +276,8 @@ def clean_gaussians(
     min_opacity=0.0,
     max_scale_factor=10.0,
     max_removal_fraction=0.2,
+    max_aspect_ratio=None,
+    isolation_factor=None,
     filter_mode="diagnostic",
     return_rejected=False,
     seed=0,
@@ -255,6 +293,12 @@ def clean_gaussians(
         raise ValueError("Le facteur de taille doit être fini et > 1")
     if not np.isfinite(max_removal_fraction) or not 0 <= max_removal_fraction <= 1:
         raise ValueError("La fraction maximale de suppression doit être dans [0, 1]")
+    if (max_aspect_ratio is None) != (isolation_factor is None):
+        raise ValueError("Filtre de forme : --max-aspect-ratio et --isolation-factor vont ensemble")
+    if max_aspect_ratio is not None and (not np.isfinite(max_aspect_ratio) or max_aspect_ratio <= 1):
+        raise ValueError("Le rapport d'élongation maximal doit être fini et > 1")
+    if isolation_factor is not None and (not np.isfinite(isolation_factor) or isolation_factor <= 0):
+        raise ValueError("Le facteur d'isolement doit être fini et > 0")
     if filter_mode not in ("diagnostic", "apply", "off"):
         raise ValueError("Mode de filtre inconnu")
     if batch_size < 1 or len(splats["means"]) == 0:
@@ -277,6 +321,14 @@ def clean_gaussians(
             valid["means"], valid["scales"], valid["quats"],
             size_factor=max_scale_factor, batch_size=min(batch_size, 20000), seed=seed,
         )
+    if filter_mode != "off" and max_aspect_ratio is not None:
+        shape_rejected, shape_report = shape_isolation_mask(
+            valid["means"], valid["scales"],
+            max_aspect_ratio=max_aspect_ratio, isolation_factor=isolation_factor,
+            batch_size=min(batch_size, 20000),
+        )
+        rejected |= shape_rejected
+        report["shape"] = shape_report
     report.update(mode=filter_mode, applied_rejections=int(rejected.sum()) if filter_mode == "apply" else 0)
     log("Filtre contextuel : " + json.dumps(report, ensure_ascii=False))
     if "warning" in report:
@@ -409,6 +461,17 @@ def main():
                         help="Demi-axe maximal / médiane locale (défaut : 10)")
     parser.add_argument("--max-removal-fraction", type=float, default=0.2,
                         help="Refuser l'application au-delà de cette fraction de rejets contextuels (défaut : 0.2)")
+    parser.add_argument("--max-aspect-ratio", type=float, default=None,
+                        help=(
+                            "Rapport max/min des demi-axes au-delà duquel un splat est allongé "
+                            "(ex. 20). Doit être combiné à --isolation-factor. Désactivé par défaut."
+                        ))
+    parser.add_argument("--isolation-factor", type=float, default=None,
+                        help=(
+                            "Un splat est isolé si sa distance moyenne aux voisins dépasse ce "
+                            "multiple de la médiane de la scène (ex. 5). Combiné à --max-aspect-ratio "
+                            "par ET. Désactivé par défaut."
+                        ))
     parser.add_argument( "--max-world-scale",type=float,default=None,
         help=(
             "Demi-axe maximal d'un Gaussian dans les unités monde COLMAP. "
@@ -487,6 +550,8 @@ def main():
         min_opacity=args.min_opacity,
         max_scale_factor=args.max_scale_factor,
         max_removal_fraction=args.max_removal_fraction,
+        max_aspect_ratio=args.max_aspect_ratio,
+        isolation_factor=args.isolation_factor,
         filter_mode=args.filter_mode,
         return_rejected=True,
         seed=args.seed,
