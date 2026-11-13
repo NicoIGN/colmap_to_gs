@@ -18,6 +18,8 @@ export_name="block.splat"
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
 export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+shape_max_aspect_ratio="${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}"
+shape_isolation_factor="${POSTPROCESS_SHAPE_ISOLATION_FACTOR:-}"
 
 quality="${TRAIN_SP_QUALITY:-}"
 distraction_robustness="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
@@ -85,6 +87,8 @@ Options:
   --python-bin PATH
   --export-script PATH
   --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
+  --shape-max-aspect-ratio R  rejette les splats plus allongés que R (>1) et isolés ; off si vide
+  --shape-isolation-factor F  seuil d'isolement, multiple de la médiane (>0) ; requis avec R
   --name FILENAME           Nom de sortie (défaut: block.splat)
   --clean
 EOF
@@ -146,6 +150,8 @@ while [[ $# -gt 0 ]]; do
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
     --export-script) need_arg "$@"; export_script="$2"; shift 2 ;;
     --export-filter-mode) need_arg "$@"; export_filter_mode="$2"; shift 2 ;;
+    --shape-max-aspect-ratio) need_arg "$@"; shape_max_aspect_ratio="$2"; shift 2 ;;
+    --shape-isolation-factor) need_arg "$@"; shape_isolation_factor="$2"; shift 2 ;;
     --name) need_arg "$@"; export_name="$2"; shift 2 ;;
     --clean)
       if [[ "${2:-}" == "true" || "${2:-}" == "false" ]]; then
@@ -297,6 +303,16 @@ case "$export_filter_mode" in
   diagnostic|apply|off) ;;
   *) die "Mode d'export invalide : $export_filter_mode (diagnostic, apply, off)" ;;
 esac
+if [[ -n "$shape_max_aspect_ratio" || -n "$shape_isolation_factor" ]]; then
+  [[ -n "$shape_max_aspect_ratio" && -n "$shape_isolation_factor" ]] ||
+    die "--shape-max-aspect-ratio et --shape-isolation-factor doivent être fournis ensemble."
+  [[ "$shape_max_aspect_ratio" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v v="$shape_max_aspect_ratio" 'BEGIN { exit !(v > 1) }' ||
+    die "--shape-max-aspect-ratio doit être un nombre > 1 : $shape_max_aspect_ratio"
+  [[ "$shape_isolation_factor" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v v="$shape_isolation_factor" 'BEGIN { exit !(v > 0) }' ||
+    die "--shape-isolation-factor doit être un nombre > 0 : $shape_isolation_factor"
+fi
 
 model_ext=""
 for ext in bin txt; do
@@ -371,6 +387,9 @@ export_world_splat() {
   [[ -z "$max_world_scale" ]] || export_cmd+=(--max-world-scale "$max_world_scale")
   if [[ "$export_script" == "$default_export_script" ]]; then
     export_cmd+=(--filter-mode "$export_filter_mode")
+    if [[ -n "$shape_max_aspect_ratio" ]]; then
+      export_cmd+=(--max-aspect-ratio "$shape_max_aspect_ratio" --isolation-factor "$shape_isolation_factor")
+    fi
   fi
 
   log "Nettoyage + conversion monde -> .splat"

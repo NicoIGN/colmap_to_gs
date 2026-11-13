@@ -369,6 +369,12 @@ POSTPROCESS_CLEANER="contextual"
 # Le recadrage sparse ci-dessous est independant et peut rester actif.
 POSTPROCESS_FILTER_MODE="diagnostic"
 
+# Filtre de forme/isolement (export_ply.py). Vide = désactivé ; les deux vont ensemble.
+# Rejet si splat allongé (rapport d'axes > MAX_ASPECT_RATIO) ET isolé
+# (distance moyenne à 8 voisins > ISOLATION_FACTOR x médiane). Ex. 20 et 5.
+POSTPROCESS_SHAPE_MAX_ASPECT_RATIO=""
+POSTPROCESS_SHAPE_ISOLATION_FACTOR=""
+
 # Defaut : 10. Nombre fini > 1, sans unite.
 # Grand axe / mediane des grands axes voisins ; le depassement seul ne retire
 # rien : il faut aussi une position peripherique et un faible support.

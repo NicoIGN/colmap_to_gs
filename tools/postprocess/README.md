@@ -137,6 +137,13 @@ python3 tools/postprocess/filter_splats.py \
 - `export_ply.py` autonome : utilise le mode diagnostic par défaut
   (`--filter-mode diagnostic|apply|off`) sur la scène fournie ; produit les
   mêmes diagnostics et conserve le PLY d'entrée.
+- Filtre de forme/isolement (aiguilles flottantes) : `--max-aspect-ratio R` et
+  `--isolation-factor F` (à fournir ensemble, désactivé par défaut). Un splat est
+  rejeté s'il est plus allongé que R (rapport max/min des axes) ET isolé (distance
+  moyenne à ses 8 voisins > F × médiane de la scène). Via `run_spirula_block.sh` :
+  `--shape-max-aspect-ratio` / `--shape-isolation-factor`, ou
+  `POSTPROCESS_SHAPE_MAX_ASPECT_RATIO` / `POSTPROCESS_SHAPE_ISOLATION_FACTOR`.
+  Sans effet si le mode d'export est `off`.
 - Arguments `--points`, `--dist`, `--radius-factor`, `--outlier-percent`
   et `--max-points` : acceptés mais sans effet sur les splats retenus ;
   un message le précise.
