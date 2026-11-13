@@ -12,7 +12,7 @@ load_config() {
   source "$config"
   source "$repo_root/tools/libs/scripts/pipeline_config.sh"
   normalize_backend_config_names || exit 1
-  init_sfm_geometry_config "$COLMAP_METHOD"
+  init_sfm_geometry_config "${COLMAP_METHOD:-spirula}"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
     if [[ -v "$name" ]]; then
