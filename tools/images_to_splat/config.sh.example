@@ -70,7 +70,7 @@ TRAIN_MASKS_SPIRULA_DEVICE="auto"
 # S'applique aux processus Spirula, pas seulement aux masques.
 export SS_NN_LOG=1
 # Prompts SAM en anglais ; conserver voitures et passants.
-TRAIN_MASKS_LABELS="sky,cloud"
+TRAIN_MASKS_LABELS="sky"
 TRAIN_MASKS_CONFIDENCE="0.5"     # [0,1]
 TRAIN_MASKS_DILATE="0.002"      # auto ou [0,0.1[, fraction de la diagonale
 # 1.0 permet les vues vers le haut presque entierement masquees.

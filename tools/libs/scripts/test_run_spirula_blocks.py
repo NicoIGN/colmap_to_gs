@@ -369,7 +369,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(again.returncode, 0, again.stderr)
             self.assertNotIn("autres masques", again.stderr)
 
-            env.update(TRAIN_MASKS_LABELS="sky,person")
+            env.update(TRAIN_MASKS_LABELS="sky,person", TRAIN_MASKS_MODE="auto")
             changed = execute()
             self.assertEqual(changed.returncode, 0, changed.stderr)
             self.assertIn("autres masques", changed.stderr)

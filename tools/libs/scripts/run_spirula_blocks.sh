@@ -62,7 +62,7 @@ MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
 TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
-TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-auto}"
+TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-empty}"
 TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
@@ -128,7 +128,7 @@ Variables:
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
   TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
-  TRAIN_MASKS_MODE          auto (empty for sky only, else ignore), ignore, empty
+  TRAIN_MASKS_MODE          auto (empty for sky only, else ignore), ignore, empty (défaut)
   TRAIN_MASKS_CONFIDENCE    Minimum label probability (0.5)
   TRAIN_MASKS_DILATE        auto (0 empty, 0.002 ignore) or fraction of image diagonal
   TRAIN_MASKS_MAX_FRACTION  Above this masked fraction, an image is kept unmasked (0.8)
