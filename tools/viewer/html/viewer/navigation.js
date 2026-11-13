@@ -167,12 +167,12 @@ export function createNavigationSystem({
    * Orbite explicite : déplace la caméra autour de target.
    * Utilisée par les boutons d’orbite encore présents.
    */
-  function rotateAroundAxis(axis, angle) {
+  function rotateAroundAxis(axis, angle, locked = isRotationLocked()) {
     if (!angle || axis.lengthSq() < 1e-12) return;
 
     const normalizedAxis = axis.clone().normalize();
 
-    if (isRotationLocked()) {
+    if (locked) {
       const principalAxis = getPrincipalAxis().clone().normalize();
       const alignment = Math.abs(
         normalizedAxis.dot(principalAxis)
@@ -291,15 +291,15 @@ export function createNavigationSystem({
     target.add(delta);
   }
 
-  function orbitScene(dx, dy) {
+  function orbitScene(dx, dy, forceLock = false) {
     const sensitivity = 0.005;
-    const locked = isRotationLocked();
+    const locked = forceLock || isRotationLocked();
     const yawAxis = locked
       ? getPrincipalAxis().clone().normalize()
       : camera.up.clone().normalize();
     let yawAngle = -dx * sensitivity;
     if (locked && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
-    rotateAroundAxis(yawAxis, yawAngle);
+    rotateAroundAxis(yawAxis, yawAngle, locked);
     if (locked) return;
 
     const direction = target.clone().sub(camera.position);
@@ -519,13 +519,19 @@ export function createNavigationSystem({
 
       // Priorité aux mesures : ne pas prévenir l’événement,
       // flouter un champ ou capturer le pointeur.
-      if (event.shiftKey) return;
+      if (event.shiftKey || event.metaKey) return;
 
-      if (event.altKey || event.metaKey) return;
+      // Alt + clic gauche : orbite autour du centre de scène, axe principal fixe.
+      const centerOrbit =
+        event.altKey && event.button === 0 && !event.ctrlKey;
+
+      if (event.altKey && !centerOrbit) return;
 
       let mode = null;
 
-      if (event.button === 0 && event.ctrlKey) {
+      if (centerOrbit) {
+        mode = "centerOrbit";
+      } else if (event.button === 0 && event.ctrlKey) {
         mode = "zoom";
       } else if (event.button === 2 && event.ctrlKey) {
         mode = "look";
@@ -542,6 +548,12 @@ export function createNavigationSystem({
 
       event.preventDefault();
       clearNavigation();
+
+      if (mode === "centerOrbit") {
+        target.copy(getSceneCenter());
+        camera.lookAt(target);
+        camera.updateMatrixWorld(true);
+      }
 
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
@@ -594,7 +606,7 @@ export function createNavigationSystem({
         buttonReleased ||
         !getCanNavigate() ||
         event.shiftKey ||
-        event.altKey ||
+        (event.altKey && drag.mode !== "centerOrbit") ||
         event.metaKey ||
         (drag.requiresControl && !event.ctrlKey) ||
         (
@@ -628,6 +640,8 @@ export function createNavigationSystem({
           height: `${box?.height ?? 0}px`,
         });
         return;
+      } else if (drag.mode === "centerOrbit") {
+        orbitScene(dx, dy, true);
       } else if (drag.mode === "orbit") {
         orbitScene(dx, dy);
       } else if (drag.mode === "look") {
