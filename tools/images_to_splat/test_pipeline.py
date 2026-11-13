@@ -750,6 +750,7 @@ if "--wait" in args:
             f'SFM_MASKS_DIR="{source_masks}"\nTRAIN_MASKS_DIR="{source_masks}"'
         )
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        (self.output / "sparse_clean").mkdir()
         mask = source_masks / "root.jpg.png"
         original = mask.stat()
         os.utime(mask, ns=(original.st_atime_ns, original.st_mtime_ns + 1000000000))

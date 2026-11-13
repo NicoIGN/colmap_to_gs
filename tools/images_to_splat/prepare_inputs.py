@@ -223,6 +223,7 @@ def prepare(check=False):
     marker = output / "inputs.json"
     resume = os.environ.get("PIPELINE_RESUME") == "true"
     adopted = False
+    rewritten = False
     if marker.is_file():
         previous = json.loads(marker.read_text())
         if not isinstance(previous, dict):
@@ -239,7 +240,7 @@ def prepare(check=False):
                                  f"\nPIPELINE_RESUME={'true' if resume else 'false'}"
                                  f" ; contrôle seul={'true' if check else 'false'}"
                                  f"\nDifférences enregistrées / actuelles :\n{details}")
-            adopted = True
+            rewritten = True
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
@@ -283,12 +284,13 @@ def prepare(check=False):
             target.symlink_to(resolved)
     if not check:
         output.mkdir(parents=True, exist_ok=True)
-        if adopted:
+        if adopted or rewritten:
             if marker.exists():
                 backup = output / "inputs.before_resume.json"
-                if backup.exists():
+                if adopted and backup.exists():
                     raise ValueError(f"Sauvegarde de signature déjà présente : {backup}")
                 shutil.copyfile(marker, backup)
+        if adopted:
             print(
                 "[AVERTISSEMENT] Reprise explicite d'une signature absente/ancienne ; "
                 "la provenance des artefacts sans métadonnées n'est pas vérifiable.",
