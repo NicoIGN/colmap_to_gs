@@ -24,7 +24,7 @@ parser = argparse.ArgumentParser(
     description="Visualiser un tileset Gaussian Splat dans CesiumJS avec un fond OSM.",
 )
 parser.add_argument("tileset", type=Path, help="Chemin du tileset.json")
-parser.add_argument("--port", type=int, default=8000, help="Port local (défaut : 8000 ; 0 : automatique)")
+parser.add_argument("--port", type=int, default=8001, help="Port local (défaut : 8001 ; 0 : automatique)")
 parser.add_argument("--no-open", action="store_true", help="Ne pas ouvrir le navigateur")
 args = parser.parse_args()
 tileset = args.tileset.expanduser().resolve()
