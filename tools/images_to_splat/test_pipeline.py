@@ -741,6 +741,29 @@ if "--wait" in args:
         self.assertEqual(len(generated), 1)
         self.assertTrue((self.output / "masks/masks.json").exists())
 
+    def test_external_mask_changes_identify_file_and_metadata_or_content(self):
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        source_masks = self.output / "masks"
+        self.output = self.root / "external-mask-diagnostics"
+        self.append(
+            f'OUTPUT_DIR="{self.output}"\n'
+            f'SFM_MASKS_DIR="{source_masks}"\nTRAIN_MASKS_DIR="{source_masks}"'
+        )
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        mask = source_masks / "root.jpg.png"
+        original = mask.stat()
+        os.utime(mask, ns=(original.st_atime_ns, original.st_mtime_ns + 1000000000))
+        result = self.run_pipeline("--phase", "merge")
+        self.assertNotEqual(result.returncode, 0)
+        diagnostic = result.stdout + result.stderr
+        self.assertIn("settings.SFM_MASKS_external_mask_stamps.root.jpg.mtime_ns", diagnostic)
+        self.assertNotIn("root.jpg.sha256", diagnostic)
+        Image.new("L", (2, 2), 0).save(mask)
+        result = self.run_pipeline("--phase", "merge")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("settings.SFM_MASKS_external_mask_stamps.root.jpg.sha256",
+                      result.stdout + result.stderr)
+
     def test_external_masks_are_reused_for_new_sfm_workspace(self):
         self.append('SFM_MASKS_LABELS="sky"\nTRAIN_MASKS_LABELS="sky"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

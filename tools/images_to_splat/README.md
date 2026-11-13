@@ -130,6 +130,9 @@ traiter séparément pendant l'entraînement.
   calculés ; chaque image doit avoir son PNG monochrome binaire de mêmes
   dimensions. Le pipeline vérifie les fichiers, crée un lien dans le workspace
   et ne charge pas de modèle ni ne relance la segmentation.
+  Ne pas modifier ces dossiers pendant le calcul : la signature contrôle taille,
+  date et SHA256 de chaque masque. En cas de divergence, le diagnostic indique
+  l'image et le champ modifié.
 - Partage des masques : si les politiques effectives sont identiques, les
   masques sont calculés une seule fois dans `masks/` ; sinon chaque étape activée
   reçoit son propre dossier `feature_masks/` ou `train_masks/`.

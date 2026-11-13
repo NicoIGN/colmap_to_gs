@@ -103,6 +103,13 @@ def gps_exif_metadata(images, gpx_configured):
 
 def record_differences(previous, current, path=""):
     """Yield bounded, field-level diagnostics without changing reuse decisions."""
+    if (path.endswith("_external_mask_stamps")
+            and isinstance(previous, list) and isinstance(current, list)
+            and all(isinstance(mask, list) and len(mask) == 4
+                    and isinstance(mask[0], str) for mask in previous + current)):
+        fields = ("size", "mtime_ns", "sha256")
+        previous = {mask[0]: dict(zip(fields, mask[1:])) for mask in previous}
+        current = {mask[0]: dict(zip(fields, mask[1:])) for mask in current}
     if (path == "images" and isinstance(previous, list) and isinstance(current, list)
             and all(isinstance(image, list) and len(image) == 4
                     and isinstance(image[0], str) for image in previous + current)):
