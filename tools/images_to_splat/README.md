@@ -72,6 +72,14 @@ Exemple d’invocation :
 bash script/images_to_3dgs.sh /chemin/config.sh
 ```
 
+Depuis des vidéos, `scripts/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
+
+```bash
+bash scripts/videos_to_3dgs.sh /chemin/config.sh --video a.mp4 --video b.mp4 --num-frames 200 [--width 1920 --height 1080] [--frames-dir DOSSIER] [--phase prepare]
+```
+
+Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côté de la première vidéo) et régénérées à chaque appel.
+
 ## 2. Entrées et sorties
 
 - `SFM_IMAGES_DIR` : dossier source des images ; l'option

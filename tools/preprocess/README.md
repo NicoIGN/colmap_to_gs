@@ -22,7 +22,8 @@ python3 tools/preprocess/images_to_colmap.py --help
 
 | Outil | Fonction |
 |---|---|
-| `extract_frames_from_video.py` | Extraction d'images depuis une vidéo |
+| `extract_frames_from_video.py` | Extraction d'images depuis une vidéo (cadence fixe, GPX optionnel) |
+| `extract_sharp_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
 | `image_info.py` | Inspection d'une image et de ses informations GPS |
 | `images_to_colmap.py` | Reconstruction COLMAP depuis des images |
 | `georef_colmap_from_gpx.py` | Recalage d'un modèle COLMAP sur une trace GPX |
