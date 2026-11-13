@@ -3,17 +3,38 @@
 
 set -Eeuo pipefail
 
+# ===============================================================
+# Configuration
+# ===============================================================
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+export DEBIAN_FRONTEND=noninteractive
+
+# ===============================================================
+# Logging
+# ===============================================================
 
 log() {
     echo "[VULKAN] $*"
 }
 
 die() {
-    echo "[ERROR] $*" >&2
+    echo "[VULKAN][ERROR] $*" >&2
     exit 1
 }
+
+on_error() {
+    local status=$?
+    local line="${1:-?}"
+
+    echo
+    log "[ERROR] Échec ligne ${line} (code ${status})."
+    exit "${status}"
+}
+
+trap 'on_error $LINENO' ERR
 
 log "Installation des dépendances"
 log "Projet : ${PROJECT_ROOT}"
@@ -22,15 +43,11 @@ log "Projet : ${PROJECT_ROOT}"
 # Contrôle de l'environnement
 # ===============================================================
 
-if ! command -v apt-get >/dev/null 2>&1; then
+command -v apt-get >/dev/null 2>&1 ||
     die "apt-get requis."
-fi
 
-if [[ "${EUID}" -ne 0 ]]; then
+[[ "${EUID}" -eq 0 ]] ||
     die "Exécution root obligatoire."
-fi
-
-export DEBIAN_FRONTEND=noninteractive
 
 # ===============================================================
 # Installation des dépendances
@@ -48,6 +65,9 @@ PACKAGES=(
     pkg-config
     cmake
     ninja-build
+    git
+    curl
+    wget
 
     # Vulkan
     libvulkan1
@@ -56,7 +76,6 @@ PACKAGES=(
     vulkan-tools
 
     # X11 / Xorg
-    xorgproto
     libx11-dev
     libxext-dev
     libxrender-dev
@@ -87,6 +106,8 @@ apt-get install -y --no-install-recommends "${PACKAGES[@]}"
 # Actualisation du cache des bibliothèques
 # ===============================================================
 
+log "Actualisation du cache des bibliothèques"
+
 ldconfig
 
 # ===============================================================
@@ -96,27 +117,40 @@ ldconfig
 log "Vérification des headers"
 
 REQUIRED_HEADERS=(
+    # Vulkan
     /usr/include/vulkan/vulkan.h
+    /usr/include/vulkan/vulkan_core.h
+    /usr/include/vulkan/vk_platform.h
 
+    # X11
     /usr/include/X11/X.h
     /usr/include/X11/Xlib.h
-    /usr/include/X11/extensions/Xinerama.h
+    /usr/include/X11/Xatom.h
+    /usr/include/X11/Xresource.h
+    /usr/include/X11/keysym.h
     /usr/include/X11/extensions/Xrandr.h
+    /usr/include/X11/extensions/Xinerama.h
     /usr/include/X11/extensions/XInput2.h
+    /usr/include/X11/Xcursor/Xcursor.h
 
+    # OpenGL
     /usr/include/GL/gl.h
     /usr/include/GL/glx.h
 
+    # EGL
     /usr/include/EGL/egl.h
 
+    # Wayland
     /usr/include/wayland-client.h
+    /usr/include/wayland-egl.h
+
+    # XKB
     /usr/include/xkbcommon/xkbcommon.h
 )
 
 for header in "${REQUIRED_HEADERS[@]}"; do
-    if [[ ! -f "${header}" ]]; then
-        die "Header manquant : ${header}"
-    fi
+    [[ -r "${header}" ]] ||
+        die "Header manquant ou illisible : ${header}"
 
     log "Header OK : ${header}"
 done
@@ -126,6 +160,9 @@ done
 # ===============================================================
 
 log "Vérification pkg-config"
+
+command -v pkg-config >/dev/null 2>&1 ||
+    die "pkg-config introuvable."
 
 REQUIRED_PC_PACKAGES=(
     vulkan
@@ -156,13 +193,14 @@ done
 log "Vérification des bibliothèques système"
 
 REQUIRED_LIBRARIES=(
-    libvulkan.so.1
     libvulkan.so
+    libvulkan.so.1
     libX11.so
+    libXext.so
+    libXrandr.so
     libXinerama.so
     libXcursor.so
     libXi.so
-    libXrandr.so
     libGL.so
     libGLX.so
     libOpenGL.so
@@ -180,6 +218,42 @@ for library in "${REQUIRED_LIBRARIES[@]}"; do
 done
 
 # ===============================================================
+# Validation spécifique de Vulkan pour CMake
+# ===============================================================
+
+log "Validation de Vulkan pour CMake"
+
+VULKAN_INCLUDE_DIR="/usr/include"
+VULKAN_HEADER="${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
+
+[[ -r "${VULKAN_HEADER}" ]] ||
+    die "Vulkan_INCLUDE_DIR invalide : ${VULKAN_HEADER}"
+
+VULKAN_LIBRARY="/usr/lib/x86_64-linux-gnu/libvulkan.so"
+
+if [[ ! -e "${VULKAN_LIBRARY}" ]]; then
+    VULKAN_LIBRARY="$(ldconfig -p |
+        awk '$1 == "libvulkan.so" {print $NF; exit}')"
+fi
+
+[[ -n "${VULKAN_LIBRARY}" && -e "${VULKAN_LIBRARY}" ]] ||
+    die "Bibliothèque de développement libvulkan.so introuvable."
+
+log "Vulkan_INCLUDE_DIR : ${VULKAN_INCLUDE_DIR}"
+log "Vulkan_LIBRARY : ${VULKAN_LIBRARY}"
+
+# Vérification de compilation minimale des headers
+if command -v c++ >/dev/null 2>&1; then
+    printf '#include <vulkan/vulkan.h>\nint main() { return 0; }\n' |
+        c++ -x c++ -fsyntax-only - ||
+        die "Impossible de compiler un programme incluant vulkan/vulkan.h."
+
+    log "Compilation test des headers Vulkan OK"
+else
+    die "Compilateur C++ introuvable."
+fi
+
+# ===============================================================
 # ICD Vulkan
 # ===============================================================
 
@@ -188,7 +262,7 @@ log "Vérification des ICD Vulkan"
 ICD_FILES=(/usr/share/vulkan/icd.d/*.json)
 
 if [[ -f "${ICD_FILES[0]}" ]]; then
-    ls -l "${ICD_FILES[@]}"
+    printf '  %s\n' "${ICD_FILES[@]}"
 else
     log "WARNING : aucun ICD Vulkan détecté."
 fi
@@ -200,68 +274,29 @@ fi
 log "Vérification du runtime Vulkan"
 
 if command -v vulkaninfo >/dev/null 2>&1; then
-    if ! vulkaninfo --summary; then
+    if vulkaninfo --summary; then
+        log "Runtime Vulkan accessible."
+    else
         log "WARNING : runtime Vulkan non opérationnel."
+        log "Les dépendances de compilation sont néanmoins installées."
     fi
 else
     log "WARNING : vulkaninfo indisponible."
 fi
 
-
 # ===============================================================
-# Validation finale des dépendances Vulkan
+# Résumé
 # ===============================================================
 
-log "Validation finale des dépendances Vulkan"
+log "==============================================================="
+log "Installation Vulkan terminée et validée"
+log "==============================================================="
 
-# Headers Vulkan indispensables à FindVulkan.cmake
-REQUIRED_VULKAN_HEADERS=(
-    /usr/include/vulkan/vulkan.h
-    /usr/include/vulkan/vulkan_core.h
-    /usr/include/vulkan/vk_platform.h
-)
-
-for header in "${REQUIRED_VULKAN_HEADERS[@]}"; do
-    [[ -r "${header}" ]] || die "Header Vulkan absent ou illisible : ${header}"
-    log "Header Vulkan OK : ${header}"
-done
-
-# pkg-config
-pkg-config --exists vulkan || die "Package pkg-config vulkan introuvable"
-
-VULKAN_PC_INCLUDEDIR="$(pkg-config --variable=includedir vulkan)"
-
-[[ -r "${VULKAN_PC_INCLUDEDIR}/vulkan/vulkan.h" ]] ||
-    die "Header Vulkan absent du chemin pkg-config : ${VULKAN_PC_INCLUDEDIR}"
-
-log "Vulkan pkg-config OK : $(pkg-config --modversion vulkan)"
-log "Vulkan include directory : ${VULKAN_PC_INCLUDEDIR}"
-
-# Bibliothèque de développement
-VULKAN_LIBRARY="/usr/lib/x86_64-linux-gnu/libvulkan.so"
-
-if [[ ! -e "${VULKAN_LIBRARY}" ]]; then
-    VULKAN_LIBRARY="$(ldconfig -p | awk '/libvulkan\.so \(/{print $NF; exit}')"
-fi
-
-[[ -n "${VULKAN_LIBRARY}" && -e "${VULKAN_LIBRARY}" ]] ||
-    die "Bibliothèque de développement libvulkan.so introuvable"
-
-log "Vulkan library OK : ${VULKAN_LIBRARY}"
-
-# ICD
-ICD_FILES=(/usr/share/vulkan/icd.d/*.json)
-
-if [[ ! -f "${ICD_FILES[0]}" ]]; then
-    die "Aucun ICD Vulkan installé dans /usr/share/vulkan/icd.d/"
-fi
-
-log "ICD Vulkan détectés :"
-printf '  %s\n' "${ICD_FILES[@]}"
-
-log "Toutes les dépendances Vulkan sont installées et vérifiées."
-
-
-
-
-log "Installation et vérifications terminées."
+log "Headers Vulkan : ${VULKAN_INCLUDE_DIR}"
+log "Bibliothèque Vulkan : ${VULKAN_LIBRARY}"
+log "X11 : OK"
+log "OpenGL : OK"
+log "EGL : OK"
+log "Wayland : OK"
+log "pkg-config : OK"
+log "==============================================================="
