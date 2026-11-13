@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Shared configuration for local execution and Slurm submission.
 die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
+# realpath -e/-m n'existe pas sur macOS : Python est portable.
+resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
 load_config() {
   local config="$1" images="${2:-}" name replacement directory
@@ -118,8 +120,8 @@ load_config() {
   [[ "$SFM_IMAGES_DIR" == /* && -d "$SFM_IMAGES_DIR" ]] ||
     die "SFM_IMAGES_DIR doit être un dossier existant avec un chemin absolu."
   [[ "${OUTPUT_DIR:-}" == /* ]] || die "OUTPUT_DIR doit être un chemin absolu."
-  SFM_IMAGES_DIR="$(realpath -e -- "$SFM_IMAGES_DIR")"
-  OUTPUT_DIR="$(realpath -m -- "$OUTPUT_DIR")"
+  SFM_IMAGES_DIR="$(resolve_path "$SFM_IMAGES_DIR")"
+  OUTPUT_DIR="$(resolve_path "$OUTPUT_DIR")"
   [[ "$OUTPUT_DIR/" != "$SFM_IMAGES_DIR/"* ]] ||
     die "OUTPUT_DIR doit être distinct et extérieur au dossier d'images."
   export SFM_IMAGES_DIR OUTPUT_DIR
@@ -219,7 +221,7 @@ load_config() {
     if [[ -n "${!directory}" ]]; then
       [[ "${!directory}" == /* && -d "${!directory}" ]] ||
         config_error "$directory doit être un dossier existant avec un chemin absolu."
-      printf -v "$directory" '%s' "$(realpath -e -- "${!directory}")"
+      printf -v "$directory" '%s' "$(resolve_path "${!directory}")"
       export "$directory"
       continue
     fi

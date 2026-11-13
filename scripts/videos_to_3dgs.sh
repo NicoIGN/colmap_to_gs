@@ -6,6 +6,8 @@ usage() {
   echo "Usage : bash scripts/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
 }
 die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
+# realpath -e/-m n'existe pas sur macOS : Python est portable.
+resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
@@ -34,9 +36,9 @@ done
 [[ $((width > 0)) == "$((height > 0))" ]] || die "--width et --height doivent être fournis ensemble."
 
 if [[ -z "$frames_dir" ]]; then
-  frames_dir="$(dirname -- "$(realpath -e -- "${videos[0]}")")/frames_3dgs"
+  frames_dir="$(dirname -- "$(resolve_path "${videos[0]}")")/frames_3dgs"
 fi
-frames_dir="$(realpath -m -- "$frames_dir")"
+frames_dir="$(resolve_path "$frames_dir")"
 
 python_bin="$(bash -c 'set -a; source "$1" >/dev/null 2>&1; echo "${PYTHON_BIN:-python3}"' _ "$config")"
 command -v "$python_bin" >/dev/null || die "Python introuvable : $python_bin"
