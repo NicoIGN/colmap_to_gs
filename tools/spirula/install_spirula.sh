@@ -129,6 +129,25 @@ log "Répertoire de compilation : ${BUILD_DIR}"
 log "Log : ${LOG_FILE}"
 
 ###############################################################################
+# BUILD PARALLELISM
+###############################################################################
+
+if [[ "${OS}" == "Linux" ]]; then
+    CPU_COUNT="$(nproc)"
+else
+    CPU_COUNT="$(sysctl -n hw.ncpu)"
+fi
+
+# Limitation facultative par variable d'environnement.
+JOBS="${SPIRULA_JOBS:-${CPU_COUNT}}"
+
+[[ "${JOBS}" =~ ^[1-9][0-9]*$ ]] ||
+    die "SPIRULA_JOBS doit être un entier positif"
+
+log "CPU disponibles : ${CPU_COUNT}"
+log "Jobs de compilation : ${JOBS}"
+
+###############################################################################
 # CMAKE ARGUMENT VALIDATION
 ###############################################################################
 
@@ -342,6 +361,7 @@ else
 
     BUILD_CMD=(
         bash build_develop.bash
+        -j "${JOBS}"
         -DSS_BACKEND=vulkan
         -DSS_BUILD_SAM=ON
         -DCMAKE_BUILD_TYPE=Release
