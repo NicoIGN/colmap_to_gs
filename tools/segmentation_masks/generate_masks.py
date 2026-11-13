@@ -11,10 +11,12 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import numpy as np
 FORMAT_VERSION = 2
@@ -59,6 +61,19 @@ def default_jobs():
     if hasattr(os, "sched_getaffinity"):
         return len(os.sched_getaffinity(0))
     return os.cpu_count() or 1
+
+
+SPIRULA_IMAGE_LINE = re.compile(r"^image (\d+) : (\S+) -- ")
+
+
+def relay_spirula_output(stream, names):
+    """Print Spirula's per-image lines with the final frame index and image name."""
+    for line in stream:
+        match = SPIRULA_IMAGE_LINE.match(line)
+        if match and match.group(2) in names:
+            index, source = names[match.group(2)]
+            line = f"image {index} : {source} -- " + line[match.end():]
+        print(line, end="", flush=True)
 
 
 def shard_bounds(total, jobs):
@@ -210,11 +225,13 @@ class SpirulaSegmenter:
         final = root / "masks"
         final.mkdir()
         shards = []
+        shard_names = []
         progress(0, len(names), self.args, "Préparation des images")
         for shard, (start, stop) in enumerate(shard_bounds(len(names), self.jobs)):
             frames, masks = root / f"frames-{shard}", root / f"masks-{shard}"
             frames.mkdir()
             masks.mkdir()
+            local_names = {}
             for local, name in enumerate(names[start:stop], 1):
                 source = images_dir / name
                 # SAM track has a flat input directory and a restricted extension list.
@@ -222,10 +239,13 @@ class SpirulaSegmenter:
                     raise ValueError(f"Format non pris en charge par Spirula SAM : {source}")
                 with Image.open(source) as image:
                     image.load()
-                (frames / f"{local:09d}{source.suffix.lower()}").symlink_to(source)
+                frame_name = f"{local:09d}{source.suffix.lower()}"
+                (frames / frame_name).symlink_to(source)
+                local_names[frame_name] = (start + local - 1, name)
                 self.paths[str(source)] = final / f"frame_{start + local - 1:05d}.png"
                 progress(start + local, len(names), self.args, "Préparation des images")
             shards.append((start, masks, self.command(frames, masks)))
+            shard_names.append(local_names)
         if self.args.accept_spirula_license:
             print("[masques] Acceptation explicite de la licence SAM 3 transmise à Spirula.", flush=True)
         print(f"[masques] Calcul SAM : {len(shards)} processus Spirula en parallèle "
@@ -235,7 +255,12 @@ class SpirulaSegmenter:
         running = {}
         try:
             for shard, (_, _, command) in enumerate(shards):
-                running[shard] = subprocess.Popen(command)
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True,
+                                           encoding="utf-8", errors="replace")
+                threading.Thread(target=relay_spirula_output,
+                                 args=(process.stdout, shard_names[shard]),
+                                 daemon=True).start()
+                running[shard] = process
             while running:
                 for shard in list(running):
                     status = running[shard].poll()
