@@ -35,6 +35,10 @@ export function createSceneTools({
   let follow = false;
   let auto = false;
   let progress = 0;
+  const configuredFollowRadius = Number($("gpsFollowRadius")?.value);
+  let followRadiusRatio = Number.isFinite(configuredFollowRadius)
+    ? configuredFollowRadius
+    : 0.05;
 
   const configuredSpeed = Number($("gpsAutoSpeed")?.value);
   let speed =
@@ -205,6 +209,7 @@ export function createSceneTools({
       "gpsAutoEnabled",
       "gpsReverse",
       "gpsAutoSpeed",
+      "gpsFollowRadius",
     ]) {
       if ($(id)) {
         $(id).disabled = state.blocked || !ready;
@@ -229,7 +234,6 @@ export function createSceneTools({
     follow = false;
     auto = false;
     progress = 0;
-    lastFollowCameraPosition = null;
     if (diagnostic) removeDiagnostic();
 
     refreshUI();
@@ -340,8 +344,10 @@ export function createSceneTools({
       const tangent = tangentAtProgress(progress);
       if (!tangent) return null;
 
-      // Garder seulement la composante dans l’axe de la trajectoire.
+      // Composante le long de la trajectoire : fait avancer la progression.
       const signedDistance = worldDelta.dot(tangent);
+      // Composante latérale : autorisée, bornée ensuite par le tube.
+      const lateralDelta = worldDelta.clone().addScaledVector(tangent, -signedDistance);
 
       const nextDistance = THREE.MathUtils.clamp(
         progress * track.length + signedDistance,
@@ -357,7 +363,7 @@ export function createSceneTools({
       const newPos = sample(nextProgress);
 
       // Déplacement réellement appliqué dans le monde.
-      return newPos.sub(oldPos);
+      return newPos.sub(oldPos).add(lateralDelta);
     }
 
   function parseGpx(text) {
@@ -910,8 +916,6 @@ export function createSceneTools({
     );
   }
 
-    let lastFollowCameraPosition = null;
-
     function frame(dt) {
       const state = getState();
 
@@ -921,7 +925,6 @@ export function createSceneTools({
         state.blocked ||
         (!follow && !auto)
       ) {
-        lastFollowCameraPosition = null;
         return;
       }
 
@@ -955,8 +958,6 @@ export function createSceneTools({
           );
         }
 
-        lastFollowCameraPosition = camera.position.clone();
-
         syncCamera();
         requestCapture();
 
@@ -969,27 +970,23 @@ export function createSceneTools({
         return;
       }
 
-      // Follow seul: on snap la POSITION à la trajectoire
-      // mais on garde complètement l'orientation utilisateur.
-      const snappedGround = sample(progress);
-      const snappedCamera = snappedGround.clone().addScaledVector(up, eyeHeight);
+      // Follow seul : la caméra reste dans un tube autour de la trajectoire.
+      // Seul l'écart au-delà du rayon est corrigé (translation pure) ;
+      // l'orientation utilisateur est conservée.
+      const groundNow = camera.position.clone().addScaledVector(up, -eyeHeight);
+      progress = nearestProgressFromWorldPoint(groundNow);
 
-      if (!lastFollowCameraPosition) {
-        // Premier snap: translation pure, sans changer le regard.
-        const delta0 = snappedCamera.clone().sub(camera.position);
-        camera.position.add(delta0);
-        target.add(delta0);
-      } else {
-        // Snap continu: translation pure depuis la dernière position suivie.
-        const delta = snappedCamera.clone().sub(lastFollowCameraPosition);
-        camera.position.add(delta);
-        target.add(delta);
+      const offset = groundNow.clone().sub(sample(progress));
+      const radius = state.radius * followRadiusRatio;
+      const offsetLength = offset.length();
+
+      if (offsetLength > radius) {
+        const correction = offset.multiplyScalar((radius - offsetLength) / offsetLength);
+        camera.position.add(correction);
+        target.add(correction);
+        syncCamera();
+        requestCapture();
       }
-
-      lastFollowCameraPosition = snappedCamera;
-
-      syncCamera();
-      requestCapture();
     }
 
   listen($("gpxInput"), "change", async (event) => {
@@ -1063,6 +1060,16 @@ export function createSceneTools({
 
       refreshUI();
     });
+
+  listen($("gpsFollowRadius"), "input", () => {
+    const value = Number($("gpsFollowRadius").value);
+
+    if (Number.isFinite(value) && value >= 0) followRadiusRatio = value;
+
+    if ($("gpsFollowRadiusValue")) {
+      $("gpsFollowRadiusValue").value = `${Math.round(followRadiusRatio * 100)} %`;
+    }
+  });
 
   listen($("gpsAutoSpeed"), "input", () => {
     const value = Number($("gpsAutoSpeed").value);

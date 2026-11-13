@@ -644,6 +644,18 @@
           Inverser le sens de la trajectoire
           <span class="info" tabindex="0" data-tip="Inverse l’ordre de parcours du GPX : le suivi et le mode auto vont de la fin vers le début. La position actuelle est conservée.">ⓘ</span>
         </label>
+        <label class="slider" for="gpsFollowRadius">
+          Rayon autour de la trajectoire
+          <input
+            type="range"
+            id="gpsFollowRadius"
+            min="0"
+            max="0.2"
+            step="0.005"
+            value="0.05"
+          />
+          <output id="gpsFollowRadiusValue" for="gpsFollowRadius">5 %</output>
+        </label>
         <label class="slider" for="gpsAutoSpeed">
           Vitesse auto
           <input
