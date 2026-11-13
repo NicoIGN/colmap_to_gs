@@ -266,8 +266,9 @@ et du recadrage bbox. Le résultat est en **ENU local métrique**
 Les altitudes GPX sont utilisées sans correction géoïde.
 
 Sorties complémentaires : `georef/source.gpx`, `georef/georef_summary.json`,
-`georef/0/georef_stats.json`, trajectoire caméra GPX et
-`georef/georef_trajectories.gpkg` pour contrôle dans QGIS.
+`georef/0/georef_stats.json` et trajectoire caméra GPX. Le GeoPackage
+`georef/georef_trajectories.gpkg` pour contrôle dans QGIS n'est produit qu'avec
+`--gpkg` (désactivé par défaut).
 Un recalage ambigu ou d'erreur normalisée > 0.08 arrête la préparation avant
 le découpage. Après contrôle, `GEOREF_ALLOW_UNCERTAIN=true` permet d'accepter
 explicitement cette solution sans refaire le SfM ; les avertissements restent

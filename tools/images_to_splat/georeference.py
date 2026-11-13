@@ -38,7 +38,7 @@ def validate(output):
         if os.environ["GEOREF_ALLOW_UNCERTAIN"] != "true":
             raise ValueError(
                 "Recalage GPX ambigu ou erreur normalisée > 0.08 : examiner "
-                "georef/georef_trajectories.gpkg et georef/0/georef_stats.json. "
+                "georef/0/georef_stats.json (et georef/georef_trajectories.gpkg si --gpkg). "
                 "Corriger le GPX/GEOREF_VIEW_PREFIX dans un nouveau workspace, "
                 "ou accepter explicitement avec GEOREF_ALLOW_UNCERTAIN=true."
             )

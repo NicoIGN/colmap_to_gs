@@ -72,7 +72,7 @@ class RealGpxGeoreferenceTest(unittest.TestCase):
             self.assertEqual(stats["output_reference"]["units"], "meters")
             self.assertAlmostEqual(stats["output_reference"]["origin_lat_lon_height"][0],
                                    float(lat[0]))
-            self.assertTrue((root / "georef/georef_trajectories.gpkg").is_file())
+            self.assertFalse((root / "georef/georef_trajectories.gpkg").exists())
             self.assertEqual((root / "georef/source.gpx").read_bytes(), track.read_bytes())
             self.assertEqual((sparse / "points3D.bin").read_bytes()[16:40],
                              struct.pack("<ddd", *point))

@@ -18,7 +18,7 @@ Sorties :
 - Modèles COLMAP transformés, même format et arborescence.
 - georef_stats.json par modèle.
 - georef_summary.json à la racine.
-- georef_trajectories.gpkg à la racine :
+- georef_trajectories.gpkg à la racine, seulement avec --gpkg :
     gpx
     prises_de_vue
     gpx_apparie
@@ -1486,6 +1486,10 @@ def main():
         help="Filtre médian spatial : entier impair ; 1 = désactivé.",
     )
     parser.add_argument(
+        "--gpkg", action="store_true",
+        help="Exporter georef_trajectories.gpkg pour contrôle QGIS (désactivé par défaut).",
+    )
+    parser.add_argument(
         "--epsg",
         type=int,
         default=2154,
@@ -1600,22 +1604,25 @@ def main():
 
     # Un seul GeoPackage, contenant les résultats de tous les modèles.
     gpkg_path = output / "georef_trajectories.gpkg"
-    try:
-        counts = export_geopackage(gpkg_path, gpx, results)
-        summary["geopackage"] = {
-            "path": str(gpkg_path),
-            "status": "ok",
-            "crs": "EPSG:4979",
-            "layers": counts,
-        }
-    except Exception as exc:
-        summary["geopackage"] = {
-            "path": str(gpkg_path),
-            "status": "failed",
-            "error": str(exc),
-        }
-        write_json(output / "georef_summary.json", summary)
-        raise
+    if not args.gpkg:
+        summary["geopackage"] = {"path": str(gpkg_path), "status": "disabled"}
+    else:
+        try:
+            counts = export_geopackage(gpkg_path, gpx, results)
+            summary["geopackage"] = {
+                "path": str(gpkg_path),
+                "status": "ok",
+                "crs": "EPSG:4979",
+                "layers": counts,
+            }
+        except Exception as exc:
+            summary["geopackage"] = {
+                "path": str(gpkg_path),
+                "status": "failed",
+                "error": str(exc),
+            }
+            write_json(output / "georef_summary.json", summary)
+            raise
 
     write_json(output / "georef_summary.json", summary)
 
