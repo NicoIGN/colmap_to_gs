@@ -432,22 +432,22 @@ def write_label_diagnostics(label_map, probability, source_rgb, relative_name, d
         path.parent.mkdir(parents=True, exist_ok=True)
         image.save(path, format=image_format)
     # Semantic class map in RGB false colors.
-    save_image("semantic", ".png", Image.fromarray(colors, mode="RGB"), "PNG")
+    save_image("semantic", ".png", Image.fromarray(colors), "PNG")
     # Original image blended with the semantic class colors.
-    original = Image.fromarray(np.asarray(source_rgb, dtype=np.uint8), mode="RGB")
-    color_image = Image.fromarray(colors, mode="RGB")
+    original = Image.fromarray(np.asarray(source_rgb, dtype=np.uint8))
+    color_image = Image.fromarray(colors)
     save_image("overlay", ".overlay.jpg", Image.blend(original, color_image, 0.48), "JPEG")
     # Selected-label probability (black = 0, white = 1).
     probability = np.clip(np.asarray(probability, dtype=np.float32), 0.0, 1.0)
     probability_u8 = np.round(probability * 255).astype(np.uint8)
     save_image("probability", ".probability.png",
-               Image.fromarray(probability_u8, mode="L"), "PNG")
+               Image.fromarray(probability_u8), "PNG")
     # Exact numeric class IDs, retained as a 16-bit PNG.
-    save_image("ids", ".ids.png", Image.fromarray(ids, mode="I;16"), "PNG")
+    save_image("ids", ".ids.png", Image.fromarray(ids), "PNG")
     selected = np.isin(ids, np.asarray(label_ids))
     binary = np.where(selected & (probability >= confidence), 0, 255).astype(np.uint8)
     save_image("threshold", ".threshold.png",
-               Image.fromarray(binary, mode="L"), "PNG")
+               Image.fromarray(binary), "PNG")
 
 def write_label_legend(segmenter, path):
     """Describe diagnostic subfolders, class IDs and their display colors."""
@@ -523,11 +523,11 @@ def mask_one(segmenter, source, label_ids, args):
         keep = np.asarray(Image.fromarray(keep).transpose(transpose))
         if label_map is not None:
             label_map = np.asarray(Image.fromarray(
-                label_map.astype(np.uint16), mode="I;16").transpose(transpose))
+                label_map.astype(np.uint16)).transpose(transpose))
         if probability is not None:
             probability = np.asarray(Image.fromarray(
-                probability.astype(np.float32), mode="F").transpose(transpose))
-        debug_rgb = np.asarray(Image.fromarray(debug_rgb, mode="RGB").transpose(transpose))
+                probability.astype(np.float32)).transpose(transpose))
+        debug_rgb = np.asarray(Image.fromarray(debug_rgb).transpose(transpose))
     return keep, {"masked_fraction": round(masked_fraction, 6), "status": status,
                   "exif_orientation": orientation}, label_map, probability, debug_rgb
 

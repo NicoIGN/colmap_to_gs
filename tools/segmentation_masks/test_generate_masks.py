@@ -26,14 +26,16 @@ class FakeSegmenter:
     def __init__(self):
         self.calls = 0
 
-    def probability(self, image, label_ids):
+    def prediction(self, image, label_ids):
         self.calls += 1
         probability = np.zeros((image.height, image.width), np.float32)
-        if 2 in label_ids:
-            probability[: image.height // 4] = 0.9
+        label_map = np.zeros((image.height, image.width), np.uint16)
+        probability[: image.height // 4] = 0.9
+        label_map[: image.height // 4] = 2
         if 3 in label_ids:
             probability[-2:] = 0.95
-        return probability
+            label_map[-2:] = 3
+        return probability, label_map
 
 
 class PureFunctionsTest(unittest.TestCase):
@@ -115,7 +117,7 @@ class RunTest(unittest.TestCase):
     def args(self, **overrides):
         values = dict(images=self.images, output=self.output, model=self.model,
                       labels="sky", confidence=0.5, dilate_fraction=0.0,
-                      max_masked_fraction=0.8, device="cpu")
+                      max_masked_fraction=0.8, device="cpu", verbose=False)
         values.update(overrides)
         return Namespace(**values)
 
