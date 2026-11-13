@@ -148,7 +148,7 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
   stage="recadrage COLMAP $id avant fusion"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off ]]; then
     cropped="$gs_root/$id/splats/$id.bbox.splat"
-    crop_splat_to_sparse "$raw" "$cropped" "$blocks/$id" \
+    crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
       "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")
