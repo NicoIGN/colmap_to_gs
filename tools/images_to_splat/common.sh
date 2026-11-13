@@ -45,10 +45,12 @@ load_config() {
     SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
     SFM_SP_MATCHER="${SFM_SP_MATCHER:-bruteforce}"
     SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+    SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
   else
     SFM_SP_FEATURES="${SFM_SP_FEATURES:-}"
     SFM_SP_MATCHER="${SFM_SP_MATCHER:-}"
     SFM_SP_PAIRS="${SFM_SP_PAIRS:-}"
+    SFM_SP_QUALITY="${SFM_SP_QUALITY:-}"
   fi
   SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
   SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-8192}"
@@ -183,8 +185,9 @@ load_config() {
     config_choice SFM_SP_FEATURES "$SFM_SP_FEATURES" 'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
     config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
     config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive'
-  elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" ]]; then
-    config_error "SFM_SP_FEATURES, SFM_SP_MATCHER et SFM_SP_PAIRS ne s'appliquent qu'à COLMAP_METHOD=spirula."
+    config_choice SFM_SP_QUALITY "$SFM_SP_QUALITY" 'low|medium|high|extreme'
+  elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" || -n "$SFM_SP_QUALITY" ]]; then
+    config_error "SFM_SP_FEATURES, SFM_SP_MATCHER, SFM_SP_PAIRS et SFM_SP_QUALITY ne s'appliquent qu'à COLMAP_METHOD=spirula."
   fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
   if [[ "$TRAIN_BACKEND" == spirula ]]; then

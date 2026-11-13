@@ -365,6 +365,7 @@ prepare_blocks() {
       --output-dir "$SFM_DIR"
       --preset panoramax
       --pairs "$SFM_SP_PAIRS"
+      --quality "$SFM_SP_QUALITY"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
       --features "$SFM_SP_FEATURES"
