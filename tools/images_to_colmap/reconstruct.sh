@@ -28,7 +28,8 @@ case "$COLMAP_METHOD" in
     bash "$repo_root/tools/libs/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
       --preset video --no-prepare --data-type individual --sequence= \
-      --pairs "$SFM_SP_PAIRS" --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
+      --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
+      --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
       --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
