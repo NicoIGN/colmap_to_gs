@@ -75,7 +75,7 @@ PACKAGES=(
     mesa-vulkan-drivers
     vulkan-tools
 
-    # X11 / Xorg
+    # X11
     libx11-dev
     libxext-dev
     libxrender-dev
@@ -192,6 +192,45 @@ done
 
 log "Vérification des bibliothèques système"
 
+# Les bibliothèques de développement (.so) et les bibliothèques
+# runtime (.so.N) sont vérifiées séparément.
+#
+# ldconfig -p ne référence pas nécessairement les liens
+# de développement .so.
+
+find_library() {
+    local library="$1"
+
+    # Cache dynamique
+    local found
+
+    found="$(ldconfig -p | awk -v lib="${library}" \
+        '$1 == lib { print $NF; exit }')"
+
+    if [[ -n "${found}" && -e "${found}" ]]; then
+        echo "${found}"
+        return 0
+    fi
+
+    # Emplacements standards
+    local paths=(
+        "/usr/lib/x86_64-linux-gnu/${library}"
+        "/usr/lib/${library}"
+        "/lib/x86_64-linux-gnu/${library}"
+        "/lib/${library}"
+        "/usr/local/lib/${library}"
+    )
+
+    for path in "${paths[@]}"; do
+        if [[ -e "${path}" ]]; then
+            echo "${path}"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 REQUIRED_LIBRARIES=(
     libvulkan.so
     libvulkan.so.1
@@ -210,8 +249,8 @@ REQUIRED_LIBRARIES=(
 )
 
 for library in "${REQUIRED_LIBRARIES[@]}"; do
-    if ldconfig -p | grep -Fq "${library}"; then
-        log "Bibliothèque OK : ${library}"
+    if library_path="$(find_library "${library}")"; then
+        log "Bibliothèque OK : ${library} (${library_path})"
     else
         die "Bibliothèque absente : ${library}"
     fi
@@ -229,26 +268,24 @@ VULKAN_HEADER="${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
 [[ -r "${VULKAN_HEADER}" ]] ||
     die "Vulkan_INCLUDE_DIR invalide : ${VULKAN_HEADER}"
 
-VULKAN_LIBRARY="/usr/lib/x86_64-linux-gnu/libvulkan.so"
-
-if [[ ! -e "${VULKAN_LIBRARY}" ]]; then
-    VULKAN_LIBRARY="$(ldconfig -p |
-        awk '$1 == "libvulkan.so" {print $NF; exit}')"
-fi
-
-[[ -n "${VULKAN_LIBRARY}" && -e "${VULKAN_LIBRARY}" ]] ||
+VULKAN_LIBRARY="$(find_library libvulkan.so)" ||
     die "Bibliothèque de développement libvulkan.so introuvable."
 
 log "Vulkan_INCLUDE_DIR : ${VULKAN_INCLUDE_DIR}"
 log "Vulkan_LIBRARY : ${VULKAN_LIBRARY}"
 
-# Vérification de compilation minimale des headers
+# ===============================================================
+# Vérification de compilation Vulkan
+# ===============================================================
+
 if command -v c++ >/dev/null 2>&1; then
+
     printf '#include <vulkan/vulkan.h>\nint main() { return 0; }\n' |
         c++ -x c++ -fsyntax-only - ||
         die "Impossible de compiler un programme incluant vulkan/vulkan.h."
 
     log "Compilation test des headers Vulkan OK"
+
 else
     die "Compilateur C++ introuvable."
 fi
@@ -259,10 +296,14 @@ fi
 
 log "Vérification des ICD Vulkan"
 
+shopt -s nullglob
+
 ICD_FILES=(/usr/share/vulkan/icd.d/*.json)
 
-if [[ -f "${ICD_FILES[0]}" ]]; then
-    printf '  %s\n' "${ICD_FILES[@]}"
+if (( ${#ICD_FILES[@]} > 0 )); then
+    for icd in "${ICD_FILES[@]}"; do
+        log "ICD Vulkan : ${icd}"
+    done
 else
     log "WARNING : aucun ICD Vulkan détecté."
 fi
@@ -274,12 +315,14 @@ fi
 log "Vérification du runtime Vulkan"
 
 if command -v vulkaninfo >/dev/null 2>&1; then
+
     if vulkaninfo --summary; then
         log "Runtime Vulkan accessible."
     else
         log "WARNING : runtime Vulkan non opérationnel."
         log "Les dépendances de compilation sont néanmoins installées."
     fi
+
 else
     log "WARNING : vulkaninfo indisponible."
 fi
@@ -299,4 +342,5 @@ log "OpenGL : OK"
 log "EGL : OK"
 log "Wayland : OK"
 log "pkg-config : OK"
+
 log "==============================================================="
