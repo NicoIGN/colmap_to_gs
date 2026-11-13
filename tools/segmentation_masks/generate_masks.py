@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import numpy as np
 FORMAT_VERSION = 2
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
@@ -49,6 +50,28 @@ def resolve_model_argument(value, backend):
     return Path(value).expanduser().resolve()
 # PIL Image.Transpose values undoing exif_transpose for each EXIF orientation.
 INVERSE_ORIENTATION = {2: 0, 3: 3, 4: 1, 5: 5, 6: 2, 7: 6, 8: 4}
+
+def default_jobs():
+    """MASKS_JOBS si défini, sinon le nombre de CPU accessibles."""
+    configured = os.environ.get("MASKS_JOBS", "").strip()
+    if configured:
+        return int(configured)
+    if hasattr(os, "sched_getaffinity"):
+        return len(os.sched_getaffinity(0))
+    return os.cpu_count() or 1
+
+
+def shard_bounds(total, jobs):
+    """Découpe 0..total en blocs contigus (au plus jobs, au moins 1)."""
+    count = max(1, min(jobs, total))
+    base, extra = divmod(total, count)
+    bounds, start = [], 0
+    for index in range(count):
+        size = base + (index < extra)
+        bounds.append((start, start + size))
+        start += size
+    return bounds
+
 
 def log(message, args=None, *, force=False):
     """Print a diagnostic only when verbose mode is enabled."""
@@ -160,29 +183,15 @@ class SpirulaSegmenter:
         self.settings = {"backend": "spirula", "binary": self.binary,
                          "binary_fingerprint": f"{stat.st_size}:{stat.st_mtime_ns}",
                          "device": args.spirula_device}
+        self.jobs = getattr(args, "jobs", None) or default_jobs()
+        if self.jobs < 1:
+            self.close()
+            raise ValueError("--jobs / MASKS_JOBS doit être au moins 1")
 
     def close(self):
         self.temporary.cleanup()
 
-    def prepare(self, images_dir, names):
-        if not names:
-            return
-        from PIL import Image
-        root = Path(self.temporary.name)
-        frames, masks = root / "frames", root / "masks"
-        frames.mkdir()
-        masks.mkdir()
-        progress(0, len(names), self.args, "Préparation des images")
-        for index, name in enumerate(names, 1):
-            source = images_dir / name
-            # SAM track has a flat input directory and a restricted extension list.
-            if source.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}:
-                raise ValueError(f"Format non pris en charge par Spirula SAM : {source}")
-            with Image.open(source) as image:
-                image.load()
-            (frames / f"{index:09d}{source.suffix.lower()}").symlink_to(source)
-            self.paths[str(source)] = masks / f"frame_{index - 1:05d}.png"
-            progress(index, len(names), self.args, "Préparation des images")
+    def command(self, frames, masks):
         command = [self.binary, "sam", "track", "--model", str(self.args.model.resolve()),
              "--frames", str(frames), "--out", str(masks),
              "--text", "; ".join(self.id2label.values()),
@@ -191,23 +200,66 @@ class SpirulaSegmenter:
              "--device", self.args.spirula_device]
         if self.args.accept_spirula_license:
             command += ["--accept-license", "sam3=yes"]
+        return command
+
+    def prepare(self, images_dir, names):
+        if not names:
+            return
+        from PIL import Image
+        root = Path(self.temporary.name)
+        final = root / "masks"
+        final.mkdir()
+        shards = []
+        progress(0, len(names), self.args, "Préparation des images")
+        for shard, (start, stop) in enumerate(shard_bounds(len(names), self.jobs)):
+            frames, masks = root / f"frames-{shard}", root / f"masks-{shard}"
+            frames.mkdir()
+            masks.mkdir()
+            for local, name in enumerate(names[start:stop], 1):
+                source = images_dir / name
+                # SAM track has a flat input directory and a restricted extension list.
+                if source.suffix.lower() not in {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}:
+                    raise ValueError(f"Format non pris en charge par Spirula SAM : {source}")
+                with Image.open(source) as image:
+                    image.load()
+                (frames / f"{local:09d}{source.suffix.lower()}").symlink_to(source)
+                self.paths[str(source)] = final / f"frame_{start + local - 1:05d}.png"
+                progress(start + local, len(names), self.args, "Préparation des images")
+            shards.append((start, masks, self.command(frames, masks)))
+        if self.args.accept_spirula_license:
             print("[masques] Acceptation explicite de la licence SAM 3 transmise à Spirula.", flush=True)
+        print(f"[masques] Calcul SAM : {len(shards)} processus Spirula en parallèle "
+              f"(MASKS_JOBS={self.jobs}).", flush=True)
         progress(0, len(names), self.args, "Calcul SAM")
         completed = 0
-        with subprocess.Popen(command) as process:
-            while True:
-                try:
-                    status = process.wait(timeout=0.5)
-                except subprocess.TimeoutExpired:
-                    status = None
-                count = sum(1 for _ in masks.glob("frame_*.png"))
+        running = {}
+        try:
+            for shard, (_, _, command) in enumerate(shards):
+                running[shard] = subprocess.Popen(command)
+            while running:
+                for shard in list(running):
+                    status = running[shard].poll()
+                    if status is None:
+                        continue
+                    del running[shard]
+                    if status:
+                        raise subprocess.CalledProcessError(status, shards[shard][2])
+                count = sum(sum(1 for _ in masks.glob("frame_*.png"))
+                            for _, masks, _ in shards)
                 if count != completed:
                     progress(count, len(names), self.args, "Calcul SAM", force=True)
                     completed = count
-                if status is not None:
-                    if status:
-                        raise subprocess.CalledProcessError(status, command)
-                    break
+                if running:
+                    time.sleep(0.5)
+        finally:
+            for process in running.values():
+                if process.poll() is None:
+                    process.kill()
+                process.wait()
+        for start, masks, _ in shards:
+            for path in sorted(masks.glob("frame_*.png")):
+                local = int(path.stem.split("_")[1])
+                os.replace(path, final / f"frame_{start + local:05d}.png")
         for source, path in self.paths.items():
             if not path.is_file():
                 raise ValueError(f"Spirula n'a pas écrit le masque de {source} : {path}")
@@ -640,6 +692,8 @@ def main(argv=None):
     parser.add_argument("--max-masked-fraction", type=float, default=0.8,
                         help="Au-delà, le masque de l'image est désactivé (0.8)")
     parser.add_argument("--device", default="auto", help="auto, cuda, cuda:N, mps ou cpu")
+    parser.add_argument("--jobs", type=int, default=None,
+                        help="Processus Spirula parallèles (défaut : MASKS_JOBS ou CPU accessibles)")
     parser.add_argument("--verbose", action="store_true", help="Afficher les étapes et la progression")
     parser.add_argument("--list-labels", action="store_true",
                         help="Afficher les labels du modèle et quitter")

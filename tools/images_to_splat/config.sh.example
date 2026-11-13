@@ -96,6 +96,10 @@ SFM_MASKS_DEVICE=""
 # true UNIQUEMENT apres lecture et acceptation des conditions SAM 3 Meta.
 # false par defaut : aucune acceptation automatique implicite.
 MASKS_ACCEPT_LICENSE="false"
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Vide = nombre de CPU accessibles ; chaque processus charge le modèle sur le GPU,
+# réduire si la mémoire GPU est saturée.
+MASKS_JOBS=""
 # auto|empty|ignore : memes modes que Panoramax.
 # empty : apprendre le ciel comme vide ; ignore : exclure les pixels de la perte.
 TRAIN_MASKS_MODE="empty"

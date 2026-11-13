@@ -51,7 +51,7 @@ class NativeMasksTest(unittest.TestCase):
             "        mask.save(out / f'frame_{index:05d}.png')\n"
         )
         self.binary.chmod(0o755)
-        self.env = dict(os.environ, SAM_LOG=str(self.log))
+        self.env = dict(os.environ, SAM_LOG=str(self.log), MASKS_JOBS="1")
 
     def execute(self, *extra):
         return subprocess.run(
@@ -121,6 +121,7 @@ class NativeMasksTest(unittest.TestCase):
         self.assertEqual(len(self.log.read_text().splitlines()), 1)
 
     def test_native_progress_is_emitted_before_the_process_finishes(self):
+        self.env["MASKS_JOBS"] = "1"
         source = self.binary.read_text()
         source = source.replace("import json, os, sys", "import json, os, sys, time")
         source += (
@@ -162,6 +163,31 @@ class NativeMasksTest(unittest.TestCase):
         result = self.execute()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(report_file.read_text())["settings"]["backend"], "spirula")
+
+    def test_frames_are_sharded_across_parallel_spirula_processes(self):
+        for name in ("c.jpg", "d.jpg", "e.jpg"):
+            Image.new("RGB", (16, 8)).save(self.images / name)
+        self.env["MASKS_JOBS"] = "3"
+        result = self.execute()
+        self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+        self.assertIn("3 processus Spirula en parallèle", result.stdout)
+        commands = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertEqual(len(commands), 3)
+        self.assertEqual(len({command[command.index("--out") + 1] for command in commands}), 3)
+        for name in ("a.jpg", "sub/a.jpg", "c.jpg", "d.jpg", "e.jpg"):
+            with Image.open(self.output / (name + ".png")) as image:
+                self.assertEqual(np.asarray(image).shape, (8, 16))
+        report = json.loads((self.output / "masks.json").read_text())
+        self.assertEqual(report["status"], "complete")
+        self.assertNotIn("jobs", report["settings"])
+
+    def test_shard_bounds_cover_all_frames_contiguously(self):
+        sys.path.insert(0, str(SCRIPT.parent))
+        import generate_masks as gm
+        self.assertEqual(gm.shard_bounds(5, 2), [(0, 3), (3, 5)])
+        self.assertEqual(gm.shard_bounds(2, 16), [(0, 1), (1, 2)])
+        self.assertEqual(gm.shard_bounds(0, 4), [(0, 0)])
+        self.assertEqual(gm.shard_bounds(4, 0), [(0, 4)])
 
 
 if __name__ == "__main__":

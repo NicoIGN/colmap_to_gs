@@ -167,6 +167,10 @@ export SS_NN_LOG=1
 # conditions SAM 3 Meta : transmet --accept-license sam3=yes pour chaque
 # calcul natif SfM ou 3DGS, y compris les jobs Slurm non interactifs.
 MASKS_ACCEPT_LICENSE="false"
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Vide = nombre de CPU accessibles ; chaque processus charge le modèle sur le GPU,
+# réduire si la mémoire GPU est saturée.
+MASKS_JOBS=""
 
 # Defaut : sky. Liste non vide, separee par des virgules.
 # segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
