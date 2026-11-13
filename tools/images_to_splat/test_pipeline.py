@@ -595,7 +595,7 @@ if "--wait" in args:
     def test_resume_does_not_ignore_mask_policy_metadata(self):
         masks, _ = self.interrupted_workspace()
         (masks / "masks.json").write_text(json.dumps({
-            "status": "complete", "settings": {"labels": ["sky"]},
+            "status": "complete", "settings": {"labels": ["sky", "cloud"]},
         }))
         self.append("PIPELINE_RESUME=true")
         result = self.run_pipeline("--phase", "prepare")
