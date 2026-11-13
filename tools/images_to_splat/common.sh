@@ -4,6 +4,27 @@ die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
 # realpath -e/-m n'existe pas sur macOS : Python est portable.
 resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
+# Modèle SAM 3 par défaut : models/ de spirula-studio (SPIRULA_ROOT, sinon
+# parent du dossier de SPIRULA_BIN). Retourne vide si ambigu ou absent.
+default_spirula_model() {
+  local root="${SPIRULA_ROOT:-}" dir files
+  if [[ -z "$root" && "$SPIRULA_BIN" == */* ]]; then
+    root="$(dirname "$(dirname "$SPIRULA_BIN")")"
+  fi
+  dir="$root/models"
+  [[ -n "$root" && -d "$dir" ]] || return 0
+  if [[ -f "$dir/sam3-q4_0.ggml" ]]; then
+    printf '%s\n' "$dir/sam3-q4_0.ggml"; return 0
+  fi
+  shopt -s nullglob
+  files=("$dir"/*.ggml)
+  shopt -u nullglob
+  if [[ ${#files[@]} -eq 1 ]]; then
+    printf '%s\n' "${files[0]}"; return 0
+  fi
+  printf '[ALERTE] Aucun modèle par défaut utilisable dans %s (%d .ggml trouvés) : renseignez TRAIN_MASKS_SPIRULA_MODEL.\n' "$dir" "${#files[@]}" >&2
+}
+
 load_config() {
   local config="$1" images="${2:-}" name replacement directory
   local config_errors=0
@@ -71,7 +92,7 @@ load_config() {
   TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-$default_mask_backend}"
   TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
   TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
-  TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
+  TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-$(default_spirula_model)}"
   TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
   TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
   TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
