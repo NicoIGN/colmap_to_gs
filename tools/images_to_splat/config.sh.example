@@ -183,8 +183,13 @@ TRAIN_SP_SPLATS_PER_IMAGE=""
 # Vide/absent : estimation [1.001,1.05] pour atteindre le cap a l'arret.
 # Valeur explicite > 1 : prioritaire, non bornee automatiquement.
 TRAIN_SP_GROWTH_FACTOR=""
-# Arret = max(14000, 20000-4000) = 16000, puis 4000 pas sans croissance.
+# Iteration minimale d'arret de la densification (ajout/division de splats),
+# pas de l'entrainement : les splats existants restent optimises ensuite.
 TRAIN_SP_REFINE_STOP_ITER="14000"
+# Nombre d'iterations finales souhaitees sans densification, sous reserve
+# du minimum ci-dessus. Arret = max(REFINE_STOP_ITER, TRAIN_NUM_ITER - REFINE_STOP_NUM_ITER).
+# Ici : max(14000, 20000-4000) = 16000, puis 4000 iterations de stabilisation.
+# Si REFINE_STOP_ITER >= TRAIN_NUM_ITER, aucune phase finale sans densification.
 TRAIN_SP_REFINE_STOP_NUM_ITER="4000"
 TRAIN_SP_FLOATER_SUPPRESSION="mild"       # off|mild|strong
 TRAIN_SP_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong

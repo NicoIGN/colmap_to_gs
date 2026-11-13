@@ -310,13 +310,17 @@ TRAIN_SP_SPLATS_PER_IMAGE=""
 TRAIN_SP_GROWTH_FACTOR=""
 
 # Defaut : "". Vide = defaut Spirula (14000) ; sinon entier >= 0.
-# Pas minimal d'arret de croissance : arret effectif au maximum de
+# Iteration minimale d'arret de densification (ajout/division de splats),
+# pas de l'entrainement : les splats existants restent optimises ensuite.
+# Arret effectif au maximum de
 # TRAIN_SP_REFINE_STOP_ITER et TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER.
 TRAIN_SP_REFINE_STOP_ITER=""
 
 # Defaut : "". Vide = defaut Spirula (2500) ; sinon entier >= 0.
-# Nombre de pas reserves a l'affinage seul en fin de calcul, sous reserve
-# du minimum TRAIN_SP_REFINE_STOP_ITER. Si l'arret effectif >= TRAIN_NUM_ITER, avertissement.
+# Nombre d'iterations finales souhaitees sans densification, sous reserve
+# du minimum TRAIN_SP_REFINE_STOP_ITER. Exemple avec 20000 iterations et
+# des valeurs explicites 14000 / 4000 : arret a 16000, puis 4000 de stabilisation.
+# Si REFINE_STOP_ITER >= TRAIN_NUM_ITER, aucune phase finale sans densification.
 TRAIN_SP_REFINE_STOP_NUM_ITER=""
 
 # Defaut : off. Valeurs : off|mild|strong.
