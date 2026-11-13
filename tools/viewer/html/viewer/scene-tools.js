@@ -36,9 +36,9 @@ export function createSceneTools({
   let auto = false;
   let progress = 0;
   const configuredFollowRadius = Number($("gpsFollowRadius")?.value);
-  let followRadiusRatio = Number.isFinite(configuredFollowRadius)
+  let followRadiusMeters = Number.isFinite(configuredFollowRadius)
     ? configuredFollowRadius
-    : 0.05;
+    : 2;
 
   const configuredSpeed = Number($("gpsAutoSpeed")?.value);
   let speed =
@@ -893,6 +893,15 @@ export function createSceneTools({
     refreshAppUI();
   }
 
+  function metersToWorld(state) {
+    if (!state.entity) return 1;
+
+    const matrix = new THREE.Matrix4().fromArray(
+      state.entity.getWorldTransform().data
+    );
+    return new THREE.Vector3().setFromMatrixScale(matrix).x || 1;
+  }
+
   function sample(t) {
     const distance = THREE.MathUtils.clamp(t, 0, 1) * track.length;
 
@@ -977,7 +986,7 @@ export function createSceneTools({
       progress = nearestProgressFromWorldPoint(groundNow);
 
       const offset = groundNow.clone().sub(sample(progress));
-      const radius = state.radius * followRadiusRatio;
+      const radius = followRadiusMeters * metersToWorld(state);
       const offsetLength = offset.length();
 
       if (offsetLength > radius) {
@@ -1064,10 +1073,10 @@ export function createSceneTools({
   listen($("gpsFollowRadius"), "input", () => {
     const value = Number($("gpsFollowRadius").value);
 
-    if (Number.isFinite(value) && value >= 0) followRadiusRatio = value;
+    if (Number.isFinite(value) && value >= 0) followRadiusMeters = value;
 
     if ($("gpsFollowRadiusValue")) {
-      $("gpsFollowRadiusValue").value = `${Math.round(followRadiusRatio * 100)} %`;
+      $("gpsFollowRadiusValue").value = `${followRadiusMeters} m`;
     }
   });
 
