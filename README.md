@@ -129,6 +129,34 @@ Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
 Les installations, données attendues, paramètres et sorties sont décrits dans
 le README du pipeline choisi.
 
+### Convertir et visualiser un splat en 3D Tiles
+
+Le fichier `.splat` géoréférencé (repère ENU) se convertit en tileset 3D Tiles,
+puis s'ouvre dans le viewer HTML avec fond OpenStreetMap. Prérequis, une fois :
+
+```bash
+npm install --global 3dgs-ply-3dtiles-converter
+```
+
+```bash
+# Conversion (--georef-summary est facultatif)
+python3 tools/splat_to_3dtiles/convert.py \
+  --input /chemin/vers/scene.splat \
+  --output-dir /chemin/vers/scene_tiles \
+  --no-open-inspector
+
+# Visualisation
+bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
+```
+
+Sans `--georef-summary`, le convertisseur cherche `georef/georef_summary.json`
+puis `georef_summary.json` dans le dossier du `.splat`. Il est donc prévu de
+convertir depuis le dossier de calcul. Indique `--georef-summary` si le résumé
+est ailleurs. Le dossier `scene_tiles` ne doit pas exister, sauf avec `--overwrite`.
+
+Détails et options : [conversion 3D Tiles](tools/splat_to_3dtiles/README.md) et
+[visualisation](tools/viewer/README.md).
+
 ### Documentation des outils
 
 - [Préparation des images et modèles COLMAP](tools/preprocess/README.md).

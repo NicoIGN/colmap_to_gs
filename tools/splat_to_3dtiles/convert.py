@@ -177,7 +177,11 @@ def convert_splat_to_ply(source, destination):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True, type=Path, help="Fichier .splat en repère local ENU")
-    parser.add_argument("--georef-summary", required=True, type=Path, help="georef_summary.json de georef_colmap_from_gpx.py")
+    parser.add_argument(
+        "--georef-summary",
+        type=Path,
+        help="georef_summary.json ; défaut : georef/georef_summary.json ou georef_summary.json à côté du .splat",
+    )
     parser.add_argument(
         "--model",
         help="Modèle du résumé à utiliser (requis si le rapport en contient plusieurs)",
@@ -193,7 +197,11 @@ def main():
     args = parser.parse_args()
 
     source = args.input.expanduser().resolve()
-    georef_path = args.georef_summary.expanduser().resolve()
+    if args.georef_summary is not None:
+        georef_path = args.georef_summary.expanduser().resolve()
+    else:
+        candidates = [source.parent / "georef" / "georef_summary.json", source.parent / "georef_summary.json"]
+        georef_path = next((path for path in candidates if path.is_file()), candidates[0])
     output_dir = args.output_dir.expanduser().resolve()
     if not source.is_file():
         parser.error(f"Fichier .splat introuvable : {source}")

@@ -40,7 +40,7 @@ Le premier lancement du convertisseur peut ouvrir son inspecteur ; la commande c
 
 Options de `convert.py` :
 
-- `--input PATH`, `--georef-summary PATH`, `--output-dir PATH` : paramètres requis.
+- `--georef-summary PATH` : `georef_summary.json` de `georef_colmap_from_gpx.py`. Facultatif : sans lui, le convertisseur cherche `georef/georef_summary.json`, puis `georef_summary.json` dans le dossier du `.splat`.
 - `--model NAME` : modèle du résumé géographique ; facultatif avec un seul modèle, requis s'il y en a plusieurs.
 - `--converter COMMAND` : commande du convertisseur installé ; défaut `3dgs-ply-3dtiles-converter`.
 - `--overwrite` : autorise le remplacement du dossier de sortie.
