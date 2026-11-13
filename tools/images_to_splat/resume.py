@@ -44,8 +44,11 @@ def validate_sparse(folder):
     import numpy as np
 
     cameras = read_cameras_binary(folder / "cameras.bin")
+    print(f"[sparse] Lecture cameras.bin : {len(cameras)} caméras", flush=True)
     images = read_images_binary(folder / "images.bin")
+    print(f"[sparse] Lecture images.bin : {len(images)} images", flush=True)
     points = read_points3d_binary(folder / "points3D.bin")
+    print(f"[sparse] Lecture points3D.bin : {len(points)} points", flush=True)
     if not cameras or not images or not points:
         raise ValueError(f"Modèle sparse vide : {folder}")
     tracks = {point_id: set(point.track) for point_id, point in points.items()}

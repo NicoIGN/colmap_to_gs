@@ -878,7 +878,9 @@ def fit_model(images, gpx, args):
     if not paths:
         raise ValueError("Aucune trajectoire GPS non stationnaire.")
 
+    info(f"Recalage GPX : recherche des fenêtres GPS ({len(paths)} trajectoires)")
     candidates = search_windows(source, paths, args)
+    info(f"Recalage GPX : {len(candidates)} candidats à raffiner")
     solutions = []
 
     for candidate in tqdm(
@@ -1398,8 +1400,11 @@ def export_camera_trajectory_gpx(path, images, fit, sim, origin, folder):
 def process_model(folder, destination, relative, gpx, args):
     started = time.perf_counter()
     ext = model_format(folder)
+    info(f"Recalage GPX : chargement des poses ({folder})")
     images = load_image_metadata(folder, ext)
+    info(f"Recalage GPX : {len(images)} images ; estimation Sim(3)")
     sim, stats, fit = fit_model(images, gpx, args)
+    info("Recalage GPX : écriture du modèle transformé")
 
     destination.mkdir(parents=True, exist_ok=True)
     shutil.copy2(
@@ -1411,11 +1416,13 @@ def process_model(folder, destination, relative, gpx, args):
         destination / f"images.{ext}",
         ext, sim,
     )
+    info(f"Recalage GPX : {image_count} images transformées ; points 3D en cours")
     point_count = transform_points(
         folder / f"points3D.{ext}",
         destination / f"points3D.{ext}",
         ext, sim,
     )
+    info(f"Recalage GPX : {point_count} points 3D transformés ; trajectoire caméra")
     
     camera_gpx, camera_coordinates = export_camera_trajectory_gpx(
         destination / "georef_camera_smoothed.gpx",

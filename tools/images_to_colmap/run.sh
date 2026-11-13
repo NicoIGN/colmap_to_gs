@@ -21,6 +21,10 @@ lock="$OUTPUT_DIR/.colmap.lock"
 mkdir "$lock" 2>/dev/null || die "Production COLMAP déjà verrouillée : $lock"
 trap 'rmdir "$lock"' EXIT
 trap 'status=$?; echo "[ERREUR] Production COLMAP : $stage (code $status)." >&2; exit "$status"' ERR
+begin_stage() {
+  stage="$1"
+  echo "[étape $(date '+%H:%M:%S')] $stage"
+}
 sfm="$OUTPUT_DIR/sfm"
 selected="$OUTPUT_DIR/images"
 sfm_masks="$OUTPUT_DIR/feature_masks"
