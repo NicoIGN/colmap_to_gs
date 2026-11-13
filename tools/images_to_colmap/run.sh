@@ -102,7 +102,7 @@ prepare() {
         die "Version du filtre de densité modifiée : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
       "$PYTHON_BIN" "$density_filter" \
         --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
-        --workers "$SFM_THREADS" --verbose --no-progress
+        --workers "$SFM_THREADS" --verbose
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
       printf '%s\n' "$density_version" > "$sparse/.density_done"
     else
