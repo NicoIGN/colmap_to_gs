@@ -114,7 +114,9 @@ export function createNavigationSystem({
 
     if (commitZoom && drag.mode === "zoom" && getCanNavigate()) {
       const box = selectionZoom(drag.start, drag, canvas.getBoundingClientRect());
-      if (box) {
+      if (!box) {
+        setStatus("Zone trop petite pour zoomer : tracez un rectangle plus grand.");
+      } else {
         const distance = camera.position.distanceTo(target);
         const halfHeight = distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / camera.zoom;
         const delta = new THREE.Vector3(box.x * halfHeight * camera.aspect, box.y * halfHeight, 0)
@@ -506,7 +508,11 @@ export function createNavigationSystem({
       lastPointer.x = event.clientX;
       lastPointer.y = event.clientY;
 
-      if (!getCanNavigate() || mouseDrag) return;
+      if (!getCanNavigate()) return;
+
+      // Un glissement resté ouvert (relâchement non reçu) bloquerait
+      // tous les suivants : on le termine avant d’en démarrer un nouveau.
+      if (mouseDrag) finishMouseDrag();
 
       // Priorité aux mesures : ne pas prévenir l’événement,
       // flouter un champ ou capturer le pointeur.
@@ -574,8 +580,15 @@ export function createNavigationSystem({
           ? 4
           : 2;
 
+      // Le zoom ne s’arrête que si plus aucun bouton n’est enfoncé :
+      // un état de bouton différent (trackpad, émulation) ne doit pas
+      // annuler la sélection avant le relâchement.
+      const buttonReleased = drag.mode === "zoom"
+        ? event.buttons === 0
+        : !(event.buttons & buttonMask);
+
       if (
-        !(event.buttons & buttonMask) ||
+        buttonReleased ||
         !getCanNavigate() ||
         event.shiftKey ||
         event.altKey ||
