@@ -359,9 +359,10 @@ else
 
     log "Compilation de Spirula"
 
+    export CMAKE_BUILD_PARALLEL_LEVEL="${JOBS}"
+
     BUILD_CMD=(
         bash build_develop.bash
-        -j "${JOBS}"
         -DSS_BACKEND=vulkan
         -DSS_BUILD_SAM=ON
         -DCMAKE_BUILD_TYPE=Release
