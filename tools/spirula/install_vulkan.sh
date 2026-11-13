@@ -207,4 +207,61 @@ else
     log "WARNING : vulkaninfo indisponible."
 fi
 
+
+# ===============================================================
+# Validation finale des dépendances Vulkan
+# ===============================================================
+
+log "Validation finale des dépendances Vulkan"
+
+# Headers Vulkan indispensables à FindVulkan.cmake
+REQUIRED_VULKAN_HEADERS=(
+    /usr/include/vulkan/vulkan.h
+    /usr/include/vulkan/vulkan_core.h
+    /usr/include/vulkan/vk_platform.h
+)
+
+for header in "${REQUIRED_VULKAN_HEADERS[@]}"; do
+    [[ -r "${header}" ]] || die "Header Vulkan absent ou illisible : ${header}"
+    log "Header Vulkan OK : ${header}"
+done
+
+# pkg-config
+pkg-config --exists vulkan || die "Package pkg-config vulkan introuvable"
+
+VULKAN_PC_INCLUDEDIR="$(pkg-config --variable=includedir vulkan)"
+
+[[ -r "${VULKAN_PC_INCLUDEDIR}/vulkan/vulkan.h" ]] ||
+    die "Header Vulkan absent du chemin pkg-config : ${VULKAN_PC_INCLUDEDIR}"
+
+log "Vulkan pkg-config OK : $(pkg-config --modversion vulkan)"
+log "Vulkan include directory : ${VULKAN_PC_INCLUDEDIR}"
+
+# Bibliothèque de développement
+VULKAN_LIBRARY="/usr/lib/x86_64-linux-gnu/libvulkan.so"
+
+if [[ ! -e "${VULKAN_LIBRARY}" ]]; then
+    VULKAN_LIBRARY="$(ldconfig -p | awk '/libvulkan\.so \(/{print $NF; exit}')"
+fi
+
+[[ -n "${VULKAN_LIBRARY}" && -e "${VULKAN_LIBRARY}" ]] ||
+    die "Bibliothèque de développement libvulkan.so introuvable"
+
+log "Vulkan library OK : ${VULKAN_LIBRARY}"
+
+# ICD
+ICD_FILES=(/usr/share/vulkan/icd.d/*.json)
+
+if [[ ! -f "${ICD_FILES[0]}" ]]; then
+    die "Aucun ICD Vulkan installé dans /usr/share/vulkan/icd.d/"
+fi
+
+log "ICD Vulkan détectés :"
+printf '  %s\n' "${ICD_FILES[@]}"
+
+log "Toutes les dépendances Vulkan sont installées et vérifiées."
+
+
+
+
 log "Installation et vérifications terminées."
