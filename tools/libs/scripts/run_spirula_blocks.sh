@@ -46,6 +46,7 @@ SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
+SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
@@ -488,8 +489,10 @@ for ((index = first_index; index < last_index; index++)); do
     --num-iterations "$TRAIN_NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
-    --export-filter-mode off
+    --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}"
   )
+  [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
+    block_args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
   if [[ "$TRAIN_BACKEND" == spirula ]]; then
     block_cap="$TRAIN_SP_CAP_MAX"
     if [[ -n "$TRAIN_SP_SPLATS_PER_IMAGE" ]]; then
