@@ -130,7 +130,9 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     stage="entraînement $id"
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$gs_root/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
-          --export-filter-mode off --name "$id.splat")
+          --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}" --name "$id.splat")
+    [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
+      args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
     bash "$repo_root/tools/libs/scripts/run_3dgs_block.sh" "${args[@]}"
   done
