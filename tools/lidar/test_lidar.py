@@ -13,7 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh_basis, sh_transform,
                     transform_records, write_scene)
-from filter_splats_by_lidar import distance_mask
+from filter_splats_by_lidar import distance_mask, ellipsoid_distances, support_mask
 from merge_splats import BASE_DTYPE, SPLAT_DTYPE
 
 
@@ -48,6 +48,46 @@ class LidarTests(unittest.TestCase):
             points, np.array([[0., 0, 0]]), 0.5, np.array([-1, -1, -1, 1, 1, 1]))
         np.testing.assert_array_equal(keep, [True, False, True])
         self.assertEqual(tested, 2)
+
+    def test_oriented_support_not_just_nearest_point(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(3, dtype=SPLAT_DTYPE)
+            raw["scale"] = [1, 0.01, 0.01]
+            raw["rotation"] = [255, 128, 128, 128]
+            raw["position"] = [[0, 0, 0], [0, 10, 0], [100, 100, 100]]
+            # First Gaussian: nearest point misses minor axis; a farther point hits major axis.
+            lidar = np.array([[0., 0.4, 0], [2.5, 0, 0], [0, 12.5, 0]])
+            rotation = Rotation.from_euler("z", 90, degrees=True).as_quat()[[3, 0, 1, 2]]
+            raw["rotation"][1] = np.clip(np.rint(rotation*128+128), 0, 255)
+            source = Path(directory)/"test.splat"
+            raw.tofile(source)
+            scene = Scene(source)
+            keep, report = support_mask(scene, lidar, 0.1, spacing_factor=0)
+            np.testing.assert_array_equal(keep, [True, True, False])
+            self.assertEqual(report["centre_far_kept"], 2)
+            limited, _ = support_mask(scene, lidar, 0.1, spacing_factor=0,
+                                     bbox=np.array([-5, -5, -5, 5, 15, 5]))
+            np.testing.assert_array_equal(limited, [True, True, True])
+            scene.close()
+
+    def test_ellipsoid_distance_and_density_tolerance(self):
+        np.testing.assert_allclose(ellipsoid_distances(
+            np.array([[0., 0, 0], [4, 0, 0], [0, 3, 0]]), np.array([3., 2, 1])),
+            [0, 1, 1], atol=1e-10)
+        np.testing.assert_allclose(ellipsoid_distances(
+            np.array([[3., 4, 0], [1, 1, 1]]), np.array([2., 2, 2])),
+            [3, 0], atol=1e-10)
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(1, dtype=SPLAT_DTYPE)
+            raw["scale"] = 0.01
+            raw["rotation"] = [255, 128, 128, 128]
+            source = Path(directory)/"test.splat"
+            raw.tofile(source)
+            scene = Scene(source)
+            lidar = np.array([[1., 0, 0], [2, 0, 0], [3, 0, 0]])
+            self.assertFalse(support_mask(scene, lidar, 0.1, spacing_factor=0)[0][0])
+            self.assertTrue(support_mask(scene, lidar, 0.1, spacing_factor=1)[0][0])
+            scene.close()
 
     def test_sh_rotation_preserves_directional_color(self):
         r = Rotation.from_rotvec([0.2, -0.1, 0.4]).as_matrix()
@@ -168,7 +208,9 @@ class LidarTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(report_path.read_text())
             self.assertEqual(report["lidar_classes"], [2])
-            self.assertEqual(report["rejected"], 51)
+            self.assertGreaterEqual(report["rejected"], 1)
+            self.assertLess(report["rejected"], 51)
+            self.assertEqual(report["criterion"], "distance_to_oriented_solid_ellipsoid")
             report_path.unlink()
             result = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)

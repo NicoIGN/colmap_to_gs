@@ -10,17 +10,19 @@ import sys
 
 import numpy as np
 
-from common import class_codes, open_scene, vector, write_report
+from common import class_codes, gaussian_geometry, open_scene, vector, write_report
 from fetch_ign_lidar import CRS, fetch_lidar
 
 
-def scene_bbox(scene, origin, margin):
+def scene_bbox(scene, origin, margin, sigma=3.):
     if not np.isfinite(margin) or margin <= 0:
         raise ValueError("Marge attendue finie et > 0")
     lower, upper = np.full(3, np.inf), np.full(3, -np.inf)
     for start in range(0, scene.count, 100000):
-        xyz, _ = scene.geometry(slice(start, start+100000))
-        lower, upper = np.minimum(lower, xyz.min(axis=0)), np.maximum(upper, xyz.max(axis=0))
+        xyz, scales, rotations = gaussian_geometry(scene, slice(start, start+100000))
+        extent = sigma * np.sqrt(np.sum((rotations * scales[:, None, :])**2, axis=2))
+        lower = np.minimum(lower, (xyz-extent).min(axis=0))
+        upper = np.maximum(upper, (xyz+extent).max(axis=0))
     return np.array([lower[0]+origin[0]-margin, lower[1]+origin[1]-margin,
                      upper[0]+origin[0]+margin, upper[1]+origin[1]+margin])
 
@@ -41,9 +43,12 @@ def run(args):
     origin = vector(args.origin)
     for value, label in ((args.max_correspondence_distance, "distance de recalage"),
                          (args.max_distance, "distance de nettoyage"),
-                         (args.max_area_km2, "surface maximale"), (args.voxel_size, "voxel")):
+                         (args.max_area_km2, "surface maximale"), (args.voxel_size, "voxel"),
+                         (args.support_sigma, "sigma")):
         if not np.isfinite(value) or value <= 0:
             raise ValueError(f"{label} attendu fini et > 0")
+    if not np.isfinite(args.spacing_factor) or args.spacing_factor < 0:
+        raise ValueError("Facteur de densité attendu fini >= 0")
     if args.margin < args.max_correspondence_distance + args.max_distance:
         raise ValueError("La marge doit couvrir distance de recalage + distance de nettoyage")
     if args.lidar_stride < 1 or args.max_tiles < 1 or not 0 < args.min_overlap <= 1:
@@ -53,7 +58,7 @@ def run(args):
             class_codes(codes)
     scene = open_scene(args.input)
     try:
-        bbox = scene_bbox(scene, origin, args.margin)
+        bbox = scene_bbox(scene, origin, args.margin, args.support_sigma)
     finally:
         scene.close()
     area = (bbox[2]-bbox[0]) * (bbox[3]-bbox[1]) / 1e6
@@ -98,14 +103,16 @@ def run(args):
         # A large correction can move points outside the fetched footprint.
         checked = open_scene(aligned)
         try:
-            new_bbox = scene_bbox(checked, origin, args.max_distance)
+            new_bbox = scene_bbox(checked, origin, args.max_distance, args.support_sigma)
         finally:
             checked.close()
         if np.any(new_bbox[:2] < bbox[:2]) or np.any(new_bbox[2:] > bbox[2:]):
             raise ValueError("Scène recalée hors couverture extraite : relancer avec davantage de marge")
         clean = [sys.executable, str(directory / "filter_splats_by_lidar.py"), *shared,
                  "--input", str(aligned), "--output", str(cleaned),
-                 "--max-distance", str(args.max_distance), "--rejected-output", str(rejected)]
+                 "--max-distance", str(args.max_distance), "--rejected-output", str(rejected),
+                 "--support-sigma", str(args.support_sigma),
+                 "--spacing-factor", str(args.spacing_factor)]
         if args.filter_classes is not None:
             clean.extend(["--lidar-classes", args.filter_classes])
         if args.dry_run_clean:
@@ -130,6 +137,8 @@ def main():
     parser.add_argument("--margin", type=float, default=10, help="Marge XY en mètres")
     parser.add_argument("--max-correspondence-distance", type=float, default=2)
     parser.add_argument("--max-distance", type=float, default=0.5)
+    parser.add_argument("--support-sigma", type=float, default=3)
+    parser.add_argument("--spacing-factor", type=float, default=1)
     parser.add_argument("--voxel-size", type=float, default=0.2)
     parser.add_argument("--min-overlap", type=float, default=0.3)
     parser.add_argument("--estimate-scale", action="store_true")

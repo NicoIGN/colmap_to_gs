@@ -36,7 +36,7 @@ python tools/lidar/lidar_pipeline.py \
   --margin 10 --max-correspondence-distance 2 --max-distance 0.5
 ```
 
-Le script calcule l'emprise XY de tous les centres, ajoute 10 m de marge,
+Le script calcule l'emprise XY des ellipsoïdes orientés à 3σ, ajoute 10 m de marge,
 interroge l'index WFS IGN LiDAR HD, extrait les points COPC dans `lidar.laz`
 via PDAL, puis lance le recalage et le nettoyage. Il produit `aligned.splat`,
 `cleaned.splat`, `rejected.splat` et leurs rapports (mêmes noms en `.ply`
@@ -53,7 +53,8 @@ Cela ne constitue pas une classification sémantique des gaussiennes.
 
 `--dry-run-clean` réalise téléchargement et recalage, mais seulement un diagnostic
 du nettoyage. `--estimate-scale`, `--voxel-size`, `--min-overlap` et
-`--lidar-stride` sont transmis aux outils appropriés. Une correction sortant de
+`--lidar-stride` sont transmis aux outils appropriés. `--support-sigma` (3 par défaut) et `--spacing-factor` (1 par défaut) règlent
+le support gaussien et la tolérance de densité du nettoyage. Une correction sortant de
 l'emprise récupérée bloque le nettoyage : relancer dans un nouveau dossier avec
 plus de marge. La marge doit couvrir au moins les deux seuils de distance.
 
@@ -139,9 +140,26 @@ python tools/lidar/filter_splats_by_lidar.py \
   --rejected-output scene_rejected.splat
 ```
 
-Rejette les gaussiennes dont le **centre** est à plus de 0.5 m du point LiDAR
-le plus proche. La taille et l'étendue de la gaussienne ne sont pas testées.
-`--bbox xmin,ymin,zmin,xmax,ymax,zmax` limite le filtrage à une zone dans le
+Rejette les gaussiennes dont l'**ellipsoïde orienté à 3σ** n'est proche
+d'aucun point LiDAR. Les tailles et quaternions sont pris en compte : un centre
+éloigné reste conservé si l'étendue de la gaussienne rencontre le LiDAR.
+La distance euclidienne au volume ellipsoïdal est calculée sur tous les points
+candidats dans sa sphère englobante, pas seulement le voisin le plus proche du centre.
+
+`--max-distance 0.5` est la tolérance de base en mètres entre ellipsoïde et
+points. On ajoute par défaut l'espacement local LiDAR : distance au sixième
+voisin du point le plus proche du centre, divisée par sqrt(6) (moins de voisins
+si le nuage est petit). `--spacing-factor 0` désactive cette tolérance ;
+`--support-sigma` modifie le rayon en écarts-types.
+Le rapport compte les splats conservés malgré un centre éloigné.
+
+Ce test est volontairement conservateur, pas une preuve d'utilité visuelle :
+les gaussiennes très grandes peuvent être conservées malgré un rendu incorrect.
+Un support gaussien est théoriquement infini ; 3σ est une approximation finie,
+et un seul point proche suffit ici. Les trous de couverture, changements de
+date et erreurs de recalage peuvent encore provoquer des rejets injustifiés.
+La tolérance de densité n'interpole pas une surface LiDAR.
+`--bbox xmin,ymin,zmin,xmax,ymax,zmax` limite le filtrage aux centres dans une zone du
 repère local ; les splats hors zone restent inchangés. Sans bbox, tous sont testés.
 `--dry-run` écrit uniquement le rapport JSON, pas les scènes.
 

@@ -230,3 +230,21 @@ def open_scene(path):
         scene.close()
         raise ValueError("Scène vide")
     return scene
+
+
+def gaussian_geometry(scene, selection):
+    """Return centres, standard deviations and local-to-world rotation matrices."""
+    raw = scene.raw[selection]
+    xyz, _ = scene.geometry(selection)
+    if scene.is_splat:
+        scales = raw["scale"].astype(float)
+        quats = (raw["rotation"].astype(float) - 128) / 128
+    else:
+        scales = np.exp(np.column_stack([raw[f"scale_{i}"] for i in range(3)]).astype(float))
+        quats = np.column_stack([raw[f"rot_{i}"] for i in range(4)])
+    if not np.isfinite(scales).all() or np.any(scales <= 0):
+        raise ValueError("Échelles gaussiennes invalides")
+    if not np.isfinite(quats).all() or np.any(np.linalg.norm(quats, axis=1) < 1e-8):
+        raise ValueError("Quaternions gaussiens invalides")
+    rotations = Rotation.from_quat(quats[:, [1, 2, 3, 0]]).as_matrix()
+    return xyz, scales, rotations
