@@ -461,3 +461,11 @@ SLURM_CONDA_ENV=""
 # Defaut : "". Racine Conda ; vide = conda info --base.
 # Utilise uniquement si SLURM_CONDA_ENV est non vide.
 SLURM_CONDA_BASE=""
+# LiDAR optionnel (local et Slurm) ; détails : tools/lidar/PIPELINES.md.
+LIDAR_COLMAP_ALIGN=false
+LIDAR_COLMAP_INJECT=false
+LIDAR_CLEAN=false
+LIDAR_CLEAN_MODE=diagnostic
+LIDAR_MARGIN=20
+LIDAR_CLEAN_DISTANCE=0.5
+LIDAR_CLEAN_MIN_OPACITY=0.05

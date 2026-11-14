@@ -295,6 +295,11 @@ fi
 DIR="$(cd -- "$DIR" && pwd)"
 SFM_DIR="$DIR/sfm-$TRAIN_NUM_ITER"
 SPARSE_DIR="$SFM_DIR/sparse/0"
+RAW_SPARSE_DIR="$SPARSE_DIR"
+source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
+load_lidar_config
+LIDAR_WORKSPACE="${LIDAR_WORKSPACE:-$DIR}"
+[[ "$LIDAR_COLMAP_ALIGN" != true ]] || SPARSE_DIR="$LIDAR_WORKSPACE/colmap_lidar"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
@@ -327,8 +332,8 @@ prepare_blocks() {
   local sfm_args
   local feature_args=()
   if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
-        -d "$GS_ROOT" && ( ! -s "$SPARSE_DIR/cameras.bin" ||
-        ! -s "$SPARSE_DIR/images.bin" || ! -s "$SPARSE_DIR/points3D.bin" ) ]]; then
+        -d "$GS_ROOT" && ( ! -s "$RAW_SPARSE_DIR/cameras.bin" ||
+        ! -s "$RAW_SPARSE_DIR/images.bin" || ! -s "$RAW_SPARSE_DIR/points3D.bin" ) ]]; then
     die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
   fi
   if [[ "$SFM_MASKS" == on ]]; then
@@ -354,10 +359,10 @@ prepare_blocks() {
     "$PYTHON_BIN" "${sfm_args[@]}"
   elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
     die "Ce SfM a été filtré par GPS ; conserver SFM_SP_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
-  elif [[ -s "$SPARSE_DIR/cameras.bin" &&
-        -s "$SPARSE_DIR/images.bin" &&
-        -s "$SPARSE_DIR/points3D.bin" ]]; then
-    printf '[pipeline] SfM existant : %s (ignoré).\n' "$SPARSE_DIR"
+  elif [[ -s "$RAW_SPARSE_DIR/cameras.bin" &&
+        -s "$RAW_SPARSE_DIR/images.bin" &&
+        -s "$RAW_SPARSE_DIR/points3D.bin" ]]; then
+    printf '[pipeline] SfM existant : %s (ignoré).\n' "$RAW_SPARSE_DIR"
   else
     printf '[pipeline] Lancement du SfM.\n'
     sfm_args=(
@@ -384,9 +389,15 @@ prepare_blocks() {
   fi
 
   for file in cameras.bin images.bin points3D.bin; do
-    [[ -s "$SPARSE_DIR/$file" ]] || die "Artefact SfM absent ou vide : $SPARSE_DIR/$file"
+    [[ -s "$RAW_SPARSE_DIR/$file" ]] || die "Artefact SfM absent ou vide : $RAW_SPARSE_DIR/$file"
   done
   [[ -d "$SFM_DIR/images" ]] || die "Images préparées par SfM absentes : $SFM_DIR/images"
+  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+    [[ ! -s "$BLOCKS_DIR/manifest.json" || -f "$LIDAR_WORKSPACE/lidar/colmap_inputs.json" ]] ||
+      die "Activer LiDAR nécessite un nouveau workspace avant découpage."
+    lidar_pipeline_hook prepare --workspace "$LIDAR_WORKSPACE" \
+      --model "$RAW_SPARSE_DIR" --images "$SFM_DIR/images"
+  fi
 
   if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
     local mask_model="$TRAIN_MASKS_MODEL"
@@ -444,6 +455,10 @@ PY
 }
 if [[ "$mode" != block ]]; then
   prepare_blocks
+fi
+if [[ "$mode" == block ]]; then
+  lidar_pipeline_hook check --workspace "$LIDAR_WORKSPACE" \
+    --model "$RAW_SPARSE_DIR" --images "$SFM_DIR/images"
 fi
 
 [[ "$mode" != prepare ]] || {

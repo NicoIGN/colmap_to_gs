@@ -75,6 +75,10 @@ PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
+load_lidar_config
+export LIDAR_WORKSPACE="$OUTPUT_DIR"
+lidar_pipeline_hook preflight
 export TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 if [[ "$TRAIN_BACKEND" == spirula ]]; then
   : "${TRAIN_SP_CAP_MAX:?TRAIN_SP_CAP_MAX doit être défini pour TRAIN_BACKEND=spirula}"
@@ -335,6 +339,9 @@ if [[ "$phase" == prepare || "$phase" == train-block ]]; then
   printf '[pipeline] Étape %s terminée.\n' "$phase"
   exit 0
 fi
+LIDAR_SPARSE="$SFM_DIR/sparse/0"
+[[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
+lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
 
 pipeline_stage="vérification des splats avant fusion"
 MERGE_INPUTS=()
@@ -345,7 +352,7 @@ for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
     pipeline_stage="recadrage bbox COLMAP du bloc $block_id avant fusion"
     cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
-    crop_splat_to_sparse "$splat" "$cropped" "$SFM_DIR/sparse/0" \
+    crop_splat_to_sparse "$splat" "$cropped" "$LIDAR_SPARSE" \
       apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
     splat="$cropped"
   fi
@@ -359,9 +366,16 @@ pipeline_stage="fusion des splats des blocs"
 merge_pipeline_splats "$UNFILTERED_SPLAT" "$MERGE_STRENGTH" "${MERGE_INPUTS[@]}"
 if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
   pipeline_stage="filtre Clean-GS multivues"
+  CLEAN_SCENE="$SFM_DIR"
+  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+    CLEAN_SCENE="$OUTPUT_DIR/lidar_scene"
+    mkdir -p "$CLEAN_SCENE/sparse"
+    [[ -e "$CLEAN_SCENE/sparse/0" ]] || ln -s "$LIDAR_SPARSE" "$CLEAN_SCENE/sparse/0"
+    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$SFM_DIR/images" "$CLEAN_SCENE/images"
+  fi
   "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-    --scene "$SFM_DIR" --model "$CLEANGS_MODEL" --mode "$CLEANGS_MODE" \
+    --scene "$CLEAN_SCENE" --model "$CLEANGS_MODEL" --mode "$CLEANGS_MODE" \
     --min-views "$CLEANGS_MIN_VIEWS" --sky-confidence "$CLEANGS_SKY_CONFIDENCE" \
     --max-removal-fraction "$CLEANGS_MAX_REMOVAL_FRACTION" --overwrite
 else
@@ -369,7 +383,7 @@ else
   "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
     --mode "$POSTPROCESS_FILTER_MODE" --size-factor "$POSTPROCESS_FILTER_SIZE_FACTOR" \
-    --sparse-points "$SFM_DIR/sparse/0/points3D.bin" \
+    --sparse-points "$LIDAR_SPARSE/points3D.bin" \
     --sparse-bbox-mode "$POSTPROCESS_SPARSE_BBOX_MODE" \
     --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
 fi
@@ -383,7 +397,7 @@ cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
 cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
 mkdir -p "$GEOREF_DIR/sparse"
-cp -R "$SFM_DIR/sparse/0/." "$GEOREF_DIR/sparse/"
+cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
 cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
 if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
@@ -424,9 +438,16 @@ data = {
     "num_blocks": int(blocks),
     "num_iterations_per_block": int(iterations),
 }
+reference_path = Path(output).parent / "sparse/georef_stats.json"
+if reference_path.is_file():
+    reference = json.loads(reference_path.read_text())["output_reference"]
+    data["output_reference"] = reference
+    data["coordinate_frame"] = "COLMAP LiDAR-aligned local ENU frame"
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
+pipeline_stage="nettoyage LiDAR du splat final"
+lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$FINAL_SPLAT"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"
 printf '[pipeline] Géoréférencement et références : %s\n' "$GEOREF_DIR"

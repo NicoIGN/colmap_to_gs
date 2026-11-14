@@ -261,3 +261,11 @@ SLURM_QOS=""
 # Script optionnel source sur chaque noeud (modules, activation mamba/conda).
 # Vide : environnement herite du terminal de soumission (--export=ALL).
 SLURM_ENV_SETUP=""
+# LiDAR optionnel (images, vidéos et Slurm) ; détails : tools/lidar/PIPELINES.md.
+LIDAR_COLMAP_ALIGN=false
+LIDAR_COLMAP_INJECT=false
+LIDAR_CLEAN=false
+LIDAR_CLEAN_MODE=diagnostic
+LIDAR_MARGIN=20
+LIDAR_CLEAN_DISTANCE=0.5
+LIDAR_CLEAN_MIN_OPACITY=0.05

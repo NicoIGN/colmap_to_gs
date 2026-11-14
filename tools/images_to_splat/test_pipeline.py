@@ -13,6 +13,38 @@ SOURCE = Path(__file__).resolve().parent
 
 
 class ImagesPipelineTest(unittest.TestCase):
+    def test_lidar_colmap_is_partition_source_and_cleanup_is_after_merge(self):
+        wrapper = self.bin/"python"
+        stub = (
+            "if name == 'pipeline_options.py' and args[1] in ('preflight','prepare','check','clean'):\n"
+            "    phase=args[1]\n"
+            "    if phase != 'preflight':\n"
+            "        with open(os.environ['TEST_EVENTS'],'a') as log:\n"
+            "            log.write(json.dumps(['lidar',phase])+'\\n')\n"
+            "    if phase == 'prepare':\n"
+            "        workspace=Path(get('--workspace')); model=Path(get('--model'))\n"
+            "        shutil.copytree(model, workspace/'colmap_lidar')\n"
+            "        (workspace/'lidar').mkdir()\n"
+            "        (workspace/'lidar/colmap_inputs.json').write_text('{}')\n"
+            "    if phase == 'clean':\n"
+            "        assert Path(get('--splat')).is_file()\n"
+            "    sys.exit(0)\n"
+        )
+        text = wrapper.read_text().replace("if name not in known:", stub+"if name not in known:")
+        text = text.replace('expected = "/georef/0" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0"',
+                            'expected = "/colmap_lidar"')
+        text = text.replace('"/sfm/sparse/0/points3D.bin"', '"/colmap_lidar/points3D.bin"')
+        wrapper.write_text(text)
+        self.append("LIDAR_COLMAP_ALIGN=true\nLIDAR_COLMAP_INJECT=true\nLIDAR_CLEAN=true")
+        self.assert_ok(self.run_pipeline())
+        events = [json.loads(line) for line in self.events.read_text().splitlines()]
+        prepare = next(i for i, event in enumerate(events) if event == ["lidar", "prepare"])
+        split = next(i for i, event in enumerate(events) if event[0] == "colmap_split_blocks.py")
+        merge = next(i for i, event in enumerate(events) if event[0] == "merge_splats.py")
+        clean = next(i for i, event in enumerate(events) if event == ["lidar", "clean"])
+        self.assertLess(prepare, split)
+        self.assertLess(merge, clean)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

@@ -34,6 +34,8 @@ submit_dir="$PWD"
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config slurm || exit 1
+source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
+load_lidar_config
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
 : "${PANORAMAX_BBOX:?PANORAMAX_BBOX doit être défini dans la configuration}"

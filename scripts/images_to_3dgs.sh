@@ -35,6 +35,7 @@ elif [[ -n "$block" ]]; then
   die "--block nécessite --phase train-block."
 fi
 command -v "$PYTHON_BIN" >/dev/null || die "Python introuvable : $PYTHON_BIN"
+lidar_pipeline_hook preflight
 if [[ "$TRAIN_BACKEND" == nerfstudio ]]; then
   if [[ "$phase" == all || "$phase" == train-block ]]; then
     "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
@@ -44,6 +45,7 @@ else
 fi
 
 if [[ "$validate_only" == true ]]; then
+  lidar_pipeline_hook preflight
   for prefix in SFM_MASKS TRAIN_MASKS; do
     [[ "${!prefix}" == on ]] || continue
     dir_key="${prefix}_DIR"
@@ -117,16 +119,29 @@ filter_input="$sparse"
 if [[ "$SFM_FILTER_DENSITY" == true ]]; then
   sparse="$OUTPUT_DIR/sparse_clean"
 fi
+lidar_input="$sparse"
+if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+  sparse="$OUTPUT_DIR/colmap_lidar"
+  if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_COLMAP_GEOREF" ]]; then
+    export LIDAR_COLMAP_GEOREF="$OUTPUT_DIR/georef/0/georef_stats.json"
+  fi
+fi
 
 check_filtered_sparse() {
-  [[ -f "$sparse/.density_done" && -s "$sparse/density_report.json" ]] ||
+  [[ -f "$lidar_input/.density_done" && -s "$lidar_input/density_report.json" ]] ||
     die "Filtrage sparse incomplet : relancer --phase prepare."
-  "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
+  "$PYTHON_BIN" "$script_dir/resume.py" "$lidar_input"
 }
 
 prepare() {
   stage="production COLMAP"
   bash "$repo_root/tools/images_to_colmap/run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+    [[ ! -s "$blocks/manifest.json" || -f "$OUTPUT_DIR/lidar/colmap_inputs.json" ]] ||
+      die "Activer LiDAR nécessite un nouveau workspace avant découpage."
+    stage="recalage et enrichissement COLMAP LiDAR"
+    lidar_pipeline_hook prepare --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
+  fi
   if [[ ! -s "$blocks/manifest.json" ]]; then
     stage="découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/colmap_split_blocks.py" \
@@ -171,6 +186,7 @@ else
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
     check_filtered_sparse
   fi
+  lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
 fi
 [[ "$phase" != prepare ]] || exit 0
 if [[ -d "$OUTPUT_DIR/masks" ]]; then
@@ -217,4 +233,9 @@ if [[ -n "$GEOREF_GPX_FILE" ]]; then
   stage="export de la référence géographique du splat"
   "$PYTHON_BIN" "$script_dir/georeference.py" export
 fi
+stage="nettoyage LiDAR du splat final"
+if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_CLEAN_GEOREF" && "$LIDAR_COLMAP_ALIGN" != true ]]; then
+  export LIDAR_CLEAN_GEOREF="$OUTPUT_DIR/georef/0/georef_stats.json"
+fi
+lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

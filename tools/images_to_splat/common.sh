@@ -180,6 +180,8 @@ load_config() {
   [[ "$OUTPUT_DIR/" != "$SFM_IMAGES_DIR/"* ]] ||
     die "OUTPUT_DIR doit être distinct et extérieur au dossier d'images."
   export SFM_IMAGES_DIR OUTPUT_DIR
+  source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
+  load_lidar_config || exit 1
 
   reject_legacy_config || exit 1
   validate_sfm_geometry_config

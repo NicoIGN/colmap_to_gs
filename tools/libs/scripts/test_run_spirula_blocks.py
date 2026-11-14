@@ -14,6 +14,39 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
+    def test_lidar_recalage_precedes_partition_and_block_jobs_check_it(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            wrapper = root/"bin/python3"
+            stub = (
+                "if args and args[0].endswith('pipeline_options.py') and args[1] in ('prepare','check'):\n"
+                "  from pathlib import Path\n"
+                "  workspace=Path(args[args.index('--workspace')+1])\n"
+                "  assert os.environ['LIDAR_COLMAP_INJECT']=='true'\n"
+                "  with open(log,'a') as f: f.write(json.dumps(['lidar',args[1]])+'\\n')\n"
+                "  if args[1]=='prepare':\n"
+                "    target=workspace/'colmap_lidar'; target.mkdir(exist_ok=True)\n"
+                "    for name in ('cameras.bin','images.bin','points3D.bin'): (target/name).write_bytes(b'colmap')\n"
+                "    (workspace/'lidar').mkdir(exist_ok=True)\n"
+                "    (workspace/'lidar/colmap_inputs.json').write_text('{}')\n"
+                "  sys.exit(0)\n"
+            )
+            wrapper.write_text(wrapper.read_text().replace(
+                "log = os.environ['COMMAND_LOG']\n", "log = os.environ['COMMAND_LOG']\n"+stub))
+            env.update(LIDAR_COLMAP_ALIGN="true", LIDAR_COLMAP_INJECT="true")
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            lidar_index = next(i for i, c in enumerate(commands) if c[:2] == ["lidar", "prepare"])
+            split_index = next(i for i, c in enumerate(commands) if c[0] == "split")
+            self.assertLess(lidar_index, split_index)
+            split = commands[split_index]
+            self.assertEqual(split[split.index("--input")+1], str(data/"colmap_lidar"))
+            result = execute("--block", "0")
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertIn(["lidar", "check"], commands)
+
     def test_spirula_analysis_exposure_reaches_sfm_and_training_options_reach_blocks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
