@@ -5,9 +5,12 @@ die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
 resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 
 # Modèle SAM 3 par défaut : models/ de spirula-studio (SPIRULA_ROOT, sinon
-# parent du dossier de SPIRULA_BIN). Retourne vide si ambigu ou absent.
+# dépôt adjacent au projet, puis parent du dossier de SPIRULA_BIN).
 default_spirula_model() {
   local root="${SPIRULA_ROOT:-}" dir files
+  if [[ -z "$root" && -n "${repo_root:-}" ]]; then
+    root="$(dirname "$repo_root")/spirula-studio"
+  fi
   if [[ -z "$root" && "$SPIRULA_BIN" == */* ]]; then
     root="$(dirname "$(dirname "$SPIRULA_BIN")")"
   fi
@@ -26,7 +29,7 @@ default_spirula_model() {
 }
 
 load_config() {
-  local config="$1" images="${2:-}" name replacement directory
+  local config="$1" images="${2:-}" name replacement directory spirula_candidate
   local config_errors=0
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
@@ -48,7 +51,19 @@ load_config() {
   SFM_IMAGES_DIR="${images:-${SFM_IMAGES_DIR:-}}"
   SFM_IMAGES_RECURSIVE="${SFM_IMAGES_RECURSIVE:-true}"
   PYTHON_BIN="${PYTHON_BIN:-python3}"
-  SPIRULA_BIN="${SPIRULA_BIN:-spirula}"
+  SPIRULA_ROOT="${SPIRULA_ROOT:-$(dirname "$repo_root")/spirula-studio}"
+  if [[ -z "${SPIRULA_BIN:-}" ]]; then
+    shopt -s nullglob
+    local spirula_candidates=("$SPIRULA_ROOT"/build*/spirula)
+    shopt -u nullglob
+    SPIRULA_BIN=spirula
+    for spirula_candidate in "${spirula_candidates[@]}"; do
+      if [[ -x "$spirula_candidate" ]]; then
+        SPIRULA_BIN="$spirula_candidate"
+        break
+      fi
+    done
+  fi
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
