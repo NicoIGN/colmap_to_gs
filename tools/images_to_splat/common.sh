@@ -59,7 +59,11 @@ load_config() {
   PYTHON_BIN="${PYTHON_BIN:-python3}"
   local adjacent_spirula_root="$(dirname "$repo_root")/spirula-studio"
   SPIRULA_ROOT="${SPIRULA_ROOT:-$adjacent_spirula_root}"
-  if [[ -z "${SPIRULA_BIN:-}" ]]; then
+  # Un SPIRULA_BIN absent, ou un chemin non exécutable, déclenche la recherche
+  # de build*/spirula dans SPIRULA_ROOT puis dans le spirula-studio voisin.
+  local configured_spirula_bin="${SPIRULA_BIN:-}"
+  if [[ -z "$configured_spirula_bin" ||
+        ( "$configured_spirula_bin" == */* && ! -x "$configured_spirula_bin" ) ]]; then
     shopt -s nullglob
     local spirula_roots=("$SPIRULA_ROOT")
     [[ "$adjacent_spirula_root" == "$SPIRULA_ROOT" ]] ||
@@ -69,10 +73,12 @@ load_config() {
       spirula_candidates+=("$directory"/build*/spirula)
     done
     shopt -u nullglob
-    SPIRULA_BIN=spirula
+    SPIRULA_BIN="${configured_spirula_bin:-spirula}"
     for spirula_candidate in "${spirula_candidates[@]}"; do
       if [[ -x "$spirula_candidate" ]]; then
         SPIRULA_BIN="$spirula_candidate"
+        [[ -z "$configured_spirula_bin" ]] ||
+          echo "[AVERTISSEMENT] SPIRULA_BIN introuvable ($configured_spirula_bin) : utilisation de $SPIRULA_BIN." >&2
         break
       fi
     done
