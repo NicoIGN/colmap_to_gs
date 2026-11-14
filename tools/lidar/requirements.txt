@@ -1,0 +1,6 @@
+numpy
+scipy
+plyfile
+tqdm
+laspy
+lazrs

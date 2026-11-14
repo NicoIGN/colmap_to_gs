@@ -165,6 +165,7 @@ Détails et options : [conversion 3D Tiles](tools/splat_to_3dtiles/README.md) et
 - [Installation de Spirula](tools/spirula/README.md).
 - [Masques](tools/segmentation_masks/README.md).
 - [Export, filtrage et fusion](tools/postprocess/README.md).
+- [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
 - [Nettoyage multivues du ciel](tools/clean_gs/README.md).
 - [Visualisation](tools/viewer/README.md).
 - [Conversion en 3D Tiles](tools/splat_to_3dtiles/README.md).
