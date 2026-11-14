@@ -142,8 +142,8 @@ def main():
     parser.add_argument("--max-correspondence-distance", type=float, default=2)
     parser.add_argument("--max-distance", type=float, default=0.5)
     parser.add_argument("--support-sigma", type=float, default=3)
-    parser.add_argument("--min-support-opacity", type=float,
-                        help="Opacité locale minimale du support LiDAR ; défaut : désactivé")
+    parser.add_argument("--min-support-opacity", type=float, default=0.05,
+                        help="Opacité locale minimale du support LiDAR ; défaut : 0.05")
     parser.add_argument("--spacing-factor", type=float, default=1)
     parser.add_argument("--voxel-size", type=float, default=0.2)
     parser.add_argument("--min-overlap", type=float, default=0.3)

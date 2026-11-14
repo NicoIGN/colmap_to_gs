@@ -167,7 +167,11 @@ Si l'opacité au centre est inférieure au seuil, aucun support suffisamment opa
 n'existe : le splat est proposé au rejet, même si son centre touche le LiDAR.
 À égalité, le support se réduit au centre. La bbox reste respectée : les splats
 hors zone sont conservés. Le seuil doit être dans ]0,1] et est **désactivé par
-défaut**, préservant le test précédent à 3σ. Le rapport indique le seuil et
+défaut dans le filtre autonome**, préservant le test précédent à 3σ.
+Le **script maître utilise 0.05 (5 %) par défaut**, un compromis conservateur
+qui exclut les queues très transparentes sans exiger un support fortement opaque.
+Ce seuil reste ajustable selon la scène et n'est pas une garantie de qualité visuelle.
+Le rapport indique le seuil et
 le nombre de rejets faute d'opacité au centre.
 
 Il s'agit d'une approximation 3D par gaussienne, **pas de l'opacité finale

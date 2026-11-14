@@ -166,6 +166,7 @@ class IgnPipelineTests(unittest.TestCase):
             master.main()
         self.assertEqual(run.call_args.args[0].align_classes, "2,3,4,5,6,67")
         self.assertIsNone(run.call_args.args[0].filter_classes)
+        self.assertEqual(run.call_args.args[0].min_support_opacity, 0.05)
 
     def test_coverage_guard_blocks_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:
