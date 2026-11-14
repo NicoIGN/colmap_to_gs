@@ -1,8 +1,10 @@
 # Post-traitement LiDAR
 
-Deux outils CPU autonomes pour LAS/LAZ et `.splat` classique (32 octets par
+Outils CPU autonomes pour LAS/LAZ et `.splat` classique (32 octets par
 gaussienne) ou PLY 3DGS binaire. Les sorties gardent le format d'entrée.
 Les fichiers existants ne sont pas écrasés.
+
+Pour les modèles sparse COLMAP, voir [recalage et injection LiDAR avec tracks](COLMAP.md).
 
 Installer les dépendances dans l'environnement Python utilisé :
 

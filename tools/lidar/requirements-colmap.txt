@@ -1,0 +1,4 @@
+-r requirements.txt
+pycolmap>=4.2
+pyproj
+Pillow
