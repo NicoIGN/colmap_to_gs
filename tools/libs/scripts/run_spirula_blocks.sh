@@ -300,6 +300,16 @@ source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 LIDAR_WORKSPACE="${LIDAR_WORKSPACE:-$DIR}"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || SPARSE_DIR="$LIDAR_WORKSPACE/colmap_lidar"
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$LIDAR_WORKSPACE" "run_3dgs_blocks:$mode:${block_index:-all}"
+blocks_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap blocks_exit EXIT
+pipeline_report_phase "validation de la configuration des blocs"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 MASKS_DIR="$SFM_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
@@ -331,6 +341,7 @@ prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
   local feature_args=()
+  pipeline_report_phase "reconstruction SfM"
   if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
         -d "$GS_ROOT" && ( ! -s "$RAW_SPARSE_DIR/cameras.bin" ||
         ! -s "$RAW_SPARSE_DIR/images.bin" || ! -s "$RAW_SPARSE_DIR/points3D.bin" ) ]]; then
@@ -395,11 +406,13 @@ prepare_blocks() {
   if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
     [[ ! -s "$BLOCKS_DIR/manifest.json" || -f "$LIDAR_WORKSPACE/lidar/colmap_inputs.json" ]] ||
       die "Activer LiDAR nécessite un nouveau workspace avant découpage."
+    pipeline_report_phase "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$LIDAR_WORKSPACE" \
       --model "$RAW_SPARSE_DIR" --images "$SFM_DIR/images"
   fi
 
   if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
+    pipeline_report_phase "masques d'entraînement"
     local mask_model="$TRAIN_MASKS_MODEL"
     local license_args=()
     [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
@@ -418,6 +431,7 @@ prepare_blocks() {
       die "Génération des masques d’entraînement échouée."
   fi
 
+  pipeline_report_phase "découpage COLMAP"
   if [[ -s "$BLOCKS_DIR/manifest.json" ]]; then
     block_count="$("$PYTHON_BIN" - "$BLOCKS_DIR/manifest.json" <<'PY'
 import json
@@ -491,6 +505,7 @@ last_index="$SPLIT_NUM_BLOCKS"
 [[ "$mode" != block ]] || last_index=$((block_index + 1))
 for ((index = first_index; index < last_index; index++)); do
   block_id="$(printf '%03d' "$index")"
+  pipeline_report_phase "entraînement et export du bloc $block_id"
   block_sparse="$BLOCKS_DIR/block_$block_id"
   block_output="$GS_ROOT/block_$block_id"
   splat_name="Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"

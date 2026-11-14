@@ -20,9 +20,20 @@ mkdir -p "$OUTPUT_DIR/logs"
 lock="$OUTPUT_DIR/.colmap.lock"
 mkdir "$lock" 2>/dev/null || die "Production COLMAP déjà verrouillée : $lock"
 trap 'rmdir "$lock"' EXIT
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$OUTPUT_DIR" "images_to_colmap"
+colmap_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  rmdir "$lock"
+  exit "$status"
+}
+trap colmap_exit EXIT
 trap 'status=$?; echo "[ERREUR] Production COLMAP : $stage (code $status)." >&2; exit "$status"' ERR
 begin_stage() {
   stage="$1"
+  pipeline_report_phase "$stage"
   echo "[étape $(date '+%H:%M:%S')] $stage"
 }
 sfm="$OUTPUT_DIR/sfm"
@@ -51,12 +62,12 @@ sparse_ready() {
 }
 
 prepare() {
-  stage="sélection des images"
+  begin_stage "sélection des images"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
   rm -f -- "$OUTPUT_DIR/.prepare_done"
   feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
-    stage="masques SfM / entraînement"
+    begin_stage "masques SfM / entraînement"
     "$PYTHON_BIN" "$script_dir/prepare_masks.py"
     if [[ -d "$OUTPUT_DIR/masks" ]]; then
       sfm_masks="$OUTPUT_DIR/masks"
@@ -71,7 +82,7 @@ prepare() {
           die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
       done
     fi
-    stage="reconstruction COLMAP ($COLMAP_METHOD)"
+    begin_stage "reconstruction COLMAP ($COLMAP_METHOD)"
     bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
     if [[ "$PIPELINE_RESUME" == true ]]; then
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
@@ -84,11 +95,11 @@ prepare() {
     "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
   fi
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
-    stage="recalage du SfM sur le GPX"
+    begin_stage "recalage du SfM sur le GPX"
     "$PYTHON_BIN" "$script_dir/georeference.py" prepare
   fi
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
-    stage="filtrage du sparse par densité"
+    begin_stage "filtrage du sparse par densité"
     density_filter="$repo_root/tools/preprocess/filter_sparse_density.py"
     density_version="$("$PYTHON_BIN" "$density_filter" --version)"
     [[ "$density_version" =~ ^[0-9]+$ ]] ||
@@ -110,7 +121,7 @@ prepare() {
     fi
   fi
 }
-stage="initialisation"
+begin_stage "initialisation"
 prepare
 "$PYTHON_BIN" - "$OUTPUT_DIR" "$sparse" <<'PYINFO'
 import json, sys

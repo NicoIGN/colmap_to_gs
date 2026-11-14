@@ -50,6 +50,17 @@ done
 mkdir -p "$frames_dir"
 echo "[prévalidation] vérification de la configuration et des ressources des masques avant extraction."
 bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" --validate-only
+report_workspace="$(bash -c 'source "$1" >/dev/null; printf "%s" "$OUTPUT_DIR"' _ "$config")"
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$report_workspace" "videos_to_3dgs"
+video_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap video_exit EXIT
+pipeline_report_phase "extraction des images vidéo"
 
 extract_args=(--out "$frames_dir" --num-frames "$num_frames" --reset --video "${videos[@]}")
 if ((width > 0)); then extract_args+=(--width "$width" --height "$height"); fi
@@ -58,4 +69,5 @@ echo "[vidéos] extraction de $num_frames image(s) par vidéo dans $frames_dir"
 "$python_bin" "$repo_root/tools/preprocess/extract_sharp_frames.py" "${extract_args[@]}"
 
 echo "[3dgs] lancement du pipeline images_to_3dgs"
-exec bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" "${pipeline_args[@]}"
+pipeline_report_phase "pipeline images_to_3dgs"
+bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" "${pipeline_args[@]}"

@@ -8,6 +8,8 @@ Pour les modèles sparse COLMAP, voir [recalage et injection LiDAR avec tracks](
 Le script chapeau `colmap_lidar_pipeline.py` conserve le LAZ partagé dans
 `workspace/lidar/` pour le réutiliser ensuite avec le splat final.
 Voir [les paramètres d'intégration des pipelines images/vidéos/Panoramax et Slurm](PIPELINES.md).
+Les maîtres conservent aussi les [dates et durées de leurs phases](../libs/python/PIPELINE_REPORT.md)
+dans `pipeline_report.json`.
 
 Installer les dépendances dans l'environnement Python utilisé :
 

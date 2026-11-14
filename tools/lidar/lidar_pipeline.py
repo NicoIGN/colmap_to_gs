@@ -10,7 +10,7 @@ import sys
 
 import numpy as np
 
-from common import class_codes, gaussian_geometry, open_scene, vector, write_report
+from common import Reporter, class_codes, gaussian_geometry, open_scene, vector, write_report
 from common import validate_support_opacity
 from fetch_ign_lidar import CRS, fetch_lidar, validate_cached_lidar
 from geographic import local_laz, projected_enu, reference_metadata
@@ -103,12 +103,15 @@ def run(args):
              "parameters": {key: str(value) if isinstance(value, Path) else value
                             for key, value in vars(args).items()}}
     write_report(state_path, state)
+    reporter = Reporter(output, "lidar_splat_pipeline")
+    reporter.__enter__()
     def update(status):
         state["status"] = status
         temporary = output / ".pipeline.json.tmp"
         write_report(temporary, state)
         temporary.replace(state_path)
     try:
+        reporter.phase("récupération ou réutilisation LiDAR")
         if args.lidar_file is None:
             fetch_lidar(bbox, laz, pdal=args.pdal, max_tiles=args.max_tiles)
         else:
@@ -130,6 +133,7 @@ def run(args):
         if args.align_classes is not None:
             align.extend(["--lidar-classes", args.align_classes])
         update("aligning")
+        reporter.phase("recalage du splat")
         subprocess.run(align, check=True)
         # A large correction can move points outside the fetched footprint.
         checked = open_scene(aligned)
@@ -153,6 +157,7 @@ def run(args):
         if args.dry_run_clean:
             clean.append("--dry-run")
         update("filtering")
+        reporter.phase("nettoyage du splat")
         subprocess.run(clean, check=True)
         update("complete")
         print(f"[lidar] Terminé : {output}", flush=True)
@@ -161,6 +166,8 @@ def run(args):
         state["error"] = str(error)
         update("failed")
         raise
+    finally:
+        reporter.__exit__(*sys.exc_info())
 
 
 def main():

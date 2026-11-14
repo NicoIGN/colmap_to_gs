@@ -79,6 +79,17 @@ source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 export LIDAR_WORKSPACE="$OUTPUT_DIR"
 lidar_pipeline_hook preflight
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$OUTPUT_DIR" "panoramax_to_3dgs:$phase"
+pipeline_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap pipeline_exit EXIT
+set_pipeline_stage() { pipeline_stage="$1"; pipeline_report_phase "$pipeline_stage"; }
+set_pipeline_stage "initialisation"
 export TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 if [[ "$TRAIN_BACKEND" == spirula ]]; then
   : "${TRAIN_SP_CAP_MAX:?TRAIN_SP_CAP_MAX doit être défini pour TRAIN_BACKEND=spirula}"
@@ -224,12 +235,12 @@ PY
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
   printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
-  pipeline_stage="téléchargement des photos Panoramax"
+  set_pipeline_stage "téléchargement des photos Panoramax"
   "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
 
   # The downloader retains old files for manual resume. The dedicated pipeline
   # directory must contain exactly this run's successful/reused manifest images.
-  pipeline_stage="validation des photos téléchargées"
+  set_pipeline_stage "validation des photos téléchargées"
   "$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
 import json
 import sys
@@ -268,11 +279,11 @@ fi
 if [[ "$phase" != merge ]]; then
   if [[ "$phase" == prepare ]]; then
     phase_args=(--prepare-only)
-    pipeline_stage="reconstruction SfM et découpage COLMAP"
+    set_pipeline_stage "reconstruction SfM et découpage COLMAP"
   elif [[ "$phase" == train-block ]]; then
-    pipeline_stage="entraînement du bloc $3"
+    set_pipeline_stage "entraînement du bloc $3"
   else
-    pipeline_stage="reconstruction SfM, découpage COLMAP et entraînement des blocs"
+    set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
   printf '[pipeline] Étape : %s\n' "$pipeline_stage"
   DIR="$DATASET_DIR" \
@@ -343,14 +354,14 @@ LIDAR_SPARSE="$SFM_DIR/sparse/0"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
 lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
 
-pipeline_stage="vérification des splats avant fusion"
+set_pipeline_stage "vérification des splats avant fusion"
 MERGE_INPUTS=()
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
   splat="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
   [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
-    pipeline_stage="recadrage bbox COLMAP du bloc $block_id avant fusion"
+    set_pipeline_stage "recadrage bbox COLMAP du bloc $block_id avant fusion"
     cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
     crop_splat_to_sparse "$splat" "$cropped" "$LIDAR_SPARSE" \
       apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
@@ -362,10 +373,10 @@ done
 FINAL_SPLAT="$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 UNFILTERED_SPLAT="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.unfiltered.splat"
 printf '[pipeline] Fusion des blocs vers %s\n' "$UNFILTERED_SPLAT"
-pipeline_stage="fusion des splats des blocs"
+set_pipeline_stage "fusion des splats des blocs"
 merge_pipeline_splats "$UNFILTERED_SPLAT" "$MERGE_STRENGTH" "${MERGE_INPUTS[@]}"
 if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
-  pipeline_stage="filtre Clean-GS multivues"
+  set_pipeline_stage "filtre Clean-GS multivues"
   CLEAN_SCENE="$SFM_DIR"
   if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
     CLEAN_SCENE="$OUTPUT_DIR/lidar_scene"
@@ -379,7 +390,7 @@ if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
     --min-views "$CLEANGS_MIN_VIEWS" --sky-confidence "$CLEANGS_SKY_CONFIDENCE" \
     --max-removal-fraction "$CLEANGS_MAX_REMOVAL_FRACTION" --overwrite
 else
-  pipeline_stage="filtre contextuel global des splats"
+  set_pipeline_stage "filtre contextuel global des splats"
   "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
     --mode "$POSTPROCESS_FILTER_MODE" --size-factor "$POSTPROCESS_FILTER_SIZE_FACTOR" \
@@ -391,7 +402,7 @@ fi
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
 GEOREF_DIR="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.georef"
-pipeline_stage="copie des références de géoréférencement"
+set_pipeline_stage "copie des références de géoréférencement"
 mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
@@ -446,7 +457,7 @@ if reference_path.is_file():
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
-pipeline_stage="nettoyage LiDAR du splat final"
+set_pipeline_stage "nettoyage LiDAR du splat final"
 lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$FINAL_SPLAT"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"

@@ -44,6 +44,12 @@ class ImagesPipelineTest(unittest.TestCase):
         clean = next(i for i, event in enumerate(events) if event == ["lidar", "clean"])
         self.assertLess(prepare, split)
         self.assertLess(merge, clean)
+        report = json.loads((self.output/"pipeline_report.json").read_text())
+        runs = report["runs"]
+        self.assertTrue(all(run["status"] == "completed" for run in runs))
+        images = next(run for run in runs if run["pipeline"].startswith("images_to_3dgs:"))
+        self.assertTrue(any(p["name"] == "fusion des blocs" for p in images["phases"]))
+        self.assertTrue(all(p["duration_seconds"] >= 0 for p in images["phases"]))
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

@@ -249,7 +249,7 @@ def inject_tracks(model, lidar, args):
                        "ni mise à jour database.db ; ne pas interpréter error=0 comme une validation."}
 
 
-def run(args):
+def run(args, reporter=None):
     if args.output.exists():
         raise ValueError("Sortie déjà présente ; choisir un nouveau dossier")
     positive = (args.voxel_size, args.max_correspondence_distance, args.translation_step,
@@ -298,11 +298,17 @@ def run(args):
     if reference is not None:
         lidar = enu_lidar(lidar, reference["origin_lat_lon_height"], args.lidar_crs)
         references = enu_lidar(references, reference["origin_lat_lon_height"], args.lidar_crs)
+    if reporter is not None:
+        reporter.phase("recalage COLMAP")
     s, r, t, report = search_alignment(points, references, args, initial)
     model.transform(similarity(s, r, t))
+    if reporter is not None and args.inject:
+        reporter.phase("enrichissement COLMAP par LiDAR")
     injection = inject_tracks(model, lidar, args) if args.inject else None
     if not model.is_valid():
         raise ValueError("Modèle transformé/injecté incohérent : export refusé")
+    if reporter is not None:
+        reporter.phase("export et validation du modèle COLMAP")
     args.output.mkdir(parents=True)
     model.write(args.output)
     reloaded = pycolmap.Reconstruction(args.output)

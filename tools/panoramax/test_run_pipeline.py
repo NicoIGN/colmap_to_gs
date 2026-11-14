@@ -28,7 +28,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-']:\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -53,7 +53,12 @@ class PanoramaxPipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             python = root / "failed-python"
-            python.write_text("#!/bin/sh\nexit 13\n")
+            python.write_text(
+                f"#!{sys.executable}\n"
+                "import os, sys\n"
+                "if sys.argv[1].endswith('pipeline_report.py'):\n"
+                "    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
+                "sys.exit(13)\n")
             python.chmod(0o755)
             config = root / "config.sh"
             config.write_text(
@@ -71,6 +76,10 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertIn("code 13", result.stderr)
             self.assertIn("summary.json", result.stderr)
             self.assertIn("manifest.jsonl", result.stderr)
+            report = json.loads((root/"output/pipeline_report.json").read_text())["runs"][0]
+            self.assertEqual(report["status"], "failed")
+            self.assertEqual(report["exit_code"], 13)
+            self.assertEqual(report["phases"][-1]["name"], "téléchargement des photos Panoramax")
 
     def test_changed_request_stops_or_archives_previous_dataset(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -87,7 +96,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-']:\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -136,7 +145,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, runpy, sys\n"
                 "args = sys.argv[1:]\n"
-                "if args and args[0] != '-':\n"
+                "if args and args[0] != '-' and not args[0].endswith('pipeline_report.py'):\n"
                 "  with open(os.environ['COMMAND_LOG'], 'a') as log:\n"
                 "    log.write(os.path.basename(args[0]) + '\\n')\n"
                 "if args and args[0].endswith('download.py'):\n"

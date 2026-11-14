@@ -66,6 +66,15 @@ command -v scancel >/dev/null 2>&1 || die "scancel introuvable."
 [[ -f "$repo_root/scripts/panoramax_to_3dgs.sh" ]] || die "scripts/panoramax_to_3dgs.sh introuvable."
 
 mkdir -p "$OUTPUT_DIR/logs"
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$OUTPUT_DIR" "launch_panoramax_to_3dgs:submission"
+submission_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap submission_exit EXIT
 log_dir="$(cd -- "$OUTPUT_DIR/logs" && pwd)"
 exec > >(tee -a "$log_dir/submit.log") 2>&1
 gres="gpu:1"
@@ -91,6 +100,7 @@ printf '[slurm] Partition=%s CPU/job=%s RAM/job=%s GPU/bloc=%s durée/job=%s par
 PIPELINE_SUBMITTED_JOBS=()
 submit_job() {
   local stage="$1"
+  pipeline_report_phase "soumission Slurm : $stage"
   shift
   pipeline_submit_job "$stage" "${sbatch_args[@]}" "$@" "$script_dir/launch.slurm" \
     "$repo_root" "$config_path" "$stage"

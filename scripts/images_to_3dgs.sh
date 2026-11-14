@@ -100,7 +100,19 @@ mkdir -p "$OUTPUT_DIR/logs"
 lock="$OUTPUT_DIR/.${phase}-${block:-all}.lock"
 mkdir "$lock" 2>/dev/null || die "Étape déjà verrouillée : $lock"
 trap 'rmdir "$lock" || echo "[AVERTISSEMENT] Verrou conservé : $lock" >&2' EXIT
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$OUTPUT_DIR" "images_to_3dgs:$phase:${block:-all}"
+pipeline_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  rmdir "$lock" || echo "[AVERTISSEMENT] Verrou conservé : $lock" >&2
+  exit "$status"
+}
+trap pipeline_exit EXIT
+set_stage() { stage="$1"; pipeline_report_phase "$stage"; }
 stage="initialisation"
+pipeline_report_phase "$stage"
 trap 'status=$?; echo "[ERREUR] Étape $stage, code $status, ligne $LINENO" >&2; exit "$status"' ERR
 exec > >(tee -a "$OUTPUT_DIR/logs/${phase}-${block:-all}.log") 2>&1
 export PYTHONUNBUFFERED=1
@@ -134,16 +146,16 @@ check_filtered_sparse() {
 }
 
 prepare() {
-  stage="production COLMAP"
+  set_stage "production COLMAP"
   bash "$repo_root/tools/images_to_colmap/run.sh" "$config" --images "$SFM_IMAGES_DIR"
   if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
     [[ ! -s "$blocks/manifest.json" || -f "$OUTPUT_DIR/lidar/colmap_inputs.json" ]] ||
       die "Activer LiDAR nécessite un nouveau workspace avant découpage."
-    stage="recalage et enrichissement COLMAP LiDAR"
+    set_stage "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
   fi
   if [[ ! -s "$blocks/manifest.json" ]]; then
-    stage="découpage COLMAP"
+    set_stage "découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/colmap_split_blocks.py" \
       --input "$sparse" --output "$blocks" --num-blocks "$SPLIT_NUM_BLOCKS" \
       --overlap-max-fraction "$SPLIT_OVERLAP_MAX_FRACTION" --export-binary
@@ -166,19 +178,19 @@ PY
 if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare
 elif [[ "$phase" == mask-setup ]]; then
-  stage="préparation des entrées pour les masques"
+  set_stage "préparation des entrées pour les masques"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
   exit 0
 elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
-  stage="vérification des entrées pour les masques"
+  set_stage "vérification des entrées pour les masques"
   [[ -f "$OUTPUT_DIR/inputs.json" && -d "$selected" ]] ||
     die "Entrées des masques non préparées : relancer le lanceur Slurm."
-  stage="calcul des masques ${phase#mask-}"
+  set_stage "calcul des masques ${phase#mask-}"
   policy="${phase#mask-}"
   "$PYTHON_BIN" "$script_dir/prepare_masks.py" --policy "$policy"
   exit 0
 else
-  stage="vérification du workspace"
+  set_stage "vérification du workspace"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     "$PYTHON_BIN" "$script_dir/georeference.py" check
@@ -198,7 +210,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
   [[ "$phase" != train-block ]] || last=$((block + 1))
   for ((index=first; index<last; index++)); do
     printf -v id 'block_%03d' "$index"
-    stage="entraînement $id"
+    set_stage "entraînement $id"
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$gs_root/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
           --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}" --name "$id.splat")
@@ -216,7 +228,7 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
   raw="$gs_root/$id/splats/$id.splat"
   [[ -s "$raw" ]] || die "Splat brut absent : $raw"
   [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
-  stage="recadrage COLMAP $id avant fusion"
+  set_stage "recadrage COLMAP $id avant fusion"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off ]]; then
     cropped="$gs_root/$id/splats/$id.bbox.splat"
     crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
@@ -227,13 +239,13 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
     inputs+=("$raw")
   fi
 done
-stage="fusion des blocs"
+set_stage "fusion des blocs"
 merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
-  stage="export de la référence géographique du splat"
+  set_stage "export de la référence géographique du splat"
   "$PYTHON_BIN" "$script_dir/georeference.py" export
 fi
-stage="nettoyage LiDAR du splat final"
+set_stage "nettoyage LiDAR du splat final"
 if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_CLEAN_GEOREF" && "$LIDAR_COLMAP_ALIGN" != true ]]; then
   export LIDAR_CLEAN_GEOREF="$OUTPUT_DIR/georef/0/georef_stats.json"
 fi

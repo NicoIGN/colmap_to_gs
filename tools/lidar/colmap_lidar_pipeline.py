@@ -8,7 +8,7 @@ import numpy as np
 import pycolmap
 
 import align_colmap_to_lidar as aligner
-from common import vector, write_report
+from common import Reporter, vector, write_report
 from fetch_ign_lidar import (CRS, fetch_lidar, file_signature, validate_cached_lidar)
 
 
@@ -70,6 +70,12 @@ def run(args):
         raise ValueError(f"Emprise {area:.2f} km² trop grande : ajuster recherche ou --max-area-km2")
     if not (0 < bbox[0] < bbox[2] < 1400000 and 6000000 < bbox[1] < bbox[3] < 7300000):
         raise ValueError("Emprise incompatible avec Lambert-93 métropolitain")
+    with Reporter(args.workspace, "colmap_lidar_pipeline") as reporter:
+        execute(args, bbox, reporter)
+
+
+def execute(args, bbox, reporter):
+    reporter.phase("récupération ou réutilisation LiDAR")
     shared = args.workspace / "lidar"
     laz = shared / "lidar.laz"
     manifest = laz.with_suffix(".laz.json")
@@ -92,7 +98,7 @@ def run(args):
         raise ValueError(f"Rapport déjà présent : {state_path}")
     write_report(state_path, state)
     try:
-        aligner.run(args)
+        aligner.run(args, reporter=reporter)
         state["status"] = "complete"
     except (OSError, ValueError, RuntimeError, ImportError, subprocess.CalledProcessError) as error:
         state.update(status="failed", error=str(error))

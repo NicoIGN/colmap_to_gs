@@ -13,6 +13,8 @@ from scipy.spatial.transform import Rotation
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "postprocess"))
 from merge_splats import Scene
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "libs/python"))
+from pipeline_report import Reporter
 
 
 def vector(value):

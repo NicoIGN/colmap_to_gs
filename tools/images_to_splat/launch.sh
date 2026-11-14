@@ -25,6 +25,15 @@ load_config "$config" "$images"
 command -v sbatch >/dev/null || die "sbatch introuvable."
 command -v scancel >/dev/null || die "scancel introuvable."
 mkdir -p "$OUTPUT_DIR/logs"
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$OUTPUT_DIR" "launch_images_to_3dgs:submission"
+submission_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap submission_exit EXIT
 exec > >(tee -a "$OUTPUT_DIR/logs/submit.log") 2>&1
 gres="gpu:1"
 [[ -z "$SLURM_GPU_TYPE" ]] || gres="gpu:$SLURM_GPU_TYPE:1"
@@ -37,6 +46,7 @@ PIPELINE_SUBMITTED_JOBS=()
 submit() {
   local phase="$1"
   shift
+  pipeline_report_phase "soumission Slurm : $phase"
   pipeline_submit_job "$phase" "${args[@]}" "$@" "$script_dir/launch.slurm" \
     "$repo_root" "$config" "$phase" "$SFM_IMAGES_DIR"
   job="$PIPELINE_JOB_ID"
