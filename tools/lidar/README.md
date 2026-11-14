@@ -15,7 +15,8 @@ python -m pip install -r tools/lidar/requirements.txt
 Les deux scripts acceptent `--lidar-classes 2,6` pour ne retenir que certains
 codes de classification LAS. Par défaut, toutes les classes sont utilisées.
 Codes LAS usuels : 2 = sol, 3/4/5 = végétation basse/moyenne/haute,
-6 = bâtiment, 9 = eau ; vérifier la nomenclature du producteur.
+6 = bâtiment, 9 = eau ; 67 = bâti incertain selon le jeu IGN utilisé.
+Vérifier la nomenclature du producteur (67 est un code spécifique).
 Les classes sélectionnées sont enregistrées dans le rapport.
 
 Pour le recalage, sol et bâtiments peuvent fournir des références plus stables
@@ -25,6 +26,70 @@ Pour le nettoyage, restreindre les références à 2 et 6 **peut supprimer la
 végétation réelle**. Commencer par toutes les classes et un `--dry-run`.
 Les scripts ne prétendent pas connaître la classe sémantique des splats :
 une association au point LiDAR le plus proche n'est pas une classification fiable.
+
+## Pipeline IGN automatique
+
+```bash
+python tools/lidar/lidar_pipeline.py \
+  --input scene.splat --output-dir lidar_result \
+  --crs EPSG:2154 --origin 650000,6860000,0 \
+  --margin 10 --max-correspondence-distance 2 --max-distance 0.5
+```
+
+Le script calcule l'emprise XY de tous les centres, ajoute 10 m de marge,
+interroge l'index WFS IGN LiDAR HD, extrait les points COPC dans `lidar.laz`
+via PDAL, puis lance le recalage et le nettoyage. Il produit `aligned.splat`,
+`cleaned.splat`, `rejected.splat` et leurs rapports (mêmes noms en `.ply`
+pour une entrée PLY). `pipeline.json` conserve paramètres, taille/SHA256 de
+l'entrée et état de chaque étape ; les erreurs interrompent l'enchaînement.
+Le dossier de sortie doit être nouveau. Les fichiers intermédiaires restent
+disponibles pour diagnostic, sans reprise implicite ni écrasement.
+
+**Par défaut, le recalage utilise les classes 2,3,4,5,6,67**, dont la végétation
+et le bâti incertain. Le nettoyage utilise toutes les classes, donc inclut aussi
+3/4/5/67. La classification originale est conservée : pas de conversion 67 vers 6.
+`--align-classes` et `--filter-classes` permettent de restreindre ces références.
+Cela ne constitue pas une classification sémantique des gaussiennes.
+
+`--dry-run-clean` réalise téléchargement et recalage, mais seulement un diagnostic
+du nettoyage. `--estimate-scale`, `--voxel-size`, `--min-overlap` et
+`--lidar-stride` sont transmis aux outils appropriés. Une correction sortant de
+l'emprise récupérée bloque le nettoyage : relancer dans un nouveau dossier avec
+plus de marge. La marge doit couvrir au moins les deux seuils de distance.
+
+Le pipeline est limité aux données métropolitaines **Lambert-93 / EPSG:2154** ;
+il ne devine ni l'origine des splats ni le référentiel vertical. Une vérification
+grossière du domaine Lambert-93 et une limite de 25 km²/100 tuiles évitent une
+extraction accidentelle trop grande (`--max-area-km2`, `--max-tiles`).
+Des splats aberrants peuvent gonfler l'emprise ; les nettoyer en amont si nécessaire.
+
+Installer également **PDAL avec `readers.copc`, `filters.merge`, `filters.crop`
+et `writers.las`**, par exemple dans un environnement conda-forge adapté.
+Vérifier avec `pdal --drivers`. `--pdal` permet de donner le chemin de l'exécutable.
+Le réseau doit accéder au WFS et aux URL HTTPS COPC ; PDAL extrait la zone via
+les requêtes HTTP partielles plutôt que télécharger chaque tuile entière.
+Les classes ne sont pas filtrées lors de la récupération.
+
+La récupération peut aussi être utilisée seule :
+
+```bash
+python tools/lidar/fetch_ign_lidar.py \
+  --bbox 650000,6860000,650100,6860100 \
+  --crs EPSG:2154 --output zone.laz
+```
+
+### Source de l'approche WFS/COPC
+
+Le projet [IGNfab roofer-with-ignf-datasets](https://github.com/ignfab/roofer-with-ignf-datasets)
+(MIT) utilise l'index `IGNF_LIDAR-HD_METADONNEE:metadata` sur
+`https://data.geopf.fr/wfs`, son champ `url_npl` et PDAL `readers.copc`.
+Nous utilisons ces interfaces avec une implémentation Python propre :
+pagination WFS, réécriture des liens `/telechargement/` vers
+`/chunk/telechargement/`, fusion puis crop exact. Contrairement à ce projet,
+la classe 67 n'est pas réassignée à 6 et aucune étape roofer/BD TOPO n'est requise.
+Les tests de récupération utilisent des réponses simulées ; la disponibilité
+du service et la récupération d'une emprise réelle restent à vérifier sur une
+machine disposant de PDAL et de l'accès réseau IGN.
 
 ## Repère et précision
 
@@ -93,5 +158,5 @@ au plus proche voisin. Préparer une zone LAZ adaptée pour les grandes acquisit
 
 ```bash
 cd tools/lidar
-python -m unittest test_lidar
+python -m unittest test_lidar test_ign_pipeline
 ```
