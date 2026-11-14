@@ -7,25 +7,31 @@ resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1])
 # Modèle SAM 3 par défaut : models/ de spirula-studio (SPIRULA_ROOT, sinon
 # dépôt adjacent au projet, puis parent du dossier de SPIRULA_BIN).
 default_spirula_model() {
-  local root="${SPIRULA_ROOT:-}" dir files
-  if [[ -z "$root" && -n "${repo_root:-}" ]]; then
-    root="$(dirname "$repo_root")/spirula-studio"
+  local root dir candidate files
+  local roots=()
+  [[ -z "${SPIRULA_ROOT:-}" ]] || roots+=("$SPIRULA_ROOT")
+  if [[ -n "${repo_root:-}" ]]; then
+    candidate="$(dirname "$repo_root")/spirula-studio"
+    [[ "$candidate" == "${SPIRULA_ROOT:-}" ]] || roots+=("$candidate")
   fi
-  if [[ -z "$root" && "$SPIRULA_BIN" == */* ]]; then
-    root="$(dirname "$(dirname "$SPIRULA_BIN")")"
+  if [[ "${SPIRULA_BIN:-}" == */* ]]; then
+    candidate="$(dirname "$(dirname "$SPIRULA_BIN")")"
+    [[ "$candidate" == "${SPIRULA_ROOT:-}" ]] || roots+=("$candidate")
   fi
-  dir="$root/models"
-  [[ -n "$root" && -d "$dir" ]] || return 0
-  if [[ -f "$dir/sam3-q4_0.ggml" ]]; then
-    printf '%s\n' "$dir/sam3-q4_0.ggml"; return 0
-  fi
-  shopt -s nullglob
-  files=("$dir"/*.ggml)
-  shopt -u nullglob
-  if [[ ${#files[@]} -eq 1 ]]; then
-    printf '%s\n' "${files[0]}"; return 0
-  fi
-  printf '[ALERTE] Aucun modèle par défaut utilisable dans %s (%d .ggml trouvés) : renseignez TRAIN_MASKS_SPIRULA_MODEL.\n' "$dir" "${#files[@]}" >&2
+  for root in "${roots[@]}"; do
+    dir="$root/models"
+    [[ -d "$dir" ]] || continue
+    if [[ -f "$dir/sam3-q4_0.ggml" ]]; then
+      printf '%s\n' "$dir/sam3-q4_0.ggml"; return 0
+    fi
+    shopt -s nullglob
+    files=("$dir"/*.ggml)
+    shopt -u nullglob
+    if [[ ${#files[@]} -eq 1 ]]; then
+      printf '%s\n' "${files[0]}"; return 0
+    fi
+  done
+  printf '[ALERTE] Aucun modèle SAM 3 par défaut trouvé dans les dossiers models/ de Spirula Studio ; renseignez TRAIN_MASKS_SPIRULA_MODEL.\n' >&2
 }
 
 load_config() {
@@ -51,10 +57,17 @@ load_config() {
   SFM_IMAGES_DIR="${images:-${SFM_IMAGES_DIR:-}}"
   SFM_IMAGES_RECURSIVE="${SFM_IMAGES_RECURSIVE:-true}"
   PYTHON_BIN="${PYTHON_BIN:-python3}"
-  SPIRULA_ROOT="${SPIRULA_ROOT:-$(dirname "$repo_root")/spirula-studio}"
+  local adjacent_spirula_root="$(dirname "$repo_root")/spirula-studio"
+  SPIRULA_ROOT="${SPIRULA_ROOT:-$adjacent_spirula_root}"
   if [[ -z "${SPIRULA_BIN:-}" ]]; then
     shopt -s nullglob
-    local spirula_candidates=("$SPIRULA_ROOT"/build*/spirula)
+    local spirula_roots=("$SPIRULA_ROOT")
+    [[ "$adjacent_spirula_root" == "$SPIRULA_ROOT" ]] ||
+      spirula_roots+=("$adjacent_spirula_root")
+    local spirula_candidates=()
+    for directory in "${spirula_roots[@]}"; do
+      spirula_candidates+=("$directory"/build*/spirula)
+    done
     shopt -u nullglob
     SPIRULA_BIN=spirula
     for spirula_candidate in "${spirula_candidates[@]}"; do

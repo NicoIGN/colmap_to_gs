@@ -5,21 +5,25 @@ script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
 
 usage() {
-  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
-images=""; phase=all; block=""
+images=""; phase=all; block=""; validate_only=false
 while (($#)); do
-  [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 1; }
   case "$1" in
-    --images) images="$2" ;;
-    --phase) phase="$2" ;;
-    --block) block="$2" ;;
+    --validate-only) validate_only=true; shift ;;
+    --images|--phase|--block)
+      [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 1; }
+      case "$1" in
+        --images) images="$2" ;;
+        --phase) phase="$2" ;;
+        --block) block="$2" ;;
+      esac
+      shift 2 ;;
     *) usage >&2; exit 1 ;;
   esac
-  shift 2
 done
 source "$script_dir/common.sh"
 load_config "$config" "$images"
@@ -37,6 +41,57 @@ if [[ "$TRAIN_BACKEND" == nerfstudio ]]; then
   fi
 else
   command -v "$SPIRULA_BIN" >/dev/null || die "Spirula introuvable : $SPIRULA_BIN"
+fi
+
+if [[ "$validate_only" == true ]]; then
+  for prefix in SFM_MASKS TRAIN_MASKS; do
+    [[ "${!prefix}" == on ]] || continue
+    dir_key="${prefix}_DIR"
+    [[ -z "${!dir_key}" ]] || continue
+    backend_key="${prefix}_BACKEND"
+    backend="${!backend_key}"
+    if [[ "$backend" == spirula ]]; then
+      mask_python="$PYTHON_BIN"
+      command -v "$SPIRULA_BIN" >/dev/null ||
+        die "Spirula requis pour les masques mais introuvable : $SPIRULA_BIN"
+    else
+      python_key="${prefix}_PYTHON"
+      mask_python="${!python_key}"
+    fi
+    command -v "$mask_python" >/dev/null ||
+      die "Python des masques introuvable : $mask_python"
+    imports='import numpy; from PIL import Image'
+    required_modules="numpy, Pillow"
+    if [[ "$backend" == segmentation ]]; then
+      imports+='; import torch, transformers'
+      required_modules+=", torch, transformers"
+    fi
+    dilate_key="${prefix}_DILATE"
+    dilate="${!dilate_key}"
+    needs_scipy=false
+    if [[ "$dilate" == auto ]]; then
+      if [[ "$prefix" == SFM_MASKS ]]; then
+        needs_scipy=true
+      elif [[ "$TRAIN_MASKS_MODE" == empty ]]; then
+        needs_scipy=false
+      elif [[ "$TRAIN_MASKS_MODE" == auto &&
+              "$(printf '%s' "$TRAIN_MASKS_LABELS" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')" == sky ]]; then
+        needs_scipy=false
+      else
+        needs_scipy=true
+      fi
+    elif awk -v value="$dilate" 'BEGIN { exit !(value > 0) }'; then
+      needs_scipy=true
+    fi
+    if [[ "$needs_scipy" == true ]]; then
+      imports+='; import scipy'
+      required_modules+=", scipy"
+    fi
+    "$mask_python" -c "$imports" >/dev/null 2>&1 ||
+      die "Dépendances Python manquantes pour les masques ($backend, $mask_python). Vérifier $required_modules."
+  done
+  echo "[prévalidation] Configuration, Spirula/modèle et dépendances des masques disponibles."
+  exit 0
 fi
 
 mkdir -p "$OUTPUT_DIR/logs"

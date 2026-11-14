@@ -47,6 +47,10 @@ for module in cv2 numpy tqdm; do
     die "Module Python manquant pour l'extraction vidéo : $module (Python : $python_bin). Installer avec : $python_bin -m pip install opencv-python-headless numpy tqdm"
 done
 
+mkdir -p "$frames_dir"
+echo "[prévalidation] vérification de la configuration et des ressources des masques avant extraction."
+bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" --validate-only
+
 extract_args=(--out "$frames_dir" --num-frames "$num_frames" --reset --video "${videos[@]}")
 if ((width > 0)); then extract_args+=(--width "$width" --height "$height"); fi
 
