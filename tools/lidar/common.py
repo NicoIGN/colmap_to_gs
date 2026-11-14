@@ -31,13 +31,14 @@ def class_codes(value):
     return result
 
 
-def load_lidar(path, origin, stride=1, bbox=None, classes=None):
+def load_lidar(path, origin, stride=1, bbox=None, classes=None, max_points=None):
     import laspy
 
     if stride < 1:
         raise ValueError("Stride LiDAR attendu >= 1")
     clouds = []
     offset = 0
+    selected_count = 0
     with laspy.open(path) as reader:
         for chunk in reader.chunk_iterator(200000):
             points = np.column_stack((chunk.x, chunk.y, chunk.z)) - origin
@@ -49,7 +50,11 @@ def load_lidar(path, origin, stride=1, bbox=None, classes=None):
                 points = points[((points >= bbox[:3]) & (points <= bbox[3:])).all(axis=1)]
             start = (-offset) % stride
             offset += len(points)
-            clouds.append(points[start::stride])
+            clouds.append(points[start::stride].copy() if stride > 1 else points)
+            selected_count += len(clouds[-1])
+            if max_points is not None and selected_count > max_points:
+                raise ValueError(f"Plus de {max_points} points LiDAR sélectionnés : "
+                                 "préparer une emprise LAZ plus petite pour borner la RAM")
     points = np.concatenate(clouds) if clouds else np.empty((0, 3))
     if len(points) < 3:
         raise ValueError("Moins de trois points LiDAR sélectionnés")

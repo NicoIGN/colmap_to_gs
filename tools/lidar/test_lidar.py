@@ -13,11 +13,76 @@ from scipy.spatial.transform import Rotation
 
 from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh_basis, sh_transform,
                     support_radii, transform_records, write_scene)
-from filter_splats_by_lidar import aerial_guard, distance_mask, ellipsoid_distances, support_mask
+from filter_splats_by_lidar import (HeightGrid, MAX_SUPPORT_POINTS, aerial_guard,
+                                   distance_mask, ellipsoid_distances, support_mask)
 from merge_splats import BASE_DTYPE, SPLAT_DTYPE
 
 
 class LidarTests(unittest.TestCase):
+    def test_compact_grid_and_vector_ellipsoid_distance(self):
+        points = np.array([[0., 0, 1], [0.1, .2, 4], [1000000, 0, 8]])
+        grid = HeightGrid(points, np.zeros(2), 1)
+        heights, counts = grid.query(np.array([[0, 0], [1, 0], [1000000, 0], [-1, 0]]))
+        np.testing.assert_array_equal(heights, [4, -np.inf, 8, -np.inf])
+        np.testing.assert_array_equal(counts, [2, 0, 1, 0])
+        np.testing.assert_allclose(ellipsoid_distances(
+            np.array([[4., 0, 0], [0, 3, 0], [3, 4, 0]]),
+            np.array([[3., 2, 1], [3, 2, 1], [0, 0, 0]])), [1, 1, 5])
+
+    def test_aerial_duplicates_and_missing_ground_neighbourhood(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(1, dtype=SPLAT_DTYPE)
+            raw["rotation"] = [255, 128, 128, 128]
+            raw["scale"] = .01
+            raw["position"] = [.5, .5, 10]
+            source = Path(directory)/"unknown.splat"
+            raw.tofile(source)
+            scene = Scene(source)
+            try:
+                coverage = np.array([[.25, .25, 0], [.5, .5, 0], [.75, .75, 0]])
+                # The raster's larger height neighbourhood must not invent nearby ground.
+                far_ground = np.array([[2.8, .75, 0], [2.9, .75, 0], [2.95, .75, 0]])
+                keep, report = aerial_guard(scene, np.zeros(1, dtype=bool), coverage,
+                                            far_ground, distance=.1)
+                self.assertTrue(keep[0])
+                self.assertEqual(report["protected_unknown"], 1)
+                duplicates = np.repeat(coverage[:1], 5, axis=0)
+                keep, report = aerial_guard(scene, np.zeros(1, dtype=bool), duplicates,
+                                            coverage, distance=.1)
+                self.assertTrue(keep[0])
+                self.assertEqual(report["protected_unknown"], 1)
+            finally:
+                scene.close()
+
+    def test_large_and_dense_support_budgets_conserve_unknown(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(2, dtype=SPLAT_DTYPE)
+            raw["rotation"] = [255, 128, 128, 128]
+            raw["rgba"][:, 3] = 200
+            raw["position"] = [.5, .5, 10]
+            raw["scale"][0] = [10, 10, .01]
+            raw["scale"][1] = [1e30, 1e30, .01]
+            source = Path(directory)/"budgets.splat"
+            raw.tofile(source)
+            ground = np.array([[.2, .2, 0], [.5, .5, 0], [.8, .8, 0]])
+            scene = Scene(source)
+            try:
+                keep, report = aerial_guard(scene, np.zeros(2, dtype=bool), ground, ground,
+                                            distance=.1)
+                self.assertTrue(keep.all())
+                self.assertEqual(report["protected_cell_budget"], 2)
+                lidar = np.column_stack((np.linspace(-2, 2, MAX_SUPPORT_POINTS+1),
+                                         np.full(MAX_SUPPORT_POINTS+1, 2.),
+                                         np.full(MAX_SUPPORT_POINTS+1, 10.)))
+                # All candidates miss the thin Y axis; never truncate then falsely reject.
+                raw["scale"][0] = [10, .01, .01]
+                raw.tofile(source)
+                keep, report = support_mask(scene, lidar, .1, spacing_factor=0)
+                self.assertTrue(keep[0])
+                self.assertGreaterEqual(report["protected_support_budget"], 1)
+            finally:
+                scene.close()
+
     def test_aerial_rejects_only_observed_free_space(self):
         with tempfile.TemporaryDirectory() as directory:
             raw = np.zeros(7, dtype=SPLAT_DTYPE)

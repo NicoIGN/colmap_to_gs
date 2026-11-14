@@ -33,6 +33,75 @@ def validate_aerial_options(ground_clearance, cell_size, min_returns):
         raise ValueError("Protection sol >= 0, cellule > 0 et retours >= 1 requis")
 
 
+GRID_DTYPE = np.dtype([("x", "<i8"), ("y", "<i8")])
+SPLAT_BATCH = 10000
+MAX_SUPPORT_POINTS = 4096
+MAX_BATCH_SUPPORT_POINTS = 50000
+MAX_AERIAL_CELLS = 256
+MAX_LIDAR_POINTS = 20000000
+
+
+def grid_keys(indices):
+    result = np.empty(len(indices), dtype=GRID_DTYPE)
+    result["x"], result["y"] = indices.T
+    return result
+
+
+class HeightGrid:
+    """Sparse sorted arrays, with no per-point Python objects or dense world raster."""
+    def __init__(self, points, base, cell_size):
+        if not len(points):
+            self.keys = np.empty(0, dtype=GRID_DTYPE)
+            self.heights = np.empty(0)
+            self.counts = np.empty(0, dtype=np.int64)
+            return
+        indices = np.floor((points[:, :2]-base)/cell_size).astype(np.int64)
+        keys = grid_keys(indices)
+        order = np.argsort(keys)
+        keys = keys[order]
+        starts = np.flatnonzero(np.r_[True, keys[1:] != keys[:-1]])
+        self.keys = keys[starts]
+        self.heights = np.maximum.reduceat(points[order, 2], starts)
+        self.counts = np.diff(np.r_[starts, len(points)])
+
+    def query(self, indices):
+        positions, valid = self.positions(indices)
+        heights = np.full(len(indices), -np.inf)
+        counts = np.zeros(len(indices), dtype=np.int64)
+        heights[valid] = self.heights[positions[valid]]
+        counts[valid] = self.counts[positions[valid]]
+        return heights, counts
+
+    def positions(self, indices):
+        keys = grid_keys(indices)
+        positions = np.searchsorted(self.keys, keys)
+        valid = positions < len(self.keys)
+        valid[valid] &= self.keys[positions[valid]] == keys[valid]
+        return positions, valid
+
+
+def aerial_surfaces(columns, ground_grid, ground, base, cell_size):
+    tops = columns.heights.copy()
+    ground_heights = np.full(len(tops), -np.inf)
+    ground_tree = cKDTree(ground[:, :2])
+    for start in range(0, len(tops), SPLAT_BATCH):
+        end = min(start+SPLAT_BATCH, len(tops))
+        keys = columns.keys[start:end]
+        indices = np.column_stack((keys["x"], keys["y"]))
+        for dx in range(-2, 3):
+            for dy in range(-2, 3):
+                heights, _ = ground_grid.query(indices+[dx, dy])
+                ground_heights[start:end] = np.maximum(ground_heights[start:end], heights)
+                if abs(dx) <= 1 and abs(dy) <= 1:
+                    heights, _ = columns.query(indices+[dx, dy])
+                    tops[start:end] = np.maximum(tops[start:end], heights)
+        centers = base+(indices+.5)*cell_size
+        distances = ground_tree.query(centers, distance_upper_bound=2*cell_size+1e-10)[0]
+        # Enlarging the height neighbourhood must not turn missing ground into negative evidence.
+        ground_heights[start:end][~np.isfinite(distances)] = -np.inf
+    return tops, ground_heights
+
+
 def aerial_guard(scene, keep, lidar, ground, *, sigma=3., min_opacity=None,
                  ground_clearance=2., cell_size=1., min_returns=3, distance=0.5):
     """Only reject unsupported Gaussians wholly above locally observed aerial surfaces."""
@@ -44,73 +113,84 @@ def aerial_guard(scene, keep, lidar, ground, *, sigma=3., min_opacity=None,
     if not len(lidar):
         raise ValueError("Couverture LiDAR vide")
     base = lidar[:, :2].min(axis=0)
-    indices = np.floor((lidar[:, :2]-base)/cell_size).astype(np.int64)
-    columns = {}
-    for key, z in zip(map(tuple, indices), lidar[:, 2]):
-        height, count = columns.get(key, (-np.inf, 0))
-        columns[key] = (max(height, float(z)), count+1)
-    ground_tree = cKDTree(ground[:, :2]) if len(ground) else None
+    columns = HeightGrid(lidar, base, cell_size)
+    ground_grid = HeightGrid(ground, base, cell_size)
     stats = dict(aerial_rejected=0, protected_near_ground=0,
                  protected_below_cover=0, protected_unknown=0,
                  protected_no_opaque_support=0, ground_points=len(ground),
                  ground_clearance=ground_clearance, aerial_cell_size=cell_size,
-                 aerial_min_returns=min_returns)
+                 aerial_min_returns=min_returns, protected_cell_budget=0,
+                 max_aerial_cells_per_splat=MAX_AERIAL_CELLS)
     result = keep.copy()
-    for start in range(0, scene.count, 10000):
-        xyz, scales, rotations = gaussian_geometry(scene, slice(start, start+10000))
-        radii, exists = support_radii(scene, slice(start, start+10000), sigma, min_opacity)
-        extent = radii[:, None] * np.sqrt(np.sum(
-            (rotations * scales[:, None, :])**2, axis=2))
-        for i in np.flatnonzero(~keep[start:start+len(xyz)]):
-            reason = None
-            bottom = xyz[i, 2]-extent[i, 2]
-            lower = np.floor((xyz[i, :2]-extent[i, :2]-distance-base)/cell_size).astype(np.int64)
-            upper = np.floor((xyz[i, :2]+extent[i, :2]+distance-base)/cell_size).astype(np.int64)
-            # Missing coverage or excessively large supports are unknown, never negative evidence.
-            count = float(upper[0]-lower[0]+1)*float(upper[1]-lower[1]+1)
-            if not exists[i]:
-                reason = "protected_no_opaque_support"
-            elif ground_tree is None or count > 10000:
-                reason = "protected_unknown"
-            else:
-                for x in range(int(lower[0]), int(upper[0])+1):
-                    for y in range(int(lower[1]), int(upper[1])+1):
-                        cell = columns.get((x, y))
-                        if cell is None or cell[1] < min_returns:
-                            reason = "protected_unknown"
-                            break
-                        center = base + (np.array([x, y])+0.5)*cell_size
-                        ground_ids = ground_tree.query_ball_point(center, 2*cell_size)
-                        if not ground_ids:
-                            reason = "protected_unknown"
-                            break
-                        if bottom <= ground[ground_ids, 2].max()+ground_clearance:
-                            reason = "protected_near_ground"
-                            break
-                        # Include neighbours to avoid falsely carving below roof/canopy edges.
-                        top = max(columns.get((x+dx, y+dy), (-np.inf, 0))[0]
-                                  for dx in (-1, 0, 1) for dy in (-1, 0, 1))
-                        if bottom <= top+distance:
-                            reason = "protected_below_cover"
-                            break
-                    if reason:
-                        break
-            if reason:
-                result[start+i] = True
-                stats[reason] += 1
-            else:
-                stats["aerial_rejected"] += 1
+    if not len(ground):
+        unknown = int((~keep).sum())
+        stats["protected_unknown"] = unknown
+        stats["visibility_model"] = "vertical_columns_not_acquisition_rays"
+        return np.ones_like(keep), stats
+    covering_tops, local_ground = aerial_surfaces(columns, ground_grid, ground, base, cell_size)
+    for start in range(0, scene.count, 1000):
+        rejected = np.flatnonzero(~keep[start:start+1000])
+        if not len(rejected):
+            continue
+        selection = start+rejected
+        xyz, scales, rotations = gaussian_geometry(scene, selection)
+        radii, exists = support_radii(scene, selection, sigma, min_opacity)
+        extent = radii[:, None] * np.hypot.reduce(rotations * scales[:, None, :], axis=2)
+        bottom = xyz[:, 2]-extent[:, 2]
+        lower_float = np.floor((xyz[:, :2]-extent[:, :2]-distance-base)/cell_size)
+        upper_float = np.floor((xyz[:, :2]+extent[:, :2]+distance-base)/cell_size)
+        invalid = (~np.isfinite(lower_float).all(axis=1)
+                   | ~np.isfinite(upper_float).all(axis=1)
+                   | (np.abs(lower_float) > 1e15).any(axis=1)
+                   | (np.abs(upper_float) > 1e15).any(axis=1))
+        lower = np.clip(np.nan_to_num(lower_float), -1e15, 1e15).astype(np.int64)
+        upper = np.clip(np.nan_to_num(upper_float), -1e15, 1e15).astype(np.int64)
+        width = upper-lower+1
+        cells = width[:, 0].astype(float)*width[:, 1]
+        budget = invalid | (cells > MAX_AERIAL_CELLS)
+        stats["protected_cell_budget"] += int((budget & exists).sum())
+        reason = np.zeros(len(selection), dtype=np.uint8)
+        reason[~exists] = 1
+        reason[budget & exists] = 2
+        active = np.flatnonzero(reason == 0)
+        if len(active):
+            sizes = cells[active].astype(np.int64)
+            owners = np.repeat(active, sizes)
+            offsets = np.arange(len(owners))-np.repeat(np.cumsum(sizes)-sizes, sizes)
+            indices = lower[owners] + np.column_stack(
+                (offsets//width[owners, 1], offsets % width[owners, 1]))
+            positions, valid = columns.positions(indices)
+            tops = np.full(len(indices), -np.inf)
+            ground_heights = np.full(len(indices), -np.inf)
+            tops[valid] = covering_tops[positions[valid]]
+            ground_heights[valid] = local_ground[positions[valid]]
+            dense = np.zeros(len(indices), dtype=bool)
+            dense[valid] = columns.counts[positions[valid]] >= min_returns
+            unknown = ~dense | ~np.isfinite(ground_heights)
+            near_ground = bottom[owners] <= ground_heights+ground_clearance
+            covered = bottom[owners] <= tops+distance
+            for code, condition in ((4, covered), (3, near_ground), (2, unknown)):
+                reason[np.unique(owners[condition])] = code
+        for code, name in ((1, "protected_no_opaque_support"), (2, "protected_unknown"),
+                           (3, "protected_near_ground"), (4, "protected_below_cover")):
+            stats[name] += int((reason == code).sum())
+        result[selection[reason != 0]] = True
+        stats["aerial_rejected"] += int((reason == 0).sum())
     stats["visibility_model"] = "vertical_columns_not_acquisition_rays"
     return result, stats
 
 
 def ellipsoid_distances(local_points, axes):
     """Euclidean distance to a solid ellipsoid, solved by Lagrange bisection."""
-    if np.all(axes == 0):
-        return np.linalg.norm(local_points, axis=1)
-    inside = np.sum((local_points / axes) ** 2, axis=1) <= 1
+    axes = np.broadcast_to(axes, local_points.shape)
+    degenerate = np.all(axes == 0, axis=1)
+    safe_axes = np.where(degenerate[:, None], 1., axes)
+    inside = (np.sum((local_points / safe_axes) ** 2, axis=1) <= 1) & ~degenerate
     result = np.zeros(len(local_points))
-    p = np.abs(local_points[~inside])
+    result[degenerate] = np.linalg.norm(local_points[degenerate], axis=1)
+    outside = ~inside & ~degenerate
+    p = np.abs(local_points[outside])
+    axes = axes[outside]
     if not len(p):
         return result
     squared = axes ** 2
@@ -122,7 +202,7 @@ def ellipsoid_distances(local_points, axes):
         low = np.where(equation > 1, middle, low)
         high = np.where(equation > 1, high, middle)
     closest = squared * p / (squared + high[:, None])
-    result[~inside] = np.linalg.norm(p - closest, axis=1)
+    result[outside] = np.linalg.norm(p - closest, axis=1)
     return result
 
 
@@ -137,39 +217,57 @@ def support_mask(scene, lidar, distance, *, sigma=3., spacing_factor=1., bbox=No
         raise ValueError("Au moins trois points LiDAR distincts et finis requis")
     tree = cKDTree(lidar)
     keep = np.ones(scene.count, dtype=bool)
-    tested = centre_far_kept = below_opacity = 0
-    for start in range(0, scene.count, 10000):
-        xyz, scales, rotations = gaussian_geometry(scene, slice(start, start+10000))
+    tested = centre_far_kept = below_opacity = budget_kept = 0
+    for start in range(0, scene.count, SPLAT_BATCH):
+        xyz, scales, rotations = gaussian_geometry(scene, slice(start, start+SPLAT_BATCH))
         nearest_distances, nearest = tree.query(xyz)
         neighbors = min(7, len(lidar))
-        spacing = tree.query(lidar[nearest], k=neighbors)[0][:, -1] / np.sqrt(neighbors-1)
+        spacing = (tree.query(lidar[nearest], k=neighbors)[0][:, -1] / np.sqrt(neighbors-1)
+                   if spacing_factor else np.zeros(len(xyz)))
         tolerances = distance + spacing_factor * spacing
-        radii, exists = support_radii(scene, slice(start, start+10000), sigma, min_opacity)
+        radii, exists = support_radii(scene, slice(start, start+SPLAT_BATCH), sigma, min_opacity)
         axes = radii[:, None] * scales
         inside = (np.ones(len(xyz), dtype=bool) if bbox is None else
                   ((xyz >= bbox[:3]) & (xyz <= bbox[3:])).all(axis=1))
-        for i in np.flatnonzero(inside):
-            tested += 1
-            if not exists[i]:
-                keep[start+i] = False
-                below_opacity += 1
-                continue
-            if nearest_distances[i] <= tolerances[i]:
-                continue
-            candidates = tree.query_ball_point(xyz[i], axes[i].max() + tolerances[i])
-            supported = False
+        tested += int(inside.sum())
+        below_opacity += int((inside & ~exists).sum())
+        supported = exists & (nearest_distances <= tolerances)
+        possible = inside & exists & ~supported & (
+            nearest_distances <= axes.max(axis=1)+tolerances)
+        ids = np.flatnonzero(possible)
+        local = np.einsum("ni,nij->nj", lidar[nearest[ids]]-xyz[ids], rotations[ids])
+        supported[ids] = ellipsoid_distances(local, axes[ids]) <= tolerances[ids]+1e-10
+        unresolved = np.flatnonzero(possible & ~supported)
+        lengths = tree.query_ball_point(xyz[unresolved],
+                                        axes[unresolved].max(axis=1)+tolerances[unresolved],
+                                        return_length=True)
+        order = np.argsort(lengths, kind="stable")
+        affordable = np.zeros(len(lengths), dtype=bool)
+        affordable[order] = ((np.cumsum(lengths[order]) <= MAX_BATCH_SUPPORT_POINTS)
+                             & (lengths[order] <= MAX_SUPPORT_POINTS))
+        heavy = unresolved[~affordable]
+        supported[heavy] = True
+        budget_kept += len(heavy)
+        for i in unresolved[affordable]:
+            candidates = tree.query_ball_point(xyz[i], axes[i].max()+tolerances[i])
+            found = False
             for offset in range(0, len(candidates), 10000):
                 points = lidar[candidates[offset:offset+10000]]
                 local = (points - xyz[i]) @ rotations[i]
                 if np.any(ellipsoid_distances(local, axes[i]) <= tolerances[i] + 1e-10):
-                    supported = True
+                    found = True
                     break
-            keep[start+i] = supported
-            centre_far_kept += int(supported and nearest_distances[i] > distance)
+            # The bounded list is complete, so a failed intersection is valid negative evidence.
+            supported[i] = found
+        keep[start:start+len(xyz)][inside] = supported[inside]
+        centre_far_kept += int((inside & supported & (nearest_distances > distance)).sum())
     return keep, dict(tested=tested, centre_far_kept=centre_far_kept,
                       criterion="distance_to_oriented_solid_ellipsoid",
                       sigma=sigma, spacing_factor=spacing_factor,
                       min_support_opacity=min_opacity, below_support_opacity=below_opacity,
+                      protected_support_budget=budget_kept,
+                      max_support_points_per_splat=MAX_SUPPORT_POINTS,
+                      max_support_points_per_batch=MAX_BATCH_SUPPORT_POINTS,
                       spacing_neighbors=min(7, len(lidar))-1)
 
 
@@ -234,13 +332,18 @@ def main():
                     or np.any(bbox[:3] >= bbox[3:])):
                 raise ValueError("BBox : six coordonnées finies et min < max requis")
         scene = open_scene(args.input)
-        lidar = load_lidar(args.lidar, origin, args.lidar_stride, classes=classes)
+        if args.lidar_stride < 1:
+            raise ValueError("Stride LiDAR attendu >= 1")
+        coverage = (load_lidar(args.lidar, origin, max_points=MAX_LIDAR_POINTS)
+                    if args.evidence_mode == "aerial" else None)
+        lidar = (coverage[::args.lidar_stride] if coverage is not None and classes is None
+                 else load_lidar(args.lidar, origin, args.lidar_stride,
+                                 classes=classes, max_points=MAX_LIDAR_POINTS))
         keep, support = support_mask(scene, lidar, args.max_distance,
                                      sigma=args.support_sigma, spacing_factor=args.spacing_factor,
                                      bbox=bbox, min_opacity=args.min_support_opacity)
         if args.evidence_mode == "aerial":
             # Use all classes and original density for covering structures, not the filtered references.
-            coverage = load_lidar(args.lidar, origin)
             ground = ground_points(args.lidar, origin)
             keep, aerial = aerial_guard(
                 scene, keep, coverage, ground, sigma=args.support_sigma,
@@ -248,9 +351,14 @@ def main():
                 cell_size=args.aerial_cell_size, min_returns=args.aerial_min_returns,
                 distance=args.max_distance)
             support.update(aerial)
+            support["max_lidar_points"] = MAX_LIDAR_POINTS
             if not len(ground):
                 print("[AVERTISSEMENT] Aucun sol classé 2 : les rejets aériens sont "
                       "indéterminés et les splats sans support sont conservés.")
+        if support.get("protected_cell_budget", 0) or support["protected_support_budget"]:
+            print("[AVERTISSEMENT] Supports coûteux conservés sans rejet : "
+                  f"{support.get('protected_cell_budget', 0)} emprises dépassent le budget de cellules, "
+                  f"{support['protected_support_budget']} dépassent le budget de voisins.")
         report = dict(total=scene.count, **support, kept=int(keep.sum()),
                       evidence_mode=args.evidence_mode,
                       rejected=int((~keep).sum()), max_distance=args.max_distance,

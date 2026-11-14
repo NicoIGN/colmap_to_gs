@@ -166,6 +166,9 @@ On exige également des points **sol classés 2** à moins de deux tailles de ce
 de chaque cellule testée. Le support doit être entièrement à plus de
 **`--ground-clearance 2` mètres au-dessus de ce sol**, réglable. On utilise
 la hauteur maximale des points sol locaux pour protéger les terrains en pente.
+Cette hauteur inclut un voisinage raster 5×5 légèrement plus large que le rayon :
+cela peut protéger davantage de splats, mais n'autorise pas un rejet quand le
+rayon de deux cellules ne contient aucun point sol.
 Un support touchant la bande protégée près du sol n'est pas supprimé.
 
 Un trou dans le LiDAR, une densité insuffisante, l'absence de sol classé ou une
@@ -179,6 +182,34 @@ originale, même si `--lidar-classes` restreint les références de proximité.
 Réglages : `--aerial-cell-size 1`, `--aerial-min-returns 3` et
 `--ground-clearance 2`. Le rapport distingue les rejets aériens et les
 protections près du sol, sous couverture, sans couverture fiable ou sans support opaque.
+
+### Volumes de 1 à 8 millions de splats
+
+Les scènes restent mappées en mémoire et sont traitées par lots : 10 000 splats
+pour la proximité, 1 000 candidats pour la visibilité. Les cellules LiDAR sont
+des tableaux triés compacts ; hauteurs de couverture et de sol sont pré-calculées
+une seule fois, sans dictionnaire Python par retour ni raster de toute l'emprise.
+La proximité utilise des tests vectorisés avant les intersections détaillées.
+
+Pour borner les coûts, un support nécessitant plus de **4 096 voisins** ou
+dépassant le budget cumulé de **50 000 voisins par lot** est conservé comme inconnu.
+De même pour une emprise dépassant **256 cellules** par splat.
+Les recherches ne sont jamais tronquées puis interprétées comme un rejet.
+Le rapport indique `protected_support_budget`, `protected_cell_budget` et les
+limites utilisées ; un avertissement signale ces conservations.
+Le chargement du filtre refuse plus de **20 millions de points LiDAR sélectionnés**
+(en mode aérien, cette limite s'applique aussi à la couverture toutes classes
+sans stride). Réduire/cadrer le LAZ plutôt que supprimer arbitrairement des retours
+de couverture. Un stride de proximité ne réduit pas la couverture aérienne.
+
+Mesure synthétique Linux de ce filtre, avec 30 000 retours sol et 20 % de splats
+hauts à rejeter : **1 million en 3.1 s / 450 Mio RSS**, **8 millions en 22 s /
+591 Mio RSS**. Les rejets attendus sont vérifiés exactement. Cela mesure le
+chargement et les deux critères, pas l'écriture, le téléchargement ni l'ICP.
+Ces chiffres ne prédisent pas une scène réelle : davantage de retours,
+des supports anisotropes et beaucoup de cellules augmentent temps et mémoire.
+La cible de 16 Go concerne le filtrage, pas l'entraînement 3DGS ou l'ensemble
+du pipeline ; elle n'est pas une garantie universelle pour tout LAZ.
 
 **Limite :** ce sont des colonnes verticales échantillonnées, pas les trajectoires
 réelles du laser. Une surface mesurée sous un arbre ne prouve pas que toute la
