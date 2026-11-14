@@ -51,6 +51,9 @@ def sha256(path):
 
 
 def run(args):
+    from filter_splats_by_lidar import validate_aerial_options
+
+    validate_aerial_options(args.ground_clearance, args.aerial_cell_size, args.aerial_min_returns)
     if args.lidar_file is None and not shutil.which(args.pdal):
         raise ValueError("PDAL introuvable ; installer PDAL avec le lecteur COPC")
     if args.output_dir.exists():
@@ -149,7 +152,11 @@ def run(args):
                  "--input", str(aligned), "--output", str(cleaned),
                  "--max-distance", str(args.max_distance), "--rejected-output", str(rejected),
                  "--support-sigma", str(args.support_sigma),
-                 "--spacing-factor", str(args.spacing_factor)]
+                 "--spacing-factor", str(args.spacing_factor),
+                 "--evidence-mode", args.evidence_mode,
+                 "--ground-clearance", str(args.ground_clearance),
+                 "--aerial-cell-size", str(args.aerial_cell_size),
+                 "--aerial-min-returns", str(args.aerial_min_returns)]
         if args.filter_classes is not None:
             clean.extend(["--lidar-classes", args.filter_classes])
         if args.min_support_opacity is not None:
@@ -185,6 +192,10 @@ def main():
     parser.add_argument("--min-support-opacity", type=float, default=0.05,
                         help="Opacité locale minimale du support LiDAR ; défaut : 0.05")
     parser.add_argument("--spacing-factor", type=float, default=1)
+    parser.add_argument("--evidence-mode", choices=("aerial", "proximity"), default="aerial")
+    parser.add_argument("--ground-clearance", type=float, default=2)
+    parser.add_argument("--aerial-cell-size", type=float, default=1)
+    parser.add_argument("--aerial-min-returns", type=int, default=3)
     parser.add_argument("--voxel-size", type=float, default=0.2)
     parser.add_argument("--min-overlap", type=float, default=0.3)
     parser.add_argument("--estimate-scale", action="store_true")

@@ -13,11 +13,102 @@ from scipy.spatial.transform import Rotation
 
 from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh_basis, sh_transform,
                     support_radii, transform_records, write_scene)
-from filter_splats_by_lidar import distance_mask, ellipsoid_distances, support_mask
+from filter_splats_by_lidar import aerial_guard, distance_mask, ellipsoid_distances, support_mask
 from merge_splats import BASE_DTYPE, SPLAT_DTYPE
 
 
 class LidarTests(unittest.TestCase):
+    def test_aerial_rejects_only_observed_free_space(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(7, dtype=SPLAT_DTYPE)
+            raw["position"] = [[0.5, .5, 10], [10.5, .5, 1],
+                               [20.5, .5, 4], [30.5, .5, 10],
+                               [40.5, .5, 4], [50.5, .5, 10], [60.5, .5, 10]]
+            raw["scale"] = 0.01
+            raw["scale"][5] = [0.6, .01, .01]
+            raw["rotation"] = [255, 128, 128, 128]
+            raw["rgba"][:, 3] = 200
+            raw["rgba"][6, 3] = 1
+            ground = np.array([[x+dx, dy, 0] for x in (0, 10, 20, 40, 50, 60)
+                               for dx, dy in ((.2, .2), (.5, .5), (.8, .8))])
+            covers = np.array([[x+dx, dy, 8] for x in (20, 40)
+                               for dx, dy in ((.2, .2), (.5, .5), (.8, .8))])
+            coverage = np.concatenate((ground, covers))
+            source = Path(directory)/"aerial.splat"
+            raw.tofile(source)
+            scene = Scene(source)
+            try:
+                keep, report = aerial_guard(
+                    scene, np.zeros(7, dtype=bool), coverage, ground,
+                    distance=.1, min_opacity=.05)
+                np.testing.assert_array_equal(keep, [False, True, True, True, True, True, True])
+                self.assertEqual(report["aerial_rejected"], 1)
+                self.assertEqual(report["protected_below_cover"], 2)
+                self.assertEqual(report["protected_near_ground"], 1)
+                self.assertEqual(report["protected_unknown"], 2)
+                self.assertEqual(report["protected_no_opaque_support"], 1)
+                no_ground, stats = aerial_guard(
+                    scene, np.zeros(7, dtype=bool), coverage, np.empty((0, 3)), distance=.1)
+                self.assertTrue(no_ground.all())
+                self.assertEqual(stats["aerial_rejected"], 0)
+                sparse, _ = aerial_guard(scene, np.zeros(7, dtype=bool),
+                                          ground[::3], ground, distance=.1)
+                self.assertTrue(sparse.all())
+                # Ground margin is adjustable: a larger protection keeps the aerial candidate.
+                high_margin, _ = aerial_guard(scene, np.zeros(7, dtype=bool), coverage,
+                                              ground, ground_clearance=12, distance=.1)
+                self.assertTrue(high_margin.all())
+            finally:
+                scene.close()
+
+    def test_aerial_cli_preserves_missing_coverage_and_uses_class_two(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ground = np.array([[.2, .2, 0], [.5, .5, 0], [.8, .8, 0]])
+            cloud = laspy.LasData(laspy.LasHeader(point_format=6, version="1.4"))
+            cloud.x, cloud.y, cloud.z = ground.T
+            cloud.classification = np.array([2, 2, 2], dtype="u1")
+            laz = root/"ground.laz"
+            cloud.write(laz)
+            raw = np.zeros(2, dtype=SPLAT_DTYPE)
+            raw["position"] = [[.5, .5, 5], [10.5, .5, 5]]
+            raw["scale"] = .01
+            raw["rotation"] = [255, 128, 128, 128]
+            raw["rgba"][:, 3] = 200
+            source, output = root/"in.splat", root/"out.splat"
+            raw.tofile(source)
+            command = [sys.executable, str(Path(__file__).with_name("filter_splats_by_lidar.py")),
+                       "--lidar", str(laz), "--input", str(source), "--output", str(output),
+                       "--max-distance", ".1", "--spacing-factor", "0",
+                       "--min-support-opacity", ".05"]
+            result = subprocess.run(command, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.with_suffix(".splat.json").read_text())
+            self.assertEqual(report["evidence_mode"], "aerial")
+            self.assertEqual(report["rejected"], 1)
+            np.testing.assert_array_equal(np.fromfile(output, dtype=SPLAT_DTYPE), raw[1:])
+
+    def test_large_upper_splat_kept_if_opaque_extent_reaches_cover(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = np.zeros(2, dtype=BASE_DTYPE)
+            raw["x"], raw["y"], raw["z"] = .5, .5, 10
+            raw["rot_0"] = 1
+            raw["opacity"] = np.log(.8/.2)
+            raw["scale_0"] = raw["scale_1"] = np.log(.01)
+            raw["scale_2"] = np.log([.2, 3.])
+            source = Path(directory)/"upper.ply"
+            PlyData([PlyElement.describe(raw, "vertex")]).write(source)
+            ground = np.array([[.2, .2, 0], [.5, .5, 0], [.8, .8, 0]])
+            roof = ground + [0, 0, 5]
+            scene = Scene(source)
+            try:
+                keep, _ = aerial_guard(scene, np.zeros(2, dtype=bool),
+                                        np.concatenate((ground, roof)), ground,
+                                        min_opacity=.05, distance=.1)
+                np.testing.assert_array_equal(keep, [False, True])
+            finally:
+                scene.close()
+
     def test_similarity_and_registration(self):
         points = np.random.default_rng(4).normal(size=(500, 3))
         r = Rotation.from_rotvec([0.01, -0.02, 0.01]).as_matrix()
@@ -241,7 +332,7 @@ class LidarTests(unittest.TestCase):
             command = [sys.executable, str(Path(__file__).with_name("filter_splats_by_lidar.py")),
                        "--lidar", str(laz), "--input", str(source), "--output", str(output),
                        "--origin", ",".join(map(str, origin)), "--max-distance", "0.01",
-                       "--rejected-output", str(rejected)]
+                       "--rejected-output", str(rejected), "--evidence-mode", "proximity"]
             result = subprocess.run(command + ["--dry-run"], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             report_path = output.with_suffix(".splat.json")

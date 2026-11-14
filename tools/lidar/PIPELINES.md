@@ -89,6 +89,10 @@ une origine locale ; Z du modèle est supposé approximativement vertical.
 | `LIDAR_CLEAN_SPACING_FACTOR` | `1` | Tolérance selon la densité LiDAR |
 | `LIDAR_CLEAN_MIN_OPACITY` | `0.05` | Opacité locale minimale du support |
 | `LIDAR_CLEAN_CLASSES` | vide | Toutes les classes ; restreindre avec prudence |
+| `LIDAR_CLEAN_EVIDENCE_MODE` | `aerial` | Vide présumé observable depuis le ciel ; `proximity` pour l'ancien critère |
+| `LIDAR_CLEAN_GROUND_CLEARANCE` | `2` | Bande de protection au-dessus du sol classé 2, mètres |
+| `LIDAR_CLEAN_AERIAL_CELL_SIZE` | `1` | Cellules de couverture aérienne, mètres |
+| `LIDAR_CLEAN_AERIAL_MIN_RETURNS` | `3` | Retours distincts minimaux par cellule |
 | `LIDAR_CLEAN_GEOREF` | vide | Rapport ENU ; référence du COLMAP recalé détectée |
 | `LIDAR_CLEAN_ORIGIN` | `0,0,0` | Origine projetée si pas de référence ENU/recalage COLMAP |
 
@@ -115,3 +119,10 @@ provoque une erreur explicite.
 Commencer avec `LIDAR_CLEAN_MODE=diagnostic` : un objet absent du LiDAR n'est pas
 forcément un artefact, et l'opacité locale d'une gaussienne n'est pas l'opacité
 finale composée du rendu.
+
+Le mode aérien vise les parasites en haut de scène et garde ce qui est près
+du sol, sous une structure couvrante ou sans mesure fiable. Le seuil d'opacité
+délimite la partie à tester, il ne supprime pas automatiquement les gaussiennes
+peu opaques. Voir les hypothèses et limites de ce test dans [README.md](README.md).
+Ce changement de critère est enregistré dans les signatures : un ancien dossier
+de nettoyage n'est pas réutilisé implicitement avec la nouvelle logique.

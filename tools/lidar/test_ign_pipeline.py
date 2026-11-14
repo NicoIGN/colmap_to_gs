@@ -109,7 +109,9 @@ class IgnPipelineTests(unittest.TestCase):
             max_area_km2=25, voxel_size=0.001, lidar_stride=1, max_tiles=100,
             min_overlap=0.3, align_classes="2,3,4,5,6,67", filter_classes=None,
             estimate_scale=False, dry_run_clean=False, support_sigma=3, spacing_factor=1,
-            min_support_opacity=None, lidar_file=None, georef=None)
+            min_support_opacity=None, lidar_file=None, georef=None,
+            evidence_mode="proximity", ground_clearance=2, aerial_cell_size=1,
+            aerial_min_returns=3)
         def retrieve(bbox, path, **kwargs):
             self.assertLess(bbox[0], origin[0]-10)
             classes = np.tile([2, 3, 4, 5, 6, 67], 20)
@@ -167,6 +169,8 @@ class IgnPipelineTests(unittest.TestCase):
         self.assertEqual(run.call_args.args[0].align_classes, "2,3,4,5,6,67")
         self.assertIsNone(run.call_args.args[0].filter_classes)
         self.assertEqual(run.call_args.args[0].min_support_opacity, 0.05)
+        self.assertEqual(run.call_args.args[0].evidence_mode, "aerial")
+        self.assertEqual(run.call_args.args[0].ground_clearance, 2)
 
     def test_coverage_guard_blocks_cleanup(self):
         with tempfile.TemporaryDirectory() as directory:

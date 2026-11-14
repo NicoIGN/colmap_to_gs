@@ -21,7 +21,10 @@ class PipelineOptionTests(unittest.TestCase):
                            ("LIDAR_COLMAP_MIN_VIEWS", "1"),
                            ("LIDAR_COLMAP_SCALE_STEPS", "1.5"),
                            ("LIDAR_CLEAN_MODE", "silent"),
-                           ("LIDAR_COLMAP_MAX_TILT", "90")):
+                           ("LIDAR_COLMAP_MAX_TILT", "90"),
+                           ("LIDAR_CLEAN_EVIDENCE_MODE", "unknown"),
+                           ("LIDAR_CLEAN_GROUND_CLEARANCE", "-1"),
+                           ("LIDAR_CLEAN_AERIAL_MIN_RETURNS", "0")):
             changed = dict(config, **{key: value})
             with self.assertRaises(ValueError, msg=key):
                 options.validate(changed)
@@ -48,6 +51,8 @@ class PipelineOptionTests(unittest.TestCase):
             def filter_only(command, check):
                 self.assertTrue(command[1].endswith("filter_splats_by_lidar.py"))
                 self.assertIn(str(shared), command)
+                self.assertEqual(command[command.index("--evidence-mode")+1], "aerial")
+                self.assertEqual(command[command.index("--ground-clearance")+1], "2")
                 output = Path(command[command.index("--output")+1])
                 raw[:1].tofile(output)
             with patch.object(options.subprocess, "run", side_effect=filter_only) as run:

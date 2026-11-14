@@ -147,6 +147,50 @@ inspecter visuellement le résultat. Pas de recherche globale automatique.
 
 ## Nettoyage
 
+### LiDAR aérien et images prises au sol
+
+Le mode par défaut est désormais **`--evidence-mode aerial`**, destiné notamment
+aux splats parasites flottant en haut d'une scène reconstruite depuis un vélo.
+Être gros ou épars ne suffit pas à prouver qu'un splat est un artefact :
+le critère reste une incompatibilité géométrique avec la couverture aérienne.
+
+Le test d'ellipsoïde ci-dessous produit des candidats sans support proche.
+Le mode aérien ne les rejette que si la totalité de la boîte XY du support opaque,
+élargie par la tolérance métrique, est couverte par des cellules LiDAR de 1 m
+contenant au moins 3 retours distincts. Le bas de ce support doit être au-dessus
+du retour le plus haut de chaque cellule et de ses voisines, avec la tolérance
+`--max-distance`. Un splat passant sous un toit, une canopée ou le bord d'une
+structure couvrante reste donc conservé.
+
+On exige également des points **sol classés 2** à moins de deux tailles de cellule
+de chaque cellule testée. Le support doit être entièrement à plus de
+**`--ground-clearance 2` mètres au-dessus de ce sol**, réglable. On utilise
+la hauteur maximale des points sol locaux pour protéger les terrains en pente.
+Un support touchant la bande protégée près du sol n'est pas supprimé.
+
+Un trou dans le LiDAR, une densité insuffisante, l'absence de sol classé ou une
+emprise très grande à vérifier sont traités comme **inconnus, donc conservés**.
+Une gaussienne sans partie atteignant le seuil d'opacité est également conservée
+dans ce mode : elle n'apporte pas de support opaque à tester, et ce n'est pas un
+rejet d'opacité global. Le vide dans les splats n'est jamais utilisé comme preuve.
+Les structures couvrantes utilisent toutes les classes du LAZ à leur densité
+originale, même si `--lidar-classes` restreint les références de proximité.
+
+Réglages : `--aerial-cell-size 1`, `--aerial-min-returns 3` et
+`--ground-clearance 2`. Le rapport distingue les rejets aériens et les
+protections près du sol, sous couverture, sans couverture fiable ou sans support opaque.
+
+**Limite :** ce sont des colonnes verticales échantillonnées, pas les trajectoires
+réelles du laser. Une surface mesurée sous un arbre ne prouve pas que toute la
+colonne était libre, surtout si la canopée a changé depuis l'acquisition.
+Ce mode réduit les rejets abusifs mais ne garantit pas la conservation de tout
+objet réel. Une boîte XY incomplètement couverte est conservée volontairement,
+donc de grands parasites peuvent subsister. Commencer en diagnostic.
+
+L'ancien test de proximité peut être demandé explicitement avec
+`--evidence-mode proximity` ; il ne protège pas les objets non observés depuis
+le ciel et n'est pas recommandé pour un nettoyage général de scènes vélo.
+
 ```bash
 python tools/lidar/filter_splats_by_lidar.py \
   --lidar terrain.laz --input scene_aligned.splat --output scene_clean.splat \
@@ -178,7 +222,8 @@ L'opacité au centre est le canal alpha/255 du `.splat`, ou la sigmoid de
 la propriété `opacity` (logit) du PLY 3DGS.
 
 Si l'opacité au centre est inférieure au seuil, aucun support suffisamment opaque
-n'existe : le splat est proposé au rejet, même si son centre touche le LiDAR.
+n'existe : en mode `proximity`, le splat est proposé au rejet, même si son centre
+touche le LiDAR ; en mode `aerial`, il est conservé comme indéterminé.
 À égalité, le support se réduit au centre. La bbox reste respectée : les splats
 hors zone sont conservés. Le seuil doit être dans ]0,1] et est **désactivé par
 défaut dans le filtre autonome**, préservant le test précédent à 3σ.

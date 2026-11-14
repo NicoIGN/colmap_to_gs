@@ -35,6 +35,8 @@ DEFAULTS = {
     "LIDAR_CLEAN_SPACING_FACTOR": "1", "LIDAR_CLEAN_MIN_OPACITY": "0.05",
     "LIDAR_CLEAN_CLASSES": "", "LIDAR_CLEAN_GEOREF": "",
     "LIDAR_CLEAN_ORIGIN": "0,0,0",
+    "LIDAR_CLEAN_EVIDENCE_MODE": "aerial", "LIDAR_CLEAN_GROUND_CLEARANCE": "2",
+    "LIDAR_CLEAN_AERIAL_CELL_SIZE": "1", "LIDAR_CLEAN_AERIAL_MIN_RETURNS": "3",
 }
 FLAGS = {"LIDAR_COLMAP_ALIGN", "LIDAR_COLMAP_INJECT",
          "LIDAR_COLMAP_ALREADY_PROJECTED", "LIDAR_COLMAP_ACCEPT_AMBIGUOUS", "LIDAR_CLEAN"}
@@ -67,6 +69,8 @@ def validate(config):
         raise ValueError("LIDAR_COLMAP_INJECT nécessite LIDAR_COLMAP_ALIGN=true")
     if config["LIDAR_CLEAN_MODE"] not in ("diagnostic", "apply"):
         raise ValueError("LIDAR_CLEAN_MODE attend diagnostic ou apply")
+    if config["LIDAR_CLEAN_EVIDENCE_MODE"] not in ("aerial", "proximity"):
+        raise ValueError("LIDAR_CLEAN_EVIDENCE_MODE attend aerial ou proximity")
     for key in ("LIDAR_COLMAP_ORIGIN", "LIDAR_CLEAN_ORIGIN"):
         vector(config[key])
     if config["LIDAR_COLMAP_TERRAIN_CENTER"]:
@@ -82,17 +86,19 @@ def validate(config):
                 "LIDAR_COLMAP_TRANSLATION_STEP", "LIDAR_COLMAP_INJECT_VOXEL",
                 "LIDAR_COLMAP_INJECT_MAX_POINTS", "LIDAR_COLMAP_MIN_VIEWS",
                 "LIDAR_COLMAP_MIN_VIEW_ANGLE", "LIDAR_COLMAP_VISIBILITY_CELL",
-                "LIDAR_CLEAN_DISTANCE", "LIDAR_CLEAN_SUPPORT_SIGMA")
+                "LIDAR_CLEAN_DISTANCE", "LIDAR_CLEAN_SUPPORT_SIGMA",
+                "LIDAR_CLEAN_AERIAL_CELL_SIZE", "LIDAR_CLEAN_AERIAL_MIN_RETURNS")
     nonnegative = ("LIDAR_COLMAP_SEARCH_RADIUS", "LIDAR_COLMAP_MAX_TILT",
                    "LIDAR_COLMAP_INJECT_MIN_SEPARATION", "LIDAR_COLMAP_DEPTH_TOLERANCE",
-                   "LIDAR_COLMAP_KEYPOINT_SEPARATION", "LIDAR_CLEAN_SPACING_FACTOR")
+                   "LIDAR_COLMAP_KEYPOINT_SEPARATION", "LIDAR_CLEAN_SPACING_FACTOR",
+                   "LIDAR_CLEAN_GROUND_CLEARANCE")
     for key in positive + nonnegative:
         value = float(config[key])
         if not np.isfinite(value) or value < 0 or (key in positive and value == 0):
             raise ValueError(f"{key} invalide")
     for key in ("LIDAR_MAX_TILES", "LIDAR_COLMAP_SCALE_STEPS", "LIDAR_COLMAP_YAW_STEPS",
                 "LIDAR_COLMAP_INJECT_MAX_POINTS", "LIDAR_COLMAP_MIN_VIEWS",
-                "LIDAR_COLMAP_VISIBILITY_CELL"):
+                "LIDAR_COLMAP_VISIBILITY_CELL", "LIDAR_CLEAN_AERIAL_MIN_RETURNS"):
         if not config[key].isdigit():
             raise ValueError(f"{key} attend un entier")
     if float(config["LIDAR_COLMAP_MIN_OVERLAP"]) > 1:
@@ -231,7 +237,11 @@ def clean(config, workspace, splat):
     flags = ["--max-distance", config["LIDAR_CLEAN_DISTANCE"],
              "--support-sigma", config["LIDAR_CLEAN_SUPPORT_SIGMA"],
              "--spacing-factor", config["LIDAR_CLEAN_SPACING_FACTOR"],
-             "--min-support-opacity", config["LIDAR_CLEAN_MIN_OPACITY"]]
+             "--min-support-opacity", config["LIDAR_CLEAN_MIN_OPACITY"],
+             "--evidence-mode", config["LIDAR_CLEAN_EVIDENCE_MODE"],
+             "--ground-clearance", config["LIDAR_CLEAN_GROUND_CLEARANCE"],
+             "--aerial-cell-size", config["LIDAR_CLEAN_AERIAL_CELL_SIZE"],
+             "--aerial-min-returns", config["LIDAR_CLEAN_AERIAL_MIN_RETURNS"]]
     if config["LIDAR_CLEAN_CLASSES"]:
         flags += ["--lidar-classes", config["LIDAR_CLEAN_CLASSES"]]
     if aligned:
