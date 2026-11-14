@@ -4,7 +4,16 @@
 _config_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 _repo_root="$(cd -- "$_config_dir/.." && pwd)"
 SPIRULA_ROOT="${SPIRULA_ROOT:-$(dirname -- "$_repo_root")/spirula-studio}"
-SPIRULA_BIN="${SPIRULA_BIN:-$SPIRULA_ROOT/build/spirula}"
+if [[ -z "${SPIRULA_BIN:-}" ]]; then
+  for _spirula_candidate in "$SPIRULA_ROOT"/build*/spirula; do
+    if [[ -x "$_spirula_candidate" ]]; then
+      SPIRULA_BIN="$_spirula_candidate"
+      break
+    fi
+  done
+  SPIRULA_BIN="${SPIRULA_BIN:-$SPIRULA_ROOT/build/spirula}"
+fi
+unset _spirula_candidate
 unset _config_dir _repo_root
 
 PYTHON_BIN="${PYTHON_BIN:-python3}"
