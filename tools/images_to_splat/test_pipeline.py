@@ -562,7 +562,7 @@ if "--wait" in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
         self.assertIn("images.root.jpg.size", result.stdout + result.stderr)
-        self.assertIn("images.root.jpg.mtime_ns", result.stdout + result.stderr)
+        self.assertIn("images.root.jpg.sha256", result.stdout + result.stderr)
 
     def test_signature_diagnostics_report_added_and_removed_settings_without_adoption(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

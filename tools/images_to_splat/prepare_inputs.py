@@ -113,7 +113,7 @@ def record_differences(previous, current, path=""):
     if (path == "images" and isinstance(previous, list) and isinstance(current, list)
             and all(isinstance(image, list) and len(image) == 4
                     and isinstance(image[0], str) for image in previous + current)):
-        fields = ("resolved", "size", "mtime_ns")
+        fields = ("resolved", "size", "sha256")
         previous = {image[0]: dict(zip(fields, image[1:])) for image in previous}
         current = {image[0]: dict(zip(fields, image[1:])) for image in current}
     if isinstance(previous, dict) and isinstance(current, dict):
@@ -167,7 +167,7 @@ def prepare(check=False):
             if path.suffix.lower() in EXTENSIONS and path.is_file():
                 stat = path.stat()
                 images.append([path.relative_to(source).as_posix(), str(path.resolve()),
-                               stat.st_size, stat.st_mtime_ns])
+                               stat.st_size, file_sha256(path)])
     if not images:
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
     settings = {key: value for key, value in os.environ.items()
