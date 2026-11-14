@@ -2,7 +2,6 @@
 """Recaler un modèle COLMAP sur LAS/LAZ et ajouter des tracks LiDAR synthétiques."""
 
 import argparse
-import json
 from pathlib import Path
 import sys
 
@@ -14,43 +13,7 @@ from scipy.spatial.transform import Rotation
 
 from common import (class_codes, load_lidar, register, vector, voxel_sample,
                     write_report)
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
-from georef_colmap_from_gpx import enu_rotation
-
-
-def enu_lidar(points, lat_lon_height, crs):
-    from pyproj import Transformer
-
-    lat, lon, height = lat_lon_height
-    geographic_to_ecef = Transformer.from_crs(4979, 4978, always_xy=True)
-    base = np.array(geographic_to_ecef.transform(lon, lat, height))
-    to_geo = Transformer.from_crs(crs, 4979, always_xy=True)
-    longitude, latitude, altitude = to_geo.transform(*points.T)
-    ecef = np.column_stack(geographic_to_ecef.transform(longitude, latitude, altitude))
-    return (ecef-base) @ enu_rotation(lat_lon_height).T
-
-
-def reference_metadata(folder, explicit=None):
-    candidates = [explicit] if explicit is not None else [
-        folder/"georef_stats.json", folder/"orientation_reference.json"]
-    for path in candidates:
-        if path is None or not path.is_file():
-            continue
-        metadata = json.loads(path.read_text())
-        reference = metadata.get("output_reference", metadata.get("reference"))
-        if not isinstance(reference, dict) or reference.get("type") != "local_ENU":
-            raise ValueError(f"Référence ENU manquante ou non prise en charge : {path}")
-        if reference.get("units", "meters") != "meters" or reference.get(
-                "axes", ["East", "North", "Up"]) != ["East", "North", "Up"]:
-            raise ValueError(f"Axes/unités ENU non pris en charge : {path}")
-        origin = np.asarray(reference.get("origin_lat_lon_height"), dtype=float)
-        if (origin.shape != (3,) or not np.isfinite(origin).all()
-                or abs(origin[0]) > 90 or abs(origin[1]) > 180):
-            raise ValueError(f"Origine ENU invalide : {path}")
-        return reference, path
-    if explicit is not None:
-        raise ValueError(f"Référence introuvable : {explicit}")
-    return None, None
+from geographic import enu_lidar, enu_rotation, projected_enu, reference_metadata
 
 
 def exif_initialization(model, images):
@@ -358,11 +321,11 @@ def run(args):
     print(f"[lidar] Modèle COLMAP recalé : {args.output}", flush=True)
 
 
-def main():
+def build_parser(*, pipeline=False):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, required=True)
-    parser.add_argument("--lidar", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--lidar", type=Path, required=not pipeline)
+    parser.add_argument("--output", type=Path, required=not pipeline)
     parser.add_argument("--origin", default="0,0,0")
     parser.add_argument("--georef", type=Path, help="Rapport ENU ; défaut : georef_stats.json du modèle")
     parser.add_argument("--lidar-crs", default="EPSG:2154")
@@ -394,6 +357,11 @@ def main():
     parser.add_argument("--depth-tolerance", type=float, default=0.1)
     parser.add_argument("--visibility-cell", type=int, default=4)
     parser.add_argument("--keypoint-separation", type=float, default=2)
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
     try:
         run(args)

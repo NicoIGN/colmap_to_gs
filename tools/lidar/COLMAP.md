@@ -10,6 +10,86 @@ un **nouveau modèle binaire**. Les intrinsics et tracks existants sont conserv�
 Les modèles avec rigs/frames sont transformés par l'API pycolmap.
 Le dossier de sortie doit être absent ; les entrées ne sont pas modifiées.
 
+## Script chapeau et LAZ partagé dans le workspace
+
+```bash
+python tools/lidar/colmap_lidar_pipeline.py \
+  --workspace reconstruction \
+  --model reconstruction/georef/0 \
+  --images reconstruction/images --inject --margin 20
+```
+
+Ce maître enchaîne **récupération WFS/COPC IGN, recalage COLMAP et enrichissement
+optionnel** (`--inject`). Il conserve :
+
+```text
+reconstruction/
+  lidar/
+    lidar.laz
+    lidar.laz.json
+    lidar.laz.pipeline.json
+    colmap_lidar.pipeline.json
+  colmap_lidar/
+    cameras.bin, images.bin, points3D.bin, ...
+    lidar_alignment.json
+    georef_stats.json       # si sortie ENU
+```
+
+Le LAZ reste en Lambert-93, avec toutes ses classes et attributs. Son manifeste
+enregistre l'emprise, le CRS, la taille et le SHA256. **Aucun téléchargement
+n'est lancé si ce LAZ existe et couvre l'emprise demandée avec une signature
+valide**, même sans PDAL disponible. Un LAZ incomplet, altéré, sans manifeste
+ou trop petit provoque une erreur, sans écrasement silencieux.
+Les anciens manifestes sans signature doivent être remplacés par une nouvelle
+extraction dans un autre workspace, pas acceptés comme vérifiés.
+
+Le modèle existant reste intact. La sortie par défaut est `workspace/colmap_lidar` ;
+`--output` permet une autre destination. Chaque sortie doit être nouvelle,
+avec un rapport distinct dans `workspace/lidar/`. Les traces de récupération
+partielle sont conservées en cas d'erreur PDAL.
+
+L'emprise vient du modèle ENU GPX, de l'ancrage EXIF, ou, sans géoréférencement,
+d'une sphère couvrant les points sparse à l'échelle maximale et tous les caps
+autour de `--terrain-center`, avec rayon de recherche et marge :
+
+```bash
+python tools/lidar/colmap_lidar_pipeline.py \
+  --workspace reconstruction --model reconstruction/sfm/sparse/0 \
+  --terrain-center 650050,6860050,120 --origin 650000,6860000,0 \
+  --scale-min 0.5 --scale-max 2 --images reconstruction/images --inject
+```
+
+Tous les réglages du script de recalage ci-dessous sont disponibles.
+La récupération est limitée au CRS IGN métropolitain EPSG:2154, avec limites
+de surface/tuiles et dépendance PDAL comme le maître splat.
+
+### Réutiliser pour le splat final
+
+Pour un splat entraîné à partir du modèle COLMAP ENU recalé, conserver sa
+référence et lancer :
+
+```bash
+python tools/lidar/lidar_pipeline.py \
+  --input reconstruction/scene.splat \
+  --output-dir reconstruction/lidar_clean \
+  --crs EPSG:2154 \
+  --lidar-file reconstruction/lidar/lidar.laz \
+  --georef reconstruction/colmap_lidar/georef_stats.json
+```
+
+Le maître splat ne retélécharge pas le LAZ. Il vérifie signature et couverture,
+crée une **copie locale ENU** dans son dossier de sortie pour les calculs, puis
+recalage et nettoyage. Le LAZ global partagé reste inchangé. La copie conserve
+les classes et attributs (les coordonnées sont réexprimées et le CRS projeté
+n'est pas conservé sur cette copie locale).
+
+Pour un splat projeté/local après initialisation manuelle, utiliser plutôt
+`--origin` avec la même origine que lors du recalage COLMAP, sans `--georef`.
+Les nouvelles gaussiennes peuvent dépasser l'emprise du sparse : prévoir une
+marge suffisante dès la récupération. Si le LAZ ne couvre plus l'emprise du
+splat, le script refuse sa réutilisation et demande une extraction plus large,
+au lieu de nettoyer avec une couverture tronquée.
+
 ## Modèle déjà géoréférencé (GPX ou EXIF)
 
 ```bash
@@ -117,5 +197,5 @@ Le modèle exporté est relu et sa cohérence vérifiée.
 
 ```bash
 cd tools/lidar
-python -m unittest test_colmap_lidar
+python -m unittest test_colmap_lidar test_colmap_pipeline
 ```

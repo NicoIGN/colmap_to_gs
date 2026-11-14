@@ -109,7 +109,7 @@ class IgnPipelineTests(unittest.TestCase):
             max_area_km2=25, voxel_size=0.001, lidar_stride=1, max_tiles=100,
             min_overlap=0.3, align_classes="2,3,4,5,6,67", filter_classes=None,
             estimate_scale=False, dry_run_clean=False, support_sigma=3, spacing_factor=1,
-            min_support_opacity=None)
+            min_support_opacity=None, lidar_file=None, georef=None)
         def retrieve(bbox, path, **kwargs):
             self.assertLess(bbox[0], origin[0]-10)
             classes = np.tile([2, 3, 4, 5, 6, 67], 20)

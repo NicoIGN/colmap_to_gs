@@ -5,6 +5,8 @@ gaussienne) ou PLY 3DGS binaire. Les sorties gardent le format d'entrée.
 Les fichiers existants ne sont pas écrasés.
 
 Pour les modèles sparse COLMAP, voir [recalage et injection LiDAR avec tracks](COLMAP.md).
+Le script chapeau `colmap_lidar_pipeline.py` conserve le LAZ partagé dans
+`workspace/lidar/` pour le réutiliser ensuite avec le splat final.
 
 Installer les dépendances dans l'environnement Python utilisé :
 
@@ -30,6 +32,13 @@ Les scripts ne prétendent pas connaître la classe sémantique des splats :
 une association au point LiDAR le plus proche n'est pas une classification fiable.
 
 ## Pipeline IGN automatique
+
+`--lidar-file workspace/lidar/lidar.laz` réutilise une extraction précédente
+sans téléchargement ni PDAL, après vérification du manifeste, de l'emprise et
+de la signature taille/SHA256. Pour un splat dans le repère ENU du modèle
+COLMAP, ajouter `--georef workspace/colmap_lidar/georef_stats.json` :
+le maître convertit une copie du LAZ en ENU sans modifier le fichier partagé.
+Sans `--georef`, les coordonnées projetées et `--origin` restent utilisées.
 
 ```bash
 python tools/lidar/lidar_pipeline.py \

@@ -2,6 +2,7 @@
 """Extract IGN LiDAR HD COPC points using the Geoplateforme WFS tile index."""
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -16,6 +17,32 @@ from common import load_lidar, write_report
 WFS = "https://data.geopf.fr/wfs"
 LAYER = "IGNF_LIDAR-HD_METADONNEE:metadata"
 CRS = "EPSG:2154"
+
+
+def file_signature(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024*1024), b""):
+            digest.update(chunk)
+    return {"size": path.stat().st_size, "sha256": digest.hexdigest()}
+
+
+def validate_cached_lidar(path, bbox):
+    manifest_path = path.with_suffix(path.suffix + ".json")
+    if not path.is_file() or not manifest_path.is_file():
+        raise ValueError(f"LAZ ou manifeste manquant : {path}")
+    report = json.loads(manifest_path.read_text())
+    if report.get("crs") != CRS:
+        raise ValueError("CRS du LAZ partagé incompatible")
+    stored = np.asarray(report.get("bbox"), dtype=float)
+    if (stored.shape != (4,) or not np.isfinite(stored).all()
+            or np.any(stored[:2] >= stored[2:])
+            or np.any(bbox[:2] < stored[:2]) or np.any(bbox[2:] > stored[2:])):
+        raise ValueError("Le LAZ partagé ne couvre pas l'emprise demandée ; "
+                         "choisir une nouvelle extraction plus large")
+    if report.get("file_signature") != file_signature(path):
+        raise ValueError("Signature taille/SHA256 du LAZ partagé invalide")
+    return report
 
 
 def bbox_values(value):
@@ -129,7 +156,7 @@ def fetch_lidar(bbox, output, *, pdal="pdal", max_tiles=100):
     partial.rename(output)
     report = {"wfs": WFS, "layer": LAYER, "crs": CRS,
               "bbox": bbox.tolist(), "copc_urls": urls, "points": len(points),
-              "classes_preserved": True}
+              "classes_preserved": True, "file_signature": file_signature(output)}
     write_report(manifest, report)
     return report
 

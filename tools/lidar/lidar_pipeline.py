@@ -12,7 +12,8 @@ import numpy as np
 
 from common import class_codes, gaussian_geometry, open_scene, vector, write_report
 from common import validate_support_opacity
-from fetch_ign_lidar import CRS, fetch_lidar
+from fetch_ign_lidar import CRS, fetch_lidar, validate_cached_lidar
+from geographic import local_laz, projected_enu, reference_metadata
 
 
 def scene_bbox(scene, origin, margin, sigma=3.):
@@ -28,6 +29,19 @@ def scene_bbox(scene, origin, margin, sigma=3.):
                      upper[0]+origin[0]+margin, upper[1]+origin[1]+margin])
 
 
+def scene_projected_bbox(scene, reference, margin, sigma):
+    lower, upper = np.full(2, np.inf), np.full(2, -np.inf)
+    for start in range(0, scene.count, 10000):
+        xyz, scales, rotations = gaussian_geometry(scene, slice(start, start+10000))
+        extent = sigma * np.sqrt(np.sum((rotations * scales[:, None, :])**2, axis=2))
+        for signs in ((x, y, z) for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)):
+            projected = projected_enu(xyz + extent*np.asarray(signs),
+                                      reference["origin_lat_lon_height"], CRS)
+            lower = np.minimum(lower, projected[:, :2].min(axis=0))
+            upper = np.maximum(upper, projected[:, :2].max(axis=0))
+    return np.concatenate((lower-margin, upper+margin))
+
+
 def sha256(path):
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -37,11 +51,14 @@ def sha256(path):
 
 
 def run(args):
-    if not shutil.which(args.pdal):
+    if args.lidar_file is None and not shutil.which(args.pdal):
         raise ValueError("PDAL introuvable ; installer PDAL avec le lecteur COPC")
     if args.output_dir.exists():
         raise ValueError("Choisir un nouveau --output-dir ; aucune reprise implicite")
     origin = vector(args.origin)
+    reference, _ = reference_metadata(args.input.parent, args.georef)
+    if reference is not None and args.origin != "0,0,0":
+        raise ValueError("Splat ENU : ne pas fournir --origin")
     validate_support_opacity(args.min_support_opacity)
     for value, label in ((args.max_correspondence_distance, "distance de recalage"),
                          (args.max_distance, "distance de nettoyage"),
@@ -60,7 +77,9 @@ def run(args):
             class_codes(codes)
     scene = open_scene(args.input)
     try:
-        bbox = scene_bbox(scene, origin, args.margin, args.support_sigma)
+        bbox = (scene_bbox(scene, origin, args.margin, args.support_sigma)
+                if reference is None else
+                scene_projected_bbox(scene, reference, args.margin, args.support_sigma))
     finally:
         scene.close()
     area = (bbox[2]-bbox[0]) * (bbox[3]-bbox[1]) / 1e6
@@ -69,10 +88,12 @@ def run(args):
                          "ou augmenter --max-area-km2")
     if not (0 < bbox[0] < bbox[2] < 1400000 and 6000000 < bbox[1] < bbox[3] < 7300000):
         raise ValueError("Emprise incompatible avec Lambert-93 métropolitain : vérifier --origin/--crs")
+    if args.lidar_file is not None:
+        validate_cached_lidar(args.lidar_file, bbox)
     output = args.output_dir
     output.mkdir(parents=True)
     suffix = args.input.suffix.lower()
-    laz = output / "lidar.laz"
+    laz = args.lidar_file if args.lidar_file is not None else output / "lidar.laz"
     aligned, cleaned = output / ("aligned"+suffix), output / ("cleaned"+suffix)
     rejected = output / ("rejected"+suffix)
     state_path = output / "pipeline.json"
@@ -88,9 +109,17 @@ def run(args):
         write_report(temporary, state)
         temporary.replace(state_path)
     try:
-        fetch_lidar(bbox, laz, pdal=args.pdal, max_tiles=args.max_tiles)
+        if args.lidar_file is None:
+            fetch_lidar(bbox, laz, pdal=args.pdal, max_tiles=args.max_tiles)
+        else:
+            print(f"[lidar] Réutilisation du LAZ partagé : {laz}", flush=True)
+        working_laz = laz
+        if reference is not None:
+            working_laz = output / "lidar_local.laz"
+            local_laz(laz, working_laz, reference)
+            write_report(output/"georef_stats.json", {"output_reference": reference})
         directory = Path(__file__).resolve().parent
-        shared = ["--lidar", str(laz), "--origin", args.origin,
+        shared = ["--lidar", str(working_laz), "--origin", args.origin,
                   "--lidar-stride", str(args.lidar_stride)]
         align = [sys.executable, str(directory / "align_splats_to_lidar.py"), *shared,
                  "--input", str(args.input), "--output", str(aligned),
@@ -105,7 +134,9 @@ def run(args):
         # A large correction can move points outside the fetched footprint.
         checked = open_scene(aligned)
         try:
-            new_bbox = scene_bbox(checked, origin, args.max_distance, args.support_sigma)
+            new_bbox = (scene_bbox(checked, origin, args.max_distance, args.support_sigma)
+                        if reference is None else scene_projected_bbox(
+                            checked, reference, args.max_distance, args.support_sigma))
         finally:
             checked.close()
         if np.any(new_bbox[:2] < bbox[:2]) or np.any(new_bbox[2:] > bbox[2:]):
@@ -135,6 +166,8 @@ def run(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--lidar-file", type=Path, help="LAZ IGN déjà extrait avec son manifeste")
+    parser.add_argument("--georef", type=Path, help="Référence ENU du modèle/splat")
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--crs", choices=[CRS], required=True)
     parser.add_argument("--origin", default="0,0,0")
