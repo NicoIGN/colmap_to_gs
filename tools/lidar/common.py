@@ -248,3 +248,27 @@ def gaussian_geometry(scene, selection):
         raise ValueError("Quaternions gaussiens invalides")
     rotations = Rotation.from_quat(quats[:, [1, 2, 3, 0]]).as_matrix()
     return xyz, scales, rotations
+
+
+def validate_support_opacity(threshold):
+    if threshold is not None and (not np.isfinite(threshold) or not 0 < threshold <= 1):
+        raise ValueError("Seuil d'opacité de support attendu fini dans ]0,1]")
+
+
+def support_radii(scene, selection, sigma, threshold=None):
+    """Radius in standard deviations where alpha0 * exp(-r²/2) >= threshold."""
+    validate_support_opacity(threshold)
+    raw = scene.raw[selection]
+    if threshold is None:
+        return np.full(len(raw), sigma), np.ones(len(raw), dtype=bool)
+    if scene.is_splat:
+        alpha = raw["rgba"][:, 3].astype(float) / 255
+    else:
+        logits = raw["opacity"].astype(float)
+        if not np.isfinite(logits).all():
+            raise ValueError("Opacités PLY non finies")
+        alpha = np.exp(-np.logaddexp(0., -logits))
+    exists = alpha >= threshold
+    radii = np.zeros(len(raw))
+    radii[exists] = np.minimum(sigma, np.sqrt(2 * np.log(alpha[exists] / threshold)))
+    return radii, exists

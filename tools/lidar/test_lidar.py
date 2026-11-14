@@ -12,7 +12,7 @@ from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
 
 from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh_basis, sh_transform,
-                    transform_records, write_scene)
+                    support_radii, transform_records, write_scene)
 from filter_splats_by_lidar import distance_mask, ellipsoid_distances, support_mask
 from merge_splats import BASE_DTYPE, SPLAT_DTYPE
 
@@ -88,6 +88,51 @@ class LidarTests(unittest.TestCase):
             self.assertFalse(support_mask(scene, lidar, 0.1, spacing_factor=0)[0][0])
             self.assertTrue(support_mask(scene, lidar, 0.1, spacing_factor=1)[0][0])
             scene.close()
+
+    def test_opacity_support_both_formats_and_boundary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            lidar = np.array([[2.5, 0., 0], [10, 0, 0], [20, 0, 0]])
+            for suffix in (".splat", ".ply"):
+                source = root / ("opacity"+suffix)
+                if suffix == ".splat":
+                    data = np.zeros(3, dtype=SPLAT_DTYPE)
+                    data["scale"] = 1
+                    data["rotation"] = [255, 128, 128, 128]
+                    data["rgba"][:, 3] = [204, 51, 128]
+                    data["position"][1:] = [2.5, 0, 0]
+                    data.tofile(source)
+                    equality = 128/255
+                else:
+                    data = np.zeros(3, dtype=BASE_DTYPE)
+                    data["rot_0"] = 1
+                    data["opacity"] = np.log(np.array([0.8, 0.2, 0.5]) /
+                                             (1-np.array([0.8, 0.2, 0.5])))
+                    data["x"][1:] = 2.5
+                    PlyData([PlyElement.describe(data, "vertex")]).write(source)
+                    equality = 0.5
+                scene = Scene(source)
+                try:
+                    keep, _ = support_mask(scene, lidar, 0.1, spacing_factor=0)
+                    np.testing.assert_array_equal(keep, [True, True, True])
+                    keep, report = support_mask(scene, lidar, 0.1, spacing_factor=0,
+                                                min_opacity=0.4)
+                    np.testing.assert_array_equal(keep, [False, False, True])
+                    self.assertEqual(report["below_support_opacity"], 1)
+                    radii, exists = support_radii(scene, slice(None), 3, equality)
+                    self.assertTrue(exists[2])
+                    self.assertEqual(radii[2], 0)
+                    self.assertTrue(support_mask(scene, lidar, 0.1, spacing_factor=0,
+                                                 min_opacity=equality)[0][2])
+                    tiny, _ = support_radii(scene, slice(None), 3, 1e-10)
+                    np.testing.assert_array_equal(tiny, [3, 3, 3])
+                    for invalid in (0, -1, 1.1, float("nan")):
+                        with self.assertRaises(ValueError):
+                            support_mask(scene, lidar, 0.1, min_opacity=invalid)
+                finally:
+                    scene.close()
+            np.testing.assert_allclose(ellipsoid_distances(
+                np.array([[1., 2, 2]]), np.zeros(3)), [3])
 
     def test_sh_rotation_preserves_directional_color(self):
         r = Rotation.from_rotvec([0.2, -0.1, 0.4]).as_matrix()

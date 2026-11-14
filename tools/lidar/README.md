@@ -153,6 +153,29 @@ si le nuage est petit). `--spacing-factor 0` désactive cette tolérance ;
 `--support-sigma` modifie le rayon en écarts-types.
 Le rapport compte les splats conservés malgré un centre éloigné.
 
+### Support suffisamment opaque (optionnel)
+
+Ajouter `--min-support-opacity 0.1` au filtre ou au script maître pour n'accepter
+que la partie où l'opacité gaussienne locale atteint au moins 10 % :
+`alpha(r) = alpha_centre * exp(-r²/2)`.
+Le rayon testé en écarts-types devient
+`min(support_sigma, sqrt(2 * log(alpha_centre / seuil)))`.
+L'opacité au centre est le canal alpha/255 du `.splat`, ou la sigmoid de
+la propriété `opacity` (logit) du PLY 3DGS.
+
+Si l'opacité au centre est inférieure au seuil, aucun support suffisamment opaque
+n'existe : le splat est proposé au rejet, même si son centre touche le LiDAR.
+À égalité, le support se réduit au centre. La bbox reste respectée : les splats
+hors zone sont conservés. Le seuil doit être dans ]0,1] et est **désactivé par
+défaut**, préservant le test précédent à 3σ. Le rapport indique le seuil et
+le nombre de rejets faute d'opacité au centre.
+
+Il s'agit d'une approximation 3D par gaussienne, **pas de l'opacité finale
+composée du rendu**, qui dépend du point de vue et des autres splats.
+La tolérance métrique/densité s'applique autour de ce support opaque.
+Le maître conserve l'emprise à `support_sigma` pour l'extraction, volontairement
+plus large que le support opaque, afin de ne pas réduire la couverture LiDAR.
+
 Ce test est volontairement conservateur, pas une preuve d'utilité visuelle :
 les gaussiennes très grandes peuvent être conservées malgré un rendu incorrect.
 Un support gaussien est théoriquement infini ; 3σ est une approximation finie,

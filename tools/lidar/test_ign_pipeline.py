@@ -108,7 +108,8 @@ class IgnPipelineTests(unittest.TestCase):
             max_correspondence_distance=0.2, max_distance=0.02,
             max_area_km2=25, voxel_size=0.001, lidar_stride=1, max_tiles=100,
             min_overlap=0.3, align_classes="2,3,4,5,6,67", filter_classes=None,
-            estimate_scale=False, dry_run_clean=False, support_sigma=3, spacing_factor=1)
+            estimate_scale=False, dry_run_clean=False, support_sigma=3, spacing_factor=1,
+            min_support_opacity=None)
         def retrieve(bbox, path, **kwargs):
             self.assertLess(bbox[0], origin[0]-10)
             classes = np.tile([2, 3, 4, 5, 6, 67], 20)
@@ -135,11 +136,14 @@ class IgnPipelineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             args, retrieve = self.setup_scene(directory)
             args.dry_run_clean = True
+            args.min_support_opacity = 0.1
             with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
                     patch.object(master, "fetch_lidar", side_effect=retrieve):
                 master.run(args)
             self.assertTrue((args.output_dir/"aligned.splat").exists())
             self.assertFalse((args.output_dir/"cleaned.splat").exists())
+            report = json.loads((args.output_dir/"cleaned.splat.json").read_text())
+            self.assertEqual(report["min_support_opacity"], 0.1)
             args.output_dir = Path(directory)/"failed"
             with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
                     patch.object(master, "fetch_lidar", side_effect=OSError("WFS indisponible")):

@@ -11,6 +11,7 @@ import sys
 import numpy as np
 
 from common import class_codes, gaussian_geometry, open_scene, vector, write_report
+from common import validate_support_opacity
 from fetch_ign_lidar import CRS, fetch_lidar
 
 
@@ -41,6 +42,7 @@ def run(args):
     if args.output_dir.exists():
         raise ValueError("Choisir un nouveau --output-dir ; aucune reprise implicite")
     origin = vector(args.origin)
+    validate_support_opacity(args.min_support_opacity)
     for value, label in ((args.max_correspondence_distance, "distance de recalage"),
                          (args.max_distance, "distance de nettoyage"),
                          (args.max_area_km2, "surface maximale"), (args.voxel_size, "voxel"),
@@ -115,6 +117,8 @@ def run(args):
                  "--spacing-factor", str(args.spacing_factor)]
         if args.filter_classes is not None:
             clean.extend(["--lidar-classes", args.filter_classes])
+        if args.min_support_opacity is not None:
+            clean.extend(["--min-support-opacity", str(args.min_support_opacity)])
         if args.dry_run_clean:
             clean.append("--dry-run")
         update("filtering")
@@ -138,6 +142,8 @@ def main():
     parser.add_argument("--max-correspondence-distance", type=float, default=2)
     parser.add_argument("--max-distance", type=float, default=0.5)
     parser.add_argument("--support-sigma", type=float, default=3)
+    parser.add_argument("--min-support-opacity", type=float,
+                        help="Opacité locale minimale du support LiDAR ; défaut : désactivé")
     parser.add_argument("--spacing-factor", type=float, default=1)
     parser.add_argument("--voxel-size", type=float, default=0.2)
     parser.add_argument("--min-overlap", type=float, default=0.3)
