@@ -16,6 +16,7 @@ from fetch_ign_lidar import file_signature, validate_cached_lidar
 
 DEFAULTS = {
     "LIDAR_COLMAP_ALIGN": "false", "LIDAR_COLMAP_INJECT": "false",
+    "LIDAR_COLMAP_ALIGNMENT_MODE": "all", "LIDAR_COLMAP_GROUND_CORRIDOR": "10",
     "LIDAR_COLMAP_TERRAIN_CENTER": "", "LIDAR_COLMAP_ORIGIN": "0,0,0",
     "LIDAR_COLMAP_GEOREF": "", "LIDAR_COLMAP_ALREADY_PROJECTED": "false",
     "LIDAR_MARGIN": "20", "LIDAR_PDAL": "pdal", "LIDAR_MAX_TILES": "100",
@@ -41,6 +42,7 @@ DEFAULTS = {
 FLAGS = {"LIDAR_COLMAP_ALIGN", "LIDAR_COLMAP_INJECT",
          "LIDAR_COLMAP_ALREADY_PROJECTED", "LIDAR_COLMAP_ACCEPT_AMBIGUOUS", "LIDAR_CLEAN"}
 COLMAP_FLAGS = {
+    "ALIGNMENT_MODE": "alignment-mode", "GROUND_CORRIDOR": "ground-corridor",
     "TERRAIN_CENTER": "terrain-center", "ORIGIN": "origin", "GEOREF": "georef",
     "DISTANCE": "max-correspondence-distance", "VOXEL": "voxel-size",
     "MIN_OVERLAP": "min-overlap", "CLASSES": "lidar-classes",
@@ -71,6 +73,13 @@ def validate(config):
         raise ValueError("LIDAR_CLEAN_MODE attend diagnostic ou apply")
     if config["LIDAR_CLEAN_EVIDENCE_MODE"] not in ("aerial", "proximity"):
         raise ValueError("LIDAR_CLEAN_EVIDENCE_MODE attend aerial ou proximity")
+    if config["LIDAR_COLMAP_ALIGNMENT_MODE"] not in ("all", "trajectory-ground"):
+        raise ValueError("LIDAR_COLMAP_ALIGNMENT_MODE attend all ou trajectory-ground")
+    if config["LIDAR_COLMAP_ALIGNMENT_MODE"] == "trajectory-ground":
+        if config["LIDAR_COLMAP_TERRAIN_CENTER"]:
+            raise ValueError("trajectory-ground nécessite un ancrage, sans TERRAIN_CENTER")
+        if float(config["LIDAR_COLMAP_MAX_TILT"]) <= 0:
+            raise ValueError("trajectory-ground nécessite LIDAR_COLMAP_MAX_TILT > 0")
     for key in ("LIDAR_COLMAP_ORIGIN", "LIDAR_CLEAN_ORIGIN"):
         vector(config[key])
     if config["LIDAR_COLMAP_TERRAIN_CENTER"]:
@@ -79,7 +88,7 @@ def validate(config):
     for key in ("LIDAR_COLMAP_CLASSES", "LIDAR_CLEAN_CLASSES"):
         if config[key]:
             class_codes(config[key])
-    positive = ("LIDAR_MARGIN", "LIDAR_MAX_TILES", "LIDAR_MAX_AREA_KM2",
+    positive = ("LIDAR_COLMAP_GROUND_CORRIDOR", "LIDAR_MARGIN", "LIDAR_MAX_TILES", "LIDAR_MAX_AREA_KM2",
                 "LIDAR_COLMAP_DISTANCE", "LIDAR_COLMAP_VOXEL", "LIDAR_COLMAP_MIN_OVERLAP",
                 "LIDAR_COLMAP_SCALE_MIN", "LIDAR_COLMAP_SCALE_MAX",
                 "LIDAR_COLMAP_SCALE_STEPS", "LIDAR_COLMAP_YAW_STEPS",

@@ -263,6 +263,8 @@ SLURM_QOS=""
 SLURM_ENV_SETUP=""
 # LiDAR optionnel (images, vidéos et Slurm) ; détails : tools/lidar/PIPELINES.md.
 LIDAR_COLMAP_ALIGN=false
+LIDAR_COLMAP_ALIGNMENT_MODE=all # trajectory-ground : sol proche, hauteur/inclinaison seules.
+LIDAR_COLMAP_GROUND_CORRIDOR=10
 LIDAR_COLMAP_INJECT=false
 LIDAR_CLEAN=false
 LIDAR_CLEAN_MODE=diagnostic

@@ -16,6 +16,12 @@ def extraction_bbox(model, args):
     points = np.array([point.xyz for point in model.points3D.values()])
     if len(points) < 6 or not np.isfinite(points).all():
         raise ValueError("Au moins six points sparse finis requis")
+    if getattr(args, "alignment_mode", "all") == "trajectory-ground":
+        cameras = np.array([image.projection_center() for image in model.images.values()
+                            if image.has_pose])
+        if len(cameras) < 2 or not np.isfinite(cameras).all():
+            raise ValueError("Au moins deux centres caméra finis requis pour la trajectoire")
+        points = np.concatenate((points, cameras))
     if not np.isfinite(args.margin) or args.margin <= 0:
         raise ValueError("Marge finie > 0 requise")
     if args.margin < args.max_correspondence_distance:
@@ -47,10 +53,17 @@ def extraction_bbox(model, args):
         lower, upper = points[:, :2].min(axis=0), points[:, :2].max(axis=0)
     else:
         raise ValueError("Ancrage absent : fournir --terrain-center ou --images GPS EXIF")
-    return np.concatenate((lower-args.margin, upper+args.margin))
+    corridor = (args.ground_corridor if getattr(args, "alignment_mode", "all") ==
+                "trajectory-ground" else 0)
+    return np.concatenate((lower-args.margin-corridor, upper+args.margin+corridor))
 
 
 def run(args):
+    if getattr(args, "alignment_mode", "all") == "trajectory-ground":
+        if args.terrain_center is not None:
+            raise ValueError("trajectory-ground nécessite un modèle déjà ancré")
+        if not np.isfinite(args.ground_corridor) or args.ground_corridor <= 0:
+            raise ValueError("--ground-corridor doit être fini et > 0")
     if args.lidar_crs != CRS:
         raise ValueError("Récupération IGN limitée à EPSG:2154")
     if args.max_tiles < 1:

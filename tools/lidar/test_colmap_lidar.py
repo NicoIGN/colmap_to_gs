@@ -41,11 +41,91 @@ def options(**kwargs):
                 min_views=2, min_view_angle=2, depth_tolerance=0.1, visibility_cell=4,
                 keypoint_separation=2, inject=False, images=None, georef=None,
                 already_projected=True, lidar_crs="EPSG:2154", lidar_classes=None)
+    args.update(alignment_mode="all", ground_corridor=10)
     args.update(kwargs)
     return argparse.Namespace(**args)
 
 
 class ColmapLidarTests(unittest.TestCase):
+    def test_ground_mode_projected_roundtrip_and_class_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            model, _ = reconstruction()
+            for pid in list(model.points3D):
+                model.delete_point3D(pid)
+            origin = np.array([650000., 6860000., 100.])
+            model.transform(tool.similarity(1., np.eye(3), origin+[0, 0, 2.3]))
+            x, y = np.meshgrid(np.linspace(-4, 4, 25), np.linspace(-2, 2, 17))
+            ground = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+            for point in ground+origin+[0, 0, .3]:
+                model.add_point3D(point, pycolmap.Track())
+            source = root/"model"
+            source.mkdir()
+            model.write(source)
+            data = np.concatenate((ground+origin, ground+origin+[0, 0, 4]))
+            header = laspy.LasHeader(point_format=6, version="1.4")
+            header.offsets = origin
+            header.scales = [.0001]*3
+            cloud = laspy.LasData(header)
+            cloud.x, cloud.y, cloud.z = data.T
+            cloud.classification = np.r_[np.full(len(ground), 2), np.full(len(ground), 6)]
+            laz = root/"ground.laz"
+            cloud.write(laz)
+            args = options(model=source, lidar=laz, output=root/"out",
+                           origin="650000,6860000,100", alignment_mode="trajectory-ground",
+                           ground_corridor=10, voxel_size=.1, max_correspondence_distance=1,
+                           lidar_classes="6")
+            tool.run(args)
+            reloaded = pycolmap.Reconstruction(args.output)
+            self.assertTrue(reloaded.is_valid())
+            self.assertLess(max(abs(p.xyz[2]) for p in reloaded.points3D.values()), 1e-5)
+            report = json.loads((args.output/"lidar_alignment.json").read_text())
+            self.assertEqual(report["alignment_mode"], "trajectory-ground")
+            self.assertEqual(report["sampled_lidar"], len(ground))
+            self.assertAlmostEqual(report["height_correction"], -.3, places=5)
+            cloud.classification = np.full(len(data), 6)
+            cloud.write(laz)
+            args.output = root/"no_ground"
+            with self.assertRaisesRegex(ValueError, "LiDAR sélectionnés"):
+                tool.run(args)
+            self.assertFalse(args.output.exists())
+
+    def test_trajectory_ground_height_tilt_and_locked_horizontal(self):
+        x, y = np.meshgrid(np.linspace(-5, 5, 31), np.linspace(-3, 3, 21))
+        ground = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        cameras = np.array([[-4., 0, 2], [0, 0, 2], [4, 0, 2]])
+        pivot = cameras.mean(axis=0)
+        rotation = Rotation.from_rotvec(np.radians([1., -.6, 0])).as_matrix()
+        sparse = (ground-pivot) @ rotation.T+pivot+[0, 0, .3]
+        moved_cameras = (cameras-pivot) @ rotation.T+pivot+[0, 0, .3]
+        # High roof/facade points must not drive the ground-only fit.
+        source = np.concatenate((sparse, ground+[0, 0, 8]))
+        s, r, t, report = tool.trajectory_ground_alignment(
+            source, moved_cameras, ground,
+            options(alignment_mode="trajectory-ground", voxel_size=.1,
+                    max_correspondence_distance=1))
+        self.assertEqual(s, 1)
+        corrected = sparse @ r.T+t
+        self.assertLess(np.abs(corrected[:, 2]).max(), 1e-5)
+        np.testing.assert_allclose((r @ moved_cameras.mean(axis=0)+t)[:2],
+                                   moved_cameras.mean(axis=0)[:2], atol=1e-8)
+        self.assertLess(report["rmse_after"], 1e-5)
+        self.assertIn("scale", report["locked_corrections"])
+        with self.assertRaisesRegex(ValueError, "ancrage"):
+            tool.trajectory_ground_alignment(sparse, cameras, ground,
+                                             options(terrain_center="1,2,3"))
+        with self.assertRaisesRegex(ValueError, "classé 2"):
+            tool.trajectory_ground_alignment(sparse, cameras, np.empty((0, 3)), options())
+
+    def test_trajectory_ground_rejects_narrow_geometry_and_missing_source(self):
+        x = np.linspace(-5, 5, 100)
+        line = np.column_stack((x, np.zeros_like(x), np.zeros_like(x)))
+        cameras = np.array([[-4., 0, 2], [4, 0, 2]])
+        with self.assertRaisesRegex(ValueError, "planes"):
+            tool.trajectory_ground_alignment(line+[0, 0, .2], cameras, line, options())
+        with self.assertRaisesRegex(ValueError, "sous les caméras"):
+            tool.trajectory_ground_alignment(line+[0, 0, 5], cameras, line, options())
+
     def test_search_non_georef_yaw_scale_and_vertical(self):
         points = np.random.default_rng(5).normal(size=(80, 3))
         r = Rotation.from_euler("z", 90, degrees=True).as_matrix()

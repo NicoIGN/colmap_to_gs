@@ -123,6 +123,47 @@ Ne pas l'utiliser pour un modèle déjà exprimé en ENU.
 
 ## Modèle non géoréférencé
 
+### Option sol proche de la trajectoire vélo
+
+Pour un modèle déjà ancré par GPX/EXIF ou `--already-projected` :
+
+```bash
+python tools/lidar/colmap_lidar_pipeline.py \
+  --workspace reconstruction --model reconstruction/georef/0 \
+  --alignment-mode trajectory-ground --ground-corridor 10 --max-tilt 5
+```
+
+Le mode `all` reste le défaut. `trajectory-ground` utilise uniquement les retours
+**classés 2**, indépendamment de `--lidar-classes`, dans un rayon XY de 10 m
+des centres caméra. La classe 2 désigne du sol, **pas nécessairement une route**.
+Le sparse retenu est sous les caméras d'au moins 0.5 m, dans ce même corridor,
+et présente des voisinages plans dont la normale est à moins de 30° de la verticale :
+les façades et les points hauts ne doivent pas piloter le résultat.
+Une régression point-à-plan locale robuste (Huber) estime uniquement la hauteur
+et l'inclinaison autour du centre moyen des caméras. Les voisinages sont refusés
+s'ils ne sont pas assez plans, étendus ou proches. `--max-correspondence-distance`
+borne la correction verticale et la distance aux voisinages ; `--max-tilt`
+borne la norme de la correction d'inclinaison (doit être strictement positif).
+
+**Ce n'est pas un recalage horizontal ni une recherche d'échelle/cap.**
+La translation horizontale au pivot est verrouillée, ainsi que l'échelle ;
+le vecteur de rotation correctif n'a pas de composante verticale. Les petits
+déplacements XY induits par l'inclinaison restent possibles loin du pivot.
+Il faut donc un ancrage initial suffisamment correct horizontalement.
+`--terrain-center` est refusé : un sol quasi plan ne permet pas de localiser
+fiablement un modèle sans cap ni échelle connus.
+Une trajectoire étroite/colinéaire, l'absence de sol ou de points sparse
+appropriés provoque une erreur explicite, **sans repli sur l'ICP toutes classes**.
+Le rapport indique les degrés de liberté verrouillés et les résidus sur le sol,
+qui ne valident pas le placement des façades.
+
+Le maître agrandit l'emprise d'extraction du rayon du corridor, conserve le LAZ
+partagé toutes classes et peut toujours injecter après correction.
+Ce mode n'utilise aucune hypothèse de symétrie entre débords de toits voisins :
+ces débords ne sont pas des correspondances fiables avec les façades vues du vélo.
+
+### Recherche générale sans ancrage
+
 ```bash
 python tools/lidar/align_colmap_to_lidar.py \
   --model sparse/0 --lidar zone.laz --output colmap_lidar \

@@ -18,6 +18,19 @@ from test_ign_pipeline import cloud_file
 
 
 class ColmapPipelineTests(unittest.TestCase):
+    def test_ground_extraction_covers_camera_trajectory_and_corridor(self):
+        model, _ = reconstruction()
+        with tempfile.TemporaryDirectory() as directory:
+            args = options(model=Path(directory), already_projected=True, margin=10,
+                           alignment_mode="trajectory-ground", ground_corridor=7)
+            bbox = master.extraction_bbox(model, args)
+            # Camera X = -1/+1; camera Y = 0, independent of sparse bounds.
+            self.assertLessEqual(bbox[0], -1-17)
+            self.assertGreaterEqual(bbox[2], 1+17)
+            with self.assertRaisesRegex(ValueError, "ancré"):
+                master.run(options(model=Path(directory), alignment_mode="trajectory-ground",
+                                   terrain_center="650000,6860000,100"))
+
     def test_download_reuse_injection_and_final_enu_splat(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

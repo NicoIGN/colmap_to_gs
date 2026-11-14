@@ -22,6 +22,8 @@ class PipelineOptionTests(unittest.TestCase):
                            ("LIDAR_COLMAP_SCALE_STEPS", "1.5"),
                            ("LIDAR_CLEAN_MODE", "silent"),
                            ("LIDAR_COLMAP_MAX_TILT", "90"),
+                           ("LIDAR_COLMAP_ALIGNMENT_MODE", "roof-symmetry"),
+                           ("LIDAR_COLMAP_GROUND_CORRIDOR", "0"),
                            ("LIDAR_CLEAN_EVIDENCE_MODE", "unknown"),
                            ("LIDAR_CLEAN_GROUND_CLEARANCE", "-1"),
                            ("LIDAR_CLEAN_AERIAL_MIN_RETURNS", "0")):
@@ -85,10 +87,14 @@ class PipelineOptionTests(unittest.TestCase):
             model, _ = reconstruction()
             model.write(source)
             config = dict(options.DEFAULTS, LIDAR_COLMAP_ALIGN="true",
-                          LIDAR_COLMAP_INJECT="true", LIDAR_COLMAP_ALREADY_PROJECTED="true")
+                          LIDAR_COLMAP_INJECT="true", LIDAR_COLMAP_ALREADY_PROJECTED="true",
+                          LIDAR_COLMAP_ALIGNMENT_MODE="trajectory-ground",
+                          LIDAR_COLMAP_GROUND_CORRIDOR="7")
             def master(command, check):
                 self.assertIn("--inject", command)
                 self.assertIn("--already-projected", command)
+                self.assertEqual(command[command.index("--alignment-mode")+1], "trajectory-ground")
+                self.assertEqual(command[command.index("--ground-corridor")+1], "7")
                 workspace.mkdir()
                 shutil.copytree(source, workspace/"colmap_lidar")
                 shared = workspace/"lidar/lidar.laz"

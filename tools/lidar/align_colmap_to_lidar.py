@@ -8,6 +8,7 @@ import sys
 import numpy as np
 import pycolmap
 from scipy.ndimage import minimum_filter
+from scipy.optimize import least_squares
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
@@ -69,6 +70,105 @@ def nearest_score(source, tree, distance):
     distances = tree.query(source)[0]
     overlap = float(np.mean(distances <= distance))
     return float(np.mean(np.minimum(distances, distance) ** 2)), overlap
+
+
+def trajectory_ground_alignment(points, cameras, ground, args, initial=None):
+    """Fit only roll/pitch and height; ground does not reliably constrain XY/yaw/scale."""
+    if args.terrain_center is not None:
+        raise ValueError("trajectory-ground nécessite un ancrage ENU/EXIF ou --already-projected ; "
+                         "le sol seul ne détermine pas le cap ni l'échelle")
+    if len(cameras) < 2 or not np.isfinite(cameras).all():
+        raise ValueError("Au moins deux centres caméra finis requis pour la trajectoire")
+    if not np.isfinite(args.ground_corridor) or args.ground_corridor <= 0:
+        raise ValueError("--ground-corridor doit être fini et > 0")
+    if args.max_tilt <= 0:
+        raise ValueError("trajectory-ground nécessite --max-tilt > 0")
+    s, r, t = initial if initial is not None else (1., np.eye(3), -vector(args.origin))
+    source = s*points @ r.T+t
+    cameras = s*cameras @ r.T+t
+    camera_tree = cKDTree(cameras[:, :2])
+    ground = ground[camera_tree.query(ground[:, :2])[0] <= args.ground_corridor]
+    ground = voxel_sample(ground, args.voxel_size) if len(ground) else ground
+    if len(ground) < 16:
+        raise ValueError("Sol classé 2 insuffisant près de la trajectoire")
+    distances, near = camera_tree.query(source[:, :2])
+    source = source[(distances <= args.ground_corridor)
+                    & (source[:, 2] <= cameras[near, 2]-.5)]
+    source = voxel_sample(source, args.voxel_size) if len(source) else source
+    if len(source) < 16:
+        raise ValueError("Sparse sous les caméras insuffisant pour reconnaître le sol")
+    if len(source) > args.search_points:
+        source = source[np.linspace(0, len(source)-1, args.search_points, dtype=int)]
+    if len(source) < 16:
+        raise ValueError("--search-points >= 16 requis pour trajectory-ground")
+
+    # Reject walls in the source rather than treating low facade points as road observations.
+    neighbours = cKDTree(source).query(source, k=16)[1]
+    local = source[neighbours]
+    centered = local-local.mean(axis=1)[:, None, :]
+    values, vectors = np.linalg.eigh(np.einsum("nki,nkj->nij", centered, centered))
+    flat = ((values[:, 1] > 1e-8) & (values[:, 0] <= .05*values[:, 1])
+            & (np.abs(vectors[:, 2, 0]) >= np.cos(np.radians(30))))
+    source = source[flat]
+    if len(source) < 12:
+        raise ValueError("Pas assez de surfaces sparse planes orientées comme le sol")
+    tree = cKDTree(ground[:, :2])
+    distances, neighbours = tree.query(source[:, :2], k=16)
+    local = ground[neighbours]
+    centers = local.mean(axis=1)
+    centered = local-centers[:, None, :]
+    values, vectors = np.linalg.eigh(np.einsum("nki,nkj->nij", centered, centered))
+    normals = vectors[:, :, 0]
+    normals[normals[:, 2] < 0] *= -1
+    residuals = np.sum((source-centers)*normals, axis=1)
+    eligible = ((distances[:, -1] <= args.max_correspondence_distance)
+                & (values[:, 1] > 1e-8) & (values[:, 0] <= .05*values[:, 1])
+                & (normals[:, 2] >= np.cos(np.radians(30)))
+                & (np.abs(residuals) <= args.max_correspondence_distance))
+    source, centers, normals = source[eligible], centers[eligible], normals[eligible]
+    if len(source) < 12:
+        raise ValueError("Recouvrement de sol local insuffisant ; aucun recalage de secours")
+    pivot = cameras.mean(axis=0)
+    def moved(parameters):
+        correction = Rotation.from_rotvec([parameters[0], parameters[1], 0]).as_matrix()
+        return (source-pivot) @ correction.T+pivot+[0, 0, parameters[2]]
+    def objective(parameters):
+        return np.sum((moved(parameters)-centers)*normals, axis=1)
+    bound = np.radians(args.max_tilt)
+    fit = least_squares(objective, np.zeros(3), loss="huber",
+                        f_scale=max(.02, args.voxel_size/2),
+                        bounds=([-bound, -bound, -args.max_correspondence_distance],
+                                [bound, bound, args.max_correspondence_distance]),
+                        max_nfev=200)
+    if not fit.success or np.linalg.norm(fit.x[:2]) > bound+1e-10:
+        raise ValueError("Correction de sol non convergée ou inclinaison hors limites")
+    inliers = np.abs(objective(fit.x)) <= args.max_correspondence_distance/4
+    if inliers.sum() < 12 or inliers.mean() < args.min_overlap:
+        raise ValueError("Recouvrement final du sol insuffisant")
+    jacobian = fit.jac[inliers]
+    norms = np.linalg.norm(jacobian, axis=0)
+    singular = np.linalg.svd(jacobian/np.maximum(norms, 1e-15), compute_uv=False)
+    if np.any(norms < 1e-8) or singular[-1] < singular[0]*1e-3:
+        raise ValueError("Sol trop étroit/colinéaire : inclinaison non observable")
+    before = float(np.sqrt(np.mean(objective(np.zeros(3))[inliers]**2)))
+    after = float(np.sqrt(np.mean(objective(fit.x)[inliers]**2)))
+    if after > before+1e-7 or np.any(tree.query(moved(fit.x)[inliers, :2])[0] >
+                                   args.max_correspondence_distance):
+        raise ValueError("Correction dégradante ou hors couverture du sol")
+    correction = Rotation.from_rotvec([fit.x[0], fit.x[1], 0]).as_matrix()
+    shift = pivot-correction @ pivot+np.array([0, 0, fit.x[2]])
+    report = dict(alignment_mode="trajectory-ground", sampled_splats=len(source),
+                  sampled_lidar=len(ground), overlap=float(inliers.mean()),
+                  rmse_before=before, rmse_after=after, converged=True,
+                  criterion="local_ground_point_to_plane", ground_corridor=args.ground_corridor,
+                  correction_tilt_degrees=float(np.degrees(np.linalg.norm(fit.x[:2]))),
+                  height_correction=float(fit.x[2]), pivot=pivot.tolist(),
+                  locked_corrections=["horizontal_translation_at_pivot", "yaw_rotation_vector", "scale"],
+                  warning="Sol classé 2, pas une classe route ; XY/cap/échelle de l'ancrage "
+                          "conservés, sans hypothèse de symétrie des toits.")
+    print("[lidar] Sol proche trajectoire : hauteur/inclinaison seules ; "
+          "translation horizontale au pivot, cap et échelle non recherchés.", flush=True)
+    return s, correction @ r, correction @ t+shift, report
 
 
 def search_alignment(points, lidar, args, initial=None):
@@ -290,7 +390,13 @@ def run(args, reporter=None):
         raise ValueError("Modèle sans référence : fournir --terrain-center ou --images "
                          "pour l'ancrage EXIF ; --already-projected pour un modèle projeté connu")
     lidar = load_lidar(args.lidar, np.zeros(3) if reference is not None else origin)
-    if args.lidar_classes is not None:
+    alignment_mode = getattr(args, "alignment_mode", "all")
+    if alignment_mode == "trajectory-ground":
+        if args.terrain_center is not None:
+            raise ValueError("trajectory-ground nécessite un modèle déjà ancré, sans --terrain-center")
+        references = load_lidar(args.lidar, np.zeros(3) if reference is not None else origin,
+                                classes={2})
+    elif args.lidar_classes is not None:
         references = load_lidar(args.lidar, np.zeros(3) if reference is not None else origin,
                                 classes=class_codes(args.lidar_classes))
     else:
@@ -300,7 +406,13 @@ def run(args, reporter=None):
         references = enu_lidar(references, reference["origin_lat_lon_height"], args.lidar_crs)
     if reporter is not None:
         reporter.phase("recalage COLMAP")
-    s, r, t, report = search_alignment(points, references, args, initial)
+    if alignment_mode == "trajectory-ground":
+        cameras = np.array([image.projection_center() for image in model.images.values()
+                            if image.has_pose])
+        s, r, t, report = trajectory_ground_alignment(points, cameras, references, args, initial)
+    else:
+        s, r, t, report = search_alignment(points, references, args, initial)
+        report["alignment_mode"] = "all"
     model.transform(similarity(s, r, t))
     if reporter is not None and args.inject:
         reporter.phase("enrichissement COLMAP par LiDAR")
@@ -338,6 +450,9 @@ def build_parser(*, pipeline=False):
     parser.add_argument("--already-projected", action="store_true",
                         help="Modèle déjà dans le CRS projeté du LiDAR (sans référence ENU)")
     parser.add_argument("--terrain-center", help="X,Y,Z terrain approximatif du centre sparse")
+    parser.add_argument("--alignment-mode", choices=("all", "trajectory-ground"), default="all")
+    parser.add_argument("--ground-corridor", type=float, default=10,
+                        help="Rayon XY près des centres caméra, mètres (trajectory-ground)")
     parser.add_argument("--max-correspondence-distance", type=float, default=2)
     parser.add_argument("--voxel-size", type=float, default=0.2)
     parser.add_argument("--min-overlap", type=float, default=0.3)

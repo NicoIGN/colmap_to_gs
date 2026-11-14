@@ -48,6 +48,8 @@ les coordonnées ENU brutes sont des coordonnées Lambert-93.
 | Variable | Défaut | Usage |
 |---|---|---|
 | `LIDAR_COLMAP_ALIGN` | `false` | Activer avant découpage |
+| `LIDAR_COLMAP_ALIGNMENT_MODE` | `all` | `all` : ICP Sim(3) ; `trajectory-ground` : sol près des caméras, hauteur/inclinaison seules |
+| `LIDAR_COLMAP_GROUND_CORRIDOR` | `10` | Rayon XY autour des centres caméra, mètres (`trajectory-ground`) |
 | `LIDAR_COLMAP_INJECT` | `false` | Ajouter points avec tracks ; exige ALIGN |
 | `LIDAR_COLMAP_GEOREF` | vide | Rapport ENU explicite ; rapport GPX du modèle détecté sinon |
 | `LIDAR_COLMAP_TERRAIN_CENTER` | vide | XYZ terrain du centre sparse non géoréférencé |
@@ -77,6 +79,15 @@ Pour GPX/EXIF, ne pas renseigner de centre terrain. L'ancrage vient du rapport
 ENU ou des GPS EXIF des images. Pour un modèle non géoréférencé, fournir
 `LIDAR_COLMAP_TERRAIN_CENTER`, des bornes d'échelle réalistes et éventuellement
 une origine locale ; Z du modèle est supposé approximativement vertical.
+
+Pour une acquisition vélo déjà ancrée, choisir
+`LIDAR_COLMAP_ALIGNMENT_MODE=trajectory-ground`. Ce mode utilise exclusivement
+le sol classé 2, garde la translation horizontale au centre des caméras,
+ne recherche ni le cap ni l'échelle et refuse `LIDAR_COLMAP_TERRAIN_CENTER`.
+Il corrige la hauteur et l'inclinaison par ajustement robuste des surfaces
+de sol proches, avec `LIDAR_COLMAP_MAX_TILT > 0`. Il échoue si le sol sparse/LiDAR
+ou sa géométrie ne permet pas cette correction, sans repli toutes classes.
+Voir [COLMAP.md](COLMAP.md) pour les limites, notamment sur les routes étroites.
 
 ## Nettoyage final
 
