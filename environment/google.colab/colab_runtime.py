@@ -3,6 +3,7 @@
 import codecs
 from datetime import datetime, timezone
 import hashlib
+import json
 import os
 from pathlib import Path
 import shlex
@@ -53,6 +54,34 @@ def run_live(command, log_dir, name, *, cwd=None, env=None):
     if status:
         raise subprocess.CalledProcessError(status, command)
     return log_path
+
+
+def configure_nvidia_vulkan(library_dir, work, log_dir):
+    """Expose Colab's mounted NVIDIA libraries without installing a driver."""
+    library_dir = Path(library_dir)
+    glx = (library_dir / "libGLX_nvidia.so.0").resolve(strict=True)
+    egl = (library_dir / "libEGL_nvidia.so.0").resolve(strict=True)
+    destination = Path(work) / "nvidia-vulkan"
+    destination.mkdir(parents=True, exist_ok=True)
+    icd = destination / "nvidia_icd.json"
+    egl_vendor = destination / "nvidia_egl.json"
+    for path, library, api in ((icd, glx, {"api_version": "1.3.0"}),
+                               (egl_vendor, egl, {})):
+        path.write_text(json.dumps({
+            "file_format_version": "1.0.0",
+            "ICD": {"library_path": str(library), **api},
+        }, indent=2))
+    settings = {
+        "VK_DRIVER_FILES": str(icd),
+        "VK_ICD_FILENAMES": str(icd),
+        "__EGL_VENDOR_LIBRARY_FILENAMES": str(egl_vendor),
+    }
+    log = run_live(["vulkaninfo", "--summary"], log_dir, "vulkan-nvidia", env=settings)
+    text = log.read_text(errors="replace")
+    if "NVIDIA" not in text or "deviceType" not in text:
+        raise RuntimeError(f"GPU NVIDIA Vulkan non confirmé ; voir {log}")
+    os.environ.update(settings)
+    print("Vulkan NVIDIA validé ; configuration transmise aux processus suivants.", flush=True)
 
 
 def sha256(path):

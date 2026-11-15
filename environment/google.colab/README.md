@@ -8,9 +8,14 @@ Le notebook utilise `review_copilot` par défaut. Le YAML et le helper
 `colab_runtime.py` doivent être présents sur la branche sélectionnée.
 Le helper affiche stdout/stderr en direct, y compris les progressions avec
 retours chariot, et conserve un log local distinct par commande. Micromamba
-utilise `--no-capture-output` : une boucle de lecture seule ne suffit pas si
-Micromamba capture les sorties de son enfant. Un programme natif peut néanmoins
-tamponner lui-même ses messages.
+est lancé avec `run -n`, sans l'option Conda `--no-capture-output` qui provoque
+`exec: --: invalid option` dans le runtime testé. Un programme natif peut
+néanmoins tamponner lui-même ses messages.
+
+La cellule Python dédiée `ACCEPT_SAM_LICENSE = True`, juste avant les réglages,
+enregistre l'acceptation dans le noyau courant. L'exécuter seulement après
+lecture et acceptation personnelle de la licence SAM. Après redémarrage,
+réexécuter cette cellule ; aucun `export` Bash n'est nécessaire.
 
 ## Disque local et Drive
 
@@ -48,11 +53,20 @@ Après les dépendances système, une cellule de diagnostic collecte la version
 du pilote, les paquets NVIDIA, les chemins et dépendances GLX/EGL, les ICD et les
 variables de sélection. Elle teste le chargeur Vulkan sans modifier les pilotes
 ni l'environnement. Les erreurs sont signalées sans interrompre la collecte ;
-le contrôle bloquant suivant reste obligatoire avant le calcul.
+le contrôle bloquant reste obligatoire avant le calcul.
 Le rapport complet est enregistré dans `RUN/logs/vulkan-diagnostic-*.log`.
 `DIAGNOSTIC_LD_DEBUG=True` ajoute la trace du chargement dynamique au rapport,
 avec un affichage filtré et limité. Après un essai de bibliothèques isolées,
 relancer le diagnostic avec les mêmes variables que le calcul.
+
+La cellule suivante crée des descripteurs Vulkan et EGL locaux pour les
+bibliothèques déjà montées dans `/usr/lib64-nvidia`. Le descripteur EGL est
+nécessaire dans le runtime Colab testé : le seul ICD Vulkan échoue avec
+`Could not get 'vkCreateInstance'`. Aucun pilote n'est installé ou remplacé.
+Les variables `VK_DRIVER_FILES`, `VK_ICD_FILENAMES` et
+`__EGL_VENDOR_LIBRARY_FILENAMES` sont exportées aux processus enfants après
+validation de Vulkan NVIDIA, puis héritées par Micromamba et le pipeline.
+Réexécuter cette configuration après chaque redémarrage du noyau.
 
 Pour `VK_ERROR_INCOMPATIBLE_DRIVER`, inspecter les ICD et les variables affichés
 dans la cellule système. Installer arbitrairement un autre pilote NVIDIA dans

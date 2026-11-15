@@ -1,3 +1,4 @@
+import ast
 import contextlib
 import io
 import json
@@ -11,7 +12,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from colab_runtime import restore_spirula, run_live, save_snapshot
+from colab_runtime import configure_nvidia_vulkan, restore_spirula, run_live, save_snapshot
 
 
 class ColabRuntimeTests(unittest.TestCase):
@@ -116,7 +117,14 @@ class ColabRuntimeTests(unittest.TestCase):
                 self.assertIsNone(cell["execution_count"])
                 self.assertEqual(cell["outputs"], [])
         environment = next(c for c in notebook["cells"] if c["metadata"]["id"] == "environment")
-        self.assertIn("--no-capture-output", "".join(environment["source"]))
+        tree = ast.parse("".join(environment["source"]))
+        function = next(node for node in tree.body
+                        if isinstance(node, ast.FunctionDef) and node.name == "in_env")
+        namespace = dict(MAMBA=Path("/content/bin/micromamba"), MAMBA_ENV="gsplat")
+        exec(compile(ast.Module(body=[function], type_ignores=[]), "in_env", "exec"), namespace)
+        self.assertEqual(namespace["in_env"](["python", "-u", "-c", "print('live')"]),
+                         ["/content/bin/micromamba", "run", "-n", "gsplat",
+                          "python", "-u", "-c", "print('live')"])
         config = next(c for c in notebook["cells"] if c["metadata"]["id"] == "config")
         self.assertIn("'OUTPUT_DIR': str(OUTPUT)", "".join(config["source"]))
 
@@ -127,6 +135,11 @@ class ColabRuntimeTests(unittest.TestCase):
         namespace = dict(ACCEPT_SAM_LICENSE=False)
         with self.assertRaisesRegex(RuntimeError, "licence"):
             exec(source, namespace)
+        ids = [cell["metadata"]["id"] for cell in notebook["cells"]]
+        self.assertLess(ids.index("sam-license"), ids.index("config"))
+        license_cell = notebook["cells"][ids.index("sam-license")]
+        exec("".join(license_cell["source"]), namespace)
+        self.assertIs(namespace["ACCEPT_SAM_LICENSE"], True)
         namespace.update(ACCEPT_SAM_LICENSE=True, RUN=self.root,
                          OUTPUT=self.root / "output", FRAMES=self.root / "frames",
                          SPIRULA_ROOT=self.root / "spirula", SPIRULA_BIN=self.root / "spirula/bin",
@@ -138,6 +151,37 @@ class ColabRuntimeTests(unittest.TestCase):
             ["bash", "-c", 'source "$1"; printf "%s" "$OUTPUT_DIR"', "_", str(config)], text=True)
         self.assertEqual(result, str(self.root / "output"))
         self.assertNotIn("/content/drive", config.read_text())
+
+    def test_nvidia_configuration_exports_both_manifests_only_after_validation(self):
+        libraries = self.root / "libraries"
+        libraries.mkdir()
+        for name in ("libGLX_nvidia.so.0", "libEGL_nvidia.so.0"):
+            (libraries / name).touch()
+        log = self.root / "vulkan.log"
+        keys = ("VK_DRIVER_FILES", "VK_ICD_FILENAMES", "__EGL_VENDOR_LIBRARY_FILENAMES")
+        with patch.dict(os.environ), patch("colab_runtime.run_live", return_value=log) as run, \
+                contextlib.redirect_stdout(io.StringIO()):
+            before = os.environ.copy()
+            log.write_text("deviceType = DISCRETE_GPU\nNVIDIA\n")
+            configure_nvidia_vulkan(libraries, self.root, self.root)
+            settings = run.call_args.kwargs["env"]
+            self.assertEqual(settings["VK_DRIVER_FILES"], settings["VK_ICD_FILENAMES"])
+            for key, name in ((keys[0], "libGLX_nvidia.so.0"), (keys[2], "libEGL_nvidia.so.0")):
+                manifest = json.loads(Path(settings[key]).read_text())
+                self.assertEqual(manifest["ICD"]["library_path"], str(libraries / name))
+                self.assertEqual(os.environ[key], settings[key])
+            os.environ.clear()
+            os.environ.update(before)
+            log.write_text("deviceType = CPU\nllvmpipe\n")
+            with self.assertRaisesRegex(RuntimeError, "non confirmé"):
+                configure_nvidia_vulkan(libraries, self.root, self.root)
+            self.assertEqual(os.environ, before)
+            run.side_effect = subprocess.CalledProcessError(1, ["vulkaninfo"])
+            with self.assertRaises(subprocess.CalledProcessError):
+                configure_nvidia_vulkan(libraries, self.root, self.root)
+            self.assertEqual(os.environ, before)
+        with self.assertRaises(FileNotFoundError):
+            configure_nvidia_vulkan(self.root / "missing", self.root, self.root)
 
     def test_vulkan_diagnostic_retains_failures_without_changing_environment(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
