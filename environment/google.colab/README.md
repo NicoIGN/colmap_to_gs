@@ -44,6 +44,16 @@ environnement Conda que le calcul, exige un GPU NVIDIA et s'arrête avant
 l'extraction en cas d'échec. `libvulkan1` est le chargeur, pas le pilote NVIDIA.
 Un ZIP de Spirula ne transporte pas le pilote du runtime.
 
+Après les dépendances système, une cellule de diagnostic collecte la version
+du pilote, les paquets NVIDIA, les chemins et dépendances GLX/EGL, les ICD et les
+variables de sélection. Elle teste le chargeur Vulkan sans modifier les pilotes
+ni l'environnement. Les erreurs sont signalées sans interrompre la collecte ;
+le contrôle bloquant suivant reste obligatoire avant le calcul.
+Le rapport complet est enregistré dans `RUN/logs/vulkan-diagnostic-*.log`.
+`DIAGNOSTIC_LD_DEBUG=True` ajoute la trace du chargement dynamique au rapport,
+avec un affichage filtré et limité. Après un essai de bibliothèques isolées,
+relancer le diagnostic avec les mêmes variables que le calcul.
+
 Pour `VK_ERROR_INCOMPATIBLE_DRIVER`, inspecter les ICD et les variables affichés
 dans la cellule système. Installer arbitrairement un autre pilote NVIDIA dans
 Colab peut créer une incompatibilité avec le pilote hôte ; le notebook ne le
