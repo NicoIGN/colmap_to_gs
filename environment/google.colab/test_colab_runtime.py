@@ -151,6 +151,10 @@ class ColabRuntimeTests(unittest.TestCase):
             ["bash", "-c", 'source "$1"; printf "%s" "$OUTPUT_DIR"', "_", str(config)], text=True)
         self.assertEqual(result, str(self.root / "output"))
         self.assertNotIn("/content/drive", config.read_text())
+        inherited = subprocess.check_output(
+            ["bash", "-c", 'source "$1"; bash -c \'printf "%s" "$SS_NN_LOG"\'', "_", str(config)],
+            text=True)
+        self.assertEqual(inherited, "1")
 
     def test_nvidia_configuration_exports_both_manifests_only_after_validation(self):
         libraries = self.root / "libraries"
