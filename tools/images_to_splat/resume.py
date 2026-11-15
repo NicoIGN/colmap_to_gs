@@ -6,7 +6,11 @@ from pathlib import Path
 import sys
 
 
-def validate_masks(images, output):
+class MissingMaskError(ValueError):
+    pass
+
+
+def validate_masks(images, output, *, allow_missing=False):
     from PIL import Image
 
     extensions = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
@@ -16,10 +20,14 @@ def validate_masks(images, output):
     )
     if not sources:
         raise ValueError(f"Aucune image sélectionnée : {images}")
+    missing = []
     for source in sources:
         mask_path = output / (source.relative_to(images).as_posix() + ".png")
         if not mask_path.is_file():
-            raise ValueError(f"Masque attendu absent : {mask_path}")
+            if allow_missing:
+                missing.append(mask_path)
+                continue
+            raise MissingMaskError(f"Masque attendu absent : {mask_path}")
         with Image.open(source) as image, Image.open(mask_path) as mask:
             mask.load()
             if mask.format != "PNG" or mask.mode != "L" or mask.size != image.size:
@@ -29,7 +37,8 @@ def validate_masks(images, output):
             histogram = mask.histogram()
             if sum(histogram[1:255]):
                 raise ValueError(f"Masque non binaire (0/255 requis) : {mask_path}")
-    print(f"[reprise] {len(sources)} masques vérifiés dans {output}.", flush=True)
+    print(f"[reprise] {len(sources)-len(missing)} masques vérifiés dans {output}.", flush=True)
+    return missing
 
 
 def validate_sparse(folder):

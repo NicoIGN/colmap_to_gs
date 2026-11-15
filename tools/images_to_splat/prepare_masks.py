@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import generate, policy
-from resume import validate_masks
+from resume import MissingMaskError, validate_masks
 
 
 def policies():
@@ -57,7 +57,7 @@ def prepare(policy_only=None):
 
         def verify_report(strict):
             if not report_path.is_file():
-                return False
+                return None
             report = json.loads(report_path.read_text())
             if not isinstance(report, dict) or not isinstance(report.get("settings"), dict):
                 raise ValueError(f"Rapport de masques invalide : {report_path}")
@@ -86,8 +86,36 @@ def prepare(policy_only=None):
             return report
 
         if os.environ.get("PIPELINE_RESUME") == "true" and directory.is_dir():
-            verify_report(strict=True)
-            validate_masks(images, directory)
+            report = verify_report(strict=True)
+            try:
+                validate_masks(images, directory)
+            except MissingMaskError:
+                empty = report is None and not any(directory.iterdir())
+                partial = (report is not None and report.get("status") == "partial"
+                           and isinstance(report.get("images"), dict))
+                if not (empty or partial):
+                    raise
+                if directory.is_symlink():
+                    raise ValueError(f"Reprise de génération refusée sur un lien externe : {directory}")
+                downstream = [name for name in (
+                    "sfm", "georef", "colmap_lidar", "sparse_filtered", "sparse_clean",
+                    "sparse_rejected", "blocks", "gs", "gs-nerfstudio", ".prepare_done",
+                ) if (output / name).exists()]
+                if downstream:
+                    raise ValueError(
+                        "Masques incomplets déjà susceptibles d'avoir été utilisés : "
+                        f"{', '.join(downstream)}. Choisir un nouvel OUTPUT_DIR."
+                    )
+                # Validate every available PNG, not only the prefix before the first hole.
+                missing = validate_masks(images, directory, allow_missing=True)
+                print(
+                    f"[masques] Génération interrompue : {len(missing)} masque(s) manquant(s) "
+                    f"dans {directory} ; reprise avec la même politique.",
+                    flush=True,
+                )
+                generate(settings, images, directory)
+                validate_masks(images, directory)
+                return
             if not report_path.is_file():
                 report = {
                     "status": "complete",
