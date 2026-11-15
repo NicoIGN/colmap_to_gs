@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import struct
+import sys
 import tempfile
 import time
 import uuid
@@ -28,7 +29,12 @@ def counters(workspace):
     manifests.extend(sorted(workspace.glob("panoramax/sfm-*/blocks-*/manifest.json")))
     for manifest in manifests:
         if manifest.is_file():
-            stats["blocks"] = len(json.loads(manifest.read_text())["blocks"])
+            try:
+                stats["blocks"] = len(json.loads(manifest.read_text())["blocks"])
+            except json.JSONDecodeError as error:
+                message = f"Manifeste de découpage incomplet : {manifest} ({error})"
+                print(f"[AVERTISSEMENT] {message}", file=sys.stderr)
+                stats.setdefault("artifact_errors", []).append(message)
     panorama_summary = workspace/"panoramax/summary.json"
     if panorama_summary.is_file():
         summary = json.loads(panorama_summary.read_text())

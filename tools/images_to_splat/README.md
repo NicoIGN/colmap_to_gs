@@ -177,6 +177,16 @@ correspondent aux images et aux réglages choisis.
 - Reprise explicite : permet d'adopter certaines signatures anciennes ; une
   politique connue incompatible reste refusée.
 
+Le SfM est **global**. L'ordre est : reconstruction globale, géoréférencement
+éventuel, puis découpage en sous-modèles COLMAP et entraînement par bloc.
+`SPLIT_NUM_BLOCKS` et `SPLIT_OVERLAP_MAX_FRACTION` ne font donc plus partie de
+la signature SfM ; les anciennes signatures sont migrées automatiquement.
+Modifier ces valeurs puis relancer `all` ou `prepare` conserve les images,
+masques, le SfM et le géoréférencement validés. Les anciens blocs, entraînements
+et exports sont déplacés dans `output/partition-backups/<horodatage>/` avant
+le nouveau découpage, sans suppression. Un worker lancé directement avec
+`train-block` ou `merge` refuse un découpage incompatible et demande `prepare`.
+
 ### Reconstruction des caméras et des points 3D
 
 Le SfM estime les positions des caméras et un nuage de points 3D à partir des
@@ -349,8 +359,10 @@ nouvel `OUTPUT_DIR`, sans mélanger plusieurs reconstructions.
 Ne pas modifier les images/configurations pendant des jobs actifs.
 Une préparation compatible reprend les masques et réutilise le SfM/découpage.
 Les entraînements terminés sont réutilisés par défaut ; `TRAIN_CLEAN=true`
-recalcule le 3DGS uniquement. Les sorties partielles du train nécessitent aussi
-ce réglage, après sauvegarde. L'exemple ne supprime jamais les images source.
+recalcule le 3DGS uniquement. Avec `PIPELINE_RESUME=true`, les sorties
+partielles Spirula sont reprises depuis un checkpoint complet si disponible ;
+sinon, les artefacts sont archivés et seul le bloc incomplet redémarre.
+L'exemple ne supprime jamais les images source.
 
 #### Masques terminés, SfM interrompu
 
@@ -358,6 +370,7 @@ Pour reprendre un workspace partiel, activer explicitement dans la configuration
 
 ```bash
 PIPELINE_RESUME=true
+REMOVE_LOCKS=false
 ```
 
 Puis relancer la même commande, après avoir arrêté les anciens jobs :
@@ -366,6 +379,20 @@ Puis relancer la même commande, après avoir arrêté les anciens jobs :
 bash "$GIT_ROOT/tools/images_to_splat/launch.sh" \
   /shared/home/NBellaiche/data/Paris9/config.sh
 ```
+
+Les verrous d'étape enregistrent l'hôte, le PID et l'identité du processus.
+`PIPELINE_RESUME=true` récupère automatiquement un verrou local abandonné,
+mais refuse un propriétaire encore actif, un enfant natif orphelin actif ou
+un verrou d'un autre hôte. Les anciens verrous vides sans propriétaire sont
+vérifiés via les processus locaux avant récupération. Un contenu inconnu
+dans un verrou n'est jamais supprimé.
+
+`REMOVE_LOCKS=true` n'est autorisé qu'avec `PIPELINE_RESUME=true` ; sinon la
+configuration est refusée avant toute suppression. Il force les verrous rencontrés, avec un
+avertissement, même si le propriétaire paraît actif ou distant. **À utiliser
+seulement après avoir arrêté tous les anciens jobs** : un verrou n'arrête
+pas le calcul qui le détenait et deux calculs peuvent corrompre leurs sorties.
+Remettre `REMOVE_LOCKS=false` après cette récupération.
 
 Ce mode ne désactive pas les validations : il vérifie pour **chaque image**
 le masque attendu (`<chemin relatif de l'image>.png`), son décodage PNG,
@@ -388,10 +415,21 @@ explicitement inconnue (pas une attribution rétroactive au modèle configuré).
 
 Le sparse SfM est lu intégralement : caméras, images, points et références
 observations/tracks doivent être cohérents. Si le sparse est absent ou invalide,
-le pipeline relance `sfm auto` dans le même workspace (features en mode `auto`,
-matches en mode `redo`) et valide sa nouvelle sortie avant le découpage.
+le sparse incomplet est archivé et le pipeline relance `sfm auto` dans le même
+workspace, avec features et matches en mode `auto` pour réutiliser les caches.
+Sa nouvelle sortie est validée avant le découpage.
 Il ne reprend pas une optimisation SfM à l'itération interrompue.
 Les erreurs Spirula continuent d'arrêter le job.
+
+Un géoréférencement ou un découpage interrompu est conservé dans une archive
+locale de dossier puis régénéré depuis le modèle global, sans refaire le SfM.
+Un checkpoint Spirula complet (`config.json`, `state.tar` avec état de reprise)
+est transmis à `spirula train --resume` ; cela exige une version native qui
+supporte cette option. Le checkpoint incomplet le plus récent est ignoré
+avec diagnostic au profit du dernier checkpoint complet. Sans état reprenable,
+les fichiers du bloc sont conservés dans `interrupted-*/splats`, puis ce bloc
+recommence. Les blocs dont le checkpoint final existe ne sont pas réentraînés ;
+un export interrompu peut ainsi repartir du checkpoint final.
 
 Une signature `inputs.json` absente peut être adoptée **avant** le recalage,
 le découpage et l'entraînement. Une signature ancienne peut être enrichie si

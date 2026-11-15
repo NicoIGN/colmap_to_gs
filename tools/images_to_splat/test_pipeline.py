@@ -1,9 +1,11 @@
 import json
+import io
 import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tarfile
 import unittest
 
 from PIL import Image
@@ -158,7 +160,9 @@ elif name == "colmap_split_blocks.py":
         block.mkdir(parents=True)
         for file in ("cameras.bin", "images.bin", "points3D.bin"):
             (block / file).write_bytes(b"colmap")
-    (output / "manifest.json").write_text(json.dumps({"blocks": list(range(count))}))
+    (output / "manifest.json").write_text(json.dumps({
+        "blocks": list(range(count)),
+        "parameters": {"overlap_max_fraction": float(get("--overlap-max-fraction"))}}))
 elif name == "export_ply.py":
     assert get("--filter-mode") == "off"
     Path(get("--out-ply")).write_bytes(b"raw-splat")
@@ -175,7 +179,7 @@ elif name == "filter_splats.py":
     output.with_suffix(".rejected.splat").write_bytes(b"rejected")
 elif name == "merge_splats.py":
     paths = args[1:args.index("--output")]
-    assert len(paths) == 4, paths
+    assert len(paths) == int(os.environ.get("SPLIT_NUM_BLOCKS", "4")), paths
     mode = os.environ["POSTPROCESS_SPARSE_BBOX_MODE"]
     if mode != "off":
         assert all(p.endswith(".bbox.splat") for p in paths), paths
@@ -207,7 +211,7 @@ if args[0] == "sfm":
         ("--ba-loss-param", "SFM_SP_BA_LOSS_PARAM"),
     ):
         assert get(flag) == os.environ[variable]
-    assert get("--reuse-matches") == "redo"
+    assert get("--reuse-matches") == ("auto" if os.environ.get("PIPELINE_RESUME") == "true" else "redo")
     if os.environ["SFM_MASKS"] == "on":
         if os.environ.get("PIPELINE_RESUME") == "true":
             assert Path(get("--feature-masks"), "root.jpg.png").is_file()
@@ -601,6 +605,156 @@ if "--wait" in args:
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
         self.assertIn("images.root.jpg.size", result.stdout + result.stderr)
         self.assertIn("images.root.jpg.sha256", result.stdout + result.stderr)
+
+    def test_partition_changes_keep_global_sfm_masks_and_georeferencing(self):
+        gpx = self.root / "trace.gpx"
+        gpx.write_text("<gpx/>")
+        self.append(f'PIPELINE_RESUME=true\nSPLIT_NUM_BLOCKS=2\nGEOREF_GPX_FILE="{gpx}"\nGEOREF_VIEW_PREFIX=h00')
+        self.assert_ok(self.run_pipeline())
+        retained = [
+            self.output / "sfm/sparse/0/points3D.bin",
+            self.output / "georef/0/points3D.bin",
+            self.output / "masks/root.jpg.png",
+        ]
+        stamps = {path: (path.stat().st_mtime_ns, path.read_bytes()) for path in retained}
+        # Simulate the old workspace signature which included partition settings.
+        marker = self.output / "inputs.json"
+        record = json.loads(marker.read_text())
+        record["settings"].update(SPLIT_NUM_BLOCKS="2", SPLIT_OVERLAP_MAX_FRACTION="0.10")
+        marker.write_text(json.dumps(record))
+        self.events.unlink()
+        self.append("SPLIT_NUM_BLOCKS=1")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        commands = self.commands()
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in commands))
+        self.assertFalse(any(command[0] == "generate_masks.py" for command in commands))
+        self.assertFalse(any(command[0] == "georef_colmap_from_gpx.py" for command in commands))
+        for path, state in stamps.items():
+            self.assertEqual((path.stat().st_mtime_ns, path.read_bytes()), state)
+        manifest = self.output / "blocks/manifest.json"
+        self.assertEqual(len(json.loads(manifest.read_text())["blocks"]), 1)
+        backup = next((self.output / "partition-backups").iterdir())
+        self.assertTrue((backup / "blocks/block_001/cameras.bin").is_file())
+        self.assertTrue((backup / "gs/block_000/splats").is_dir())
+        self.assertTrue((backup / "scene.splat").is_file())
+        self.assertFalse((self.output / "gs").exists())
+        self.assertFalse(any(key.startswith("SPLIT_") for key in
+                             json.loads(marker.read_text())["settings"]))
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(self.events.exists())
+
+    def test_partition_overlap_change_requires_prepare_before_training(self):
+        self.append("PIPELINE_RESUME=true\nSPLIT_NUM_BLOCKS=2")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.events.unlink()
+        self.append("SPLIT_OVERLAP_MAX_FRACTION=0.2")
+        refused = self.run_pipeline("--phase", "train-block", "--block", "0")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("relancer --phase prepare", refused.stdout + refused.stderr)
+        self.assertFalse(self.events.exists())
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+        self.assertTrue(any(command[0] == "colmap_split_blocks.py" for command in self.commands()))
+
+    def test_interrupted_partition_is_rebuilt_from_existing_sfm(self):
+        self.append("PIPELINE_RESUME=true")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        (self.output / "blocks/block_000/cameras.bin").unlink()
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+        self.assertTrue((self.output / "blocks/block_000/cameras.bin").is_file())
+        (self.output / "blocks/manifest.json").write_text('{"blocks":')
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+
+    def test_interrupted_sfm_preserves_feature_cache_and_archives_invalid_sparse(self):
+        _, sparse = self.interrupted_workspace()
+        cache = sparse.parents[1] / "features.cache"
+        cache.write_bytes(b"keep")
+        self.append("PIPELINE_RESUME=true")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(cache.read_bytes(), b"keep")
+        backup = next(sparse.parent.glob("0-interrupted-*"))
+        self.assertEqual((backup / "points3D.bin").read_bytes(), b"interrupted")
+        sfm = next(command for command in self.commands() if command[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[sfm.index("--reuse-matches") + 1], "auto")
+
+    def test_interrupted_georeferencing_restarts_without_reconstructing_sfm(self):
+        gpx = self.root / "trace.gpx"
+        gpx.write_text("<gpx/>")
+        self.append(f'PIPELINE_RESUME=true\nGEOREF_GPX_FILE="{gpx}"\nGEOREF_VIEW_PREFIX=h00')
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        (self.output / "georef/0/points3D.bin").unlink()
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+        self.assertTrue((self.output / "georef/0/points3D.bin").is_file())
+        self.assertTrue(any(self.output.glob("georef-interrupted-*")))
+
+    def test_resume_reclaims_empty_legacy_stage_locks(self):
+        self.append("PIPELINE_RESUME=true")
+        self.output.mkdir()
+        (self.output / ".all-all.lock").mkdir()
+        (self.output / ".colmap.lock").mkdir()
+        result = self.run_pipeline()
+        self.assert_ok(result)
+        self.assertIn("Verrou abandonné récupéré", result.stdout)
+        self.assertFalse((self.output / ".all-all.lock").exists())
+        self.assertFalse((self.output / ".colmap.lock").exists())
+
+    def test_remove_locks_requires_resume_before_touching_outputs(self):
+        self.append("REMOVE_LOCKS=true\nPIPELINE_RESUME=false")
+        result = self.run_pipeline()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("REMOVE_LOCKS=true exige PIPELINE_RESUME=true", result.stderr)
+        self.assertFalse(self.output.exists())
+
+    def test_resume_uses_latest_complete_training_checkpoint(self):
+        self.append("PIPELINE_RESUME=true\nSPLIT_NUM_BLOCKS=1")
+        self.env["TEST_FAIL_BLOCK"] = "block_000"
+        self.assertNotEqual(self.run_pipeline().returncode, 0)
+        self.env.pop("TEST_FAIL_BLOCK")
+        block = self.output / "gs/block_000"
+        splats = block / "splats"
+        checkpoint = splats / "step-000001000.ckpt"
+        checkpoint.mkdir(parents=True)
+        (splats / "config.json").write_text("{}")
+        with tarfile.open(checkpoint / "state.tar", "w") as archive:
+            for name, content in (("state.json", b'{"full_resume":1}'),
+                                  ("world.means.npy", b"world")):
+                member = tarfile.TarInfo(name)
+                member.size = len(content)
+                archive.addfile(member, io.BytesIO(content))
+        interrupted = splats / "step-000002000.ckpt"
+        interrupted.mkdir()
+        (interrupted / "state.tar").write_bytes(b"partial")
+        (block / ".training_lock").mkdir()
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline())
+        train = next(command for command in self.commands() if command[:2] == ["spirula", "train"])
+        self.assertEqual(train[train.index("--resume") + 1], str(checkpoint))
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+        self.assertTrue((checkpoint / "state.tar").is_file())
+        self.assertTrue((self.output / "scene.splat").is_file())
+
+    def test_resume_restarts_only_uncheckpointed_block_and_preserves_partial_artifacts(self):
+        self.append("PIPELINE_RESUME=true\nSPLIT_NUM_BLOCKS=1")
+        self.env["TEST_FAIL_BLOCK"] = "block_000"
+        self.assertNotEqual(self.run_pipeline().returncode, 0)
+        self.env.pop("TEST_FAIL_BLOCK")
+        splats = self.output / "gs/block_000/splats"
+        splats.mkdir()
+        (splats / "partial.tmp").write_bytes(b"keep")
+        self.events.unlink()
+        self.assert_ok(self.run_pipeline())
+        train = next(command for command in self.commands() if command[:2] == ["spirula", "train"])
+        self.assertNotIn("--resume", train)
+        self.assertFalse(any(command[:2] == ["spirula", "sfm"] for command in self.commands()))
+        saved = next(splats.parent.glob("interrupted-*/splats/partial.tmp"))
+        self.assertEqual(saved.read_bytes(), b"keep")
 
     def test_signature_diagnostics_report_added_and_removed_settings_without_adoption(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

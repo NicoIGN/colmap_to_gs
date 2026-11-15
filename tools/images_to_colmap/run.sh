@@ -18,15 +18,16 @@ if [[ "$COLMAP_METHOD" == nerfstudio ]]; then
 fi
 mkdir -p "$OUTPUT_DIR/logs"
 lock="$OUTPUT_DIR/.colmap.lock"
-mkdir "$lock" 2>/dev/null || die "Production COLMAP déjà verrouillée : $lock"
-trap 'rmdir "$lock"' EXIT
+lock_helper="$repo_root/tools/libs/python/pipeline_lock.py"
+"$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --resume "$PIPELINE_RESUME" --ignore "$REMOVE_LOCKS" --workspace "$OUTPUT_DIR"
+trap '"$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --release' EXIT
 source "$repo_root/tools/libs/scripts/pipeline_report.sh"
 pipeline_report_start "$OUTPUT_DIR" "images_to_colmap"
 colmap_exit() {
   local status=$?
   trap - EXIT
   pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
-  rmdir "$lock"
+  "$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --release
   exit "$status"
 }
 trap colmap_exit EXIT
@@ -81,6 +82,7 @@ prepare() {
         [[ ! -e "$OUTPUT_DIR/$downstream" ]] ||
           die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
       done
+      "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0" --archive-sparse
     fi
     begin_stage "reconstruction COLMAP ($COLMAP_METHOD)"
     bash "$repo_root/tools/images_to_colmap/reconstruct.sh"

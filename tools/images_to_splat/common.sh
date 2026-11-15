@@ -84,6 +84,7 @@ load_config() {
     done
   fi
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
+  REMOVE_LOCKS="${REMOVE_LOCKS:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
   SFM_COLMAP_BIN="${SFM_COLMAP_BIN:-colmap}"
@@ -195,6 +196,10 @@ load_config() {
   fi
   config_choice SFM_IMAGES_RECURSIVE "$SFM_IMAGES_RECURSIVE" 'true|false'
   config_choice PIPELINE_RESUME "$PIPELINE_RESUME" 'true|false'
+  config_choice REMOVE_LOCKS "$REMOVE_LOCKS" 'true|false'
+  if [[ "$REMOVE_LOCKS" == true && "$PIPELINE_RESUME" != true ]]; then
+    config_error "REMOVE_LOCKS=true exige PIPELINE_RESUME=true."
+  fi
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
   config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
   config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'

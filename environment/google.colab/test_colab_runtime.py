@@ -184,6 +184,7 @@ class ColabRuntimeTests(unittest.TestCase):
         namespace.update(ACCEPT_SAM_LICENSE=True, RUN=self.root,
                          OUTPUT=self.root / "output", FRAMES=self.root / "frames",
                          SOURCE_IMAGES=self.root / "frames", COLMAP_ARCHIVE="",
+                         REMOVE_LOCKS="false", PIPELINE_RESUME="true",
                          TRAIN_NUM_ITER=1234, TRAIN_SP_CAP_MAX=54321, SPLIT_NUM_BLOCKS=1,
                          SPIRULA_ROOT=self.root / "spirula", SPIRULA_BIN=self.root / "spirula/bin",
                          SAM_MODEL=self.root / "sam.ggml", RUN_NAME="video", PHASE="all")
@@ -355,11 +356,22 @@ class ColabRuntimeTests(unittest.TestCase):
                               in_env=lambda command: command, run=lambda command, *args, **kw: commands.append(command)))
         self.assertEqual(commands, [["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "all"]])
 
+    def test_remove_locks_requires_resume_before_creating_workspace(self):
+        notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
+        source = "".join(next(cell for cell in notebook["cells"]
+                              if cell["metadata"]["id"] == "parameters")["source"])
+        with patch.dict(os.environ, {"PIPELINE_RESUME": "false", "REMOVE_LOCKS": "true"}, clear=True):
+            with patch.object(Path, "mkdir") as mkdir:
+                with self.assertRaisesRegex(ValueError, "exige PIPELINE_RESUME=true"):
+                    exec(source, {})
+                mkdir.assert_not_called()
+
     def test_first_cell_reads_training_environment_and_defaults_to_one_block(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
         tree = ast.parse("".join(next(cell for cell in notebook["cells"]
                                     if cell["metadata"]["id"] == "parameters")["source"]))
-        names = {"TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SPLIT_NUM_BLOCKS", "COLMAP_ARCHIVE"}
+        names = {"TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SPLIT_NUM_BLOCKS", "COLMAP_ARCHIVE",
+                 "PIPELINE_RESUME", "REMOVE_LOCKS"}
         assignments = [node for node in tree.body if isinstance(node, ast.Assign)
                        and any(isinstance(target, ast.Name) and target.id in names for target in node.targets)]
         code = compile(ast.Module(body=assignments, type_ignores=[]), "parameters", "exec")
@@ -368,6 +380,8 @@ class ColabRuntimeTests(unittest.TestCase):
             exec(code, namespace)
             self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 1)
             self.assertEqual(namespace["COLMAP_ARCHIVE"], "")
+            self.assertEqual(namespace["REMOVE_LOCKS"], "false")
+            self.assertEqual(namespace["PIPELINE_RESUME"], "true")
         with patch.dict(os.environ, TRAIN_NUM_ITER="9876", TRAIN_SP_CAP_MAX="456789",
                         SPLIT_NUM_BLOCKS="3", COLMAP_ARCHIVE="/drive/model.zip"):
             exec(code, namespace)

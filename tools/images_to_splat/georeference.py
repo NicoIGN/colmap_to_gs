@@ -2,6 +2,7 @@
 """Run and validate the existing GPX alignment before block partitioning."""
 
 import argparse
+from datetime import datetime, timezone
 import json
 import math
 import os
@@ -56,6 +57,16 @@ def main():
     root = output / "georef"
     marker = root / ".done"
     if args.phase == "prepare":
+        complete = (root / "georef_summary.json").is_file() and all(
+            (root / "0" / name).is_file() and (root / "0" / name).stat().st_size
+            for name in ("cameras.bin", "images.bin", "points3D.bin", "georef_stats.json")
+        )
+        if (not complete and root.exists() and any(root.iterdir())
+                and os.environ.get("PIPELINE_RESUME") == "true"):
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+            backup = output / f"georef-interrupted-{stamp}"
+            root.rename(backup)
+            print(f"[reprise] Géoréférencement incomplet conservé : {backup}", flush=True)
         if not (root / "georef_summary.json").exists():
             if root.exists() and any(root.iterdir()):
                 raise ValueError(

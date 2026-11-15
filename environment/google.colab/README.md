@@ -36,6 +36,20 @@ remplacés. Une extraction interrompue dans le nouveau notebook ne publie pas
 de frames partielles. Les signatures du pipeline continuent de protéger
 les masques, le SfM et les blocs existants.
 
+Le nombre de blocs et leur recouvrement sont indépendants du SfM global.
+Les changer conserve le SfM et son géoréférencement ; seuls le découpage
+et les résultats d'entraînement associés sont archivés puis recalculés.
+Ne pas déplacer `output/` pour ce seul changement.
+
+La première cellule expose également `PIPELINE_RESUME` (`'true'` par défaut)
+et `REMOVE_LOCKS` (`'false'` par défaut).
+La reprise récupère normalement les verrous abandonnés sans intervention.
+Après avoir arrêté tous les anciens calculs, mettre `REMOVE_LOCKS = 'true'`
+permet de forcer les verrous encore bloquants ; remettre `'false'` ensuite.
+Ce forçage exige `PIPELINE_RESUME=true` (déjà activé dans le notebook).
+Ce forçage n'arrête aucun processus et ne doit pas servir à lancer deux
+calculs simultanés sur le même run.
+
 `SPIRULA_LOCAL_ROOT` facultatif désigne une installation Spirula locale
 existante contenant le binaire `SPIRULA_BINARY_RELATIVE` et le modèle SAM.
 Dans ce cas, l'archive Spirula Drive n'est pas requise. Sinon, l'extraction
