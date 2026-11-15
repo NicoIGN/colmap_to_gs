@@ -1,0 +1,67 @@
+# Notebook vidéo Colab T4
+
+Ouvrir `colmap_to_gs_video_T4.ipynb` dans Colab, sélectionner un runtime GPU et
+exécuter les cellules dans l'ordre. Renseigner la vidéo, l'archive Spirula exacte,
+le nom de run et l'acceptation personnelle de la licence SAM.
+
+Le notebook utilise `review_copilot` par défaut. Le YAML et le helper
+`colab_runtime.py` doivent être présents sur la branche sélectionnée.
+Le helper affiche stdout/stderr en direct, y compris les progressions avec
+retours chariot, et conserve un log local distinct par commande. Micromamba
+utilise `--no-capture-output` : une boucle de lecture seule ne suffit pas si
+Micromamba capture les sorties de son enfant. Un programme natif peut néanmoins
+tamponner lui-même ses messages.
+
+## Disque local et Drive
+
+`/content/colmap_to_gs_work/<RUN_NAME>/` contient vidéo locale, frames,
+configuration, logs et `output/` (masques, SfM, entraînement, exports).
+Le traitement n'écrit aucun intermédiaire dans Drive. La vidéo est copiée une
+seule fois et vérifiée par SHA256. Une archive Spirula est extraite dans
+`/content/colmap_to_gs_work/assets/`, identifiée par son hash, sans effacer une
+installation préexistante.
+
+Après succès, une sauvegarde est créée si `SAVE_ON_SUCCESS=True`. Après échec
+ou interruption, lancer la cellule de sauvegarde manuelle, une fois les
+processus arrêtés. Elle crée localement une archive compressée, matérialise les
+liens internes aux images, copie un fichier horodaté dans Drive puis vérifie son
+SHA256. Les anciennes archives sont conservées. Prévoir la place pour le run
+et son archive ; l'archivage peut être long pour de gros checkpoints.
+
+`/content` est éphémère. Il n'y a pas de sauvegarde continue, ni de restauration
+automatique des signatures et des liens après changement de runtime.
+Les archives permettent de récupérer les données ; elles ne garantissent pas
+une reprise directe du pipeline. Dans le même runtime, garder le run local et
+`PIPELINE_RESUME=true`. Pour des entrées/réglages différents, choisir un nouveau
+RUN_NAME. Ne pas copier le vieux workspace Drive dans le nouveau run local :
+les chemins et les liens peuvent ne plus correspondre.
+
+## CUDA et Vulkan sont deux contrôles distincts
+
+`nvidia-smi` et PyTorch CUDA ne prouvent pas que Spirula peut utiliser Vulkan.
+Le notebook vérifie `vulkaninfo --summary` dans le système puis dans le même
+environnement Conda que le calcul, exige un GPU NVIDIA et s'arrête avant
+l'extraction en cas d'échec. `libvulkan1` est le chargeur, pas le pilote NVIDIA.
+Un ZIP de Spirula ne transporte pas le pilote du runtime.
+
+Pour `VK_ERROR_INCOMPATIBLE_DRIVER`, inspecter les ICD et les variables affichés
+dans la cellule système. Installer arbitrairement un autre pilote NVIDIA dans
+Colab peut créer une incompatibilité avec le pilote hôte ; le notebook ne le
+fait pas. La présence de Vulkan NVIDIA ne garantit pas toutes les extensions
+nécessaires au binaire Spirula : les erreurs natives restent bloquantes.
+
+Le YAML est réutilisé seulement si son SHA256 correspond au marqueur local.
+Un environnement ancien non marqué ou un YAML modifié impose un autre
+`MAMBA_ENV` dans la cellule environnement. Le nom indiqué par `--name` remplace
+celui du YAML ; les dépendances restent celles du fichier.
+
+## Validation locale
+
+```bash
+cd environment/google.colab
+python -m unittest test_colab_runtime
+```
+
+Les tests couvrent l'affichage avant fin du processus, les logs d'échec,
+l'extraction ZIP sûre/réutilisable, les sauvegardes et la syntaxe des cellules.
+La disponibilité réelle de Vulkan sur Colab doit être vérifiée dans le runtime.
