@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import struct
 import sys
 import tarfile
 import tempfile
@@ -12,7 +13,10 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from colab_runtime import configure_nvidia_vulkan, restore_spirula, run_live, save_colmap_zip, save_snapshot
+from colab_runtime import (
+    configure_nvidia_vulkan, ensure_conda_environment, prepare_video_frames,
+    restore_colmap, restore_spirula, run_live, save_colmap_zip, save_snapshot, sha256,
+)
 
 
 class ColabRuntimeTests(unittest.TestCase):
@@ -78,6 +82,9 @@ class ColabRuntimeTests(unittest.TestCase):
         self.assertTrue(binary.stat().st_mode & 0o111)
         self.assertEqual((root / "models/sam3.ggml").read_text(), "model")
         self.assertEqual(restore_spirula(archive, assets, "build_vulkan/spirula"), (root, binary))
+        archive.unlink()
+        self.assertEqual(restore_spirula(archive, assets, "build_vulkan/spirula", existing_root=root),
+                         (root, binary))
 
     def test_unsafe_or_ambiguous_zip_is_refused(self):
         for entries in (["../escaped"], ["a/build/spirula", "b/build/spirula"]):
@@ -176,6 +183,8 @@ class ColabRuntimeTests(unittest.TestCase):
         self.assertIs(namespace["ACCEPT_SAM_LICENSE"], True)
         namespace.update(ACCEPT_SAM_LICENSE=True, RUN=self.root,
                          OUTPUT=self.root / "output", FRAMES=self.root / "frames",
+                         SOURCE_IMAGES=self.root / "frames", COLMAP_ARCHIVE="",
+                         TRAIN_NUM_ITER=1234, TRAIN_SP_CAP_MAX=54321, SPLIT_NUM_BLOCKS=1,
                          SPIRULA_ROOT=self.root / "spirula", SPIRULA_BIN=self.root / "spirula/bin",
                          SAM_MODEL=self.root / "sam.ggml", RUN_NAME="video", PHASE="all")
         with contextlib.redirect_stdout(io.StringIO()):
@@ -189,6 +198,205 @@ class ColabRuntimeTests(unittest.TestCase):
             ["bash", "-c", 'source "$1"; bash -c \'printf "%s" "$SS_NN_LOG"\'', "_", str(config)],
             text=True)
         self.assertEqual(inherited, "1")
+        for key, value in (("TRAIN_NUM_ITER", "1234"), ("TRAIN_SP_CAP_MAX", "54321"),
+                           ("SPLIT_NUM_BLOCKS", "1")):
+            self.assertIn(f"{key}={value}\n", config.read_text())
+        namespace["COLMAP_ARCHIVE"] = "/drive/colmap.zip"
+        namespace["SOURCE_IMAGES"] = self.root / "colmap-input/images"
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(source, namespace)
+        self.assertIn("SFM_MASKS=off\n", config.read_text())
+        self.assertIn(str(namespace["SOURCE_IMAGES"]), config.read_text())
+
+    def test_conda_reuses_matching_env_and_updates_unmarked_without_erasing(self):
+        prefix = self.root / "env"
+        yaml = self.root / "env.yml"
+        yaml.write_text("dependencies: [python]\n")
+        def create_env(*args):
+            (prefix / "conda-meta").mkdir(parents=True, exist_ok=True)
+            (prefix / "conda-meta/history").touch()
+        with patch("colab_runtime.run_live", side_effect=create_env) as run, \
+                contextlib.redirect_stdout(io.StringIO()):
+            ensure_conda_environment("micromamba", "gsplat", prefix, yaml, self.root)
+            self.assertEqual(run.call_args.args[0][1], "create")
+            ensure_conda_environment("micromamba", "gsplat", prefix, yaml, self.root)
+            self.assertEqual(run.call_count, 1)
+            (prefix / ".colab-yaml.sha256").unlink()
+            keep = prefix / "keep"
+            keep.touch()
+            ensure_conda_environment("micromamba", "gsplat", prefix, yaml, self.root)
+            self.assertEqual(run.call_args.args[0][1:3], ["env", "update"])
+            self.assertTrue(keep.exists())
+            yaml.write_text("dependencies: [python, numpy]\n")
+            run.side_effect = subprocess.CalledProcessError(1, ["micromamba"])
+            with self.assertRaises(subprocess.CalledProcessError):
+                ensure_conda_environment("micromamba", "gsplat", prefix, yaml, self.root)
+            self.assertNotEqual((prefix / ".colab-yaml.sha256").read_text().strip(), sha256(yaml))
+
+    def test_video_frames_are_reused_and_changed_inputs_rejected(self):
+        video = self.root / "video.mov"
+        video.write_bytes(b"video")
+        frames = self.root / "frames"
+        def extract(command, *_):
+            folder = Path(command[command.index("--out") + 1])
+            (folder / "frame.jpg").write_bytes(b"frame")
+        with patch("colab_runtime.run_live", side_effect=extract) as run, \
+                contextlib.redirect_stdout(io.StringIO()):
+            prepare_video_frames(video, frames, 1, ["extract"], self.root)
+            stamp = (frames / "frame.jpg").stat().st_mtime_ns
+            prepare_video_frames(video, frames, 1, ["extract"], self.root)
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual((frames / "frame.jpg").stat().st_mtime_ns, stamp)
+            with self.assertRaisesRegex(ValueError, "modifiés"):
+                prepare_video_frames(video, frames, 2, ["extract"], self.root)
+            (self.root / ".video-frames.json").unlink()
+            (self.root / "output").mkdir()
+            (self.root / "output/inputs.json").write_text(json.dumps({
+                "source": str(frames.resolve()),
+                "images": [["frame.jpg", str(frames / "frame.jpg"), 5, sha256(frames / "frame.jpg")]],
+            }))
+            prepare_video_frames(video, frames, 1, ["extract"], self.root)
+            self.assertEqual(run.call_count, 2)
+            prepare_video_frames(video, frames, 1, ["extract"], self.root)
+            self.assertEqual(run.call_count, 2)
+
+    def test_interrupted_frame_extraction_does_not_leave_partial_frames(self):
+        video = self.root / "video.mov"
+        video.write_bytes(b"video")
+        frames = self.root / "frames"
+        def fail(command, *_):
+            folder = Path(command[command.index("--out") + 1])
+            (folder / "partial.jpg").write_bytes(b"partial")
+            raise subprocess.CalledProcessError(1, command)
+        with patch("colab_runtime.run_live", side_effect=fail):
+            with self.assertRaises(subprocess.CalledProcessError):
+                prepare_video_frames(video, frames, 1, ["extract"], self.root)
+        self.assertEqual(list(frames.iterdir()), [])
+        self.assertFalse((self.root / ".video-frames.json").exists())
+
+    def colmap_archive(self, name="colmap.zip", image_name="frame.jpg", include_image=True):
+        archive = self.root / name
+        model = {
+            "cameras": struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1),
+            "images": (struct.pack("<QI7dI", 1, 1, 1, 0, 0, 0, 0, 0, 0, 1)
+                       + image_name.encode() + b"\0" + struct.pack("<Qddq", 1, .5, .5, 1)),
+            "points3D": struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, .1, 1, 1, 0),
+        }
+        with zipfile.ZipFile(archive, "w") as zipped:
+            for key, data in model.items():
+                zipped.writestr(f"dataset/sparse/0/{key}.bin", data)
+            if include_image:
+                # Tiny valid PPM, so the real selection pipeline can read it.
+                zipped.writestr("dataset/images/frame.jpg", b"P6\n2 2\n255\n" + b"\x80" * 12)
+            else:
+                zipped.writestr("dataset/images/", b"")
+        return archive
+
+    def test_colmap_restore_validates_reuses_and_rejects_replaced_archive(self):
+        archive = self.colmap_archive()
+        run = self.root / "run"
+        validator = [sys.executable, str(Path(__file__).resolve().parents[2]
+                                       / "tools/images_to_splat/resume.py")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            images = restore_colmap(archive, run, validator, self.root)
+            model = run / "output/sfm/sparse/0"
+            before = (model / "points3D.bin").stat().st_mtime_ns
+            self.assertEqual(restore_colmap(archive, run, validator, self.root), images)
+            self.assertEqual((model / "points3D.bin").stat().st_mtime_ns, before)
+            self.assertTrue((images / "frame.jpg").is_file())
+            archive.write_bytes(b"different")
+            with self.assertRaisesRegex(ValueError, "ZIP COLMAP modifié"):
+                restore_colmap(archive, run, validator, self.root)
+            self.assertTrue((model / "points3D.bin").is_file())
+
+    def test_imported_colmap_prepares_one_block_twice_without_running_spirula(self):
+        project = Path(__file__).resolve().parents[2]
+        archive = self.colmap_archive()
+        run = self.root / "run"
+        validator = [sys.executable, str(project / "tools/images_to_splat/resume.py")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            images = restore_colmap(archive, run, validator, self.root)
+        # A native reconstruction would fail, proving that the existing model is used.
+        spirula = self.root / "spirula"
+        spirula.write_text("#!/bin/sh\nexit 91\n")
+        spirula.chmod(0o755)
+        config = run / "config.sh"
+        import shlex
+        settings = dict(
+            SFM_IMAGES_DIR=str(images), OUTPUT_DIR=str(run / "output"),
+            SPIRULA_BIN=str(spirula), PYTHON_BIN=sys.executable,
+            TRAIN_MASKS_SPIRULA_MODEL=str(self.root / "unused.ggml"),
+            SFM_MASKS="off", TRAIN_MASKS="off", PIPELINE_RESUME="true",
+            SPLIT_NUM_BLOCKS="1",
+        )
+        config.write_text("".join(f"{key}={shlex.quote(value)}\n" for key, value in settings.items()))
+        command = ["bash", str(project / "scripts/images_to_3dgs.sh"), str(config),
+                   "--phase", "prepare"]
+        for _ in range(2):
+            result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            with contextlib.redirect_stdout(io.StringIO()):
+                restore_colmap(archive, run, validator, self.root)
+        self.assertTrue((run / "output/blocks/block_000/cameras.bin").is_file())
+        self.assertTrue((run / "output/.prepare_done").is_file())
+        with contextlib.redirect_stdout(io.StringIO()):
+            exported = save_colmap_zip(run / "output", self.root / "drive")
+            restored = restore_colmap(exported, self.root / "roundtrip", validator, self.root)
+            snapshot = save_snapshot(run, self.root / "drive")
+        self.assertEqual((restored / "frame.jpg").read_bytes(), (images / "frame.jpg").read_bytes())
+        self.assertTrue(snapshot.is_file())
+        notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
+        source = "".join(next(cell for cell in notebook["cells"]
+                              if cell["metadata"]["id"] == "run")["source"])
+        commands = []
+        with contextlib.redirect_stdout(io.StringIO()):
+            exec(source, dict(COLMAP_ARCHIVE=str(archive), CONFIG=config, PHASE="all",
+                              PROJECT=project, SAVE_ON_SUCCESS=False,
+                              in_env=lambda command: command, run=lambda command, *args, **kw: commands.append(command)))
+        self.assertEqual(commands, [["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "all"]])
+
+    def test_first_cell_reads_training_environment_and_defaults_to_one_block(self):
+        notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
+        tree = ast.parse("".join(next(cell for cell in notebook["cells"]
+                                    if cell["metadata"]["id"] == "parameters")["source"]))
+        names = {"TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SPLIT_NUM_BLOCKS", "COLMAP_ARCHIVE"}
+        assignments = [node for node in tree.body if isinstance(node, ast.Assign)
+                       and any(isinstance(target, ast.Name) and target.id in names for target in node.targets)]
+        code = compile(ast.Module(body=assignments, type_ignores=[]), "parameters", "exec")
+        with patch.dict(os.environ, {}, clear=True):
+            namespace = dict(os=os)
+            exec(code, namespace)
+            self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 1)
+            self.assertEqual(namespace["COLMAP_ARCHIVE"], "")
+        with patch.dict(os.environ, TRAIN_NUM_ITER="9876", TRAIN_SP_CAP_MAX="456789",
+                        SPLIT_NUM_BLOCKS="3", COLMAP_ARCHIVE="/drive/model.zip"):
+            exec(code, namespace)
+            self.assertEqual(namespace["TRAIN_NUM_ITER"], 9876)
+            self.assertEqual(namespace["TRAIN_SP_CAP_MAX"], 456789)
+            self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 3)
+            self.assertEqual(namespace["COLMAP_ARCHIVE"], "/drive/model.zip")
+
+    def test_colmap_restore_rejects_missing_images_unsafe_paths_and_existing_workspace(self):
+        validator = [sys.executable, str(Path(__file__).resolve().parents[2]
+                                       / "tools/images_to_splat/resume.py")]
+        with contextlib.redirect_stdout(io.StringIO()):
+            for index, name in enumerate(("missing.jpg", "../../outside.jpg")):
+                archive = self.colmap_archive(f"missing-{index}.zip", name)
+                run = self.root / f"bad-run-{index}"
+                with self.assertRaises(subprocess.CalledProcessError):
+                    restore_colmap(archive, run, validator, self.root)
+                self.assertFalse((run / "output").exists())
+            archive = self.colmap_archive()
+            with zipfile.ZipFile(archive, "a") as zipped:
+                zipped.writestr("../escaped", "no")
+            with self.assertRaisesRegex(ValueError, "non sûre"):
+                restore_colmap(archive, self.root / "unsafe", validator, self.root)
+            archive = self.colmap_archive("fresh.zip")
+            output = self.root / "existing/output"
+            (output / "sfm").mkdir(parents=True)
+            with self.assertRaisesRegex(ValueError, "déjà utilisé"):
+                restore_colmap(archive, output.parent, validator, self.root)
+        self.assertFalse((self.root / "escaped").exists())
 
     def test_nvidia_configuration_exports_both_manifests_only_after_validation(self):
         libraries = self.root / "libraries"

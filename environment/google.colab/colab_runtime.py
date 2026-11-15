@@ -92,21 +92,169 @@ def sha256(path):
     return digest.hexdigest()
 
 
-def restore_spirula(archive, assets, binary_relative):
+def ensure_conda_environment(mamba, name, prefix, yaml, log_dir):
+    """Reuse a matching environment or reconcile an existing unmarked one."""
+    prefix, yaml = Path(prefix), Path(yaml)
+    stamp = prefix / ".colab-yaml.sha256"
+    fingerprint = sha256(yaml)
+    if prefix.exists():
+        if not (prefix / "conda-meta/history").is_file():
+            raise ValueError(f"Dossier existant sans environnement Conda : {prefix}")
+        if stamp.is_file() and stamp.read_text().strip() == fingerprint:
+            print(f"[Conda] Environnement inchangé réutilisé : {prefix}", flush=True)
+            return
+        print("[Conda] Environnement existant : synchronisation avec le YAML.", flush=True)
+        command = ["env", "update"]
+    else:
+        command = ["create"]
+    run_live([str(mamba), *command, "--yes", "--name", name, "--file", str(yaml)],
+             log_dir, "conda-environment")
+    stamp.write_text(fingerprint + "\n")
+
+
+def _file_manifest(folder):
+    return {path.relative_to(folder).as_posix(): sha256(path)
+            for path in sorted(folder.rglob("*")) if path.is_file()}
+
+
+def prepare_video_frames(video, frames, count, extractor, log_dir):
+    """Keep verified frames on rerun instead of invoking the resetting extractor."""
+    video, frames = Path(video), Path(frames)
+    marker = frames.parent / ".video-frames.json"
+    source = {"video_sha256": sha256(video), "num_frames": count}
+    if marker.is_file():
+        record = json.loads(marker.read_text())
+        if record.get("source") != source or record.get("files") != _file_manifest(frames):
+            raise ValueError("Vidéo, NUM_FRAMES ou frames modifiés : choisir un nouveau RUN_NAME.")
+        if not record["files"]:
+            raise ValueError("Extraction enregistrée vide : choisir un nouveau RUN_NAME.")
+        print("[vidéo] Frames vérifiées : extraction réutilisée.", flush=True)
+        return
+    if frames.exists() and any(frames.iterdir()):
+        inputs = frames.parent / "output/inputs.json"
+        previous = json.loads(inputs.read_text()) if inputs.is_file() else {}
+        signed = {image[0]: image[3] for image in previous.get("images", [])}
+        if (previous.get("source") != str(frames.resolve()) or not signed
+                or signed != _file_manifest(frames)):
+            raise ValueError("Frames existantes non vérifiables : choisir un nouveau RUN_NAME.")
+        print("[vidéo] Anciennes frames signées : vérification unique contre la vidéo.", flush=True)
+        with tempfile.TemporaryDirectory(prefix="verify-frames-", dir=frames.parent) as temporary:
+            run_live([*map(str, extractor), "--out", temporary, "--num-frames", str(count),
+                      "--video", str(video)], log_dir, "verify-legacy-frames")
+            if signed != _file_manifest(Path(temporary)):
+                raise ValueError("Les frames existantes ne correspondent pas à la vidéo : "
+                                 "choisir un nouveau RUN_NAME.")
+        marker.write_text(json.dumps({"source": source, "files": signed}, indent=2))
+        return
+    frames.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="video-extract-", dir=frames.parent) as temporary:
+        staged = Path(temporary) / "frames"
+        staged.mkdir()
+        run_live([*map(str, extractor), "--out", str(staged), "--num-frames", str(count),
+                  "--video", str(video)], log_dir, "video-frames")
+        files = _file_manifest(staged)
+        if not files:
+            raise ValueError(f"Aucune frame extraite : {frames}")
+        frames.rmdir()
+        staged.rename(frames)
+    marker.write_text(json.dumps({"source": source, "files": files}, indent=2))
+
+
+def restore_colmap(archive, run_dir, validator, log_dir):
+    """Import one immutable COLMAP dataset and seed only a fresh SfM workspace."""
+    archive, run_dir = Path(archive), Path(run_dir)
+    digest = sha256(archive)
+    destination = run_dir / "colmap-input"
+    output = run_dir / "output"
+    marker = run_dir / ".colmap-import.json"
+    if marker.is_file():
+        record = json.loads(marker.read_text())
+        if record.get("archive_sha256") != digest:
+            raise ValueError("ZIP COLMAP modifié : choisir un nouveau RUN_NAME.")
+        if record.get("files") != _file_manifest(destination):
+            raise ValueError("Import COLMAP local modifié ou incomplet : choisir un nouveau RUN_NAME.")
+        print("[COLMAP] Import local vérifié et réutilisé.", flush=True)
+    else:
+        if destination.exists() or any((output / name).exists() for name in
+                                     ("inputs.json", "images", "sfm", "blocks", "gs", "gs-nerfstudio")):
+            raise ValueError("Workspace déjà utilisé sans cet import : choisir un nouveau RUN_NAME.")
+        run_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="colmap-import-", dir=run_dir) as temporary:
+            temporary = Path(temporary)
+            local_archive = temporary / "colmap.zip"
+            print("[COLMAP] Copie du ZIP Drive vers le disque local...", flush=True)
+            shutil.copyfile(archive, local_archive)
+            if sha256(local_archive) != digest:
+                raise OSError("Copie du ZIP COLMAP non conforme.")
+            root = temporary / "extracted"
+            root.mkdir()
+            with zipfile.ZipFile(local_archive) as zipped:
+                names = set()
+                for entry in zipped.infolist():
+                    path = (root / entry.filename).resolve()
+                    if (not path.is_relative_to(root.resolve()) or path in names
+                            or (entry.external_attr >> 16) & 0o170000 == 0o120000):
+                        raise ValueError(f"Entrée ZIP non sûre : {entry.filename}")
+                    names.add(path)
+                zipped.extractall(root)
+            candidates = [path for path in root.rglob("sparse/0")
+                          if (path.parent.parent / "images").is_dir()
+                          and all((path / f"{name}.bin").is_file()
+                                  for name in ("cameras", "images", "points3D"))]
+            if len(candidates) != 1:
+                raise ValueError("ZIP COLMAP : un unique sparse/0 binaire avec images/ est requis.")
+            model = candidates[0]
+            images = model.parent.parent / "images"
+            run_live([*map(str, validator), str(model), "--images", str(images)],
+                     log_dir, "colmap-import-validation")
+            payload = temporary / "payload"
+            shutil.copytree(model, payload / "sparse/0")
+            shutil.copytree(images, payload / "images")
+            record = {"archive_sha256": digest, "files": _file_manifest(payload)}
+            payload.rename(destination)
+            marker.write_text(json.dumps(record, indent=2))
+    model = destination / "sparse/0"
+    images = destination / "images"
+    run_live([*map(str, validator), str(model), "--images", str(images)],
+             log_dir, "colmap-resume-validation")
+    target = output / "sfm/sparse/0"
+    if target.exists():
+        if _file_manifest(target) != _file_manifest(model):
+            raise ValueError("Sparse du workspace différent du ZIP : choisir un nouveau RUN_NAME.")
+    else:
+        if (output / "inputs.json").exists():
+            raise ValueError("Sparse importé supprimé après préparation : choisir un nouveau RUN_NAME.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="colmap-seed-", dir=target.parent) as temporary:
+            staged = Path(temporary) / "0"
+            shutil.copytree(model, staged)
+            staged.rename(target)
+    return images
+
+
+def restore_spirula(archive, assets, binary_relative, existing_root=None):
     """Use an immutable local extraction, without deleting an existing installation."""
+    binary_relative = Path(binary_relative)
+    if binary_relative.is_absolute() or ".." in binary_relative.parts:
+        raise ValueError("Chemin binaire relatif sans '..' requis")
+    if existing_root:
+        root = Path(existing_root).resolve()
+        binary = root / binary_relative
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise ValueError(f"Binaire Spirula local absent ou non exécutable : {binary}")
+        print(f"[Spirula] Installation locale réutilisée : {root}", flush=True)
+        return root, binary
     archive, assets = Path(archive), Path(assets)
     if not archive.is_file():
         raise FileNotFoundError(archive)
     digest = sha256(archive)
     destination = assets / f"spirula-{digest[:16]}"
-    binary_relative = Path(binary_relative)
-    if binary_relative.is_absolute() or ".." in binary_relative.parts:
-        raise ValueError("Chemin binaire relatif sans '..' requis")
     binary = destination / binary_relative
     if destination.exists():
         if not binary.is_file():
             raise ValueError(f"Extraction locale incomplète : {destination}")
         binary.chmod(binary.stat().st_mode | 0o111)
+        print(f"[Spirula] Extraction existante réutilisée : {destination}", flush=True)
         return destination, binary
     assets.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="spirula-extract-", dir=assets) as temporary:

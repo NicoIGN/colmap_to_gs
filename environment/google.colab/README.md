@@ -17,6 +17,59 @@ enregistre l'acceptation dans le noyau courant. L'exécuter seulement après
 lecture et acceptation personnelle de la licence SAM. Après redémarrage,
 réexécuter cette cellule ; aucun `export` Bash n'est nécessaire.
 
+## Paramètres et réexécution
+
+La première cellule lit les variables d'environnement `TRAIN_NUM_ITER`
+(12000), `TRAIN_SP_CAP_MAX` (500000 splats maximum **par bloc**),
+`SPLIT_NUM_BLOCKS` (**1** par défaut), `MAMBA_ENV` (`gsplat`) et `RUN_NAME`
+(`video_run`). On peut aussi modifier directement leurs valeurs Python.
+Le notebook transmet les paramètres d'entraînement à la configuration Bash,
+avec `export SS_NN_LOG=1`. Pour d'autres données ou réglages d'un entraînement
+déjà commencé, choisir un nouveau `RUN_NAME` plutôt que réutiliser ses checkpoints.
+
+À paramètres identiques, **Tout exécuter** réutilise l'environnement Conda,
+l'extraction Spirula, la vidéo locale et les frames vérifiées par SHA256.
+Les frames ne sont plus effacées à chaque lancement. Une ancienne extraction
+signée par `inputs.json` mais sans marqueur vidéo est comparée une seule fois
+à une extraction temporaire de la vidéo ; les fichiers originaux ne sont pas
+remplacés. Une extraction interrompue dans le nouveau notebook ne publie pas
+de frames partielles. Les signatures du pipeline continuent de protéger
+les masques, le SfM et les blocs existants.
+
+`SPIRULA_LOCAL_ROOT` facultatif désigne une installation Spirula locale
+existante contenant le binaire `SPIRULA_BINARY_RELATIVE` et le modèle SAM.
+Dans ce cas, l'archive Spirula Drive n'est pas requise. Sinon, l'extraction
+de l'archive est réutilisée par SHA256. Aucun checkout ou environnement
+étranger n'est supprimé automatiquement.
+
+## Repartir d'un ZIP COLMAP sur Drive
+
+Renseigner `COLMAP_ARCHIVE` dans la première cellule (ou dans l'environnement) :
+
+```python
+COLMAP_ARCHIVE = '/content/drive/MyDrive/colmap_to_gs_runs/mon-run-colmap-20261115.zip'
+```
+
+Le ZIP doit contenir un unique jeu `sparse/0/{cameras,images,points3D}.bin`
+et `images/` côte à côte, éventuellement dans un dossier parent. Les ZIP
+binaires produits par la cellule d'export sont directement utilisables.
+Une vidéo n'est pas nécessaire dans ce mode.
+
+L'archive est copiée localement et vérifiée par SHA256, puis extraite sous
+`RUN/colmap-input/`. Le modèle est lu entièrement (caméras, poses, observations,
+tracks), et l'existence des images référencées est contrôlée avant adoption.
+Les chemins sortants, liens ZIP et modèles ambigus sont refusés.
+Le sparse est copié dans `output/sfm/sparse/0` ; le pipeline utilise les images
+importées et **ne refait ni extraction vidéo ni reconstruction SfM**.
+Il génère encore les masques d'entraînement, découpe en blocs, puis entraîne
+si `PHASE='all'` (`prepare` s'arrête après la préparation).
+
+Relancer tout avec le même ZIP vérifie et réutilise l'import. Un ZIP modifié,
+un sparse local divergent ou un workspace vidéo déjà utilisé sont refusés :
+choisir un nouveau `RUN_NAME`. Conserver `COLMAP_ARCHIVE` pour les relances
+de ce run. Les images importées restent dans le run, afin que les sauvegardes
+soient autonomes.
+
 ## Disque local et Drive
 
 `/content/colmap_to_gs_work/<RUN_NAME>/` contient vidéo locale, frames,
@@ -80,10 +133,11 @@ Colab peut créer une incompatibilité avec le pilote hôte ; le notebook ne le
 fait pas. La présence de Vulkan NVIDIA ne garantit pas toutes les extensions
 nécessaires au binaire Spirula : les erreurs natives restent bloquantes.
 
-Le YAML est réutilisé seulement si son SHA256 correspond au marqueur local.
-Un environnement ancien non marqué ou un YAML modifié impose un autre
-`MAMBA_ENV` dans la cellule environnement. Le nom indiqué par `--name` remplace
-celui du YAML ; les dépendances restent celles du fichier.
+Un environnement Conda marqué avec le même SHA256 de YAML est réutilisé.
+Un environnement existant non marqué ou un YAML modifié déclenche
+`micromamba env update` ; le marqueur n'est écrit qu'après succès.
+Un dossier existant sans métadonnées Conda est refusé. Le nom `MAMBA_ENV`
+indiqué par `--name` remplace celui du YAML.
 
 ## Validation locale
 
@@ -93,5 +147,8 @@ python -m unittest test_colab_runtime
 ```
 
 Les tests couvrent l'affichage avant fin du processus, les logs d'échec,
-l'extraction ZIP sûre/réutilisable, les sauvegardes et la syntaxe des cellules.
+l'extraction ZIP sûre/réutilisable, les sauvegardes, la réutilisation des frames
+et de Conda, ainsi qu'une préparation COLMAP importée exécutée deux fois sans
+reconstruction native. La validation COLMAP nécessite numpy, scipy et tqdm ;
+la préparation des images nécessite Pillow.
 La disponibilité réelle de Vulkan sur Colab doit être vérifiée dans le runtime.

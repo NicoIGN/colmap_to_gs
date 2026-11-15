@@ -41,7 +41,7 @@ def validate_masks(images, output, *, allow_missing=False):
     return missing
 
 
-def validate_sparse(folder):
+def validate_sparse(folder, images_dir=None):
     for name in ("cameras", "images", "points3D"):
         path = folder / f"{name}.bin"
         if not path.is_file() or path.stat().st_size < 8:
@@ -64,7 +64,14 @@ def validate_sparse(folder):
     for camera_id, camera in cameras.items():
         if camera.width <= 0 or camera.height <= 0 or not np.isfinite(camera.params).all():
             raise ValueError(f"Caméra invalide : {camera_id}")
+    root = images_dir.resolve() if images_dir is not None else None
     for image_id, image in images.items():
+        if root is not None:
+            relative = Path(image.name)
+            path = (root / relative).resolve()
+            if (relative.is_absolute() or ".." in relative.parts
+                    or not path.is_relative_to(root) or not path.is_file()):
+                raise ValueError(f"Image du modèle absente ou hors du dataset : {image.name}")
         if image.camera_id not in cameras:
             raise ValueError(f"Caméra absente pour l'image {image_id}")
         if (not np.isfinite(image.qvec).all() or not np.isfinite(image.tvec).all()
@@ -94,9 +101,10 @@ def validate_sparse(folder):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sparse", type=Path)
+    parser.add_argument("--images", type=Path, help="Vérifier aussi les fichiers images du modèle")
     args = parser.parse_args()
     try:
-        validate_sparse(args.sparse)
+        validate_sparse(args.sparse, args.images)
     except ImportError as error:
         parser.exit(2, f"[ERREUR] Dépendance de validation sparse absente : {error}\n")
     except (OSError, EOFError, ValueError) as error:
