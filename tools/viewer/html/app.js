@@ -118,11 +118,14 @@ function uiIsBlocked() {
   );
 }
 
-const canNavigate = () =>
+const canDefineVertical = () =>
   !!app &&
   !disposed &&
   (sceneReady || !colmapBox.isEmpty()) &&
-  !uiIsBlocked() &&
+  !uiIsBlocked();
+
+const canNavigate = () =>
+  canDefineVertical() &&
   !picking &&
   !measurement?.isActive();
 
@@ -241,7 +244,7 @@ function refreshUI() {
     });
 
   $("fileInput").disabled = !app || disposed;
-  $("defineVertical").disabled = !canNavigate();
+  $("defineVertical").disabled = !canDefineVertical();
   for (const id of COLLISION_CONTROL_IDS) {
     const element = $(id);
     if (!element) continue;
@@ -1391,6 +1394,7 @@ async function initialize() {
       getSceneCenter: () => sceneCenter,
       getSceneBox: () => sceneBox,
       getCanNavigate: canNavigate,
+      getCanDefineVertical: canDefineVertical,
       getPrincipalAxis,
       setPrincipalAxis,
       hasCustomPrincipalAxis: () => getPrincipalAxisName() === "custom",

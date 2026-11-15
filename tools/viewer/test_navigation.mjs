@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const source = (await readFile(new URL("./html/viewer/navigation.js", import.meta.url), "utf8"))
   .replace('import * as THREE from "three";', `
@@ -115,6 +116,91 @@ test("defining vertical captures screen Y without moving the view and drives loc
   navigation.defineVertical();
   assert.equal(definitions, 2);
   assert.ok(principalAxis.distanceTo(new TestVector3(0, Math.SQRT1_2, Math.SQRT1_2)) < 1e-12);
+});
+
+test("the vertical button enables its option and held target-orbit buttons use it", async (t) => {
+  const appSource = await readFile(new URL("./html/app.js", import.meta.url), "utf8");
+  const functions = [
+    "getPrincipalAxisName", "getPrincipalAxis", "getPrincipalAxisLabel",
+    "setPrincipalAxis", "updatePrincipalAxisHelp", "installUI",
+  ].map((name) => {
+    const match = appSource.match(new RegExp(`^function ${name}\\([^]*?^\\}`, "m"));
+    assert.ok(match, name);
+    return match[0];
+  }).join("\n");
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      value: id === "principalAxis" ? "z" : "",
+      disabled: id === "customPrincipalAxis",
+      dataset: {}, listeners: new Map(),
+      classList: { add() {}, remove() {} },
+      addEventListener(type, handler) { this.listeners.set(type, handler); },
+      focus() {}, setPointerCapture() {},
+      dispatch(type) {
+        this.listeners.get(type)?.({ button: 0, pointerId: 1, preventDefault() {} });
+      },
+    });
+    return elements.get(id);
+  };
+  const camera = {
+    position: new TestVector3(0, 0, 10), up: new TestVector3(0, 1, 0),
+    quaternion: { axis: new TestVector3(0, 0, 1), angle: Math.PI / 3 },
+    lookAt() {}, updateMatrixWorld() {},
+  };
+  const target = new TestVector3();
+  const context = {
+    $, principalAxes: {
+      x: new TestVector3(1, 0, 0), y: new TestVector3(0, 1, 0),
+      z: new TestVector3(0, 0, 1), custom: new TestVector3(0, 1, 0),
+    },
+    measurement: { reset() {} }, exportCamera() {}, importCamera() {},
+  };
+  runInNewContext(functions, context);
+  let canNavigate = false;
+  const navigation = createNavigationSystem({
+    canvas: { clientWidth: 800, clientHeight: 600 }, camera, target,
+    getCanNavigate: () => canNavigate,
+    getCanDefineVertical: () => true,
+    getPrincipalAxis: context.getPrincipalAxis,
+    setPrincipalAxis: context.setPrincipalAxis,
+    hasCustomPrincipalAxis: () => context.getPrincipalAxisName() === "custom",
+    isRotationLocked: () => false,
+    getSpeedValue: () => 10, getSceneRadius: () => 1,
+    navigateWithCollision: (move) => move(),
+    syncCamera() {}, requestGifCapture() {}, setStatus() {},
+    selectPointInView: async () => { target.copy(new TestVector3(3, -2, 1)); return true; },
+  });
+  context.navigation = navigation;
+  context.installUI();
+  assert.equal($("principalAxis").value, "z");
+  assert.equal($("customPrincipalAxis").disabled, true);
+
+  // Picking or measuring may temporarily block movement, but defining up is safe.
+  $("defineVertical").dispatch("click");
+  assert.equal($("customPrincipalAxis").disabled, false);
+  assert.equal($("principalAxis").value, "custom");
+  const vertical = new TestVector3(-Math.sqrt(3) / 2, 0.5, 0);
+  assert.ok(context.getPrincipalAxis().distanceTo(vertical) < 1e-12);
+
+  const previousDocument = globalThis.document;
+  t.after(() => { globalThis.document = previousDocument; });
+  const positive = $("orbitPrincipalPositive");
+  positive.dataset.hold = "orbitPrincipalPositive";
+  globalThis.document = { hidden: false, querySelectorAll: () => [positive] };
+  canNavigate = true;
+  navigation.installHeldButtons();
+  positive.dispatch("pointerdown");
+  await Promise.resolve();
+  const pivot = target.clone();
+  const offset = camera.position.clone().sub(pivot);
+  for (let frame = 0; frame < 5; frame++) navigation.frame(0.02);
+  const expected = offset.clone().applyQuaternion({ axis: vertical, angle: 0.1 }).add(pivot);
+  assert.ok(camera.position.distanceTo(expected) < 1e-10);
+  assert.deepEqual(target, pivot);
+  assert.ok(Math.abs(camera.position.distanceTo(pivot) - offset.length()) < 1e-10);
+  positive.dispatch("pointerup");
+  assert.equal(navigation.heldButtons.size, 0);
 });
 
 test("mouse navigation distinguishes pan, look, orbit and modifier release", (t) => {

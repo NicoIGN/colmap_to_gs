@@ -27,6 +27,7 @@ export function createNavigationSystem({
   getSceneCenter,
   getSceneBox,
   getCanNavigate,
+  getCanDefineVertical = getCanNavigate,
   getPrincipalAxis,
   setPrincipalAxis,
   hasCustomPrincipalAxis = () => false,
@@ -166,7 +167,10 @@ export function createNavigationSystem({
   }
 
   function defineVertical() {
-    if (!getCanNavigate()) return;
+    if (!getCanDefineVertical()) {
+      setStatus("Définition de la verticale indisponible : attendre la fin du chargement.", "warning");
+      return;
+    }
 
     clearNavigation();
     const up = new THREE.Vector3(0, 1, 0)
