@@ -59,6 +59,64 @@ test("selection zoom centers the rectangle without stretching its aspect ratio",
   assert.equal(selectionZoom(start, { x: 500, y: 500 }, viewport).scale, 0.5);
 });
 
+test("defining vertical captures screen Y without moving the view and drives locked orbits", () => {
+  const camera = {
+    position: new TestVector3(0, 0, 10),
+    up: new TestVector3(0, 1, 0),
+    quaternion: { axis: new TestVector3(0, 0, 1), angle: Math.PI / 3 },
+    lookAt() {}, updateMatrixWorld() {},
+  };
+  const target = new TestVector3();
+  const principalAxis = new TestVector3(0, 0, 1);
+  let ready = false;
+  let synchronized = 0;
+  let captures = 0;
+  let definitions = 0;
+  const navigation = createNavigationSystem({
+    canvas: { clientWidth: 800, clientHeight: 600 }, camera, target,
+    getCanNavigate: () => ready,
+    getKeyboardLayout: () => "azerty",
+    getPrincipalAxis: () => principalAxis,
+    setPrincipalAxis: (axis) => { principalAxis.copy(axis); definitions++; },
+    isRotationLocked: () => true,
+    syncCamera: () => { synchronized++; },
+    requestGifCapture: () => { captures++; },
+    setStatus: () => {},
+  });
+  const position = camera.position.clone();
+  const originalTarget = target.clone();
+  const originalRotation = { ...camera.quaternion };
+  navigation.defineVertical();
+  assert.equal(definitions, 0);
+
+  ready = true;
+  navigation.pressedKeys.add("z");
+  navigation.defineVertical();
+  const screenY = new TestVector3(-Math.sqrt(3) / 2, 0.5, 0);
+  assert.ok(principalAxis.distanceTo(screenY) < 1e-12);
+  assert.ok(camera.up.distanceTo(screenY) < 1e-12);
+  assert.deepEqual(camera.position, position);
+  assert.deepEqual(target, originalTarget);
+  assert.deepEqual(camera.quaternion, originalRotation);
+  assert.equal(navigation.pressedKeys.size, 0);
+  assert.equal(synchronized, 1);
+  assert.equal(captures, 2);
+
+  navigation.rotateAroundAxis(principalAxis, Math.PI / 4);
+  assert.notDeepEqual(camera.position, position);
+  assert.deepEqual(target, originalTarget);
+  assert.ok(Math.abs(camera.position.distanceTo(target) - 10) < 1e-12);
+  assert.ok(camera.up.distanceTo(screenY) < 1e-12);
+  const orbitedPosition = camera.position.clone();
+  navigation.rotateAroundAxis(new TestVector3(1, 0, 0), Math.PI / 4);
+  assert.deepEqual(camera.position, orbitedPosition);
+
+  camera.quaternion = { axis: new TestVector3(1, 0, 0), angle: Math.PI / 4 };
+  navigation.defineVertical();
+  assert.equal(definitions, 2);
+  assert.ok(principalAxis.distanceTo(new TestVector3(0, Math.SQRT1_2, Math.SQRT1_2)) < 1e-12);
+});
+
 test("mouse navigation distinguishes pan, look, orbit and modifier release", (t) => {
     class Target {
       constructor() { this.listeners = new Map(); }

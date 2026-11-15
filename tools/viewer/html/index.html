@@ -470,13 +470,14 @@
 
         <div class="section row">
           <label for="principalAxis" class="hint inline-hint">
-            Axe principal du monde
+            Axe principal
           </label>
 
           <select id="principalAxis">
             <option value="x">X</option>
             <option value="y">Y</option>
             <option value="z" selected>Z</option>
+            <option value="custom" id="customPrincipalAxis" disabled>Verticale définie</option>
           </select>
         </div>
 
@@ -484,6 +485,15 @@
           <input type="checkbox" id="lockPrincipalRotation" />
           Verrouiller les rotations sur cet axe
         </label>
+
+        <div class="section">
+          <button
+            type="button"
+            id="defineVertical"
+            class="wide"
+            title="Prend le haut de la vue actuelle (axe Y caméra) comme verticale et axe principal, sans modifier les coordonnées du modèle."
+          >Définir la verticale</button>
+        </div>
 
         <div class="section">
           <button

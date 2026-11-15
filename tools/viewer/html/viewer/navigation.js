@@ -28,6 +28,7 @@ export function createNavigationSystem({
   getSceneBox,
   getCanNavigate,
   getPrincipalAxis,
+  setPrincipalAxis,
   getPrincipalAxisName,
   isRotationLocked,
   getSpeedValue,
@@ -161,6 +162,21 @@ export function createNavigationSystem({
     if (wasMoving) {
       requestGifCapture();
     }
+  }
+
+  function defineVertical() {
+    if (!getCanNavigate()) return;
+
+    clearNavigation();
+    const up = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(camera.quaternion)
+      .normalize();
+
+    setPrincipalAxis(up);
+    camera.up.copy(up);
+    syncCamera();
+    requestGifCapture();
+    setStatus("Verticale définie depuis le haut de la vue actuelle.");
   }
 
   /**
@@ -961,6 +977,7 @@ export function createNavigationSystem({
     pressedKeys,
     heldButtons,
     clearNavigation,
+    defineVertical,
     installMouseControls,
     installHeldButtons,
     installKeyboard,
