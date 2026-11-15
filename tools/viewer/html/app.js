@@ -1393,6 +1393,7 @@ async function initialize() {
       getCanNavigate: canNavigate,
       getPrincipalAxis,
       setPrincipalAxis,
+      hasCustomPrincipalAxis: () => getPrincipalAxisName() === "custom",
       getPrincipalAxisName: getPrincipalAxisLabel,
       isRotationLocked: () => $("lockPrincipalRotation").checked,
       getSpeedValue: () => Number($("step").value),

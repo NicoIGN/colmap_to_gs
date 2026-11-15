@@ -29,6 +29,7 @@ export function createNavigationSystem({
   getCanNavigate,
   getPrincipalAxis,
   setPrincipalAxis,
+  hasCustomPrincipalAxis = () => false,
   getPrincipalAxisName,
   isRotationLocked,
   getSpeedValue,
@@ -232,7 +233,8 @@ export function createNavigationSystem({
     direction.normalize();
 
     if (dx) {
-      const yawAxis = locked
+      const usePrincipalAxis = locked || hasCustomPrincipalAxis();
+      const yawAxis = usePrincipalAxis
         ? getPrincipalAxis().clone().normalize()
         : new THREE.Vector3(0, 1, 0)
             .applyQuaternion(camera.quaternion)
@@ -240,7 +242,7 @@ export function createNavigationSystem({
 
       let yawAngle = dx;
 
-      if (locked && yawAxis.dot(up) < 0) {
+      if (usePrincipalAxis && yawAxis.dot(up) < 0) {
         yawAngle = -yawAngle;
       }
 
@@ -310,11 +312,12 @@ export function createNavigationSystem({
   function orbitScene(dx, dy, forceLock = false) {
     const sensitivity = 0.005;
     const locked = forceLock || isRotationLocked();
-    const yawAxis = locked
+    const usePrincipalAxis = locked || hasCustomPrincipalAxis();
+    const yawAxis = usePrincipalAxis
       ? getPrincipalAxis().clone().normalize()
       : camera.up.clone().normalize();
     let yawAngle = -dx * sensitivity;
-    if (locked && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
+    if (usePrincipalAxis && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
     rotateAroundAxis(yawAxis, yawAngle, locked);
     if (locked) return;
 

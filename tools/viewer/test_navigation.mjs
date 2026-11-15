@@ -159,6 +159,8 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
     const target = new TestVector3();
     let moves = 0;
     let locked = false;
+    let customAxis = false;
+    const principalAxis = new TestVector3(0, 1, 0);
     const navigation = createNavigationSystem({
       canvas, camera, target,
       getCanNavigate: () => true,
@@ -166,10 +168,13 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
       getSpeedValue: () => 10,
       getKeyboardLayout: () => "azerty",
       isRotationLocked: () => locked,
-      getPrincipalAxis: () => new TestVector3(0, 1, 0),
+      getPrincipalAxis: () => principalAxis,
+      setPrincipalAxis: (axis) => { principalAxis.copy(axis); customAxis = true; },
+      hasCustomPrincipalAxis: () => customAxis,
       navigateWithCollision: (move, enabled) => { assert.equal(enabled, true); moves++; move(); },
       syncCamera: () => {},
       requestGifCapture: () => {},
+      setStatus: () => {},
     });
     navigation.installMouseControls();
     navigation.installKeyboard();
@@ -226,6 +231,41 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
     canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 15 });
     assert.notDeepEqual(camera.position, orbitStart);
     assert.deepEqual(target, orbitTarget);
+    canvas.dispatch("pointerup", { button: 0, buttons: 0 });
+
+    camera.position.copy(target).add(new TestVector3(0, 0, 10));
+    camera.quaternion = { axis: new TestVector3(0, 0, 1), angle: Math.PI / 4 };
+    navigation.defineVertical();
+    const customTarget = target.clone();
+    canvas.dispatch("pointerdown", { button: 0, buttons: 1 });
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientY: 60 });
+    assert.ok(camera.up.dot(principalAxis) < 0.999);
+    const pitchedOffset = camera.position.clone().sub(target);
+    const expectedPosition = pitchedOffset.clone()
+      .applyQuaternion({ axis: principalAxis, angle: -0.4 }).add(target);
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 80, clientY: 60 });
+    assert.ok(camera.position.distanceTo(expectedPosition) < 1e-10);
+    assert.deepEqual(target, customTarget);
+    assert.ok(Math.abs(camera.position.distanceTo(target) - 10) < 1e-10);
+    assert.ok(Math.abs(camera.position.clone().sub(target).dot(principalAxis) -
+      pitchedOffset.dot(principalAxis)) < 1e-10);
+    canvas.dispatch("pointerup", { button: 0, buttons: 0 });
+
+    camera.quaternion = {};
+    const lookPosition = camera.position.clone();
+    const expectedLookTarget = target.clone().sub(camera.position)
+      .applyQuaternion({ axis: principalAxis, angle: 0.2 }).add(camera.position);
+    navigation.orbitLook(0.2, 0);
+    assert.ok(target.distanceTo(expectedLookTarget) < 1e-10);
+    assert.deepEqual(camera.position, lookPosition);
+
+    customAxis = false;
+    const freeAxis = camera.up.clone();
+    const expectedFreePosition = camera.position.clone().sub(target)
+      .applyQuaternion({ axis: freeAxis, angle: -0.2 }).add(target);
+    canvas.dispatch("pointerdown", { button: 0, buttons: 1 });
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 40 });
+    assert.ok(camera.position.distanceTo(expectedFreePosition) < 1e-10);
     canvas.dispatch("pointerup", { button: 0, buttons: 0 });
 });
 
