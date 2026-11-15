@@ -284,6 +284,59 @@ def restore_spirula(archive, assets, binary_relative, existing_root=None):
     return destination, binary
 
 
+def _copy_verified_zip(archive, destination):
+    temporary_drive = destination.with_suffix(".zip.partial")
+    try:
+        shutil.copyfile(archive, temporary_drive)
+        if sha256(temporary_drive) != sha256(archive):
+            raise OSError(f"Vérification SHA256 ZIP échouée : {temporary_drive}")
+        temporary_drive.rename(destination)
+    finally:
+        temporary_drive.unlink(missing_ok=True)
+
+
+def save_results_zip(output_dir, drive_dir, splat_name):
+    """Export only the final splat and its self-contained georeferencing metadata."""
+    output_dir, drive_dir = Path(output_dir).resolve(), Path(drive_dir).resolve()
+    if Path(splat_name).name != splat_name or not splat_name.endswith(".splat"):
+        raise ValueError("Le résultat doit être un simple nom de fichier .splat")
+    splat = output_dir / splat_name
+    sources = [splat]
+    sidecar = splat.with_suffix(".georef.json")
+    if sidecar.is_file():
+        sources.append(sidecar)
+        reference = json.loads(sidecar.read_text())
+        for key in ("georef_summary", "source_gpx"):
+            if key in reference:
+                relative = Path(reference[key])
+                path = output_dir / relative
+                if relative.is_absolute() or not path.resolve().is_relative_to(output_dir):
+                    raise ValueError(f"Référence géographique hors des résultats : {relative}")
+                sources.append(path)
+    elif (output_dir / "georef").exists():
+        raise ValueError(f"Géoréférencement final absent : {sidecar}")
+    for path in sources:
+        if not path.is_file() or not path.stat().st_size:
+            raise ValueError(f"Résultat absent ou incomplet : {path}")
+        if not path.resolve().is_relative_to(output_dir):
+            raise ValueError(f"Résultat hors du dossier de sortie : {path}")
+    if drive_dir == output_dir or drive_dir.is_relative_to(output_dir):
+        raise ValueError("La destination doit être hors des résultats locaux")
+    drive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    destination = drive_dir / f"{output_dir.parent.name}-3dgs-{stamp}.zip"
+    print(f"[3DGS] Création locale du ZIP final ; destination Drive : {destination}", flush=True)
+    with tempfile.TemporaryDirectory(prefix="results-export-", dir=output_dir.parent) as temporary:
+        archive = Path(temporary) / destination.name
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=1) as zipped:
+            for path in sources:
+                zipped.write(path, path.relative_to(output_dir).as_posix())
+        _copy_verified_zip(archive, destination)
+    print(f"[3DGS] ZIP final vérifié : {destination}", flush=True)
+    return destination
+
+
 def save_colmap_zip(output_dir, drive_dir):
     """Export the global COLMAP model and images, not training checkpoints."""
     output_dir, drive_dir = Path(output_dir).resolve(), Path(drive_dir).resolve()
@@ -314,14 +367,7 @@ def save_colmap_zip(output_dir, drive_dir):
                         zipped.write(path, (prefix / path.relative_to(source)).as_posix())
                     elif path.is_symlink():
                         raise ValueError(f"Lien non exportable : {path}")
-        temporary_drive = destination.with_suffix(".zip.partial")
-        try:
-            shutil.copyfile(archive, temporary_drive)
-            if sha256(temporary_drive) != sha256(archive):
-                raise OSError(f"Vérification SHA256 COLMAP échouée : {temporary_drive}")
-            temporary_drive.rename(destination)
-        finally:
-            temporary_drive.unlink(missing_ok=True)
+        _copy_verified_zip(archive, destination)
     print(f"[COLMAP] ZIP vérifié : {destination}", flush=True)
     return destination
 

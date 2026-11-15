@@ -88,31 +88,35 @@ soient autonomes.
 
 `/content/colmap_to_gs_work/<RUN_NAME>/` contient vidéo locale, frames,
 configuration, logs et `output/` (masques, SfM, entraînement, exports).
-Le traitement n'écrit aucun intermédiaire dans Drive. La vidéo est copiée une
+Les artefacts de calcul restent locaux. La vidéo est copiée une
 seule fois et vérifiée par SHA256. Une archive Spirula est extraite dans
 `/content/colmap_to_gs_work/assets/`, identifiée par son hash, sans effacer une
 installation préexistante.
 
-Après succès, une sauvegarde est créée si `SAVE_ON_SUCCESS=True`. Après échec
-ou interruption, lancer la cellule de sauvegarde manuelle, une fois les
-processus arrêtés. Elle crée localement une archive compressée, matérialise les
-liens internes aux images, copie un fichier horodaté dans Drive puis vérifie son
-SHA256. Les anciennes archives sont conservées. Prévoir la place pour le run
-et son archive ; l'archivage peut être long pour de gros checkpoints.
+Avec `SAVE_ON_SUCCESS=True`, le notebook prépare d'abord le SfM global et
+les blocs, puis copie le ZIP COLMAP sur Drive **avant l'entraînement**.
+En phase `all`, le pipeline réutilise cette préparation pour entraîner et
+fusionner les blocs. Après succès, un second ZIP contient **uniquement**
+le `.splat` final, son `.georef.json` si disponible et les fichiers géographiques
+qu'il référence (résumé et GPX source). Sans géoréférencement, il contient
+seulement le `.splat`. La phase `prepare` n'exporte pas de résultat 3DGS.
+
+Les checkpoints, masques, logs, vidéo et autres artefacts de calcul ne sont
+jamais archivés par le notebook. Les deux ZIP sont créés localement, copiés
+sur Drive, puis vérifiés par SHA256, sans écraser les exports précédents.
+Les cellules d'export manuel réutilisent les archives déjà créées dans ce
+lancement, ou permettent de les créer après coup, calcul arrêté.
 
 La cellule **Export COLMAP seul vers Drive (ZIP)** exporte uniquement le modèle
 global `output/sfm/sparse/0` et `output/images`, sous `sparse/0/` et `images/`
 dans un ZIP horodaté de `DRIVE_BACKUPS`. Les fichiers images liés sont copiés
-dans l'archive. Exécuter après le SfM, calcul arrêté ; un modèle incomplet est
-refusé. Le ZIP est créé localement, puis la copie Drive est vérifiée par SHA256.
+dans l'archive. Un modèle incomplet est refusé.
 
-`/content` est éphémère. Il n'y a pas de sauvegarde continue, ni de restauration
-automatique des signatures et des liens après changement de runtime.
-Les archives permettent de récupérer les données ; elles ne garantissent pas
-une reprise directe du pipeline. Dans le même runtime, garder le run local et
-`PIPELINE_RESUME=true`. Pour des entrées/réglages différents, choisir un nouveau
-RUN_NAME. Ne pas copier le vieux workspace Drive dans le nouveau run local :
-les chemins et les liens peuvent ne plus correspondre.
+`/content` est éphémère : les checkpoints locaux disparaissent avec le runtime.
+Le ZIP COLMAP permet de recommencer l'entraînement dans un nouveau runtime via
+`COLMAP_ARCHIVE`, mais pas de restaurer un entraînement interrompu.
+Dans le même runtime, garder le run local et `PIPELINE_RESUME=true` pour
+reprendre les artefacts locaux. Pour d'autres données, choisir un nouveau RUN_NAME.
 
 ## CUDA et Vulkan sont deux contrôles distincts
 

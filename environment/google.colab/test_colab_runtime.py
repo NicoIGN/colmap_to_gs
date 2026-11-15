@@ -15,7 +15,8 @@ import zipfile
 
 from colab_runtime import (
     configure_nvidia_vulkan, ensure_conda_environment, prepare_video_frames,
-    restore_colmap, restore_spirula, run_live, save_colmap_zip, save_snapshot, sha256,
+    restore_colmap, restore_spirula, run_live, save_colmap_zip, save_results_zip,
+    save_snapshot, sha256,
 )
 
 
@@ -149,6 +150,103 @@ class ColabRuntimeTests(unittest.TestCase):
                 save_colmap_zip(output, drive)
         self.assertEqual(len(list(drive.glob("*.zip"))), 2)
         self.assertEqual(list(drive.glob("*.partial")), [])
+
+    def test_results_zip_contains_only_final_splat_and_georeferencing(self):
+        output = self.root / "run/output"
+        (output / "georef").mkdir(parents=True)
+        (output / "gs/block_000").mkdir(parents=True)
+        (output / "scene.splat").write_bytes(bytes(64))
+        (output / "gs/block_000/checkpoint").write_bytes(b"not included")
+        (output / "gs/block_000/intermediate.splat").write_bytes(b"not included")
+        (output / "georef/georef_summary.json").write_text("{}")
+        (output / "georef/source.gpx").write_text("<gpx/>")
+        (output / "scene.georef.json").write_text(json.dumps({
+            "georef_summary": "georef/georef_summary.json",
+            "source_gpx": "georef/source.gpx",
+            "output_reference": {"type": "local_ENU"},
+        }))
+        drive = self.root / "drive"
+        with contextlib.redirect_stdout(io.StringIO()):
+            first = save_results_zip(output, drive, "scene.splat")
+            second = save_results_zip(output, drive, "scene.splat")
+        self.assertNotEqual(first, second)
+        with zipfile.ZipFile(first) as zipped:
+            self.assertEqual(set(zipped.namelist()), {
+                "scene.splat", "scene.georef.json",
+                "georef/georef_summary.json", "georef/source.gpx",
+            })
+            self.assertEqual(zipped.read("scene.splat"), bytes(64))
+        with patch("colab_runtime.sha256", side_effect=["bad", "good"]):
+            with self.assertRaisesRegex(OSError, "SHA256"):
+                save_results_zip(output, drive, "scene.splat")
+        self.assertEqual(len(list(drive.glob("*.zip"))), 2)
+        self.assertEqual(list(drive.glob("*.partial")), [])
+        (output / "georef/source.gpx").unlink()
+        with self.assertRaisesRegex(ValueError, "incomplet"):
+            save_results_zip(output, drive, "scene.splat")
+
+    def test_results_zip_without_georeferencing_and_invalid_results(self):
+        output = self.root / "run/output"
+        output.mkdir(parents=True)
+        drive = self.root / "drive"
+        with self.assertRaisesRegex(ValueError, "incomplet"):
+            save_results_zip(output, drive, "scene.splat")
+        (output / "scene.splat").write_bytes(bytes(32))
+        with contextlib.redirect_stdout(io.StringIO()):
+            archive = save_results_zip(output, drive, "scene.splat")
+        with zipfile.ZipFile(archive) as zipped:
+            self.assertEqual(zipped.namelist(), ["scene.splat"])
+        with self.assertRaisesRegex(ValueError, "simple nom"):
+            save_results_zip(output, drive, "../scene.splat")
+        (output / "georef").mkdir()
+        with self.assertRaisesRegex(ValueError, "Géoréférencement final absent"):
+            save_results_zip(output, drive, "scene.splat")
+        (output / "scene.georef.json").write_text(json.dumps({"source_gpx": "../../outside"}))
+        with self.assertRaisesRegex(ValueError, "hors des résultats"):
+            save_results_zip(output, drive, "scene.splat")
+
+    def test_notebook_exports_colmap_before_training_and_only_final_results_afterwards(self):
+        notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
+        cells = {cell["metadata"]["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
+        for phase, failure in (("prepare", False), ("all", False), ("all", True)):
+            with self.subTest(phase=phase, failure=failure):
+                events = []
+                def run(command, *args, **kwargs):
+                    events.append(command[-1])
+                    if command[-1] == "all" and failure:
+                        raise subprocess.CalledProcessError(1, command)
+                def save_colmap(*args):
+                    events.append("colmap")
+                    path = self.root / "colmap.zip"
+                    path.touch()
+                    return path
+                def save_results(*args):
+                    events.append("results")
+                    path = self.root / "results.zip"
+                    path.touch()
+                    return path
+                namespace = dict(
+                    COLMAP_ARCHIVE="input.zip", CONFIG=self.root / "config", PHASE=phase,
+                    PROJECT=self.root, RUN=self.root, OUTPUT=self.root / "output",
+                    DRIVE_BACKUPS=self.root / "drive", SAVE_ON_SUCCESS=True,
+                    SETTINGS={"EXPORT_SPLAT_NAME": "scene.splat"},
+                    in_env=lambda command: command, run=run,
+                    save_colmap_zip=save_colmap, save_results_zip=save_results,
+                )
+                with contextlib.redirect_stdout(io.StringIO()):
+                    if failure:
+                        with self.assertRaises(subprocess.CalledProcessError):
+                            exec(cells["run"], namespace)
+                    else:
+                        exec(cells["run"], namespace)
+                        exec(cells["save"], namespace)
+                        exec(cells["save-colmap"], namespace)
+                expected = ["prepare", "colmap"]
+                if phase == "all":
+                    expected.append("all")
+                    if not failure:
+                        expected.append("results")
+                self.assertEqual(events, expected)
 
     def test_notebook_code_compiles_and_has_no_saved_outputs(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
@@ -352,9 +450,12 @@ class ColabRuntimeTests(unittest.TestCase):
         commands = []
         with contextlib.redirect_stdout(io.StringIO()):
             exec(source, dict(COLMAP_ARCHIVE=str(archive), CONFIG=config, PHASE="all",
-                              PROJECT=project, SAVE_ON_SUCCESS=False,
+                              PROJECT=project, RUN=run, SAVE_ON_SUCCESS=False,
                               in_env=lambda command: command, run=lambda command, *args, **kw: commands.append(command)))
-        self.assertEqual(commands, [["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "all"]])
+        self.assertEqual(commands, [
+            ["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "prepare"],
+            ["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "all"],
+        ])
 
     def test_remove_locks_requires_resume_before_creating_workspace(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
