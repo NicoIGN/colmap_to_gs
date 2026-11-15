@@ -1,12 +1,14 @@
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from colab_runtime import restore_spirula, run_live, save_snapshot
@@ -136,6 +138,45 @@ class ColabRuntimeTests(unittest.TestCase):
             ["bash", "-c", 'source "$1"; printf "%s" "$OUTPUT_DIR"', "_", str(config)], text=True)
         self.assertEqual(result, str(self.root / "output"))
         self.assertNotIn("/content/drive", config.read_text())
+
+    def test_vulkan_diagnostic_retains_failures_without_changing_environment(self):
+        notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
+        cells = notebook["cells"]
+        ids = [cell["metadata"]["id"] for cell in cells]
+        self.assertLess(ids.index("system"), ids.index("vulkan-diagnostic"))
+        self.assertLess(ids.index("vulkan-diagnostic"), ids.index("vulkan-check"))
+        self.assertLess(ids.index("vulkan-check"), ids.index("run"))
+        source = "".join(cells[ids.index("vulkan-diagnostic")]["source"])
+        icd = self.root / "nvidia_icd.json"
+        icd.write_text('{"ICD": {"library_path": "libGLX_nvidia.so.0"}}')
+        calls = []
+
+        def command_result(command, **kwargs):
+            calls.append((command, kwargs))
+            if command[0] == "vulkaninfo":
+                return subprocess.CompletedProcess(command, 1, "VK_ERROR_INCOMPATIBLE_DRIVER\n")
+            if command[0] == "ldconfig":
+                return subprocess.CompletedProcess(command, 0, "")
+            return subprocess.CompletedProcess(command, 0, "Tesla T4, 580.82.07\n")
+
+        console = io.StringIO()
+        with patch.dict(os.environ, VK_DRIVER_FILES=str(icd)), \
+                patch("shutil.which", side_effect=lambda name: None if name == "dpkg-query" else name), \
+                patch("subprocess.run", side_effect=command_result), \
+                contextlib.redirect_stdout(console):
+            before = os.environ.copy()
+            exec(source, dict(LOGS=self.root, Path=Path, os=os, subprocess=subprocess))
+            self.assertEqual(os.environ, before)
+        text = console.getvalue()
+        self.assertIn("Commande indisponible : dpkg-query", text)
+        self.assertIn("VK_ERROR_INCOMPATIBLE_DRIVER", text)
+        self.assertIn("Code de sortie : 1", text)
+        report = next(self.root.glob("vulkan-diagnostic-*.log")).read_text()
+        self.assertIn("libGLX_nvidia.so.0", report)
+        self.assertIn("VK_ERROR_INCOMPATIBLE_DRIVER", report)
+        self.assertEqual(calls[-1][0], ["vulkaninfo", "--summary"])
+        self.assertEqual(calls[-1][1]["env"]["VK_DRIVER_FILES"], str(icd))
+        self.assertEqual(calls[-1][1]["env"]["VK_LOADER_DEBUG"], "error,warn,driver")
 
 
 if __name__ == "__main__":
