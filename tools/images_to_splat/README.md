@@ -370,7 +370,16 @@ bash "$GIT_ROOT/tools/images_to_splat/launch.sh" \
 Ce mode ne désactive pas les validations : il vérifie pour **chaque image**
 le masque attendu (`<chemin relatif de l'image>.png`), son décodage PNG,
 ses dimensions brutes, son mode monochrome et ses valeurs 0/255. Un dossier
-existant incomplet/corrompu est refusé avec le chemin du fichier, sans lancer
+vide (par exemple après un refus de licence SAM) reprend automatiquement la
+génération. Un rapport `masks.json` partiel compatible permet également de
+reprendre les masques manquants : tous les PNG déjà présents sont validés
+avant de relancer le générateur, qui réutilise ses résultats enregistrés.
+Cela nécessite l'absence de résultats SfM/recalage/découpage/entraînement :
+des masques susceptibles d'avoir déjà été utilisés ne sont pas modifiés.
+Les erreurs de licence ou de génération restent bloquantes.
+
+Un dossier non vide sans rapport, un rapport complet avec des fichiers manquants,
+des PNG corrompus ou des masques externes incomplets sont refusés, sans lancer
 le SfM. Les masques complets sont réutilisés sans relancer SAM, même si leur
 rapport est absent/interrompu ; les paramètres présents dans ce rapport
 doivent rester compatibles. Si le rapport est absent, un `masks.json` de
