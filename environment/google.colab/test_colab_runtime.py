@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from colab_runtime import configure_nvidia_vulkan, restore_spirula, run_live, save_snapshot
+from colab_runtime import configure_nvidia_vulkan, restore_spirula, run_live, save_colmap_zip, save_snapshot
 
 
 class ColabRuntimeTests(unittest.TestCase):
@@ -108,6 +108,40 @@ class ColabRuntimeTests(unittest.TestCase):
         (run / "outside").symlink_to(self.root / "drive")
         with self.assertRaisesRegex(ValueError, "hors du run"):
             save_snapshot(run, self.root / "drive")
+
+    def test_colmap_zip_has_model_and_materialized_images_without_checkpoints(self):
+        output = self.root / "run/output"
+        model = output / "sfm/sparse/0"
+        model.mkdir(parents=True)
+        images = output / "images"
+        images.mkdir()
+        frame = self.root / "frame.jpg"
+        frame.write_bytes(b"image")
+        (images / "frame.jpg").symlink_to(frame)
+        (output / "checkpoint").write_bytes(b"not included")
+        drive = self.root / "drive"
+        with self.assertRaisesRegex(ValueError, "incomplet"):
+            save_colmap_zip(output, drive)
+        for name in ("cameras", "images", "points3D"):
+            (model / f"{name}.bin").write_bytes(b"model")
+        with contextlib.redirect_stdout(io.StringIO()):
+            first = save_colmap_zip(output, drive)
+            second = save_colmap_zip(output, drive)
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.is_file())
+        with zipfile.ZipFile(first) as zipped:
+            self.assertEqual(set(zipped.namelist()), {
+                "sparse/0/cameras.bin", "sparse/0/images.bin",
+                "sparse/0/points3D.bin", "images/frame.jpg",
+            })
+            self.assertEqual(zipped.read("images/frame.jpg"), b"image")
+        self.assertEqual(list(drive.glob("*.partial")), [])
+        with patch("colab_runtime.sha256", side_effect=["bad", "good"]), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(OSError, "SHA256"):
+                save_colmap_zip(output, drive)
+        self.assertEqual(len(list(drive.glob("*.zip"))), 2)
+        self.assertEqual(list(drive.glob("*.partial")), [])
 
     def test_notebook_code_compiles_and_has_no_saved_outputs(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())

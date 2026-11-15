@@ -33,6 +33,12 @@ liens internes aux images, copie un fichier horodaté dans Drive puis vérifie s
 SHA256. Les anciennes archives sont conservées. Prévoir la place pour le run
 et son archive ; l'archivage peut être long pour de gros checkpoints.
 
+La cellule **Export COLMAP seul vers Drive (ZIP)** exporte uniquement le modèle
+global `output/sfm/sparse/0` et `output/images`, sous `sparse/0/` et `images/`
+dans un ZIP horodaté de `DRIVE_BACKUPS`. Les fichiers images liés sont copiés
+dans l'archive. Exécuter après le SfM, calcul arrêté ; un modèle incomplet est
+refusé. Le ZIP est créé localement, puis la copie Drive est vérifiée par SHA256.
+
 `/content` est éphémère. Il n'y a pas de sauvegarde continue, ni de restauration
 automatique des signatures et des liens après changement de runtime.
 Les archives permettent de récupérer les données ; elles ne garantissent pas

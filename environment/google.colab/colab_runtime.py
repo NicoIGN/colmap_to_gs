@@ -136,6 +136,48 @@ def restore_spirula(archive, assets, binary_relative):
     return destination, binary
 
 
+def save_colmap_zip(output_dir, drive_dir):
+    """Export the global COLMAP model and images, not training checkpoints."""
+    output_dir, drive_dir = Path(output_dir).resolve(), Path(drive_dir).resolve()
+    model = output_dir / "sfm/sparse/0"
+    images = output_dir / "images"
+    complete = any(all((model / f"{name}.{extension}").is_file()
+                       and (model / f"{name}.{extension}").stat().st_size
+                       for name in ("cameras", "images", "points3D"))
+                   for extension in ("bin", "txt"))
+    if not complete:
+        raise ValueError(f"Modèle COLMAP absent ou incomplet : {model}")
+    if not images.is_dir() or not any(path.is_file() for path in images.rglob("*")):
+        raise ValueError(f"Images COLMAP absentes : {images}")
+    for source in (model, images):
+        if drive_dir == source.resolve() or drive_dir.is_relative_to(source.resolve()):
+            raise ValueError("La destination doit être hors des données COLMAP")
+    drive_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    destination = drive_dir / f"{output_dir.parent.name}-colmap-{stamp}.zip"
+    print(f"[COLMAP] Création locale du ZIP ; destination Drive : {destination}", flush=True)
+    with tempfile.TemporaryDirectory(prefix="colmap-export-", dir=output_dir.parent) as temporary:
+        archive = Path(temporary) / destination.name
+        with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED,
+                             compresslevel=1) as zipped:
+            for source, prefix in ((model, Path("sparse/0")), (images, Path("images"))):
+                for path in sorted(source.rglob("*")):
+                    if path.is_file():
+                        zipped.write(path, (prefix / path.relative_to(source)).as_posix())
+                    elif path.is_symlink():
+                        raise ValueError(f"Lien non exportable : {path}")
+        temporary_drive = destination.with_suffix(".zip.partial")
+        try:
+            shutil.copyfile(archive, temporary_drive)
+            if sha256(temporary_drive) != sha256(archive):
+                raise OSError(f"Vérification SHA256 COLMAP échouée : {temporary_drive}")
+            temporary_drive.rename(destination)
+        finally:
+            temporary_drive.unlink(missing_ok=True)
+    print(f"[COLMAP] ZIP vérifié : {destination}", flush=True)
+    return destination
+
+
 def save_snapshot(run_dir, drive_dir):
     """Archive stopped local work into one Drive file, without replacing prior snapshots."""
     run_dir, drive_dir = Path(run_dir).resolve(), Path(drive_dir).resolve()
