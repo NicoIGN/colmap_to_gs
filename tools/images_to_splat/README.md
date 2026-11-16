@@ -507,6 +507,7 @@ floaters isolés : un splat est retiré si son centre est à plus de
 ET si son 8e voisin de splats est aussi à plus de cette distance. Les zones denses en splats
 sont donc conservées même si le sparse y est pauvre. `POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY`
 (défaut `0`) ignore les splats moins opaques. Utiliser `diagnostic` pour examiner `.filter.json` sans retirer.
-La sécurité de rejet de 20 % s'applique par bloc ; examiner le diagnostic avant
+La sécurité de rejet de 20 % s'applique par bloc : au-delà, le filtre est ignoré et
+l'entrée est conservée (avertissement, diagnostic écrit). Examiner le diagnostic avant
 de modifier `POSTPROCESS_MAX_REMOVAL_FRACTION`. Le filtre contextuel est désactivé.
 La fusion écrit `OUTPUT_DIR/EXPORT_SPLAT_NAME`, sans réentraîner.

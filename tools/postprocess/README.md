@@ -86,8 +86,9 @@ python3 tools/postprocess/filter_splats.py \
 - `--neighbors`, `--reference-limit`, `--seed`, `--batch-size` : pilotent le
   voisinage et le coût mémoire.
 - `--mode off` : copie simplement l'entrée.
-- Plus de 20 % de rejets en mode `apply` provoque une erreur sans remplacer les
-  sorties ; examiner le diagnostic avant de modifier `--max-removal-fraction`.
+- Plus de 20 % de rejets en mode `apply` : le filtre est ignoré (entrée copiée
+  telle quelle, `skipped` dans le JSON) et un avertissement est affiché ; le
+  diagnostic `.rejected.splat` et `.filter.json` reste écrit.
 - Un rejet de tous les splats est toujours refusé ; le filtre ne désactive pas
   silencieusement une règle trop destructive.
 

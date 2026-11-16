@@ -242,7 +242,7 @@ def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.
 
 
 def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
-                       distance_factor=2.0, isolation_factor=3.0, batch_size=20000):
+                       distance_factor=3.0, isolation_factor=3.0, batch_size=20000):
     """Reject splats isolated from both sparse points and other splats.
 
     Sparse points whose eighth nearest sparse neighbour is farther than
@@ -335,7 +335,7 @@ def main():
                         help="Margin as a fraction of the largest box side")
     parser.add_argument("--sparse-support-mode", choices=("off", "diagnostic", "apply"),
                         default="off")
-    parser.add_argument("--sparse-support-distance-factor", type=float, default=2.0)
+    parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
     parser.add_argument("--sparse-support-isolation-factor", type=float, default=3.0,
                         help="Sparse points farther than this multiple of median spacing are discarded")
     parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0,
@@ -446,14 +446,17 @@ def main():
             applied_rejections=int(applied.sum()),
         )
         fraction = float(applied.mean())
-        print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if "warning" in report:
             print("[AVERTISSEMENT] " + report["warning"], flush=True)
         if fraction > args.max_removal_fraction:
-            raise ValueError(
+            warning = (
                 f"Rejet appliqué {fraction:.1%} > limite {args.max_removal_fraction:.1%} ; "
-                "aucune sortie remplacée. Examiner d'abord le mode diagnostic."
+                "filtre ignoré, entrée conservée. Examiner le diagnostic (.filter.json)."
             )
+            report.update(skipped=warning, applied_rejections=0)
+            applied[:] = False
+            print("[AVERTISSEMENT] " + warning, flush=True)
+        print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if applied.all():
             raise ValueError("Le filtre supprimerait tous les splats ; aucune sortie remplacée")
         write_records(rejected_path, records, rejected)

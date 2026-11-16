@@ -286,14 +286,12 @@ class ContextualFilterTest(unittest.TestCase):
             self.assertEqual(output.stat().st_size, len(original) - 32)
             records = np.fromfile(output, dtype=SPLAT_DTYPE)
             self.assertFalse(np.any(np.all(records["position"] == [12, 0, 3], axis=1)))
-            before = {p: p.read_bytes() for p in (output, output.with_suffix(".rejected.splat"),
-                                                  output.with_suffix(".filter.json"))}
             guarded = subprocess.run(command + ["--mode", "apply", "--max-removal-fraction", "0",
                                                "--overwrite"],
                                      capture_output=True, text=True, timeout=30)
-            self.assertNotEqual(guarded.returncode, 0)
-            for path, data in before.items():
-                self.assertEqual(path.read_bytes(), data)
+            self.assertEqual(guarded.returncode, 0, guarded.stderr)
+            self.assertIn("filtre ignoré", guarded.stdout)
+            self.assertEqual(output.read_bytes(), original)
             self.assertEqual(source.read_bytes(), original)
             same_path = subprocess.run([*command[:command.index("--output")], "--output", str(source),
                                         "--overwrite"], capture_output=True, text=True, timeout=30)
