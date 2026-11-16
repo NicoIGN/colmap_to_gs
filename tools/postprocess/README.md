@@ -109,7 +109,7 @@ python3 tools/postprocess/filter_splats.py \
 - Positions testées : centre du splat seulement, tous opacités par défaut.
 - `--sparse-support-distance-factor` : distance maximale en multiples de
   l'espacement sparse local (distance au huitième voisin divisée par `sqrt(8)`) ;
-  facteur `3`.
+  facteur `1.5`.
 - Règle : un splat est rejeté s'il est loin de tout point sparse ET de tout
   autre splat (huitième voisin) à cette même échelle. Les zones denses en splats
   sont conservées.

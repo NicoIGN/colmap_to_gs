@@ -250,7 +250,7 @@ POSTPROCESS_SPARSE_BBOX_SCOPE="planar"
 # apply = retire. DISTANCE_FACTOR : en densites sparse locales. MIN_OPACITY : splats
 # moins opaques ne sont pas testes (0 : tous).
 POSTPROCESS_SPARSE_SUPPORT_MODE="apply"
-POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="3.0"
+POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="1.5"
 POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY="0"
 # Securite PAR BLOC : refuser plus de 20 % de rejets.
 # Examiner les diagnostics avant d'augmenter cette limite [0,1].
