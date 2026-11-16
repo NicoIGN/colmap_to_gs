@@ -2,6 +2,35 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
+## Vidéo sur Slurm
+
+`scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des
+frames dans un job Slurm, puis appel du lanceur existant
+`scripts/launch_images_to_3dgs.sh` après réussite de l'extraction. Le terminal
+attend la fin de l'extraction avant de soumettre les jobs images.
+
+Ajouter ces variables à une configuration images/Slurm :
+
+```bash
+VIDEO="/chemin/IMG_5017.MOV"
+NUM_FRAMES=900
+SFM_IMAGES_DIR="/chemin/nouveau-calcul/frames"
+```
+
+```bash
+bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" /chemin/config-video.sh
+```
+
+Les options `--prepare-only` et `--wait` sont transmises au lanceur images.
+Les ressources `SLURM_*` et `SLURM_ENV_SETUP` sont aussi utilisées pour
+l'extraction. La sélection conserve la couverture temporelle et utilise la
+pondération de netteté par défaut de l'extracteur (0,7).
+Les frames existantes ne sont pas écrasées : utiliser un nouveau dossier
+pour réextraire, ou appeler directement `launch_images_to_3dgs.sh` pour
+reprendre à partir des frames déjà extraites.
+Les journaux d'extraction sont dans `OUTPUT_DIR/logs/video-frames-%j.out`
+et `.err`.
+
 ## 1. Objectif
 
 Pipeline configurable pour produire un Gaussian Splat `.splat` à partir d’images,

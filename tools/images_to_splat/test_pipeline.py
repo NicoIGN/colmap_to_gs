@@ -1135,6 +1135,52 @@ if "--wait" in args:
         self.assertFalse(any(cmd[0] == "merge_splats.py" for cmd in self.commands()))
         self.assertFalse((self.output / "scene.splat").exists())
 
+    def configure_video_launcher(self):
+        video = self.root / "source video.MOV"
+        video.write_bytes(b"video")
+        frames = self.root / "extracted frames"
+        self.append(f'VIDEO="{video}"\nNUM_FRAMES=900\nSFM_IMAGES_DIR="{frames}"')
+        self.env["TEST_VIDEO_SOURCE_IMAGES"] = str(self.images)
+        wrapper = self.bin / "python"
+        wrapper.write_text(wrapper.read_text().replace(
+            "if name not in known:",
+            '''if name == "extract_sharp_frames.py":
+    with open(os.environ["TEST_EVENTS"], "a") as log:
+        log.write(json.dumps([name, *args[1:]]) + "\\n")
+    assert get("--num-frames") == "900"
+    assert Path(get("--video")).is_file()
+    assert "--reset" not in args
+    if os.environ.get("TEST_FAIL_TOOL") == name:
+        sys.exit(7)
+    shutil.copytree(os.environ["TEST_VIDEO_SOURCE_IMAGES"], get("--out"), dirs_exist_ok=True)
+    sys.exit(0)
+if name not in known:'''))
+        return SOURCE.parents[1] / "scripts/launch_videos_to_3dgs.sh", frames
+
+    def test_slurm_video_extracts_before_launching_images(self):
+        launcher, frames = self.configure_video_launcher()
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--wait"],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assert_ok(result)
+        jobs = json.loads(self.jobs.read_text())
+        self.assertEqual(len(jobs), 4)
+        self.assertIn("--wait", jobs[0])
+        self.assertIn("--gres=none", jobs[0])
+        self.assertIn("--job-name=video-frames", jobs[0])
+        self.assertIn("--job-name=images-prepare", jobs[1])
+        self.assertEqual(jobs[1][-1], str(frames))
+        self.assertEqual(self.commands()[0][0], "extract_sharp_frames.py")
+        self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
+
+    def test_slurm_failed_video_extraction_does_not_launch_images(self):
+        launcher, _ = self.configure_video_launcher()
+        self.env["TEST_FAIL_TOOL"] = "extract_sharp_frames.py"
+        result = subprocess.run(["bash", str(launcher), str(self.config)],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(json.loads(self.jobs.read_text())), 1)
+        self.assertEqual([command[0] for command in self.commands()], ["extract_sharp_frames.py"])
+
     def test_slurm_runs_same_config_and_array_then_crops(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))
         prepare, train, merge = json.loads(self.jobs.read_text())
