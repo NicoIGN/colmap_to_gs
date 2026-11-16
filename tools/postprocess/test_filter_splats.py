@@ -57,7 +57,7 @@ class SparseBBoxTest(unittest.TestCase):
         quats = np.tile([1., 0, 0, 0], (3, 1))
         mask, report = sparse_support_mask(means, scales, quats, points)
         self.assertEqual(mask.tolist(), [False, True, True])
-        self.assertEqual(report["centre_supported_but_patch_unsupported"], 1)
+        self.assertEqual(report["unsupported"], 2)
         rotation = Rotation.from_euler("xyz", [0.4, 1.1, -0.3])
         for scale in (1e-6, 1e6):
             transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
@@ -70,7 +70,20 @@ class SparseBBoxTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sparse_support_mask(means, scales, quats, points, distance_factor=factor)
 
-    def test_outside_centres_rejected_and_similarity_invariant(self):
+    def test_support_rejects_only_opaque_unsupported_splats(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        means = np.array([[0, 0, 4], [0, 0, 4], [0, 0, 0]])
+        scales = np.array([[2, 2, 0.01], [2, 2, 0.01], [4, 2, 0.01]])
+        quats = np.tile([1., 0, 0, 0], (3, 1))
+        opacity = np.array([1.0, 0.1, 1.0])
+        mask, report = sparse_support_mask(
+            means, scales, quats, points, opacity=opacity, min_opacity=0.5,
+        )
+        self.assertEqual(mask.tolist(), [True, False, False])
+        self.assertEqual(report["tested"], 2)
+        self.assertEqual(report["unsupported"], 1)
+
         points = sparse_cloud()
         means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
         expected, report = sparse_bbox_mask(means, points)
@@ -281,6 +294,7 @@ class ContextualFilterTest(unittest.TestCase):
             root = Path(temporary)
             source, output, points = root / "raw.splat", root / "result.splat", root / "p.bin"
             s = scene()
+            s["opacity"] = np.full(len(s["means"]), 3.0)
             s["means"] = np.vstack((s["means"], [[200, 0, 0]]))
             for key in ("scales", "quats", "opacity", "dc"):
                 s[key] = np.concatenate((s[key], s[key][:1]))

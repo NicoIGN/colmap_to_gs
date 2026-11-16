@@ -1101,6 +1101,8 @@ if "--wait" in args:
             with self.subTest(mode=mode):
                 output = self.root / f"bbox-{mode}"
                 self.append(f'POSTPROCESS_SPARSE_BBOX_MODE="{mode}"\nOUTPUT_DIR="{output}"')
+                if mode == "off":
+                    self.append('POSTPROCESS_SPARSE_SUPPORT_MODE="off"')
                 self.assert_ok(self.run_pipeline())
                 self.assertTrue((output / "scene.splat").is_file())
                 cropped = output / "gs/block_000/splats/block_000.bbox.splat"
