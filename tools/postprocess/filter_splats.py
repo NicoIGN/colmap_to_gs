@@ -241,28 +241,23 @@ def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.
     return outside, report
 
 
-def sparse_support_mask(means, scales, quats, points, *, opacity=None, min_opacity=0.0,
-                        distance_factor=3.0, min_fraction=0.5, batch_size=20000):
-    """Reject opaque splats whose visible patch has no sparse support.
+def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
+                       distance_factor=3.0, batch_size=20000):
+    """Reject splats that are isolated from both sparse points and other splats.
 
-    Nine samples span +/- one sigma along the two largest axes of each splat,
-    so the test follows the splat surface, not only its centre. A sample is
-    supported when it lies within distance_factor sparse local spacings of a
-    sparse point. Only splats with opacity >= min_opacity are tested; the
-    default 0 tests every splat, so floaters with low opacity are removed too.
-    Without opacity, every splat is tested. Distances are divided by sparse local
-    spacing (eighth neighbour / sqrt(8)); no absolute scene unit is used.
+    A splat is rejected if its centre is farther than distance_factor sparse
+    local spacings from the nearest sparse point AND its eighth nearest splat
+    is also farther than that bound. Splats in a dense splat neighbourhood are
+    kept even where the sparse reconstruction is poor. Distances are divided by
+    sparse local spacing (eighth neighbour / sqrt(8)); no absolute unit is used.
+    Splats below min_opacity are not tested.
     """
     if not np.isfinite(distance_factor) or distance_factor <= 0:
         raise ValueError("Facteur de distance sparse attendu fini et > 0")
-    if not np.isfinite(min_fraction) or not 0 < min_fraction <= 1:
-        raise ValueError("Fraction de support sparse attendue dans ]0,1]")
     if not np.isfinite(min_opacity) or not 0 <= min_opacity <= 1:
         raise ValueError("Opacité minimale attendue dans [0,1]")
     if batch_size < 1:
         raise ValueError("Taille de lot attendue >= 1")
-    if opacity is None:
-        opacity = np.ones(len(means))
     tested = np.asarray(opacity) >= min_opacity
     points = np.unique(points, axis=0)
     if len(points) < 10 or not np.isfinite(points).all():
@@ -274,27 +269,22 @@ def sparse_support_mask(means, scales, quats, points, *, opacity=None, min_opaci
     points = (points - origin) / extent
     tree = cKDTree(points)
     spacing = tree.query(points, k=9)[0][:, -1] / np.sqrt(8)
-    offsets = np.array([(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1)])
+    means = (means - origin) / extent
+    splat_tree = cKDTree(means)
+    neighbours = min(9, len(means))
     rejected = np.zeros(len(means), dtype=bool)
     for start in range(0, len(means), batch_size):
         stop = min(start + batch_size, len(means))
-        q = quats[start:stop]
-        q = q / np.max(np.abs(q), axis=1, keepdims=True)
-        rotation = Rotation.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()
-        axes = np.argsort(scales[start:stop], axis=1)[:, -2:]
-        directions = np.take_along_axis(rotation, axes[:, None, :], axis=2)
-        lengths = np.take_along_axis(scales[start:stop], axes, axis=1) / extent
-        samples = ((means[start:stop] - origin) / extent)[:, None, :] + np.einsum(
-            "nij,nj,kj->nki", directions, lengths, offsets,
-        )
-        distances, near = tree.query(samples.reshape(-1, 3))
-        supported = (distances <= distance_factor * spacing[near]).reshape(-1, 9)
-        rejected[start:stop] = supported.mean(axis=1) < min_fraction
+        centres = means[start:stop]
+        distances, near = tree.query(centres)
+        splat_gaps = splat_tree.query(centres, k=neighbours)[0][:, -1]
+        bound = distance_factor * spacing[near]
+        rejected[start:stop] = (distances > bound) & (splat_gaps > bound)
     rejected &= tested
     return rejected, dict(
         unsupported=int(rejected.sum()), tested=int(tested.sum()),
         sparse_points=len(points), distance_factor=distance_factor,
-        min_fraction=min_fraction, min_opacity=min_opacity, samples=9, patch_sigma=1,
+        min_opacity=min_opacity,
         warning="Filtre expérimental : les surfaces peu représentées dans le sparse peuvent être rejetées.",
     )
 
@@ -338,8 +328,8 @@ def main():
     parser.add_argument("--sparse-support-mode", choices=("off", "diagnostic", "apply"),
                         default="off")
     parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
-    parser.add_argument("--sparse-support-min-fraction", type=float, default=0.5)
-    parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0)
+    parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0,
+                        help="Splats with opacity below this value are never rejected")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     try:
@@ -419,11 +409,10 @@ def main():
             inside = np.flatnonzero(~outside)
             opacity = records["rgba"][:, 3].astype(np.float64) / 255.0
             subset, support_report = sparse_support_mask(
-                means[inside], scales[inside], quats[inside], points,
+                means[inside], points,
                 opacity=opacity[inside],
                 min_opacity=args.sparse_support_min_opacity,
                 distance_factor=args.sparse_support_distance_factor,
-                min_fraction=args.sparse_support_min_fraction,
                 batch_size=args.batch_size,
             )
             unsupported[inside[subset]] = True

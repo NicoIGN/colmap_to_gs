@@ -242,7 +242,6 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
       --sparse-cameras "$sparse/images.bin" \
       --sparse-support-mode "$POSTPROCESS_SPARSE_SUPPORT_MODE" \
       --sparse-support-distance-factor "$POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR" \
-      --sparse-support-min-fraction "$POSTPROCESS_SPARSE_SUPPORT_MIN_FRACTION" \
       --sparse-support-min-opacity "$POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")

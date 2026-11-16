@@ -49,53 +49,38 @@ def sparse_cloud():
 
 
 class SparseBBoxTest(unittest.TestCase):
-    def test_surface_patch_support_and_similarity_invariance(self):
+    def test_support_rejects_only_splats_isolated_from_sparse_and_splats(self):
         x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
         points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
-        means = np.array([[0, 0, 0], [0, 0, 4], [0, 0, 0]])
-        scales = np.array([[4, 2, 0.01], [4, 2, 0.01], [40, 20, 0.01]])
-        quats = np.tile([1., 0, 0, 0], (3, 1))
-        mask, report = sparse_support_mask(means, scales, quats, points)
-        self.assertEqual(mask.tolist(), [False, True, True])
-        self.assertEqual(report["unsupported"], 2)
+        cluster = np.column_stack((np.arange(9) * 1e-3, np.zeros(9), np.full(9, 4.0)))
+        means = np.vstack(([[0, 0, 0.1], [5, 0, 4]], cluster))
+        opacity = np.zeros(len(means))
+        mask, report = sparse_support_mask(means, points, opacity=opacity)
+        self.assertEqual(mask.tolist(), [False, True] + [False] * 9)
+        self.assertEqual(report["unsupported"], 1)
         rotation = Rotation.from_euler("xyz", [0.4, 1.1, -0.3])
-        for scale in (1e-6, 1e6):
-            transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
-            q = np.tile(rotation.as_quat()[[3, 0, 1, 2]], (3, 1))
-            actual, _ = sparse_support_mask(
-                transform(means), scales * scale, q, transform(points), batch_size=1,
-            )
-            np.testing.assert_array_equal(actual, mask)
+        for scale in (1e-5, 1e5):
+            with self.subTest(scale=scale):
+                transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
+                actual, _ = sparse_support_mask(
+                    transform(means), transform(points), opacity=opacity, batch_size=3,
+                )
+                np.testing.assert_array_equal(actual, mask)
         for factor in (0, float("nan")):
             with self.assertRaises(ValueError):
-                sparse_support_mask(means, scales, quats, points, distance_factor=factor)
+                sparse_support_mask(means, points, opacity=opacity, distance_factor=factor)
 
-    def test_support_tests_low_opacity_splats_by_default(self):
+    def test_support_ignores_opacity_below_min_opacity(self):
         x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
         points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
-        means = np.array([[0, 0, 4]])
-        scales = np.array([[2, 2, 0.01]])
-        quats = np.tile([1., 0, 0, 0], (1, 1))
+        means = np.array([[5, 0, 4], [-5, 0, 4]])
         mask, report = sparse_support_mask(
-            means, scales, quats, points, opacity=np.array([0.1]),
+            means, points, opacity=np.array([0.0, 1.0]), min_opacity=0.5,
         )
-        self.assertEqual(mask.tolist(), [True])
+        self.assertEqual(mask.tolist(), [False, True])
         self.assertEqual(report["tested"], 1)
 
-    def test_support_rejects_only_opaque_unsupported_splats(self):
-        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
-        points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
-        means = np.array([[0, 0, 4], [0, 0, 4], [0, 0, 0]])
-        scales = np.array([[2, 2, 0.01], [2, 2, 0.01], [4, 2, 0.01]])
-        quats = np.tile([1., 0, 0, 0], (3, 1))
-        opacity = np.array([1.0, 0.1, 1.0])
-        mask, report = sparse_support_mask(
-            means, scales, quats, points, opacity=opacity, min_opacity=0.5,
-        )
-        self.assertEqual(mask.tolist(), [True, False, False])
-        self.assertEqual(report["tested"], 2)
-        self.assertEqual(report["unsupported"], 1)
-
+    def test_sparse_bbox_outside_points_and_similarity_invariance(self):
         points = sparse_cloud()
         means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
         expected, report = sparse_bbox_mask(means, points)

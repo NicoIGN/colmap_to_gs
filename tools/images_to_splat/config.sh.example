@@ -245,14 +245,12 @@ POSTPROCESS_SPARSE_BBOX_QUANTILE="0.02"
 # planar : nettoyage seulement en plani (verticale = normale du plan des centres
 # camera, altitude jamais coupee). full : boite 3D complete (coupe le haut d'un objet).
 POSTPROCESS_SPARSE_BBOX_SCOPE="planar"
-# Filtre de support (floaters dans le vide) : un splat assez opaque doit etre pres
-# des points sparse. diagnostic = ecrit .filter.json sans retirer ; apply = retire.
-# Seuls les splats d'opacite >= MIN_OPACITY sont testes (0 : tous). MIN_FRACTION : part des 9
-# points du patch du splat qui doivent etre supportes. DISTANCE_FACTOR : en densites
-# sparse locales.
-POSTPROCESS_SPARSE_SUPPORT_MODE="diagnostic"
+# Filtre de support (floaters isoles) : un splat est retire s'il est loin de tout point
+# sparse ET de tout autre splat (8e voisin). diagnostic = ecrit .filter.json sans retirer ;
+# apply = retire. DISTANCE_FACTOR : en densites sparse locales. MIN_OPACITY : splats
+# moins opaques ne sont pas testes (0 : tous).
+POSTPROCESS_SPARSE_SUPPORT_MODE="apply"
 POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="3.0"
-POSTPROCESS_SPARSE_SUPPORT_MIN_FRACTION="0.5"
 POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY="0"
 # Securite PAR BLOC : refuser plus de 20 % de rejets.
 # Examiner les diagnostics avant d'augmenter cette limite [0,1].
