@@ -237,6 +237,7 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
     cropped="$gs_root/$id/splats/$id.bbox.splat"
     crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
       "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
+      --sparse-bbox-quantile "$POSTPROCESS_SPARSE_BBOX_QUANTILE" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")
   else

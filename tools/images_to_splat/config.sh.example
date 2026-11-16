@@ -239,6 +239,9 @@ TRAIN_CLEAN="false"
 # Bbox orientee robuste (quantiles 0.5/99.5 %), pas bbox de chaque sous-bloc.
 POSTPROCESS_SPARSE_BBOX_MODE="apply"
 POSTPROCESS_SPARSE_BBOX_MARGIN="0.05"  # fraction du plus grand cote
+# Quantile de chaque cote de la bbox sparse (0.005 = 0.5 %). Plus petit = bbox plus large,
+# moins de risque de couper le haut d'un objet (ex. statue) avec peu de points sparse.
+POSTPROCESS_SPARSE_BBOX_QUANTILE="0.005"
 # Securite PAR BLOC : refuser plus de 20 % de rejets.
 # Examiner les diagnostics avant d'augmenter cette limite [0,1].
 POSTPROCESS_MAX_REMOVAL_FRACTION="0.20"
