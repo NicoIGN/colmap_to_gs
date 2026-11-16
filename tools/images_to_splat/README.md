@@ -372,11 +372,13 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 
 ```bash
 SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
+SFM_DENSITY_VOTE_FRACTION=0.75  # ]0,1[ ; baisser = plus strict
+SFM_DENSITY_FAR_SUPPORT_RATE=0.25  # ]0,1] ; monter = plus strict
 ```
 
 Le filtre expérimental de [`tools/preprocess/filter_sparse_density.py`](../preprocess/README.md) s'exécute
 sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
-ses seuils par défaut et écrit deux modèles COLMAP binaires : `sparse_clean`
+ces seuils et écrit deux modèles COLMAP binaires : `sparse_clean`
 (points conservés) et `sparse_rejected` (points retirés), chacun avec son
 rapport. Aucun PLY n'est produit ; les originaux restent intacts.
 Les blocs et le recadrage bbox final utilisent tous deux ce sparse filtré.

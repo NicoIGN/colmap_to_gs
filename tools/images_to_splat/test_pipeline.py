@@ -474,7 +474,7 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
-        self.assertEqual((filtered / ".density_done").read_text().strip(), "2")
+        self.assertEqual((filtered / ".density_done").read_text().strip(), "2 0.75 0.25")
         self.assertTrue((filtered / "density_report.json").is_file())
         report = json.loads((filtered / "density_report.json").read_text())
         self.assertEqual(report["algorithm_version"], 2)

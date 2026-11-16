@@ -86,6 +86,8 @@ load_config() {
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   REMOVE_LOCKS="${REMOVE_LOCKS:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+  SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"
+  SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
   SFM_COLMAP_BIN="${SFM_COLMAP_BIN:-colmap}"
   SFM_COLMAP_USE_GPU="${SFM_COLMAP_USE_GPU:-true}"
@@ -209,6 +211,12 @@ load_config() {
     config_error "REMOVE_LOCKS=true exige PIPELINE_RESUME=true."
   fi
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
+  if ! awk -v v="$SFM_DENSITY_VOTE_FRACTION" 'BEGIN { exit !(v > 0 && v < 1) }'; then
+    config_error "SFM_DENSITY_VOTE_FRACTION='$SFM_DENSITY_VOTE_FRACTION' doit être dans ]0,1[."
+  fi
+  if ! awk -v v="$SFM_DENSITY_FAR_SUPPORT_RATE" 'BEGIN { exit !(v > 0 && v <= 1) }'; then
+    config_error "SFM_DENSITY_FAR_SUPPORT_RATE='$SFM_DENSITY_FAR_SUPPORT_RATE' doit être dans ]0,1]."
+  fi
   config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
   config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'
   config_choice SFM_COLMAP_MATCHING "$SFM_COLMAP_MATCHING" 'exhaustive|sequential'

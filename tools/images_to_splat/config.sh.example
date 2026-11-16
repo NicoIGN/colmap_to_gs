@@ -150,6 +150,9 @@ SFM_CAMERA_MODEL="opencv"
 # Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.
 # Activer avant preparation ; changer apres decoupage exige un nouveau workspace.
 SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+# Seuils du filtre : augmenter far-support-rate ou baisser vote-fraction = plus strict.
+SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"   # ]0,1[
+SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"  # ]0,1]
 # Photos individuelles, sans sequence.
 # Sans GPX, les GPS EXIF de plusieurs images georeferencent automatiquement le SfM.
 # Un GPX configure ci-dessous reste prioritaire sur les coordonnees EXIF.

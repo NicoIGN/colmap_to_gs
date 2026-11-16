@@ -132,17 +132,21 @@ prepare() {
     [[ "$density_version" =~ ^[0-9]+$ ]] ||
       die "Version du filtre de densité invalide : $density_version"
     cached_density_version=""
+    density_key="$density_version $SFM_DENSITY_VOTE_FRACTION $SFM_DENSITY_FAR_SUPPORT_RATE"
+    cached_density_version=""
     if [[ -f "$sparse/.density_done" ]]; then
       IFS= read -r cached_density_version < "$sparse/.density_done" || true
     fi
-    if [[ "$cached_density_version" != "$density_version" ]]; then
+    if [[ "$cached_density_version" != "$density_key" ]]; then
       [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" && ! -e "$OUTPUT_DIR/gs-nerfstudio" ]] ||
-        die "Version du filtre de densité modifiée : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
+        die "Réglages ou version du filtre de densité modifiés : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
       "$PYTHON_BIN" "$density_filter" \
         --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
+        --vote-fraction "$SFM_DENSITY_VOTE_FRACTION" \
+        --far-support-rate "$SFM_DENSITY_FAR_SUPPORT_RATE" \
         --workers "$SFM_THREADS" --verbose
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-      printf '%s\n' "$density_version" > "$sparse/.density_done"
+      printf '%s\n' "$density_key" > "$sparse/.density_done"
     else
       check_filtered_sparse
     fi
