@@ -26,6 +26,7 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `extract_sharp_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
 | `image_info.py` | Inspection d'une image et de ses informations GPS |
 | `images_to_colmap.py` | Reconstruction COLMAP depuis des images |
+| `diagnose_colmap_models.py` | Compare deux modèles COLMAP et leurs correspondances Spirula VKMT facultatives |
 | `georef_colmap_from_gpx.py` | Recalage d'un modèle COLMAP sur une trace GPX |
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
@@ -36,6 +37,19 @@ python3 tools/preprocess/images_to_colmap.py --help
 - `tools/libs/python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
   appelée par `tools/libs/scripts/run.sh`.
 - `tools/libs/python/estimate_planes.py` : estimation des plans, appelée par `tools/libs/scripts/run.sh`.
+
+Pour diagnostiquer deux modèles issus d'un même SfM Spirula :
+
+```bash
+python tools/preprocess/diagnose_colmap_models.py \
+  /chemin/sfm/sparse/0 /chemin/sfm/sparse/1 \
+  --matches /chemin/sfm/matches.bin
+```
+
+`--matches` est facultatif. Les modèles et le fichier de correspondances doivent
+provenir du même calcul et employer les mêmes noms d'images. Le fichier ne
+permet pas de distinguer une paire non sélectionnée d'une paire rejetée. Les
+modèles seuls ne prouvent pas pourquoi la fusion a échoué.
 
 ## 3. Configuration et utilisation
 
