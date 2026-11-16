@@ -250,7 +250,7 @@ POSTPROCESS_SPARSE_BBOX_SCOPE="planar"
 # apply = retire. DISTANCE_FACTOR : en densites sparse locales. MIN_OPACITY : splats
 # moins opaques ne sont pas testes (0 : tous).
 POSTPROCESS_SPARSE_SUPPORT_MODE="apply"
-POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="3.0"
+POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="2.0"
 # Points sparse isolés retirés avant le filtre : distance au 8e voisin sparse > ISOLATION_FACTOR
 # fois la médiane.
 POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR="3.0"
