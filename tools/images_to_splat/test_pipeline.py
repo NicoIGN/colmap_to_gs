@@ -198,13 +198,17 @@ def get(flag): return args[args.index(flag) + 1]
 with open(os.environ["TEST_EVENTS"], "a") as log:
     log.write(json.dumps(["spirula", *args]) + "\n")
 if args[0] == "sfm":
-    assert get("--data-type") == "individual"
+    if get("--pairs") == "sequential":
+        assert get("--data-type") == "video"
+        assert get("--sequence") == "."
+    else:
+        assert get("--data-type") == "individual"
+        assert "--sequence" not in args
     assert get("--camera-mode") == "folder"
     assert get("--metric-gps") in ("none", "horizontal", "full")
     assert ("--sensor-pairs" in args) == (get("--metric-gps") != "none")
     if "--sensor-pairs" in args:
         assert get("--sensor-pair-radius") == "30"
-    assert "--sequence" not in args
     for flag, variable in (
         ("--max-error", "SFM_MAX_ERROR"), ("--min-inliers", "SFM_MIN_INLIERS"),
         ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_SP_BA_LOSS"),
@@ -835,6 +839,21 @@ if "--wait" in args:
         self.assertTrue((backups[0] / "blocks/manifest.json").is_file())
         self.assertTrue((self.output / "blocks/manifest.json").is_file())
         self.assertTrue((self.output / ".prepare_done").is_file())
+
+    def test_sequential_video_pairing_and_camera_split_guard(self):
+        self.append("SFM_SP_PAIRS=sequential\nSFM_CAMERA_SPLIT=false")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        run = self.sfm_runs()[0]
+        self.assertEqual(run[run.index("--pairs") + 1], "sequential")
+        self.assertEqual(run[run.index("--data-type") + 1], "video")
+        self.assertEqual(run[run.index("--sequence") + 1], ".")
+
+    def test_sequential_pairing_rejects_camera_split_before_work(self):
+        self.append("SFM_SP_PAIRS=sequential\nSFM_CAMERA_SPLIT=true")
+        result = self.run_pipeline("--validate-only")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_SP_PAIRS=sequential exige SFM_CAMERA_SPLIT=false", result.stderr)
+        self.assertFalse(self.events.exists())
 
     def test_resume_does_not_ignore_mask_policy_metadata(self):
         masks, _ = self.interrupted_workspace()

@@ -246,7 +246,7 @@ load_config() {
   if [[ "$COLMAP_METHOD" == spirula ]]; then
     config_choice SFM_SP_FEATURES "$SFM_SP_FEATURES" 'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
     config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
-    config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive'
+    config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive|sequential'
     config_choice SFM_SP_QUALITY "$SFM_SP_QUALITY" 'low|medium|high|extreme'
   elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" || -n "$SFM_SP_QUALITY" ]]; then
     config_error "SFM_SP_FEATURES, SFM_SP_MATCHER, SFM_SP_PAIRS et SFM_SP_QUALITY ne s'appliquent qu'à COLMAP_METHOD=spirula."
@@ -256,6 +256,9 @@ load_config() {
   config_positive_integer SFM_CAMERA_SPLIT_MIN_IMAGES "$SFM_CAMERA_SPLIT_MIN_IMAGES"
   if [[ "$SFM_CAMERA_SPLIT" == true && ( "$COLMAP_METHOD" != spirula || "$SFM_CAMERA_MODE" == image ) ]]; then
     config_error "SFM_CAMERA_SPLIT=true exige COLMAP_METHOD=spirula et SFM_CAMERA_MODE folder ou single."
+  fi
+  if [[ "$COLMAP_METHOD" == spirula && "$SFM_SP_PAIRS" == sequential && "$SFM_CAMERA_SPLIT" == true ]]; then
+    config_error "SFM_SP_PAIRS=sequential exige SFM_CAMERA_SPLIT=false : les sous-dossiers de caméras ne préservent pas l'ordre temporel global."
   fi
   if [[ "$TRAIN_BACKEND" == spirula ]]; then
     config_choice TRAIN_SP_PRESET "$TRAIN_SP_PRESET" '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'

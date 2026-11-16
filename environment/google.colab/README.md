@@ -28,6 +28,12 @@ processus Spirula SAM parallèles sur le même GPU. Chaque processus charge son
 modèle ; réduire à **1** en cas de mémoire GPU insuffisante. Le gain de vitesse
 n'est pas garanti si un seul processus sature déjà le GPU. Ce paramètre
 ne change pas les masques demandés et n'invalide pas les résultats existants.
+`SFM_SP_PAIRS` sélectionne les paires d'images pour Spirula : `prefilter` par
+défaut, ou `sequential`, `auto`, `exhaustive`. Pour essayer `sequential` sur
+une vidéo, définir également `SFM_CAMERA_SPLIT='false'` : ses sous-dossiers
+ne préservent pas l'ordre temporel global. Les frames doivent être nommées dans
+l'ordre. La fermeture de boucle dépend de la version de Spirula. Un changement
+de sélection des paires exige un nouveau workspace SfM.
 Un iPhone peut changer d'objectif ou de focale pendant la vidéo : Spirula
 produit alors plusieurs modèles. Avec `SFM_CAMERA_SPLIT=true` (défaut du
 notebook), chaque modèle d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images (100)

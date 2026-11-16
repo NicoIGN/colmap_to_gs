@@ -30,9 +30,13 @@ case "$COLMAP_METHOD" in
     echo "[COLMAP] Spirula, GPS EXIF=$metric_gps ; GPX configuré=${GEOREF_GPX_FILE:-non}."
     reuse_matches=redo
     [[ "${PIPELINE_RESUME:-false}" != true ]] || reuse_matches=auto
+    sequence_args=(--data-type individual --sequence=)
+    if [[ "$SFM_SP_PAIRS" == sequential ]]; then
+      sequence_args=(--data-type video --sequence .)
+    fi
     bash "$repo_root/tools/libs/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
-      --preset video --no-prepare --data-type individual --sequence= \
+      --preset video --no-prepare "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \

@@ -123,7 +123,8 @@ SFM_MIN_TRI_ANGLE="3"     # ]0,90] degres ; augmente = moins de faible parallaxe
 # --- COLMAP_METHOD=spirula uniquement ---
 SFM_SP_FEATURES="aliked-n16rot"
 SFM_SP_MATCHER="bruteforce"
-# prefilter|auto|exhaustive ; exhaustive couteux sur plusieurs milliers d'images.
+# prefilter|auto|exhaustive|sequential ; exhaustive est couteux.
+# sequential : noms tries dans l'ordre de la video, SFM_CAMERA_SPLIT=false.
 SFM_SP_PAIRS="prefilter"
 # low|medium|high|extreme : préréglage Spirula ; high plafonne les points max à 8192
 # et écrase SFM_ALIKED_MAX_FEATURES. Utiliser extreme pour aller au-delà.

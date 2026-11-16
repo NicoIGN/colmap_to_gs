@@ -193,6 +193,11 @@ Le SfM estime les positions des caméras et un nuage de points 3D à partir des
 images.
 
 - Images SfM : photos individuelles, sans filtrage des paires GPS.
+- Avec Spirula, `SFM_SP_PAIRS=sequential` traite les images comme une séquence
+  ordonnée par leur chemin et requiert `SFM_CAMERA_SPLIT=false`. Les images
+  doivent être nommées dans l'ordre de prise de vue ; les dossiers issus de la
+  séparation des caméras ne conservent pas cet ordre global. La fermeture de
+  boucle dépend de la version et des réglages de Spirula.
 - Caméra : une caméra par sous-dossier par défaut ; vérifier que les images
   d'un même dossier partagent bien les mêmes caractéristiques optiques.
   `SFM_CAMERA_SPLIT=true` relance le SfM avec une caméra par modèle quand
