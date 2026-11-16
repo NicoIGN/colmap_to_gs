@@ -496,8 +496,10 @@ La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers
 Seuls les fichiers explicitement retenus sont fusionnés (pas de glob mêlant
 bruts, rejets et copies recadrées).
 Les diagnostics `.filter.json` et `.rejected.splat` sont conservés à côté.
-La bbox est calculée sur les quantiles `POSTPROCESS_SPARSE_BBOX_QUANTILE` (défaut
-0.005) de chaque axe des points sparse. Un quantile plus petit élargit la bbox et
+La bbox planaire (`POSTPROCESS_SPARSE_BBOX_SCOPE=planar`, défaut) ne nettoie que le plan
+horizontal, défini par la normale du plan des centres caméra : l'altitude n'est jamais
+coupée. Elle est resserrée par défaut (quantile 0.02, marge 0.02). Le quantile vaut
+`POSTPROCESS_SPARSE_BBOX_QUANTILE` de chaque axe des points sparse. Un quantile plus petit élargit la bbox et
 évite de couper le haut d'un objet peu couvert par les points sparse.
 La sécurité de rejet de 20 % s'applique par bloc ; examiner le diagnostic avant
 de modifier `POSTPROCESS_MAX_REMOVAL_FRACTION`. Le filtre contextuel est désactivé.
