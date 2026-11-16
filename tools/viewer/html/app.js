@@ -198,16 +198,22 @@ function updatePrincipalAxisHelp() {
     `Maintenir : rotation positive autour de l’axe ${axis}`;
 }
 
+function hexToColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return new pc.Color(
+    ((n >> 16) & 255) / 255,
+    ((n >> 8) & 255) / 255,
+    (n & 255) / 255
+  );
+}
+
+function applyBackgroundColor() {
+  const hex = $("backgroundColor").value;
+  document.body.style.background = hex;
+  if (cameraEntity) cameraEntity.camera.clearColor = hexToColor(hex);
+}
+
 function updateKeyboardHelp() {
-  const layout =
-    $("keyboardLayout").value === "azerty"
-      ? "ZQSD : déplacer · A/E : descendre / monter"
-      : "WASD : déplacer · Q/E : descendre / monter";
-
-  $("keyboardHelp").dataset.tip =
-    `${layout} · Flèches : avancer / reculer / déplacement latéral · ` +
-    "Maj : accélérer · R : cadrer";
-
   if ($("help")) {
     $("help").textContent =
       "Clic gauche-glisser : tourner autour de la cible · " +
@@ -1154,14 +1160,7 @@ function installUI() {
     );
   });
 
-  $("step").addEventListener("input", () => {
-    $("stepValue").value = $("step").value;
-  });
-
-  $("keyboardLayout").addEventListener("change", () => {
-    navigation.clearNavigation();
-    updateKeyboardHelp();
-  });
+  $("backgroundColor").addEventListener("input", applyBackgroundColor);
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1348,7 +1347,7 @@ async function initialize() {
 
     cameraEntity = new pc.Entity("Camera");
     cameraEntity.addComponent("camera", {
-      clearColor: new pc.Color(0x10 / 255, 0x13 / 255, 0x1b / 255),
+      clearColor: hexToColor($("backgroundColor").value),
       fov: camera.fov,
       nearClip: camera.near,
       farClip: camera.far,
@@ -1400,8 +1399,8 @@ async function initialize() {
       hasCustomPrincipalAxis: () => getPrincipalAxisName() === "custom",
       getPrincipalAxisName: getPrincipalAxisLabel,
       isRotationLocked: () => $("lockPrincipalRotation").checked,
-      getSpeedValue: () => Number($("step").value),
-      getKeyboardLayout: () => $("keyboardLayout").value,
+      getSpeedValue: () => 10,
+      getKeyboardLayout: () => "azerty",
 
       navigateWithCollision: (move, enabled) =>
         collision.navigateWithCollision(() => {

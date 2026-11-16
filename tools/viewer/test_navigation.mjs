@@ -122,7 +122,8 @@ test("the vertical button enables its option and held target-orbit buttons use i
   const appSource = await readFile(new URL("./html/app.js", import.meta.url), "utf8");
   const functions = [
     "getPrincipalAxisName", "getPrincipalAxis", "getPrincipalAxisLabel",
-    "setPrincipalAxis", "updatePrincipalAxisHelp", "installUI",
+    "setPrincipalAxis", "updatePrincipalAxisHelp", "hexToColor",
+    "applyBackgroundColor", "installUI",
   ].map((name) => {
     const match = appSource.match(new RegExp(`^function ${name}\\([^]*?^\\}`, "m"));
     assert.ok(match, name);

@@ -434,35 +434,13 @@
         </button>
       </div>
 
-      <!-- Déplacement -->
-      <details open>
-        <summary>Déplacement</summary>
-
-        <label class="slider" for="step">
-          Vitesse de déplacement
-          <input
-            type="range"
-            id="step"
-            min="1"
-            max="50"
-            value="10"
-          />
-          <output id="stepValue" for="step">10</output>
+      <div class="section row">
+        <label for="backgroundColor" class="hint inline-hint">
+          Couleur du fond
         </label>
 
-        <div class="section row">
-          <label for="keyboardLayout" class="hint inline-hint">
-            Clavier
-          </label>
-
-          <select id="keyboardLayout">
-            <option value="azerty">AZERTY</option>
-            <option value="qwerty">QWERTY</option>
-          </select>
-        </div>
-
-        <span id="keyboardHelp" class="info" tabindex="0" data-tip="" role="img" aria-label="Aide clavier">ⓘ</span>
-      </details>
+        <input type="color" id="backgroundColor" value="#10131b" />
+      </div>
 
       <!-- Axe principal -->
       <details open>
@@ -539,49 +517,6 @@
             title="Recentrer la cible sur la scène en déplaçant ensemble la caméra et sa cible"
           >⌖ Recentrer sur la scène</button>
         </div>
-      </details>
-
-      <!-- Anticollision -->
-      <details>
-        <summary>Anticollision<span class="info" tabindex="0" data-tip="Nombre minimal de centres de splats par cellule : un seuil bas bloque davantage, un seuil haut laisse passer plus facilement. Détection approximative fondée sur les centres des splats : elle ne remplace pas un maillage physique et peut ignorer certaines surfaces. La marge de sécurité est sans effet dans la version actuelle.">ⓘ</span></summary>
-
-        <label class="check">
-          <input type="checkbox" id="collisionEnabled" />
-          Éviter les zones denses
-        </label>
-
-        <label class="slider" for="collisionDensity">
-          Seuil de densité
-          <input
-            type="range"
-            id="collisionDensity"
-            min="10"
-            max="500"
-            value="50"
-          />
-          <output
-            id="collisionDensityValue"
-            for="collisionDensity"
-          >50</output>
-        </label>
-
-
-        <label class="slider" for="collisionMargin">
-          Marge de sécurité — réservée
-          <input
-            type="range"
-            id="collisionMargin"
-            min="0.5"
-            max="3"
-            step="0.25"
-            value="0.5"
-          />
-          <output
-            id="collisionMarginValue"
-            for="collisionMargin"
-          >0.5</output>
-        </label>
-
       </details>
 
       <!-- Import COLMAP sparse binaire -->
@@ -680,25 +615,6 @@
         </label>
       </details>
 
-      <!-- Caméra -->
-      <details id="cameraSection">
-        <summary>Caméra · copier / restaurer<span class="info" tabindex="0" data-tip="Format : position X,Y,Z · cible X,Y,Z · axe vertical X,Y,Z. Fichier chargé par URL : copie du lien complet. Fichier ouvert localement : copie des coordonnées. Pour restaurer, coller les coordonnées numériques dans le champ.">ⓘ</span></summary>
-
-        <textarea
-          id="cameraValue"
-          rows="3"
-          aria-label="Coordonnées caméra"
-          placeholder="px,py,pz,tx,ty,tz,ux,uy,uz"
-          spellcheck="false"
-        ></textarea>
-
-        <div class="section row">
-          <button type="button" id="exportCam">Copier la vue</button>
-          <button type="button" id="importCam">Restaurer</button>
-        </div>
-
-      </details>
-
       <!-- GIF -->
       <details id="gifSection" open>
         <summary>Capture GIF animée<span class="info" tabindex="0" data-tip="Seule la vue 3D est enregistrée. Une image est ajoutée après chaque arrêt de la caméra pendant 600 ms. Export en boucle, limité à 640 × 480 px et 60 images, proportions conservées.">ⓘ</span></summary>
@@ -739,6 +655,68 @@
         <a id="gifDownload" class="download-link" hidden>
           Télécharger le GIF
         </a>
+
+      </details>
+
+      <!-- Caméra -->
+      <details id="cameraSection">
+        <summary>Caméra · copier / restaurer<span class="info" tabindex="0" data-tip="Format : position X,Y,Z · cible X,Y,Z · axe vertical X,Y,Z. Fichier chargé par URL : copie du lien complet. Fichier ouvert localement : copie des coordonnées. Pour restaurer, coller les coordonnées numériques dans le champ.">ⓘ</span></summary>
+
+        <textarea
+          id="cameraValue"
+          rows="3"
+          aria-label="Coordonnées caméra"
+          placeholder="px,py,pz,tx,ty,tz,ux,uy,uz"
+          spellcheck="false"
+        ></textarea>
+
+        <div class="section row">
+          <button type="button" id="exportCam">Copier la vue</button>
+          <button type="button" id="importCam">Restaurer</button>
+        </div>
+
+      </details>
+
+      <!-- Anticollision -->
+      <details>
+        <summary>Anticollision<span class="info" tabindex="0" data-tip="Nombre minimal de centres de splats par cellule : un seuil bas bloque davantage, un seuil haut laisse passer plus facilement. Détection approximative fondée sur les centres des splats : elle ne remplace pas un maillage physique et peut ignorer certaines surfaces. La marge de sécurité est sans effet dans la version actuelle.">ⓘ</span></summary>
+
+        <label class="check">
+          <input type="checkbox" id="collisionEnabled" />
+          Éviter les zones denses
+        </label>
+
+        <label class="slider" for="collisionDensity">
+          Seuil de densité
+          <input
+            type="range"
+            id="collisionDensity"
+            min="10"
+            max="500"
+            value="50"
+          />
+          <output
+            id="collisionDensityValue"
+            for="collisionDensity"
+          >50</output>
+        </label>
+
+
+        <label class="slider" for="collisionMargin">
+          Marge de sécurité — réservée
+          <input
+            type="range"
+            id="collisionMargin"
+            min="0.5"
+            max="3"
+            step="0.25"
+            value="0.5"
+          />
+          <output
+            id="collisionMarginValue"
+            for="collisionMargin"
+          >0.5</output>
+        </label>
 
       </details>
     </div>
