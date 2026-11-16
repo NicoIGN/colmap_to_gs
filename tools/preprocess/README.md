@@ -31,8 +31,12 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
 
-`extract_sharp_frames.py` retient la frame la plus nette de chaque tranche
-temporelle non vide, sans éliminer globalement les séquences floues ou similaires.
+`extract_sharp_frames.py` retient une frame par tranche temporelle non vide,
+sans éliminer globalement les séquences floues ou similaires. Le score combine
+la netteté relative à la plus nette de la tranche et la proximité du centre.
+`--sharpness-weight` règle le poids de la netteté entre 0 et 1 (défaut 0,7) ;
+1 privilégie la netteté, 0 une répartition plus régulière. La couverture d'une
+tranche non vide reste prioritaire quel que soit ce poids.
 Le nombre obtenu peut être inférieur à la demande si la vidéo est trop courte.
 L'écart maximal entre deux frames est affiché en nombre de frames vidéo et
 en secondes approximatives d'après la cadence moyenne.

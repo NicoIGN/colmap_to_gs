@@ -29,11 +29,18 @@ class SelectIndicesTest(unittest.TestCase):
         selected = select_indices(sharp, positions, num_frames=10)
         self.assertEqual(selected, list(range(10)))
 
-    def test_one_sharpest_frame_per_time_slice(self):
+    def test_prefers_sharper_frame_within_each_time_slice(self):
         sharp = [5, 9, 1, 7, 2, 8, 3, 6]
         positions = [i / 8 for i in range(8)]
         selected = select_indices(sharp, positions, num_frames=4)
         self.assertEqual(selected, [1, 3, 5, 7])
+
+    def test_weight_balances_sharpness_against_temporal_center(self):
+        sharp = [100, 90, 100, 90]
+        positions = [0.0, 0.25, 0.5, 0.75]
+        self.assertEqual(select_indices(sharp, positions, 2, sharpness_weight=0.7), [1, 3])
+        self.assertEqual(select_indices(sharp, positions, 2, sharpness_weight=1.0), [0, 2])
+        self.assertEqual(select_indices(sharp, positions, 2, sharpness_weight=0.0), [1, 3])
 
     def test_results_follow_time_not_candidate_array_order(self):
         selected = select_indices([10, 20, 30, 40], [0.75, 0.25, 0.0, 0.5], num_frames=4)
@@ -103,6 +110,12 @@ class CliTest(unittest.TestCase):
                 frame = cv2.imread(str(tmp / "out" / row["image"]))
                 self.assertIsNotNone(frame)
                 self.assertLess(abs(float(frame.mean()) - source_index * 7), 3)
+
+    def test_invalid_sharpness_weight_is_rejected(self):
+        result = self.run_cli("--video", "missing.avi", "--out", "out", "--num-frames", "4",
+                              "--sharpness-weight", "1.1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--sharpness-weight doit", result.stderr)
 
 
 if __name__ == "__main__":

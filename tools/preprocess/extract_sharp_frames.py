@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Extrait des images nettes et réparties dans le temps depuis une ou plusieurs vidéos.
 
-Sur-échantillonne la vidéo puis garde la candidate la plus nette dans chaque
-tranche temporelle. Les images floues ou similaires ne sont pas éliminées
-globalement : cela pourrait créer de longues lacunes dans la séquence.
+Sur-échantillonne la vidéo puis choisit une candidate par tranche temporelle
+en combinant sa netteté et sa proximité du centre de la tranche. Les images
+floues ou similaires ne sont pas éliminées globalement : cela pourrait créer
+de longues lacunes dans la séquence.
 
 Sortie : OUT/frame_00000.jpg, ou OUT/<nom_vidéo>/frame_00000.jpg si plusieurs vidéos.
 Dépendances : opencv-python-headless, numpy, tqdm.
@@ -20,6 +21,7 @@ from tqdm import tqdm
 
 OVERSAMPLE = 3
 SCORE_MAX_WIDTH = 960
+SHARPNESS_WEIGHT = 0.7
 
 
 def sharpness(gray):
@@ -34,7 +36,7 @@ def shrink_width(gray, max_width):
                       interpolation=cv2.INTER_AREA)
 
 
-def select_indices(sharp, positions, num_frames):
+def select_indices(sharp, positions, num_frames, sharpness_weight=SHARPNESS_WEIGHT):
     """Retourne les positions (triées) des candidates retenues.
 
     sharp : netteté de chaque candidate ; positions : position temporelle
@@ -42,12 +44,22 @@ def select_indices(sharp, positions, num_frames):
     """
     if len(sharp) == 0:
         return []
-    best = {}
+    buckets = {}
     for i in sorted(range(len(sharp)), key=lambda index: positions[index]):
         bucket = min(int(positions[i] * num_frames), num_frames - 1)
-        if bucket not in best or sharp[i] > sharp[best[bucket]]:
-            best[bucket] = i
-    return [best[bucket] for bucket in sorted(best)]
+        buckets.setdefault(bucket, []).append(i)
+    selected = []
+    for bucket, indices in sorted(buckets.items()):
+        best_sharpness = max(sharp[i] for i in indices)
+        center = (bucket + 0.5) / num_frames
+
+        def score(i):
+            quality = sharp[i] / best_sharpness if best_sharpness > 0 else 0.0
+            centered = max(0.0, 1.0 - 2.0 * num_frames * abs(positions[i] - center))
+            return sharpness_weight * quality + (1.0 - sharpness_weight) * centered
+
+        selected.append(max(indices, key=score))
+    return selected
 
 
 def read_video_info(path):
@@ -137,6 +149,8 @@ def main():
     ap.add_argument("--height", type=int, default=0,
                     help="Hauteur de sortie (0 = taille source). Nécessite --width.")
     ap.add_argument("--format", choices=["jpg", "png"], default="jpg")
+    ap.add_argument("--sharpness-weight", type=float, default=SHARPNESS_WEIGHT,
+                    help="Poids de la netteté dans chaque tranche, entre 0 et 1 (défaut : 0.7).")
     ap.add_argument("--index-csv", type=Path,
                     help="Écrit la correspondance entre noms et indices vidéo ; une seule vidéo.")
     ap.add_argument("--reset", action="store_true",
@@ -145,6 +159,8 @@ def main():
 
     if args.num_frames < 1:
         ap.error("--num-frames doit être >= 1.")
+    if not np.isfinite(args.sharpness_weight) or not 0 <= args.sharpness_weight <= 1:
+        ap.error("--sharpness-weight doit être fini et compris entre 0 et 1.")
     if args.width < 0 or args.height < 0 or (args.width > 0) != (args.height > 0):
         ap.error("--width et --height doivent être fournis ensemble et positifs.")
     if args.index_csv and len(args.video) != 1:
@@ -177,7 +193,8 @@ def main():
 
     selections = []
     for video, scan in zip(args.video, scans):
-        chosen = select_indices(scan["sharp"], scan["positions"], args.num_frames)
+        chosen = select_indices(scan["sharp"], scan["positions"], args.num_frames,
+                                sharpness_weight=args.sharpness_weight)
         frame_indices = [scan["indices"][k] for k in chosen]
         selections.append(frame_indices)
         print(f"[sélection] {video.name} : {len(frame_indices)} / {args.num_frames} image(s)")
