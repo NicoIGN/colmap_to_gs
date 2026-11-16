@@ -14,7 +14,8 @@ from scipy.spatial.transform import Rotation
 
 from tools.postprocess import export_ply as export
 from tools.postprocess.filter_splats import (
-    SPLAT_DTYPE, contextual_mask, load_sparse_points, sparse_bbox_mask, sparse_support_mask,
+    SPLAT_DTYPE, contextual_mask, load_camera_centres, load_sparse_points,
+    planar_sparse_bbox_mask, sparse_bbox_mask, sparse_support_mask,
 )
 
 
@@ -92,6 +93,57 @@ class SparseBBoxTest(unittest.TestCase):
             sparse_bbox_mask(np.zeros((1, 3)), points, margin=-1)
         with self.assertRaises(ValueError):
             sparse_bbox_mask(np.zeros((1, 3)), np.zeros((20, 3)))
+
+    def test_planar_bbox_keeps_altitude_and_cleans_plan(self):
+        angles = np.linspace(0, 2 * np.pi, 12, endpoint=False)
+        centres = np.column_stack((15 * np.cos(angles), 15 * np.sin(angles), np.full(12, 1.6)))
+        rng = np.random.default_rng(3)
+        points = rng.uniform([-2, -2, 0], [2, 2, 10], size=(500, 3))
+        means = np.array([[0, 0, 20], [0, 0, -3], [8, 0, 5], [0, 0, 50]])
+        mask, report = planar_sparse_bbox_mask(means, points, centres)
+        self.assertEqual(mask.tolist(), [False, False, True, False])
+        self.assertLess(report["vertical_flatness"], 1e-3)
+        np.testing.assert_allclose(np.abs(report["vertical_axis"]), [0, 0, 1], atol=1e-6)
+        full, _ = sparse_bbox_mask(means, points)
+        self.assertTrue(full[0])
+        with self.assertRaises(ValueError):
+            planar_sparse_bbox_mask(means, points, centres[:2])
+
+    def test_camera_centres_reader_and_planar_cli(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            angles = np.linspace(0, 2 * np.pi, 4, endpoint=False)
+            centres = np.column_stack((15 * np.cos(angles), 15 * np.sin(angles), np.full(4, 1.6)))
+            images = root / "images.bin"
+            with open(images, "wb") as stream:
+                stream.write(struct.pack("<Q", len(centres)))
+                for index, centre in enumerate(centres):
+                    stream.write(struct.pack("<I4d3dI", index, 1, 0, 0, 0, *(-centre), 1))
+                    stream.write(f"frame_{index}.jpg".encode() + b"\0")
+                    stream.write(struct.pack("<Q", 2) + bytes(48))
+            np.testing.assert_allclose(load_camera_centres(images), centres, atol=1e-12)
+            s = scene()
+            s["means"] = np.vstack((s["means"], [[0, 0, 20]], [[8, 0, 5]]))
+            for key in ("scales", "quats", "opacity", "dc"):
+                s[key] = np.concatenate((s[key], s[key][:2]))
+            source, output = root / "raw.splat", root / "result.splat"
+            export.write_world_splat(s, source, np.eye(4), np.eye(3), 1, 100)
+            points = root / "p.bin"
+            write_points3d(points, np.random.default_rng(4).uniform([-13, -6, -1], [13, 6, 4], (500, 3)))
+            command = [sys.executable, str(ROOT / "filter_splats.py"), "--input", str(source),
+                       "--output", str(output), "--sparse-points", str(points),
+                       "--mode", "off", "--sparse-bbox-scope", "planar"]
+            missing = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("--sparse-cameras", missing.stderr)
+            result = subprocess.run(command + ["--sparse-cameras", str(images)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.with_suffix(".filter.json").read_text())
+            self.assertEqual(report["sparse_bbox"]["scope"], "planar")
+            self.assertEqual(report["applied_rejections"], report["sparse_bbox"]["outside_sparse_bbox"])
+            kept = np.fromfile(output, dtype=SPLAT_DTYPE)["position"]
+            self.assertTrue(np.any(np.all(kept == [0, 0, 20], axis=1)))
 
     def test_points3d_reader_skips_tracks(self):
         with tempfile.TemporaryDirectory() as temporary:

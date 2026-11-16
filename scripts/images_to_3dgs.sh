@@ -238,6 +238,8 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
     crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
       "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
       --sparse-bbox-quantile "$POSTPROCESS_SPARSE_BBOX_QUANTILE" \
+      --sparse-bbox-scope "$POSTPROCESS_SPARSE_BBOX_SCOPE" \
+      --sparse-cameras "$sparse/images.bin" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")
   else

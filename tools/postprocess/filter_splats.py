@@ -178,6 +178,69 @@ def sparse_bbox_mask(means, points, *, quantile=0.005, margin=0.05):
     return outside, report
 
 
+def load_camera_centres(path):
+    """Return camera centres in the COLMAP world frame from images.bin."""
+    centres = []
+    with open(path, "rb") as stream:
+        header = stream.read(8)
+        if len(header) != 8:
+            raise ValueError(f"images.bin tronqué : {path}")
+        image_struct = struct.Struct("<I4d3dI")
+        for index in range(struct.unpack("<Q", header)[0]):
+            data = stream.read(image_struct.size)
+            if len(data) != image_struct.size:
+                raise ValueError(f"images.bin tronqué à l'image {index} : {path}")
+            _, qw, qx, qy, qz, tx, ty, tz, _ = image_struct.unpack(data)
+            rotation = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
+            centres.append(-rotation.T @ np.array([tx, ty, tz]))
+            while stream.read(1) != b"\0":
+                pass
+            count = struct.unpack("<Q", stream.read(8))[0]
+            stream.seek(count * 24, 1)
+    return np.asarray(centres, dtype=np.float64).reshape(-1, 3)
+
+
+def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.05):
+    """Clean only the horizontal plane; altitude is never cut.
+
+    The vertical is the normal of the best-fit plane through the camera
+    centres (smallest principal axis). The robust sparse box is computed on
+    the two horizontal axes only, so a tall object whose top is sparse in
+    the points is kept. Only centres are tested, as in sparse_bbox_mask.
+    """
+    if not 0 <= quantile < 0.5:
+        raise ValueError("Quantile de bbox sparse attendu dans [0,0.5)")
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError("Marge relative de bbox sparse attendue finie et >= 0")
+    if len(points) < 10:
+        raise ValueError("Moins de 10 points sparse valides : bbox impossible")
+    if len(centres) < 3:
+        raise ValueError("Au moins 3 caméras requises pour estimer la verticale")
+    camera_origin = np.median(centres, axis=0)
+    values, vectors = np.linalg.eigh(np.cov((centres - camera_origin).T))
+    if not np.isfinite(values).all() or values[1] <= 0:
+        raise ValueError("Positions caméra dégénérées : verticale impossible")
+    horizontal = vectors[:, 1:]
+    origin = np.median(points, axis=0)
+    flat_points = (points - origin) @ horizontal
+    _, plan_axes = np.linalg.eigh(np.cov(flat_points.T))
+    projected = flat_points @ plan_axes
+    lo, hi = np.quantile(projected, [quantile, 1 - quantile], axis=0)
+    span = float(np.max(hi - lo))
+    if not np.isfinite(span) or span <= 0:
+        raise ValueError("Points sparse dégénérés : bbox planaire impossible")
+    pad = margin * span
+    frame = ((means - origin) @ horizontal) @ plan_axes
+    outside = np.any((frame < lo - pad) | (frame > hi + pad), axis=1)
+    report = dict(
+        scope="planar", sparse_points=len(points), quantile=quantile,
+        margin_fraction=margin, outside_sparse_bbox=int(outside.sum()),
+        cameras=len(centres), vertical_axis=vectors[:, 0].tolist(),
+        vertical_flatness=float(values[0] / values[1]),
+    )
+    return outside, report
+
+
 def sparse_support_mask(means, scales, quats, points, *, distance_factor=3.0,
                         min_fraction=0.5, batch_size=20000):
     """Sample the central principal-plane patch, not just the splat centre.
@@ -256,6 +319,11 @@ def main():
                         help="COLMAP points3D.bin in the same world frame as the splats")
     parser.add_argument("--sparse-bbox-mode", choices=("apply", "diagnostic", "off"),
                         default="apply")
+    parser.add_argument("--sparse-bbox-scope", choices=("full", "planar"), default="full",
+                        help="planar : nettoie seulement le plan horizontal, verticale "
+                             "estimee depuis --sparse-cameras")
+    parser.add_argument("--sparse-cameras", type=Path,
+                        help="COLMAP images.bin dans le meme repere, requis en planar")
     parser.add_argument("--sparse-bbox-quantile", type=float, default=0.005)
     parser.add_argument("--sparse-bbox-margin", type=float, default=0.05,
                         help="Margin as a fraction of the largest box side")
@@ -303,10 +371,19 @@ def main():
         outside = np.zeros(count, dtype=bool)
         bbox_report = None
         if bbox_mode != "off":
-            outside, bbox_report = sparse_bbox_mask(
-                means, points,
-                quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
-            )
+            if args.sparse_bbox_scope == "planar":
+                if not args.sparse_cameras:
+                    raise ValueError("--sparse-cameras requis pour la bbox planaire")
+                centres = load_camera_centres(args.sparse_cameras.resolve())
+                outside, bbox_report = planar_sparse_bbox_mask(
+                    means, points, centres,
+                    quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
+                )
+            else:
+                outside, bbox_report = sparse_bbox_mask(
+                    means, points,
+                    quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
+                )
             bbox_report.update(mode=bbox_mode, points=str(args.sparse_points.resolve()))
             if outside.all():
                 raise ValueError(
