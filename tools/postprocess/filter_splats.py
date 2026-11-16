@@ -242,15 +242,17 @@ def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.
 
 
 def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
-                       distance_factor=3.0, batch_size=20000):
-    """Reject splats that are isolated from both sparse points and other splats.
+                       distance_factor=3.0, isolation_factor=3.0, batch_size=20000):
+    """Reject splats isolated from both sparse points and other splats.
 
-    A splat is rejected if its centre is farther than distance_factor sparse
-    local spacings from the nearest sparse point AND its eighth nearest splat
-    is also farther than that bound. Splats in a dense splat neighbourhood are
-    kept even where the sparse reconstruction is poor. Distances are divided by
-    sparse local spacing (eighth neighbour / sqrt(8)); no absolute unit is used.
-    Splats below min_opacity are not tested.
+    Sparse points whose eighth nearest sparse neighbour is farther than
+    isolation_factor times the median such distance are discarded first, so
+    stray COLMAP points do not inflate local spacing. A splat is rejected if
+    its centre is farther than distance_factor sparse local spacings from the
+    nearest remaining sparse point AND its eighth nearest splat is also farther
+    than that bound. Splats in a dense splat neighbourhood are kept. Distances
+    are divided by sparse local spacing (eighth neighbour / sqrt(8)); no
+    absolute unit is used. Splats below min_opacity are not tested.
     """
     if not np.isfinite(distance_factor) or distance_factor <= 0:
         raise ValueError("Facteur de distance sparse attendu fini et > 0")
@@ -267,6 +269,11 @@ def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
     if not np.isfinite(extent) or extent <= 0:
         raise ValueError("Étendue sparse indéterminable")
     points = (points - origin) / extent
+    raw = cKDTree(points).query(points, k=9)[0][:, -1]
+    kept = raw <= isolation_factor * np.median(raw)
+    points = points[kept]
+    if len(points) < 10:
+        raise ValueError("Trop de points sparse isolés retirés ; augmenter isolation_factor")
     tree = cKDTree(points)
     spacing = tree.query(points, k=9)[0][:, -1] / np.sqrt(8)
     means = (means - origin) / extent
@@ -277,13 +284,14 @@ def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
         stop = min(start + batch_size, len(means))
         centres = means[start:stop]
         distances, near = tree.query(centres)
-        splat_gaps = splat_tree.query(centres, k=neighbours)[0][:, -1]
+        splat_gaps = splat_tree.query(centres, k=neighbours)[0].reshape(len(centres), -1)[:, -1]
         bound = distance_factor * spacing[near]
         rejected[start:stop] = (distances > bound) & (splat_gaps > bound)
     rejected &= tested
     return rejected, dict(
         unsupported=int(rejected.sum()), tested=int(tested.sum()),
-        sparse_points=len(points), distance_factor=distance_factor,
+        sparse_points=len(points), isolated_sparse_points=int((~kept).sum()),
+        distance_factor=distance_factor, isolation_factor=isolation_factor,
         min_opacity=min_opacity,
         warning="Filtre expérimental : les surfaces peu représentées dans le sparse peuvent être rejetées.",
     )
@@ -328,6 +336,8 @@ def main():
     parser.add_argument("--sparse-support-mode", choices=("off", "diagnostic", "apply"),
                         default="off")
     parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
+    parser.add_argument("--sparse-support-isolation-factor", type=float, default=3.0,
+                        help="Sparse points farther than this multiple of median spacing are discarded")
     parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0,
                         help="Splats with opacity below this value are never rejected")
     parser.add_argument("--overwrite", action="store_true")
@@ -413,6 +423,7 @@ def main():
                 opacity=opacity[inside],
                 min_opacity=args.sparse_support_min_opacity,
                 distance_factor=args.sparse_support_distance_factor,
+                isolation_factor=args.sparse_support_isolation_factor,
                 batch_size=args.batch_size,
             )
             unsupported[inside[subset]] = True

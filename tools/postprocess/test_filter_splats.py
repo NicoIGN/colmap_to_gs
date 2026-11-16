@@ -80,6 +80,20 @@ class SparseBBoxTest(unittest.TestCase):
         self.assertEqual(mask.tolist(), [False, True])
         self.assertEqual(report["tested"], 1)
 
+    def test_isolated_sparse_point_is_discarded_before_support(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        plane = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        points = np.vstack((plane, [[0, 0, 4.0]]))
+        means = np.vstack(([[0, 0, 4.5]], np.column_stack((np.full(9, 50.0), np.arange(9), np.full(9, 4.5)))))
+        opacity = np.ones(len(means))
+        mask, report = sparse_support_mask(means, points, opacity=opacity)
+        self.assertEqual(mask[0], True)
+        self.assertEqual(report["isolated_sparse_points"], 1)
+        mask, _ = sparse_support_mask(
+            means, points, opacity=opacity, isolation_factor=float("inf"),
+        )
+        self.assertEqual(mask[0], False)
+
     def test_sparse_bbox_outside_points_and_similarity_invariance(self):
         points = sparse_cloud()
         means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
