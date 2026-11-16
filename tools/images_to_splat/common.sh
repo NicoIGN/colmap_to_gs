@@ -113,6 +113,8 @@ load_config() {
   SFM_THREADS="${SFM_THREADS:-16}"
   SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
   SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}"
+  SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
+  SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
   SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
   GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
   GEOREF_VIEW_PREFIX="${GEOREF_VIEW_PREFIX:-}"
@@ -250,6 +252,11 @@ load_config() {
     config_error "SFM_SP_FEATURES, SFM_SP_MATCHER, SFM_SP_PAIRS et SFM_SP_QUALITY ne s'appliquent qu'à COLMAP_METHOD=spirula."
   fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
+  config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'true|false'
+  config_positive_integer SFM_CAMERA_SPLIT_MIN_IMAGES "$SFM_CAMERA_SPLIT_MIN_IMAGES"
+  if [[ "$SFM_CAMERA_SPLIT" == true && ( "$COLMAP_METHOD" != spirula || "$SFM_CAMERA_MODE" == image ) ]]; then
+    config_error "SFM_CAMERA_SPLIT=true exige COLMAP_METHOD=spirula et SFM_CAMERA_MODE folder ou single."
+  fi
   if [[ "$TRAIN_BACKEND" == spirula ]]; then
     config_choice TRAIN_SP_PRESET "$TRAIN_SP_PRESET" '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
     config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'

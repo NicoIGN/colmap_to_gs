@@ -28,6 +28,14 @@ processus Spirula SAM parallèles sur le même GPU. Chaque processus charge son
 modèle ; réduire à **1** en cas de mémoire GPU insuffisante. Le gain de vitesse
 n'est pas garanti si un seul processus sature déjà le GPU. Ce paramètre
 ne change pas les masques demandés et n'invalide pas les résultats existants.
+Un iPhone peut changer d'objectif ou de focale pendant la vidéo : Spirula
+produit alors plusieurs modèles. Avec `SFM_CAMERA_SPLIT=true` (défaut du
+notebook), chaque modèle d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images (100)
+devient un groupe de frames ; les frames non recalées rejoignent le groupe de
+leur voisine la plus proche. Un second SfM est calculé avec une caméra par groupe
+(`output/sfm_cameras/`), puis remplace `sfm/sparse` ; l'ancien SfM est conservé
+dans `sfm/sparse-before-camera-split`. `SFM_CAMERA_MODE=image` (une caméra par
+frame) reste possible, sans cette séparation.
 Le notebook transmet les paramètres d'entraînement à la configuration Bash,
 avec `export SS_NN_LOG=1`. Pour d'autres données ou réglages d'un entraînement
 déjà commencé, choisir un nouveau `RUN_NAME` plutôt que réutiliser ses checkpoints.

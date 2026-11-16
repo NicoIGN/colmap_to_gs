@@ -212,23 +212,38 @@ if args[0] == "sfm":
     ):
         assert get(flag) == os.environ[variable]
     assert get("--reuse-matches") == ("auto" if os.environ.get("PIPELINE_RESUME") == "true" else "redo")
-    if os.environ["SFM_MASKS"] == "on":
+    split_pass = args[2].endswith("sfm_cameras/images")
+    if split_pass:
+        if os.environ["SFM_MASKS"] == "on":
+            assert get("--feature-masks").endswith("sfm_cameras/masks")
+            assert Path(get("--feature-masks"), "cam_01/h01/photo.jpg.png").is_file()
+    elif os.environ["SFM_MASKS"] == "on":
         if os.environ.get("PIPELINE_RESUME") == "true":
             assert Path(get("--feature-masks"), "root.jpg.png").is_file()
         else:
             assert Path(get("--feature-masks"), "masks.json").is_file()
     else:
         assert "--feature-masks" not in args
-    sparse = Path(get("--output")) / "sparse/0"
-    sparse.mkdir(parents=True, exist_ok=True)
     import struct
-    (sparse / "cameras.bin").write_bytes(
-        struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
-    (sparse / "images.bin").write_bytes(
-        struct.pack("<QI7dI", 1, 1, 1, 0, 0, 0, 0, 0, 0, 1)
-        + b"root.jpg\0" + struct.pack("<Qddq", 1, 0.5, 0.5, 1))
-    (sparse / "points3D.bin").write_bytes(
-        struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+    def write_model(sparse, names):
+        sparse.mkdir(parents=True, exist_ok=True)
+        (sparse / "cameras.bin").write_bytes(
+            struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
+        images = struct.pack("<Q", len(names))
+        for index, image in enumerate(names, 1):
+            images += struct.pack("<I7dI", index, 1, 0, 0, 0, 0, 0, 0, 1) + image.encode() + b"\0"
+            images += struct.pack("<Qddq", 1, 0.5, 0.5, 1) if index == 1 else struct.pack("<Q", 0)
+        (sparse / "images.bin").write_bytes(images)
+        (sparse / "points3D.bin").write_bytes(
+            struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+    sparse = Path(get("--output")) / "sparse/0"
+    if split_pass:
+        write_model(sparse, ["cam_00/root.jpg", "cam_00/h00/photo.jpg", "cam_01/h01/photo.jpg"])
+    elif os.environ.get("TEST_CAMERA_SPLIT") == "1":
+        write_model(sparse, ["root.jpg", "h00/photo.jpg"])
+        write_model(sparse.parent / "1", ["h01/photo.jpg"])
+    else:
+        write_model(sparse, ["root.jpg"])
     if os.environ.get("TEST_INVALID_SPARSE") == "1":
         (sparse / "points3D.bin").write_bytes(b"interrupted")
     elif os.environ.get("TEST_INVALID_SPARSE") == "tracks":
@@ -783,6 +798,43 @@ if "--wait" in args:
                 self.assertIn("Sparse absent ou incomplet", result.stdout + result.stderr)
                 self.assertFalse((self.output / ".prepare_done").exists())
                 self.assertFalse((self.output / "blocks").exists())
+
+    def sfm_runs(self):
+        return [command for command in self.commands() if command[:2] == ["spirula", "sfm"]]
+
+    def test_camera_split_retries_sfm_with_one_camera_per_model(self):
+        sys.path.insert(0, str(SOURCE.parents[1] / "tools/images_to_colmap"))
+        from camera_split import model_dirs, read_image_names
+
+        self.env["TEST_CAMERA_SPLIT"] = "1"
+        self.append("SFM_CAMERA_SPLIT=true\nSFM_CAMERA_SPLIT_MIN_IMAGES=1")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        runs = self.sfm_runs()
+        self.assertEqual(len(runs), 2)
+        self.assertTrue(runs[1][3].endswith("sfm_cameras/images"))
+        sfm = self.output / "sfm"
+        self.assertEqual(read_image_names(sfm / "sparse/0/images.bin"),
+                         ["root.jpg", "h00/photo.jpg", "h01/photo.jpg"])
+        self.assertEqual(len(model_dirs(sfm / "sparse-before-camera-split")), 2)
+        record = json.loads((sfm / "camera_split.json").read_text())
+        self.assertEqual(record["group_images"], [2, 1])
+        self.assertTrue((self.output / "blocks/manifest.json").is_file())
+        self.append("PIPELINE_RESUME=true")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 2)
+
+    def test_camera_split_on_resume_archives_outputs_of_previous_sfm(self):
+        self.env["TEST_CAMERA_SPLIT"] = "1"
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 1)
+        self.append("PIPELINE_RESUME=true\nSFM_CAMERA_SPLIT=true\nSFM_CAMERA_SPLIT_MIN_IMAGES=1")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 2)
+        backups = list((self.output / "camera-split-backups").iterdir())
+        self.assertEqual(len(backups), 1)
+        self.assertTrue((backups[0] / "blocks/manifest.json").is_file())
+        self.assertTrue((self.output / "blocks/manifest.json").is_file())
+        self.assertTrue((self.output / ".prepare_done").is_file())
 
     def test_resume_does_not_ignore_mask_policy_metadata(self):
         masks, _ = self.interrupted_workspace()

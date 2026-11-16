@@ -137,6 +137,13 @@ SFM_SP_IMAGE_EXPOSURE=""
 # folder : intrinseques partages par sous-dossier ; single : une camera ;
 # image : intrinseques independants par image.
 SFM_CAMERA_MODE="folder"
+# true : si Spirula produit plusieurs modeles d'au moins SFM_CAMERA_SPLIT_MIN_IMAGES
+# images (ex. video avec changement d'objectif), relance le SfM avec une camera
+# par modele dans OUTPUT_DIR/sfm_cameras ; ancien SfM dans sfm/sparse-before-camera-split.
+# Avec PIPELINE_RESUME=true, les sorties derivees de l'ancien SfM sont archivees
+# dans camera-split-backups/. Spirula uniquement, pas avec SFM_CAMERA_MODE=image.
+SFM_CAMERA_SPLIT="false"
+SFM_CAMERA_SPLIT_MIN_IMAGES=50
 SFM_CAMERA_MODEL="opencv"
 # Filtre experimental des points isoles/lointains avant decoupage (CPU).
 # Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.

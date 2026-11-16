@@ -76,6 +76,10 @@ prepare() {
     fi
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
+  camera_split="$repo_root/tools/images_to_colmap/camera_split.py"
+  if [[ "$COLMAP_METHOD" == spirula ]]; then
+    "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"
+  fi
   if ! sparse_ready; then
     if [[ "$PIPELINE_RESUME" == true ]]; then
       for downstream in georef sparse_filtered sparse_clean sparse_rejected blocks gs gs-nerfstudio; do
@@ -93,6 +97,27 @@ prepare() {
   for name in cameras images points3D; do
     [[ -s "$sfm/sparse/0/$name.bin" ]] || die "SfM incomplet : $name.bin"
   done
+  if [[ "$COLMAP_METHOD" == spirula && "$SFM_CAMERA_SPLIT" == true ]]; then
+    split_args=(--output "$OUTPUT_DIR" --min-images "$SFM_CAMERA_SPLIT_MIN_IMAGES")
+    split_status=0
+    if [[ "$SFM_MASKS" == on ]]; then
+      "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" --masks "$sfm_masks" || split_status=$?
+    else
+      "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" || split_status=$?
+    fi
+    if ((split_status == 0)); then
+      begin_stage "SfM avec une caméra par modèle initial"
+      SFM_RECONSTRUCT_IMAGES="$OUTPUT_DIR/sfm_cameras/images" \
+        SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
+        SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
+        SFM_RECONSTRUCT_CAMERA_MODE=folder \
+        bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+      "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
+      "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
+    elif ((split_status != 3)); then
+      die "Séparation des caméras impossible."
+    fi
+  fi
   if [[ "$COLMAP_METHOD" != spirula ]]; then
     "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
   fi

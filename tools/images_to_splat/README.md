@@ -195,6 +195,9 @@ images.
 - Images SfM : photos individuelles, sans filtrage des paires GPS.
 - Caméra : une caméra par sous-dossier par défaut ; vérifier que les images
   d'un même dossier partagent bien les mêmes caractéristiques optiques.
+  `SFM_CAMERA_SPLIT=true` relance le SfM avec une caméra par modèle quand
+  Spirula en produit plusieurs d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images
+  (changement d'objectif dans une vidéo, par exemple).
 - `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
   [`config.sh.example`](config.sh.example), section « 2. Reconstruction SfM globale ».
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
