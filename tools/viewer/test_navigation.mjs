@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const source = (await readFile(new URL("./html/viewer/navigation.js", import.meta.url), "utf8"))
   .replace('import * as THREE from "three";', `
@@ -59,6 +60,149 @@ test("selection zoom centers the rectangle without stretching its aspect ratio",
   assert.equal(selectionZoom(start, { x: 500, y: 500 }, viewport).scale, 0.5);
 });
 
+test("defining vertical captures screen Y without moving the view and drives locked orbits", () => {
+  const camera = {
+    position: new TestVector3(0, 0, 10),
+    up: new TestVector3(0, 1, 0),
+    quaternion: { axis: new TestVector3(0, 0, 1), angle: Math.PI / 3 },
+    lookAt() {}, updateMatrixWorld() {},
+  };
+  const target = new TestVector3();
+  const principalAxis = new TestVector3(0, 0, 1);
+  let ready = false;
+  let synchronized = 0;
+  let captures = 0;
+  let definitions = 0;
+  const navigation = createNavigationSystem({
+    canvas: { clientWidth: 800, clientHeight: 600 }, camera, target,
+    getCanNavigate: () => ready,
+    getKeyboardLayout: () => "azerty",
+    getPrincipalAxis: () => principalAxis,
+    setPrincipalAxis: (axis) => { principalAxis.copy(axis); definitions++; },
+    isRotationLocked: () => true,
+    syncCamera: () => { synchronized++; },
+    requestGifCapture: () => { captures++; },
+    setStatus: () => {},
+  });
+  const position = camera.position.clone();
+  const originalTarget = target.clone();
+  const originalRotation = { ...camera.quaternion };
+  navigation.defineVertical();
+  assert.equal(definitions, 0);
+
+  ready = true;
+  navigation.pressedKeys.add("z");
+  navigation.defineVertical();
+  const screenY = new TestVector3(-Math.sqrt(3) / 2, 0.5, 0);
+  assert.ok(principalAxis.distanceTo(screenY) < 1e-12);
+  assert.ok(camera.up.distanceTo(screenY) < 1e-12);
+  assert.deepEqual(camera.position, position);
+  assert.deepEqual(target, originalTarget);
+  assert.deepEqual(camera.quaternion, originalRotation);
+  assert.equal(navigation.pressedKeys.size, 0);
+  assert.equal(synchronized, 1);
+  assert.equal(captures, 2);
+
+  navigation.rotateAroundAxis(principalAxis, Math.PI / 4);
+  assert.notDeepEqual(camera.position, position);
+  assert.deepEqual(target, originalTarget);
+  assert.ok(Math.abs(camera.position.distanceTo(target) - 10) < 1e-12);
+  assert.ok(camera.up.distanceTo(screenY) < 1e-12);
+  const orbitedPosition = camera.position.clone();
+  navigation.rotateAroundAxis(new TestVector3(1, 0, 0), Math.PI / 4);
+  assert.deepEqual(camera.position, orbitedPosition);
+
+  camera.quaternion = { axis: new TestVector3(1, 0, 0), angle: Math.PI / 4 };
+  navigation.defineVertical();
+  assert.equal(definitions, 2);
+  assert.ok(principalAxis.distanceTo(new TestVector3(0, Math.SQRT1_2, Math.SQRT1_2)) < 1e-12);
+});
+
+test("the vertical button enables its option and held target-orbit buttons use it", async (t) => {
+  const appSource = await readFile(new URL("./html/app.js", import.meta.url), "utf8");
+  const functions = [
+    "getPrincipalAxisName", "getPrincipalAxis", "getPrincipalAxisLabel",
+    "setPrincipalAxis", "updatePrincipalAxisHelp", "installUI",
+  ].map((name) => {
+    const match = appSource.match(new RegExp(`^function ${name}\\([^]*?^\\}`, "m"));
+    assert.ok(match, name);
+    return match[0];
+  }).join("\n");
+  const elements = new Map();
+  const $ = (id) => {
+    if (!elements.has(id)) elements.set(id, {
+      value: id === "principalAxis" ? "z" : "",
+      disabled: id === "customPrincipalAxis",
+      dataset: {}, listeners: new Map(),
+      classList: { add() {}, remove() {} },
+      addEventListener(type, handler) { this.listeners.set(type, handler); },
+      focus() {}, setPointerCapture() {},
+      dispatch(type) {
+        this.listeners.get(type)?.({ button: 0, pointerId: 1, preventDefault() {} });
+      },
+    });
+    return elements.get(id);
+  };
+  const camera = {
+    position: new TestVector3(0, 0, 10), up: new TestVector3(0, 1, 0),
+    quaternion: { axis: new TestVector3(0, 0, 1), angle: Math.PI / 3 },
+    lookAt() {}, updateMatrixWorld() {},
+  };
+  const target = new TestVector3();
+  const context = {
+    $, principalAxes: {
+      x: new TestVector3(1, 0, 0), y: new TestVector3(0, 1, 0),
+      z: new TestVector3(0, 0, 1), custom: new TestVector3(0, 1, 0),
+    },
+    measurement: { reset() {} }, exportCamera() {}, importCamera() {},
+  };
+  runInNewContext(functions, context);
+  let canNavigate = false;
+  const navigation = createNavigationSystem({
+    canvas: { clientWidth: 800, clientHeight: 600 }, camera, target,
+    getCanNavigate: () => canNavigate,
+    getCanDefineVertical: () => true,
+    getPrincipalAxis: context.getPrincipalAxis,
+    setPrincipalAxis: context.setPrincipalAxis,
+    hasCustomPrincipalAxis: () => context.getPrincipalAxisName() === "custom",
+    isRotationLocked: () => false,
+    getSpeedValue: () => 10, getSceneRadius: () => 1,
+    navigateWithCollision: (move) => move(),
+    syncCamera() {}, requestGifCapture() {}, setStatus() {},
+    selectPointInView: async () => { target.copy(new TestVector3(3, -2, 1)); return true; },
+  });
+  context.navigation = navigation;
+  context.installUI();
+  assert.equal($("principalAxis").value, "z");
+  assert.equal($("customPrincipalAxis").disabled, true);
+
+  // Picking or measuring may temporarily block movement, but defining up is safe.
+  $("defineVertical").dispatch("click");
+  assert.equal($("customPrincipalAxis").disabled, false);
+  assert.equal($("principalAxis").value, "custom");
+  const vertical = new TestVector3(-Math.sqrt(3) / 2, 0.5, 0);
+  assert.ok(context.getPrincipalAxis().distanceTo(vertical) < 1e-12);
+
+  const previousDocument = globalThis.document;
+  t.after(() => { globalThis.document = previousDocument; });
+  const positive = $("orbitPrincipalPositive");
+  positive.dataset.hold = "orbitPrincipalPositive";
+  globalThis.document = { hidden: false, querySelectorAll: () => [positive] };
+  canNavigate = true;
+  navigation.installHeldButtons();
+  positive.dispatch("pointerdown");
+  await Promise.resolve();
+  const pivot = target.clone();
+  const offset = camera.position.clone().sub(pivot);
+  for (let frame = 0; frame < 5; frame++) navigation.frame(0.02);
+  const expected = offset.clone().applyQuaternion({ axis: vertical, angle: 0.1 }).add(pivot);
+  assert.ok(camera.position.distanceTo(expected) < 1e-10);
+  assert.deepEqual(target, pivot);
+  assert.ok(Math.abs(camera.position.distanceTo(pivot) - offset.length()) < 1e-10);
+  positive.dispatch("pointerup");
+  assert.equal(navigation.heldButtons.size, 0);
+});
+
 test("mouse navigation distinguishes pan, look, orbit and modifier release", (t) => {
     class Target {
       constructor() { this.listeners = new Map(); }
@@ -101,6 +245,8 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
     const target = new TestVector3();
     let moves = 0;
     let locked = false;
+    let customAxis = false;
+    const principalAxis = new TestVector3(0, 1, 0);
     const navigation = createNavigationSystem({
       canvas, camera, target,
       getCanNavigate: () => true,
@@ -108,10 +254,13 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
       getSpeedValue: () => 10,
       getKeyboardLayout: () => "azerty",
       isRotationLocked: () => locked,
-      getPrincipalAxis: () => new TestVector3(0, 1, 0),
+      getPrincipalAxis: () => principalAxis,
+      setPrincipalAxis: (axis) => { principalAxis.copy(axis); customAxis = true; },
+      hasCustomPrincipalAxis: () => customAxis,
       navigateWithCollision: (move, enabled) => { assert.equal(enabled, true); moves++; move(); },
       syncCamera: () => {},
       requestGifCapture: () => {},
+      setStatus: () => {},
     });
     navigation.installMouseControls();
     navigation.installKeyboard();
@@ -168,6 +317,41 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
     canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 15 });
     assert.notDeepEqual(camera.position, orbitStart);
     assert.deepEqual(target, orbitTarget);
+    canvas.dispatch("pointerup", { button: 0, buttons: 0 });
+
+    camera.position.copy(target).add(new TestVector3(0, 0, 10));
+    camera.quaternion = { axis: new TestVector3(0, 0, 1), angle: Math.PI / 4 };
+    navigation.defineVertical();
+    const customTarget = target.clone();
+    canvas.dispatch("pointerdown", { button: 0, buttons: 1 });
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientY: 60 });
+    assert.ok(camera.up.dot(principalAxis) < 0.999);
+    const pitchedOffset = camera.position.clone().sub(target);
+    const expectedPosition = pitchedOffset.clone()
+      .applyQuaternion({ axis: principalAxis, angle: -0.4 }).add(target);
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 80, clientY: 60 });
+    assert.ok(camera.position.distanceTo(expectedPosition) < 1e-10);
+    assert.deepEqual(target, customTarget);
+    assert.ok(Math.abs(camera.position.distanceTo(target) - 10) < 1e-10);
+    assert.ok(Math.abs(camera.position.clone().sub(target).dot(principalAxis) -
+      pitchedOffset.dot(principalAxis)) < 1e-10);
+    canvas.dispatch("pointerup", { button: 0, buttons: 0 });
+
+    camera.quaternion = {};
+    const lookPosition = camera.position.clone();
+    const expectedLookTarget = target.clone().sub(camera.position)
+      .applyQuaternion({ axis: principalAxis, angle: 0.2 }).add(camera.position);
+    navigation.orbitLook(0.2, 0);
+    assert.ok(target.distanceTo(expectedLookTarget) < 1e-10);
+    assert.deepEqual(camera.position, lookPosition);
+
+    customAxis = false;
+    const freeAxis = camera.up.clone();
+    const expectedFreePosition = camera.position.clone().sub(target)
+      .applyQuaternion({ axis: freeAxis, angle: -0.2 }).add(target);
+    canvas.dispatch("pointerdown", { button: 0, buttons: 1 });
+    canvas.dispatch("pointermove", { button: 0, buttons: 1, clientX: 40 });
+    assert.ok(camera.position.distanceTo(expectedFreePosition) < 1e-10);
     canvas.dispatch("pointerup", { button: 0, buttons: 0 });
 });
 

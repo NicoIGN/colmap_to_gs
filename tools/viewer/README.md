@@ -73,6 +73,17 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   sur une zone ; Maj + clic permet de mesurer.
 - L'affichage des points et caméras conserve une taille lisible à l'écran,
   même si l'échelle du modèle COLMAP est inconnue.
+- Après avoir orienté le modèle à la souris, **Définir la verticale** prend
+  le haut de l'écran (axe Y de la caméra) comme axe principal personnalisé.
+  L'option **Verticale définie** est alors activée et sélectionnée automatiquement,
+  même si une mesure ou une sélection de pivot suspend momentanément les déplacements.
+  Les orbites, le verrouillage et **Redresser la vue** utilisent cette verticale.
+  Même sans verrouillage, les rotations horizontales autour de la cible et du
+  regard conservent cet axe après une inclinaison ; les mouvements verticaux
+  restent libres.
+  Le cadrage et les coordonnées des modèles, du COLMAP et du GPX restent inchangés.
+  Les axes fixes X/Y/Z restent sélectionnables ; ouvrir une nouvelle scène
+  réinitialise la verticale personnalisée.
 
 ## 5. Notes et informations complémentaires
 

@@ -98,15 +98,17 @@ fi
 
 mkdir -p "$OUTPUT_DIR/logs"
 lock="$OUTPUT_DIR/.${phase}-${block:-all}.lock"
-mkdir "$lock" 2>/dev/null || die "Étape déjà verrouillée : $lock"
-trap 'rmdir "$lock" || echo "[AVERTISSEMENT] Verrou conservé : $lock" >&2' EXIT
+lock_helper="$repo_root/tools/libs/python/pipeline_lock.py"
+"$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --resume "$PIPELINE_RESUME" --ignore "$REMOVE_LOCKS" --workspace "$OUTPUT_DIR"
+trap '"$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --release' EXIT
 source "$repo_root/tools/libs/scripts/pipeline_report.sh"
 pipeline_report_start "$OUTPUT_DIR" "images_to_3dgs:$phase:${block:-all}"
 pipeline_exit() {
   local status=$?
   trap - EXIT
   pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
-  rmdir "$lock" || echo "[AVERTISSEMENT] Verrou conservé : $lock" >&2
+  "$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --release ||
+    echo "[AVERTISSEMENT] Verrou conservé : $lock" >&2
   exit "$status"
 }
 trap pipeline_exit EXIT
@@ -154,6 +156,7 @@ prepare() {
     set_stage "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
   fi
+  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition prepare
   if [[ ! -s "$blocks/manifest.json" ]]; then
     set_stage "découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/colmap_split_blocks.py" \
@@ -192,6 +195,7 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
 else
   set_stage "vérification du workspace"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
+  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     "$PYTHON_BIN" "$script_dir/georeference.py" check
   fi

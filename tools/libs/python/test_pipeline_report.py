@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -10,6 +12,21 @@ from pipeline_report import Reporter, update
 
 
 class PipelineReportTests(unittest.TestCase):
+    def test_interrupted_partition_manifest_is_reported_without_blocking_recovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "blocks").mkdir()
+            (root / "blocks/manifest.json").write_text('{"blocks":')
+            run = update(root, "start", name="resume")
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                update(root, "finish", run_id=run, code=1)
+            data = json.loads((root / "pipeline_report.json").read_text())["runs"][0]
+            self.assertEqual(data["status"], "failed")
+            self.assertNotIn("blocks", data["statistics"])
+            self.assertIn("incomplet", data["statistics"]["artifact_errors"][0])
+            self.assertIn("AVERTISSEMENT", errors.getvalue())
+
     def test_dates_durations_failure_and_statistics(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

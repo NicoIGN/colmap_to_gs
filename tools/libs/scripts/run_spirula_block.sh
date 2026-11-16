@@ -328,8 +328,9 @@ done
 mkdir -p "$output_dir"
 
 lock_dir="$output_dir/.training_lock"
-mkdir "$lock_dir" 2>/dev/null || die "Sortie verrouillée : $lock_dir"
-trap 'rmdir "$lock_dir" 2>/dev/null || true' EXIT
+lock_helper="$script_dir/../python/pipeline_lock.py"
+"$python_bin" "$lock_helper" "$lock_dir" --pid "$$" --resume "${PIPELINE_RESUME:-false}" --ignore "${REMOVE_LOCKS:-false}" --workspace "${OUTPUT_DIR:-$output_dir}"
+trap '"$python_bin" "$lock_helper" "$lock_dir" --pid "$$" --release' EXIT
 
 splats_dir="$output_dir/splats"
 train_done_file="$output_dir/.train_done"
@@ -392,6 +393,14 @@ export_world_splat() {
     fi
   fi
 
+  local export_command
+  export_command="$(printf '%q ' "${export_cmd[@]}")"
+  if [[ "${PIPELINE_RESUME:-false}" == true && -f "$export_done_file" &&
+        -s "$world_splat" && -f "$output_dir/export_command.sh" &&
+        "$(cat "$output_dir/export_command.sh")" == "$export_command" ]]; then
+    log "Export déjà terminé et commande inchangée : $world_splat"
+    return
+  fi
   log "Nettoyage + conversion monde -> .splat"
   printf '%q ' "${export_cmd[@]}" > "$output_dir/export_command.sh"
   printf '\n' >> "$output_dir/export_command.sh"
@@ -406,6 +415,7 @@ export_world_splat() {
 }
 
 masks_signature_file="$output_dir/train_masks.txt"
+resume_checkpoint=""
 masks_signature="masks=none"
 if [[ -n "$masks_dir" ]]; then
   [[ -s "$masks_dir/masks.json" ]] || die "masks.json absent dans $masks_dir"
@@ -437,11 +447,29 @@ if [[ "$clean" == false ]]; then
   fi
 
   if [[ -f "$train_done_file" ]]; then
-    die ".train_done présent mais checkpoint final absent : $final_ckpt"
+    [[ "${PIPELINE_RESUME:-false}" == true ]] ||
+      die ".train_done présent mais checkpoint final absent : $final_ckpt"
+    mv -- "$train_done_file" "$train_done_file.interrupted-$(date -u '+%Y%m%dT%H%M%S')-$$"
+    log "Marqueur train sans checkpoint final : vérification des checkpoints intermédiaires."
   fi
 
   if [[ -d "$splats_dir" ]]; then
-    die "Sortie partielle détectée ($splats_dir). Utiliser --clean pour recalculer."
+    [[ "${PIPELINE_RESUME:-false}" == true ]] ||
+      die "Sortie partielle détectée ($splats_dir). Utiliser PIPELINE_RESUME=true ou --clean."
+    [[ ! -f "$masks_signature_file" || "$(cat "$masks_signature_file")" == "$masks_signature" ]] ||
+      die "Masques modifiés depuis le checkpoint partiel ; reprise refusée."
+    [[ ! -f "$photometric_signature_file" || "$(cat "$photometric_signature_file")" == "$photometric_signature" ]] ||
+      die "Paramètres photométriques modifiés depuis le checkpoint partiel ; reprise refusée."
+    resume_checkpoint="$("$python_bin" "$script_dir/../../images_to_splat/resume.py" "$splats_dir" --training-checkpoint)"
+    if [[ -n "$resume_checkpoint" ]]; then
+      log "Reprise du checkpoint : $resume_checkpoint"
+    else
+      partial_backup="$output_dir/interrupted-$(date -u '+%Y%m%dT%H%M%S')-$$"
+      mkdir "$partial_backup"
+      mv -- "$splats_dir" "$partial_backup/splats"
+      log "Aucun checkpoint complet reprenable ; artefacts conservés : $partial_backup"
+      log "Redémarrage de ce bloc uniquement."
+    fi
   fi
 fi
 
@@ -506,6 +534,7 @@ cmd=(
 )
 
 [[ -z "$quality" ]] || cmd+=(--quality "$quality")
+[[ -z "$resume_checkpoint" ]] || cmd+=(--resume "$resume_checkpoint")
 cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$cap_max" ]] || cmd+=(--cap-max "$cap_max")
 [[ -z "$densify_loss_map_mode" ]] || cmd+=(--densify-loss-map-mode "$densify_loss_map_mode")

@@ -55,6 +55,7 @@ const principalAxes = {
   x: new THREE.Vector3(1, 0, 0),
   y: new THREE.Vector3(0, 1, 0),
   z: new THREE.Vector3(0, 0, 1),
+  custom: new THREE.Vector3(0, 1, 0),
 };
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.01, 1000);
@@ -117,11 +118,14 @@ function uiIsBlocked() {
   );
 }
 
-const canNavigate = () =>
+const canDefineVertical = () =>
   !!app &&
   !disposed &&
   (sceneReady || !colmapBox.isEmpty()) &&
-  !uiIsBlocked() &&
+  !uiIsBlocked();
+
+const canNavigate = () =>
+  canDefineVertical() &&
   !picking &&
   !measurement?.isActive();
 
@@ -166,11 +170,26 @@ function getPrincipalAxis() {
   return principalAxes[getPrincipalAxisName()];
 }
 
+function getPrincipalAxisLabel() {
+  const name = getPrincipalAxisName();
+  return name === "custom" ? "personnalisé" : name.toUpperCase();
+}
+
+function setPrincipalAxis(axis) {
+  principalAxes.custom.copy(axis);
+  $("customPrincipalAxis").disabled = false;
+  $("principalAxis").value = "custom";
+  measurement?.reset();
+  updatePrincipalAxisHelp();
+}
+
 function updatePrincipalAxisHelp() {
-  const axis = getPrincipalAxisName().toUpperCase();
+  const axis = getPrincipalAxisLabel();
 
   $("principalAxisHelp").dataset.tip =
-    `Axe ${axis} du monde, passant par le point visé au centre.`;
+    getPrincipalAxisName() === "custom"
+      ? "Verticale définie depuis le haut de la vue, passant par le point visé au centre."
+      : `Axe ${axis} du monde, passant par le point visé au centre.`;
 
   $("orbitPrincipalNegative").title =
     `Maintenir : rotation négative autour de l’axe ${axis}`;
@@ -225,6 +244,7 @@ function refreshUI() {
     });
 
   $("fileInput").disabled = !app || disposed;
+  $("defineVertical").disabled = !canDefineVertical();
   for (const id of COLLISION_CONTROL_IDS) {
     const element = $(id);
     if (!element) continue;
@@ -431,6 +451,9 @@ function applyUpFlip() {
 
 function releaseScene() {
   sceneReady = false;
+  if (getPrincipalAxisName() === "custom") $("principalAxis").value = "z";
+  $("customPrincipalAxis").disabled = true;
+  updatePrincipalAxisHelp();
   sceneTools?.reset();
   colmapLayer?.clear();
   gpsLayer?.clear();
@@ -864,7 +887,7 @@ async function selectPointInView(key, button) {
     syncCamera();
     requestGifCapture();
 
-    const axis = getPrincipalAxisName().toUpperCase();
+    const axis = getPrincipalAxisLabel();
 
     setStatus(
       valid
@@ -1077,6 +1100,7 @@ function installUI() {
   });
 
   $("recenterTarget").addEventListener("click", navigation.recenterTarget);
+  $("defineVertical").addEventListener("click", navigation.defineVertical);
   $("exportCam").addEventListener("click", exportCamera);
   $("importCam").addEventListener("click", importCamera);
 
@@ -1091,7 +1115,7 @@ function installUI() {
 
     setStatus(
       $("lockPrincipalRotation").checked
-        ? `Rotations verrouillées sur l’axe ${getPrincipalAxisName().toUpperCase()}.`
+        ? `Rotations verrouillées sur l’axe ${getPrincipalAxisLabel()}.`
         : "Rotations libres réactivées."
     );
   });
@@ -1126,7 +1150,7 @@ function installUI() {
     requestGifCapture();
 
     setStatus(
-      `Vue redressée · axe ${getPrincipalAxisName().toUpperCase()}.`
+      `Vue redressée · axe ${getPrincipalAxisLabel()}.`
     );
   });
 
@@ -1370,8 +1394,11 @@ async function initialize() {
       getSceneCenter: () => sceneCenter,
       getSceneBox: () => sceneBox,
       getCanNavigate: canNavigate,
+      getCanDefineVertical: canDefineVertical,
       getPrincipalAxis,
-      getPrincipalAxisName,
+      setPrincipalAxis,
+      hasCustomPrincipalAxis: () => getPrincipalAxisName() === "custom",
+      getPrincipalAxisName: getPrincipalAxisLabel,
       isRotationLocked: () => $("lockPrincipalRotation").checked,
       getSpeedValue: () => Number($("step").value),
       getKeyboardLayout: () => $("keyboardLayout").value,

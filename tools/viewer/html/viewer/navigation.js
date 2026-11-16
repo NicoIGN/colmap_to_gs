@@ -27,7 +27,10 @@ export function createNavigationSystem({
   getSceneCenter,
   getSceneBox,
   getCanNavigate,
+  getCanDefineVertical = getCanNavigate,
   getPrincipalAxis,
+  setPrincipalAxis,
+  hasCustomPrincipalAxis = () => false,
   getPrincipalAxisName,
   isRotationLocked,
   getSpeedValue,
@@ -163,6 +166,24 @@ export function createNavigationSystem({
     }
   }
 
+  function defineVertical() {
+    if (!getCanDefineVertical()) {
+      setStatus("Définition de la verticale indisponible : attendre la fin du chargement.", "warning");
+      return;
+    }
+
+    clearNavigation();
+    const up = new THREE.Vector3(0, 1, 0)
+      .applyQuaternion(camera.quaternion)
+      .normalize();
+
+    setPrincipalAxis(up);
+    camera.up.copy(up);
+    syncCamera();
+    requestGifCapture();
+    setStatus("Verticale définie depuis le haut de la vue actuelle.");
+  }
+
   /**
    * Orbite explicite : déplace la caméra autour de target.
    * Utilisée par les boutons d’orbite encore présents.
@@ -216,7 +237,8 @@ export function createNavigationSystem({
     direction.normalize();
 
     if (dx) {
-      const yawAxis = locked
+      const usePrincipalAxis = locked || hasCustomPrincipalAxis();
+      const yawAxis = usePrincipalAxis
         ? getPrincipalAxis().clone().normalize()
         : new THREE.Vector3(0, 1, 0)
             .applyQuaternion(camera.quaternion)
@@ -224,7 +246,7 @@ export function createNavigationSystem({
 
       let yawAngle = dx;
 
-      if (locked && yawAxis.dot(up) < 0) {
+      if (usePrincipalAxis && yawAxis.dot(up) < 0) {
         yawAngle = -yawAngle;
       }
 
@@ -294,11 +316,12 @@ export function createNavigationSystem({
   function orbitScene(dx, dy, forceLock = false) {
     const sensitivity = 0.005;
     const locked = forceLock || isRotationLocked();
-    const yawAxis = locked
+    const usePrincipalAxis = locked || hasCustomPrincipalAxis();
+    const yawAxis = usePrincipalAxis
       ? getPrincipalAxis().clone().normalize()
       : camera.up.clone().normalize();
     let yawAngle = -dx * sensitivity;
-    if (locked && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
+    if (usePrincipalAxis && yawAxis.dot(camera.up) < 0) yawAngle = -yawAngle;
     rotateAroundAxis(yawAxis, yawAngle, locked);
     if (locked) return;
 
@@ -961,6 +984,7 @@ export function createNavigationSystem({
     pressedKeys,
     heldButtons,
     clearNavigation,
+    defineVertical,
     installMouseControls,
     installHeldButtons,
     installKeyboard,

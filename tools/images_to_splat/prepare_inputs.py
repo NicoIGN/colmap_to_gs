@@ -150,6 +150,7 @@ def compatible_record(previous, current):
         key in current["settings"]
         and _comparable_setting(key, current["settings"][key]) == _comparable_setting(key, value)
         for key, value in old_settings.items()
+        if not key.startswith("SPLIT_")
     )
 
 
@@ -171,7 +172,7 @@ def prepare(check=False):
     if not images:
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
     settings = {key: value for key, value in os.environ.items()
-                if key.startswith(("SFM_", "TRAIN_MASKS", "SPLIT_"))}
+                if key.startswith(("SFM_", "TRAIN_MASKS"))}
     # Keep old unfiltered signatures compatible without adopting new provenance.
     if settings.get("SFM_FILTER_DENSITY") == "false":
         settings.pop("SFM_FILTER_DENSITY")
@@ -229,12 +230,17 @@ def prepare(check=False):
         if not isinstance(previous, dict):
             raise ValueError(f"Signature de workspace invalide : {marker}")
         if previous != record:
-            if not resume or not compatible_record(previous, record):
+            without_partition = dict(previous)
+            without_partition["settings"] = {
+                key: value for key, value in previous.get("settings", {}).items()
+                if not key.startswith("SPLIT_")
+            }
+            if without_partition != record and (not resume or not compatible_record(previous, record)):
                 differences = list(islice(record_differences(previous, record), 13))
                 details = "\n".join(f"  - {item}" for item in differences[:12])
                 if len(differences) > 12:
                     details += "\n  - Autres différences non affichées."
-                raise ValueError("Images ou paramètres SfM/masques/découpage/GPX modifiés : "
+                raise ValueError("Images ou paramètres SfM/masques/GPX modifiés : "
                                  "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM."
                                  f"\nSignature comparée : {marker}"
                                  f"\nPIPELINE_RESUME={'true' if resume else 'false'}"
