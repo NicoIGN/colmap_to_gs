@@ -70,6 +70,18 @@ class SparseBBoxTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 sparse_support_mask(means, scales, quats, points, distance_factor=factor)
 
+    def test_support_tests_low_opacity_splats_by_default(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        means = np.array([[0, 0, 4]])
+        scales = np.array([[2, 2, 0.01]])
+        quats = np.tile([1., 0, 0, 0], (1, 1))
+        mask, report = sparse_support_mask(
+            means, scales, quats, points, opacity=np.array([0.1]),
+        )
+        self.assertEqual(mask.tolist(), [True])
+        self.assertEqual(report["tested"], 1)
+
     def test_support_rejects_only_opaque_unsupported_splats(self):
         x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
         points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))

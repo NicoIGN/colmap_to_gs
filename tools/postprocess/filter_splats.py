@@ -241,16 +241,16 @@ def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.
     return outside, report
 
 
-def sparse_support_mask(means, scales, quats, points, *, opacity=None, min_opacity=0.5,
+def sparse_support_mask(means, scales, quats, points, *, opacity=None, min_opacity=0.0,
                         distance_factor=3.0, min_fraction=0.5, batch_size=20000):
     """Reject opaque splats whose visible patch has no sparse support.
 
     Nine samples span +/- one sigma along the two largest axes of each splat,
     so the test follows the splat surface, not only its centre. A sample is
     supported when it lies within distance_factor sparse local spacings of a
-    sparse point. Only splats with opacity >= min_opacity are tested: a faint
-    splat is invisible, so it is never a reason to remove it. Without
-    opacity, every splat is tested. Distances are divided by sparse local
+    sparse point. Only splats with opacity >= min_opacity are tested; the
+    default 0 tests every splat, so floaters with low opacity are removed too.
+    Without opacity, every splat is tested. Distances are divided by sparse local
     spacing (eighth neighbour / sqrt(8)); no absolute scene unit is used.
     """
     if not np.isfinite(distance_factor) or distance_factor <= 0:
@@ -339,7 +339,7 @@ def main():
                         default="off")
     parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
     parser.add_argument("--sparse-support-min-fraction", type=float, default=0.5)
-    parser.add_argument("--sparse-support-min-opacity", type=float, default=0.5)
+    parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     try:

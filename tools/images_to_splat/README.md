@@ -502,8 +502,8 @@ coupée. Elle est resserrée par défaut (quantile 0.02, marge 0.02). Le quantil
 `POSTPROCESS_SPARSE_BBOX_QUANTILE` de chaque axe des points sparse. Un quantile plus petit élargit la bbox et
 évite de couper le haut d'un objet peu couvert par les points sparse.
 Le filtre de support (`POSTPROCESS_SPARSE_SUPPORT_MODE`, défaut `diagnostic`) retire les
-floaters dans le vide : un splat opaque (opacité >= `POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY`)
-est testé sur le patch de sa surface (9 points à ±1 sigma), pas sur son seul centre. Il est
+floaters dans le vide : tout splat (opacité >= `POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY`, défaut `0`
+= toutes opacités) est testé sur le patch de sa surface (9 points à ±1 sigma), pas sur son seul centre. Il est
 retiré si moins de `POSTPROCESS_SPARSE_SUPPORT_MIN_FRACTION` de ses points sont à moins de
 `POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR` espacements sparse locaux d'un point sparse.
 Examiner `.filter.json` puis passer à `apply`.
