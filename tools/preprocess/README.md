@@ -31,6 +31,15 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
 
+`extract_sharp_frames.py` retient la frame la plus nette de chaque tranche
+temporelle non vide, sans éliminer globalement les séquences floues ou similaires.
+Le nombre obtenu peut être inférieur à la demande si la vidéo est trop courte.
+L'écart maximal entre deux frames est affiché en nombre de frames vidéo et
+en secondes approximatives d'après la cadence moyenne.
+Utiliser `--index-csv /chemin/frames.csv` avec une seule vidéo pour conserver
+l'indice source de chaque frame (indice zéro, pas un horodatage). Les frames
+existantes ne sont pas recalculées automatiquement.
+
 - Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 

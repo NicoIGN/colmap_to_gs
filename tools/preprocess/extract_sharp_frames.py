@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
 """Extrait des images nettes et réparties dans le temps depuis une ou plusieurs vidéos.
 
-Inspiré de video_to_ply (scripts/extract_frames.sh et scripts/filter_frames.py) :
-- sur-échantillonnage de OVERSAMPLE × NUM_FRAMES candidates réparties sur la durée ;
-- filtre de flou : seuil adaptatif (30e centile de la netteté, variance du Laplacien) ;
-- filtre de doublons : écart moyen avec la dernière image gardée < 0,5 × médiane des écarts ;
-- équilibrage : la durée est découpée en NUM_FRAMES tranches, on garde la plus nette de chaque tranche.
+Sur-échantillonne la vidéo puis garde la candidate la plus nette dans chaque
+tranche temporelle. Les images floues ou similaires ne sont pas éliminées
+globalement : cela pourrait créer de longues lacunes dans la séquence.
 
 Sortie : OUT/frame_00000.jpg, ou OUT/<nom_vidéo>/frame_00000.jpg si plusieurs vidéos.
 Dépendances : opencv-python-headless, numpy, tqdm.
 """
 
 import argparse
+import csv
 import sys
 from pathlib import Path
 
@@ -20,18 +19,11 @@ import numpy as np
 from tqdm import tqdm
 
 OVERSAMPLE = 3
-BLUR_PERCENTILE = 30.0
-DIFF_FACTOR = 0.5
 SCORE_MAX_WIDTH = 960
-THUMB_WIDTH = 160
 
 
 def sharpness(gray):
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
-
-
-def mean_abs_diff(a, b):
-    return float(cv2.absdiff(a, b).mean())
 
 
 def shrink_width(gray, max_width):
@@ -42,33 +34,20 @@ def shrink_width(gray, max_width):
                       interpolation=cv2.INTER_AREA)
 
 
-def select_indices(sharp, thumbs, positions, num_frames, blur_percentile=BLUR_PERCENTILE):
+def select_indices(sharp, positions, num_frames):
     """Retourne les positions (triées) des candidates retenues.
 
-    sharp : netteté de chaque candidate ; thumbs : miniatures grises pour les doublons ;
-    positions : position temporelle normalisée dans [0, 1[ ; num_frames : nombre visé.
+    sharp : netteté de chaque candidate ; positions : position temporelle
+    normalisée dans [0, 1[ ; num_frames : nombre visé.
     """
     if len(sharp) == 0:
         return []
-    sharp = np.asarray(sharp, dtype=float)
-    blur_threshold = np.percentile(sharp, blur_percentile)
-    kept = [i for i in range(len(sharp)) if sharp[i] >= blur_threshold]
-
-    diffs = [mean_abs_diff(thumbs[b], thumbs[a]) for a, b in zip(kept, kept[1:])]
-    diff_threshold = DIFF_FACTOR * float(np.median(diffs)) if diffs else 0.0
-
-    unique = []
-    for i in kept:
-        if unique and mean_abs_diff(thumbs[i], thumbs[unique[-1]]) < diff_threshold:
-            continue
-        unique.append(i)
-
     best = {}
-    for i in unique:
+    for i in sorted(range(len(sharp)), key=lambda index: positions[index]):
         bucket = min(int(positions[i] * num_frames), num_frames - 1)
         if bucket not in best or sharp[i] > sharp[best[bucket]]:
             best[bucket] = i
-    return sorted(best.values())
+    return [best[bucket] for bucket in sorted(best)]
 
 
 def read_video_info(path):
@@ -107,20 +86,20 @@ def iter_frames(path, wanted):
 
 
 def scan_video(path, num_frames):
-    total, _ = read_video_info(path)
+    total, fps = read_video_info(path)
     wanted = sample_indices(total, min(total, OVERSAMPLE * num_frames))
-    scan = {"indices": [], "sharp": [], "thumbs": [], "positions": [], "size": None}
+    scan = {"indices": [], "sharp": [], "positions": [], "size": None, "total": total, "fps": fps}
     for index, frame in tqdm(iter_frames(path, wanted), total=len(wanted),
                              desc=f"Analyse {path.name}", unit="img", dynamic_ncols=True):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         if scan["size"] is None:
             scan["size"] = (frame.shape[1], frame.shape[0])
-        thumb_height = max(1, round(gray.shape[0] * THUMB_WIDTH / gray.shape[1]))
         scan["indices"].append(index)
         scan["sharp"].append(sharpness(shrink_width(gray, SCORE_MAX_WIDTH)))
-        scan["thumbs"].append(cv2.resize(gray, (THUMB_WIDTH, thumb_height),
-                                         interpolation=cv2.INTER_AREA))
         scan["positions"].append(index / total)
+    if len(scan["indices"]) != len(wanted):
+        raise RuntimeError(f"Lecture incomplète de {path} : {len(scan['indices'])}/{len(wanted)} "
+                           "frames candidates décodées ; extraction arrêtée.")
     return scan
 
 
@@ -132,8 +111,11 @@ def write_frames(path, frame_indices, out_dir, ext, out_size):
                              desc=f"Écriture {path.name}", unit="img", dynamic_ncols=True):
         if out_size is not None:
             frame = cv2.resize(frame, out_size, interpolation=cv2.INTER_AREA)
-        cv2.imwrite(str(names[index]), frame)
+        if not cv2.imwrite(str(names[index]), frame):
+            raise RuntimeError(f"Écriture de frame impossible : {names[index]}")
         written += 1
+    if written != len(frame_indices):
+        raise RuntimeError(f"Vidéo interrompue : {written}/{len(frame_indices)} frames écrites : {path}")
     return written
 
 
@@ -155,6 +137,8 @@ def main():
     ap.add_argument("--height", type=int, default=0,
                     help="Hauteur de sortie (0 = taille source). Nécessite --width.")
     ap.add_argument("--format", choices=["jpg", "png"], default="jpg")
+    ap.add_argument("--index-csv", type=Path,
+                    help="Écrit la correspondance entre noms et indices vidéo ; une seule vidéo.")
     ap.add_argument("--reset", action="store_true",
                     help="Supprime les frame_* existantes dans les dossiers de sortie.")
     args = ap.parse_args()
@@ -163,6 +147,8 @@ def main():
         ap.error("--num-frames doit être >= 1.")
     if args.width < 0 or args.height < 0 or (args.width > 0) != (args.height > 0):
         ap.error("--width et --height doivent être fournis ensemble et positifs.")
+    if args.index_csv and len(args.video) != 1:
+        ap.error("--index-csv nécessite une seule vidéo.")
     for video in args.video:
         if not video.is_file():
             ap.error(f"Vidéo introuvable : {video}")
@@ -191,18 +177,29 @@ def main():
 
     selections = []
     for video, scan in zip(args.video, scans):
-        chosen = select_indices(scan["sharp"], scan["thumbs"], scan["positions"],
-                                args.num_frames)
+        chosen = select_indices(scan["sharp"], scan["positions"], args.num_frames)
         frame_indices = [scan["indices"][k] for k in chosen]
         selections.append(frame_indices)
         print(f"[sélection] {video.name} : {len(frame_indices)} / {args.num_frames} image(s)")
         if len(frame_indices) < args.num_frames:
             print(f"[AVERTISSEMENT] {video.name} : moins d'images que demandé "
-                  "(vidéo courte ou images trop floues/identiques).")
+                  "(vidéo courte ou lecture incomplète).")
+        if len(frame_indices) > 1:
+            position, gap = max(enumerate(b - a for a, b in zip(frame_indices, frame_indices[1:])),
+                                key=lambda item: item[1])
+            print(f"[sélection] Écart maximal : {gap} frames vidéo (~{gap / scan['fps']:.2f} s "
+                  f"à cadence moyenne), frame_{position:05d}{ext} -> frame_{position + 1:05d}{ext}.")
 
     for video, frame_indices, out_dir in zip(args.video, selections, out_dirs):
         written = write_frames(video, frame_indices, out_dir, ext, out_size)
         print(f"[OK] {video.name} : {written} image(s) -> {out_dir}")
+        if args.index_csv:
+            with args.index_csv.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.writer(stream)
+                writer.writerow(("image", "video_frame_index"))
+                for k, index in enumerate(frame_indices):
+                    writer.writerow((f"frame_{k:05d}{ext}", index))
+            print(f"[index] Correspondance des frames : {args.index_csv}")
 
 
 if __name__ == "__main__":
