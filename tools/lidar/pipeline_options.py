@@ -12,6 +12,7 @@ import numpy as np
 
 from common import write_report
 from fetch_ign_lidar import file_signature, validate_cached_lidar
+from pdal_runtime import pdal_command
 
 
 DEFAULTS = {
@@ -140,8 +141,8 @@ def preflight(config):
                 raise ValueError(f"Référence absente : {key}")
         # Reuse of an existing shared extraction does not require PDAL.
         workspace = Path(os.environ.get("LIDAR_WORKSPACE", os.environ.get("OUTPUT_DIR", ".")))
-        if not (workspace/"lidar/lidar.laz").is_file() and not shutil.which(config["LIDAR_PDAL"]):
-            raise ValueError("LiDAR activé mais PDAL absent et aucun LAZ partagé disponible")
+        if not (workspace/"lidar/lidar.laz").is_file():
+            pdal_command(config["LIDAR_PDAL"])
 
 
 def prepare(config, workspace, model, images, check=False):

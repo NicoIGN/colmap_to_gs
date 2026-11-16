@@ -38,7 +38,7 @@ les coordonnées ENU brutes sont des coordonnées Lambert-93.
 
 | Variable | Défaut | Usage |
 |---|---|---|
-| `LIDAR_PDAL` | `pdal` | Exécutable PDAL pour extraction COPC |
+| `LIDAR_PDAL` | `pdal` | Environnement PDAL isolé créé automatiquement ; chemin explicite pour un exécutable existant |
 | `LIDAR_MARGIN` | `20` | Marge de récupération en mètres |
 | `LIDAR_MAX_TILES` | `100` | Limite de tuiles |
 | `LIDAR_MAX_AREA_KM2` | `25` | Surface maximale extraite |

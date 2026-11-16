@@ -1,0 +1,6 @@
+name: lidar-pdal
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - pdal
