@@ -363,16 +363,17 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
       uniform mat4 matrix_model;
       uniform mat4 matrix_viewProjection;
       uniform float uPointSize;
+      uniform float uHighlight;
 
       varying vec4 vColor;
 
       void main(void) {
-        vColor = vertex_color;
+        vColor = mix(vertex_color, vec4(1.0, 0.92, 0.0, 1.0), uHighlight);
         gl_Position =
           matrix_viewProjection *
           matrix_model *
           vec4(vertex_position, 1.0);
-        gl_PointSize = uPointSize;
+        gl_PointSize = uPointSize * (1.0 + 1.5 * uHighlight);
       }
     `,
 
@@ -396,6 +397,7 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   });
 
   setPointSize(app, material, pointSize);
+  material.setParameter("uHighlight", 0);
 
   material.cull = pc.CULLFACE_NONE;
   material.depthTest = true;
@@ -404,6 +406,10 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   material.update();
 
   return material;
+}
+
+function setMeshHighlight(resource, on) {
+  resource?.material.setParameter("uHighlight", on ? 1 : 0);
 }
 
 function makeColmapMesh(app, positions, rgba, primitive, material) {
@@ -745,14 +751,17 @@ export function createColmapLayer({
         {
           name: "Points 3D",
           setVisible(visible) { model.pointsEntity.enabled = visible; },
+          setHighlight(on) { setMeshHighlight(model.pointsResource, on); },
         },
         {
           name: "Centres caméra",
           setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
+          setHighlight(on) { setMeshHighlight(model.cameraCentersResource, on); },
         },
         {
           name: "Frustums",
           setVisible(visible) { model.frustumsEntity.enabled = visible; },
+          setHighlight(on) { setMeshHighlight(model.frustumsResource, on); },
         },
       ];
       if (registerGroup) {

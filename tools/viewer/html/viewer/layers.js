@@ -36,11 +36,30 @@ export function createLayerManager(container) {
         const options = document.createElement("div");
         options.className = "layer-group-options";
         for (const child of layer.children) {
-          options.appendChild(makeToggle(child.name, child.visible, (visible) => {
+          const toggle = makeToggle(child.name, child.visible, (visible) => {
             child.visible = visible;
             child.setVisible(layer.visible && visible);
             render();
-          }));
+          });
+          if (!child.setHighlight) {
+            options.appendChild(toggle);
+            continue;
+          }
+          const row = document.createElement("div");
+          row.className = "layer-option";
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "highlight-btn";
+          button.title = `Mettre en évidence : ${child.name}`;
+          button.setAttribute("aria-pressed", String(child.highlighted));
+          button.textContent = "◎";
+          button.addEventListener("click", () => {
+            child.highlighted = !child.highlighted;
+            child.setHighlight(child.highlighted);
+            render();
+          });
+          row.append(toggle, button);
+          options.appendChild(row);
         }
         group.appendChild(options);
         container.appendChild(group);
@@ -81,6 +100,7 @@ export function createLayerManager(container) {
         children: children.map((child) => ({
           ...child,
           visible: child.visible ?? true,
+          highlighted: false,
         })),
       };
       layers.set(id, group);

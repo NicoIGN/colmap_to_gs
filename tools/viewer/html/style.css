@@ -200,6 +200,28 @@ textarea:disabled {
   white-space: nowrap;
 }
 
+.layer-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.highlight-btn {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.highlight-btn[aria-pressed="true"] {
+  border-color: #ffeb00;
+  color: #ffeb00;
+}
+
 input {
   accent-color: var(--accent);
 }
