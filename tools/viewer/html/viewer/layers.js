@@ -12,6 +12,23 @@ export function createLayerManager(container) {
     return label;
   }
 
+  function makeRemoveButton(layer) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "remove-btn";
+    button.title = `Supprimer : ${layer.name}`;
+    button.textContent = "×";
+    button.addEventListener("click", () => removeLayer(layer));
+    return button;
+  }
+
+  function removeLayer(layer) {
+    if (layers.get(layer.id) !== layer) return;
+    layers.delete(layer.id);
+    layer.onRemove?.();
+    render();
+  }
+
   function render() {
     container.replaceChildren();
     for (const layer of layers.values()) {
@@ -31,7 +48,10 @@ export function createLayerManager(container) {
         });
         const masterInput = master.querySelector("input");
         masterInput.indeterminate = partiallyVisible;
-        group.appendChild(master);
+        const head = document.createElement("div");
+        head.className = "layer-head";
+        head.append(master, makeRemoveButton(layer));
+        group.appendChild(head);
 
         const options = document.createElement("div");
         options.className = layer.compact ? "layer-group-options compact" : "layer-group-options";
@@ -64,10 +84,16 @@ export function createLayerManager(container) {
         group.appendChild(options);
         container.appendChild(group);
       } else {
-        container.appendChild(makeToggle(layer.name, layer.visible, (visible) => {
-          layer.visible = visible;
-          layer.setVisible(visible);
-        }));
+        const head = document.createElement("div");
+        head.className = "layer-head";
+        head.append(
+          makeToggle(layer.name, layer.visible, (visible) => {
+            layer.visible = visible;
+            layer.setVisible(visible);
+          }),
+          makeRemoveButton(layer)
+        );
+        container.appendChild(head);
       }
     }
     container.parentElement.hidden = layers.size === 0;
@@ -80,9 +106,9 @@ export function createLayerManager(container) {
   }
 
   return {
-    add({ id, name, visible = true, setVisible }) {
+    add({ id, name, visible = true, setVisible, onRemove }) {
       if (layers.has(id)) throw new Error(`Couche déjà enregistrée : ${id}`);
-      const layer = { name, visible, setVisible };
+      const layer = { id, name, visible, setVisible, onRemove };
       layers.set(id, layer);
       render();
       return () => {
@@ -92,12 +118,14 @@ export function createLayerManager(container) {
         }
       };
     },
-    addGroup({ id, name, children, visible = true, compact = false }) {
+    addGroup({ id, name, children, visible = true, compact = false, onRemove }) {
       if (layers.has(id)) throw new Error(`Couche déjà enregistrée : ${id}`);
       const group = {
+        id,
         name,
         visible,
         compact,
+        onRemove,
         children: children.map((child) => ({
           ...child,
           visible: child.visible ?? true,

@@ -328,6 +328,11 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
           setMeshHighlight(layer.resource, on);
         },
       }],
+      onRemove: () => {
+        layer.unregister?.();
+        destroyRender(layer);
+        layers.delete(id);
+      },
     }) ?? null;
 
     const sampled = source.count < source.totalPoints

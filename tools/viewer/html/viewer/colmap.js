@@ -490,7 +490,6 @@ export function createColmapLayer({
   const input = document.getElementById("colmapFolderInput");
   const pointSize = document.getElementById("colmapPointSize");
   const cameraSize = document.getElementById("colmapCameraSize");
-  const removeBtn = document.getElementById("colmapRemove");
 
   let disposed = false;
   let nextModelId = 1;
@@ -564,7 +563,6 @@ export function createColmapLayer({
 
     if (pointSize) pointSize.disabled = !ready;
     if (cameraSize) cameraSize.disabled = !ready;
-    if (removeBtn) removeBtn.disabled = !ready;
   }
 
   function destroyMeshEntity(entity, resource) {
@@ -590,6 +588,16 @@ export function createColmapLayer({
       bounds.flatMap((bound) => [bound.min, bound.max]),
       flip
     );
+  }
+
+  function removeModel(id) {
+    const model = models.get(id);
+    if (!model) return;
+    destroyModel(model);
+    models.delete(id);
+    onBoundsChanged?.(models.size ? getCombinedBounds() : null, false);
+    refreshUI();
+    refreshInfo();
   }
 
   function clear() {
@@ -770,6 +778,7 @@ export function createColmapLayer({
           name: `COLMAP · ${label}`,
           compact: true,
           children,
+          onRemove: () => removeModel(id),
         });
       } else {
         const unregister = children.map((child) => registerLayer?.({
@@ -866,11 +875,6 @@ export function createColmapLayer({
   listen(pointSize, "input", refreshPointSizes);
   listen(cameraSize, "input", refreshPointSizes);
   refreshPointSizes();
-
-  listen(removeBtn, "click", () => {
-    clear();
-    setStatus("Modèles COLMAP retirés.");
-  });
 
   refreshUI();
   refreshInfo();
