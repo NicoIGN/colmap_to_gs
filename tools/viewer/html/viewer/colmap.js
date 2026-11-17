@@ -758,6 +758,23 @@ export function createColmapLayer({
     );
   }
 
+  // Pose de la caméra COLMAP (centre, axe optique, vertical) en coordonnées de la vue.
+  function imageViewPose(model, image) {
+    const rwc = transpose3(qvecToMat3(image.qvec));
+    const center = getCameraCenter(image);
+    const offset = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
+    const position = toWorld(model, center);
+    const direction = toWorld(model, offset(mulMat3Vec3(rwc, [0, 0, 1]))).sub(position).normalize();
+    const up = toWorld(model, offset(mulMat3Vec3(rwc, [0, -1, 0]))).sub(position).normalize();
+    const targetDistance = Math.max(getSceneRadius?.() ?? 1, 1e-6) * 0.2;
+    const target = position.clone().addScaledVector(direction, targetDistance);
+    return {
+      position: position.toArray(),
+      target: target.toArray(),
+      up: up.toArray(),
+    };
+  }
+
   function toScreen(model, point) {
     const out = new pc.Vec3();
     return worldToScreen(toWorld(model, point), out) ? out : null;
@@ -1306,6 +1323,15 @@ export function createColmapLayer({
     frame,
     clear,
     refreshUI,
+
+    getShownImagePose() {
+      for (const model of models.values()) {
+        const index = model.slots[0]?.shown;
+        if (index === null || index === undefined) continue;
+        return imageViewPose(model, model.colmapImages[index]);
+      }
+      return null;
+    },
 
     setFlipUp(flip) {
       applyFlipUp(Boolean(flip));

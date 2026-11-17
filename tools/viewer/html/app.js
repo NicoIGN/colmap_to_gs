@@ -1192,6 +1192,22 @@ async function exportCamera() {
   }
 }
 
+function goToImageView() {
+  if (!canNavigate()) return;
+
+  const pose = colmapLayer?.getShownImagePose();
+  if (!pose) {
+    setStatus("Aucune image COLMAP affichée.", true);
+    return;
+  }
+
+  navigation.clearNavigation();
+  applyCameraString([...pose.position, ...pose.target, ...pose.up].join(","));
+  rememberCamera();
+  requestGifCapture();
+  setStatus("Caméra placée sur la vue de l’image COLMAP.", "success");
+}
+
 function importCamera() {
   if (!canNavigate()) return;
 
@@ -1239,6 +1255,7 @@ function installUI() {
   $("defineVertical").addEventListener("click", navigation.defineVertical);
   $("exportCam").addEventListener("click", exportCamera);
   $("importCam").addEventListener("click", importCamera);
+  $("goToImageView").addEventListener("click", goToImageView);
 
   $("principalAxis").addEventListener("change", () => {
     navigation.clearNavigation();

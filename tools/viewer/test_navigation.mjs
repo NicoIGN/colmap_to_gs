@@ -155,7 +155,7 @@ test("the vertical button enables its option and held target-orbit buttons use i
       x: new TestVector3(1, 0, 0), y: new TestVector3(0, 1, 0),
       z: new TestVector3(0, 0, 1), custom: new TestVector3(0, 1, 0),
     },
-    measurement: { reset() {} }, exportCamera() {}, importCamera() {},
+    measurement: { reset() {} }, exportCamera() {}, importCamera() {}, goToImageView() {},
   };
   runInNewContext(functions, context);
   let canNavigate = false;

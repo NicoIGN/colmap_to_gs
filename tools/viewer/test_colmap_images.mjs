@@ -61,3 +61,12 @@ test("hysteresis keeps the current image while it stays valid, then switches", (
   const moved = [5, 10, 0, 5, 0.3, 0];
   assert.deepEqual(selectNearestImages({ ...args, centers: moved, keep: 0 }), [1]);
 });
+
+test("cameras beyond the scene centre are never selected, even when kept", () => {
+  // Centre de scène à 10 unités ; caméra alignée à 12 unités (au-delà du centre).
+  const centers = [12, 0, 0, 4, 0, 0];
+  const axes = [-1, 0, 0, -1, 0, 0];
+  const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35 };
+  assert.deepEqual(selectNearestImages({ ...args, keep: 0 }), [1]);
+  assert.deepEqual(selectNearestImages({ ...args, keep: -1 }), [1]);
+});

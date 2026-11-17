@@ -62,7 +62,7 @@ export function selectNearestImages({
       // Caméras situées entre le point de vue et le centre de scène, dans le cône autour de cette direction.
       const cosView = direction[0] * (-dx / dist) + direction[1] * (-dy / dist) + direction[2] * (-dz / dist);
       if (cosView < cosMin) return null;
-      if (dist * cosView > maxAlong * (relaxed ? 1.2 : 1)) return null;
+      if (dist * cosView > maxAlong) return null;
       alignment = 1 - cosView;
     } else {
       const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
