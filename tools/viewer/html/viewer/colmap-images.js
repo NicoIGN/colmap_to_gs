@@ -26,12 +26,14 @@ export function findImageFile(index, name) {
   return index.get(path) ?? index.get(path.split("/").pop()) ?? null;
 }
 
-// Retient les caméras proches du point de vue, situées devant leur axe optique
-// (dans un cône de maxAngleDeg autour de l'axe), les plus proches d'abord.
+// Retient les caméras les plus alignées sur l'axe de vue (direction) vues depuis
+// le point de vue, dans un cône de maxAngleDeg ; à alignement égal, les plus proches.
+// Sans direction, les plus proches d'abord.
 export function selectNearestImages({
   centers,
   axes,
   viewer,
+  direction = null,
   count = 5,
   maxAngleDeg = 90,
   maxDistance = Infinity,
@@ -49,10 +51,20 @@ export function selectNearestImages({
     if (dist < 1e-9 || dist > maxDistance) continue;
     const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
     if (dot / dist < cosMin) continue;
+    let alignment = 0;
+    if (direction) {
+      // Alignement entre l'axe de vue et la direction point de vue -> caméra.
+      const ux = -dx / dist;
+      const uy = -dy / dist;
+      const uz = -dz / dist;
+      const cosView = direction[0] * ux + direction[1] * uy + direction[2] * uz;
+      if (cosView < cosMin) continue;
+      alignment = 1 - cosView;
+    }
     if (!accept(i)) continue;
-    candidates.push({ index: i, dist });
+    candidates.push({ index: i, dist, alignment });
   }
 
-  candidates.sort((a, b) => a.dist - b.dist);
+  candidates.sort((a, b) => a.alignment - b.alignment || a.dist - b.dist);
   return candidates.slice(0, count).map((candidate) => candidate.index);
 }

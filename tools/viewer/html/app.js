@@ -1614,6 +1614,7 @@ async function initialize() {
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
         getViewerPosition: () => camera.position.toArray(),
+        getViewerDirection: () => camera.getWorldDirection(new THREE.Vector3()).toArray(),
         worldToScreen: (point, out) => projectToScreen(point, out),
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),

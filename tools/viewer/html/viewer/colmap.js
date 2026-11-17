@@ -540,6 +540,7 @@ export function createColmapLayer({
   getSceneRadius,
   getFlipUp,
   getViewerPosition,
+  getViewerDirection,
   worldToScreen,
   registerLayer,
   registerGroup,
@@ -921,11 +922,15 @@ export function createColmapLayer({
       const p = getViewerPosition();
       // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
       const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
+      const d = getViewerDirection?.() ?? [0, 0, -1];
+      const direction = getFlipUp?.() ? [d[0], -d[1], -d[2]] : d;
       const picked = selectNearestImages({
         centers: model.cameraCenters,
         axes: model.axes,
         viewer,
+        direction,
         count: IMAGE_SLOTS,
+        maxAngleDeg: 35,
         accept: (i) => nominalScreenSize(model, i) >= IMAGE_MIN_SCREEN_PX,
       });
       const key = picked.join(",");
