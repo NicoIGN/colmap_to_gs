@@ -26,14 +26,15 @@ export function findImageFile(index, name) {
   return index.get(path) ?? index.get(path.split("/").pop()) ?? null;
 }
 
-// Retient les caméras dont l'axe optique pointe vers le point de vue
-// (point devant la caméra, dans un cône de maxAngleDeg), les plus proches d'abord.
+// Retient les caméras proches du point de vue, situées devant leur axe optique
+// (dans un cône de maxAngleDeg autour de l'axe), les plus proches d'abord.
 export function selectNearestImages({
   centers,
   axes,
   viewer,
   count = 5,
-  maxAngleDeg = 60,
+  maxAngleDeg = 90,
+  maxDistance = Infinity,
 }) {
   const cosMin = Math.cos((maxAngleDeg * Math.PI) / 180);
   const candidates = [];
@@ -44,7 +45,7 @@ export function selectNearestImages({
     const dy = viewer[1] - centers[i * 3 + 1];
     const dz = viewer[2] - centers[i * 3 + 2];
     const dist = Math.hypot(dx, dy, dz);
-    if (dist < 1e-9) continue;
+    if (dist < 1e-9 || dist > maxDistance) continue;
     const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
     if (dot / dist < cosMin) continue;
     candidates.push({ index: i, dist });

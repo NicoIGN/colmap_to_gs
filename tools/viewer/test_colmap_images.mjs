@@ -36,6 +36,12 @@ test("selectNearestImages keeps cameras looking at the viewer, nearest first, up
   assert.deepEqual(picked, [1, 0]);
 });
 
+test("selectNearestImages ignores cameras beyond maxDistance", () => {
+  const centers = [0, 0, 0, 0, 0, 100];
+  const axes = [0, 1, 0, 0, 1, 0];
+  assert.deepEqual(selectNearestImages({ centers, axes, viewer: [0, 5, 0], maxDistance: 10 }), [0]);
+});
+
 test("selectNearestImages rejects cameras whose axis is outside the cone", () => {
   const centers = [0, 0, 0];
   const axes = [1, 0, 0];

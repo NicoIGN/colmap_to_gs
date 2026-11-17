@@ -7,9 +7,11 @@ import {
 } from "./colmap-images.js";
 
 const IMAGE_FRUSTUM_SCALE = 3;
-const IMAGE_SLOTS = 5;
+const IMAGE_SLOTS = 10;
+// Une image s'affiche quand le point de vue est à moins de cette fraction de la profondeur d'image.
+const IMAGE_NEAR_FACTOR = 1;
 const IMAGE_MAX_WIDTH = 1024;
-const TEXTURE_CACHE_SIZE = 32;
+const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 
 /**
  * Couche COLMAP sparse (PlayCanvas)
@@ -836,7 +838,10 @@ export function createColmapLayer({
         axes: model.axes,
         viewer,
         count: IMAGE_SLOTS,
+        maxDistance: model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_NEAR_FACTOR,
       }));
+      // Libère les textures des images qui ne sont plus dans la pile.
+      trimTextureCache(TEXTURE_CACHE_SIZE);
     }
   }
 
