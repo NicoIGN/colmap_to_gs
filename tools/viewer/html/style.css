@@ -224,7 +224,7 @@ textarea:disabled {
 }
 
 .layer-group-options.compact {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 2px 6px;
   padding-left: 16px;
   font-size: 10px;
