@@ -34,6 +34,7 @@ export function selectNearestImages({
   axes,
   viewer,
   direction = null,
+  maxAlong = Infinity,
   count = 5,
   maxAngleDeg = 90,
   maxDistance = Infinity,
@@ -54,17 +55,19 @@ export function selectNearestImages({
     const dz = viewer[2] - centers[i * 3 + 2];
     const dist = Math.hypot(dx, dy, dz);
     if (dist < 1e-9 || dist > maxDistance) continue;
-    const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
-    if (dot / dist < cosMin) continue;
     let alignment = 0;
     if (direction) {
-      // Alignement entre la direction point de vue -> centre de scène et point de vue -> caméra.
+      // Caméras situées entre le point de vue et le centre de scène, dans le cône autour de cette direction.
       const ux = -dx / dist;
       const uy = -dy / dist;
       const uz = -dz / dist;
       const cosView = direction[0] * ux + direction[1] * uy + direction[2] * uz;
       if (cosView < cosMin) continue;
+      if (dist * cosView > maxAlong) continue;
       alignment = 1 - cosView;
+    } else {
+      const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
+      if (dot / dist < cosMin) continue;
     }
     if (stats) stats.inCone += 1;
     if (!accept(i)) continue;

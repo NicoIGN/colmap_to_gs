@@ -6,8 +6,8 @@ import {
   selectNearestImages,
 } from "./colmap-images.js";
 
-// Mode Images : profondeur du cadre = 5 % de l'étendue max des caméras ; x2 quand agrandi (10 %).
-const IMAGE_FRUSTUM_SCALE = 2;
+// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x5 (5 %).
+const IMAGE_FRUSTUM_SCALE = 5;
 // Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
 const IMAGE_MIN_SCREEN_PX = 32;
 const IMAGE_SLOTS = 10;
@@ -68,7 +68,7 @@ export function cameraFrustumDepth(centers, fallbackRadius) {
   if (!Number.isFinite(reference) || reference <= 0) {
     throw new Error("Échelle COLMAP indéterminée pour les frustums.");
   }
-  return reference * 0.05;
+  return reference * 0.01;
 }
 
 const MODEL_PARAM_COUNT = {
@@ -766,7 +766,9 @@ export function createColmapLayer({
     const camera = model.cameras.get(image.cameraId);
     if (!camera) return 0;
     // Indice 0 = sommet de la pyramide ; 1..4 = coins du cadre.
-    const frame = frustumCorners(image, camera, model.depth).slice(1).map((c) => toWorld(model, c));
+    const frame = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)
+      .slice(1)
+      .map((c) => toWorld(model, c));
     const center = frame
       .reduce((acc, c) => acc.add(c), new pc.Vec3())
       .mulScalar(1 / frame.length);
@@ -945,6 +947,7 @@ export function createColmapLayer({
         axes: model.axes,
         viewer,
         direction,
+        maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
         count: IMAGE_SLOTS,
         maxAngleDeg: 35,
         accept: (i) => {
