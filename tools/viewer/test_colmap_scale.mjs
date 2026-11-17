@@ -140,6 +140,6 @@ test("distant outliers and splat scene radius do not inflate camera extent", () 
 });
 
 test("degenerate camera path uses scene radius or reports invalid scale", () => {
-  assert.equal(cameraFrustumDepth([0, 0, 0], 0.001), 0.00001);
+  assert.ok(Math.abs(cameraFrustumDepth([0, 0, 0], 0.001) - 0.00005) < 1e-12);
   assert.throws(() => cameraFrustumDepth([0, 0, 0], 0), /Échelle COLMAP/);
 });

@@ -6,10 +6,10 @@ import {
   selectNearestImages,
 } from "./colmap-images.js";
 
-// Mode Images : profondeur du cadre = 10 % de l'étendue des caméras.
-const IMAGE_FRUSTUM_SCALE = 10;
+// Mode Images : profondeur du cadre = 5 % de l'étendue max des caméras ; x2 quand agrandi (10 %).
+const IMAGE_FRUSTUM_SCALE = 2;
 // Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
-const IMAGE_MIN_SCREEN_PX = 100;
+const IMAGE_MIN_SCREEN_PX = 32;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -63,12 +63,12 @@ export function cameraFrustumDepth(centers, fallbackRadius) {
     const trim = Math.floor(values.length * 0.02);
     return values[values.length - 1 - trim] - values[trim];
   });
-  const radius = Math.hypot(...spans) / 2;
-  const reference = radius > 0 ? radius : fallbackRadius;
+  const extent = Math.max(...spans);
+  const reference = extent > 0 ? extent : fallbackRadius;
   if (!Number.isFinite(reference) || reference <= 0) {
     throw new Error("Échelle COLMAP indéterminée pour les frustums.");
   }
-  return reference * 0.01;
+  return reference * 0.05;
 }
 
 const MODEL_PARAM_COUNT = {
@@ -950,6 +950,14 @@ export function createColmapLayer({
         accept: (i) => {
           const size = nominalScreenSize(model, i);
           stats.maxSize = Math.max(stats.maxSize ?? 0, size);
+          const dist = Math.hypot(
+            viewer[0] - model.cameraCenters[i * 3],
+            viewer[1] - model.cameraCenters[i * 3 + 1],
+            viewer[2] - model.cameraCenters[i * 3 + 2]
+          );
+          if (!stats.nearest || dist < stats.nearest.dist) {
+            stats.nearest = { name: model.colmapImages[i].name, dist, size, index: i };
+          }
           return size >= IMAGE_MIN_SCREEN_PX;
         },
         stats,
@@ -962,6 +970,16 @@ export function createColmapLayer({
           `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, taille max ${(stats.maxSize ?? 0).toFixed(1)} px, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
           "| point de vue", viewer.map((v) => v.toFixed(2))
         );
+        if (stats.nearest) {
+          const n = stats.nearest;
+          const c = model.cameraCenters;
+          console.log(
+            "[images] caméra la plus proche (dans le cône) :", n.name,
+            "| distance", n.dist.toFixed(3), "| cadre", n.size.toFixed(1), "px",
+            "| centre", [c[n.index * 3], c[n.index * 3 + 1], c[n.index * 3 + 2]].map((v) => v.toFixed(3)),
+            "| profondeur cadre", model.depth.toFixed(4)
+          );
+        }
       }
       assignSlots(model, picked);
       refreshEnlarged(model);
