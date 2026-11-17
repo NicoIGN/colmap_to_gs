@@ -36,6 +36,17 @@ function loadLazPerf() {
 
 const nextTick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+// Fichier d'accompagnement <nom>.laz.json : CRS (EPSG) et datum d'altitude.
+async function readSidecar(file) {
+  const meta = JSON.parse(await file.text());
+  const match = /^EPSG:(\d+)$/i.exec(meta.crs ?? "");
+  const urls = (meta.copc_urls ?? []).join(" ");
+  return {
+    epsg: match ? Number(match[1]) : null,
+    verticalDatum: /IGN69/i.test(urls) ? "IGN69" : null,
+  };
+}
+
 // Appelle visit(view, base, index) pour chaque enregistrement, dans l'ordre.
 async function readRecords(laz, buffer, header, visit, onProgress) {
   if (!header.compressed) {
@@ -257,7 +268,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     for (const layer of layers.values()) render(layer, georef);
   }
 
-  async function loadFile(file) {
+  async function loadFile(file, sidecarFile = null) {
     if (disposed) return;
     if (file.size > MAX_FILE_BYTES) {
       throw new Error("Fichier LAZ trop volumineux (limite : 1 Gio).");
@@ -266,6 +277,9 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     setStatus(`Lecture de ${file.name}…`);
     const buffer = await file.arrayBuffer();
     const header = parseLasHeader(buffer);
+    const sidecar = sidecarFile ? await readSidecar(sidecarFile) : null;
+    if (sidecar?.epsg && !header.epsg) header.epsg = sidecar.epsg;
+    if (sidecar?.verticalDatum) header.verticalDatum = sidecar.verticalDatum;
 
     setStatus("Chargement du décodeur LAZ…");
     const laz = await loadLazPerf();
@@ -305,7 +319,8 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     const sampled = source.count < source.totalPoints
       ? ` (sous-échantillonné : ${source.count.toLocaleString("fr-FR")} / ${source.totalPoints.toLocaleString("fr-FR")})`
       : "";
-    setStatus(`${file.name} chargé${sampled}. ${placement.note}`);
+    const datum = header.verticalDatum ? ` Altitudes : ${header.verticalDatum}.` : "";
+    setStatus(`${file.name} chargé${sampled}. ${placement.note}${datum}`);
   }
 
   function clear() {

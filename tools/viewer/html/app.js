@@ -807,6 +807,17 @@ async function handleDroppedFiles(fileList, items) {
     const { files, hasDirectory } = await collectDroppedFiles(items, fileList);
     if (!files.length) throw new Error("Le dossier déposé ne contient aucun fichier.");
 
+    const lidarFile = files.find((f) => /\.(laz|las)$/i.test(f.name));
+    if (lidarFile) {
+      const sidecarName = `${lidarFile.name}.json`.toLowerCase();
+      const sidecar = files.find((f) => f.name.toLowerCase() === sidecarName) ?? null;
+      if (files.length === (sidecar ? 2 : 1)) {
+        if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
+        await lidarLayer.loadFile(lidarFile, sidecar);
+        return;
+      }
+    }
+
     if (hasColmapModel(files)) {
       if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
       await colmapLayer.loadFromFileList(files);
@@ -830,9 +841,6 @@ async function handleDroppedFiles(fileList, items) {
       await sceneTools.importFile(file);
     } else if (/\.(splat|ply)$/i.test(file.name)) {
       await appendScene(file, file.name);
-    } else if (/\.(laz|las)$/i.test(file.name)) {
-      if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
-      await lidarLayer.loadFile(file);
     } else {
       await loadFile(file);
     }
