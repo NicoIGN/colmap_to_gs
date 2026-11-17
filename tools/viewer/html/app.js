@@ -1005,27 +1005,43 @@ async function selectPointInView(key, button) {
   }
 }
 
-// Projection perspective manuelle (pixels CSS) : évite worldToScreen de PlayCanvas.
-function projectToScreen(point, out) {
-  if (!cameraEntity?.camera) return false;
-  const view = cameraEntity
+// Repère caméra PlayCanvas (regarde vers -Z) : { local, tanV } ou null si pas de caméra.
+function cameraLocal(point) {
+  if (!cameraEntity?.camera) return null;
+  const local = cameraEntity
     .getWorldTransform()
     .clone()
-    .invert();
-  const local = view.transformPoint(
-    new pc.Vec3(point.x, point.y, point.z),
-    new pc.Vec3()
-  );
-  // La caméra regarde vers -Z en repère local.
-  if (local.z >= -1e-6) return false;
+    .invert()
+    .transformPoint(new pc.Vec3(point.x, point.y, point.z), new pc.Vec3());
+  const cam = cameraEntity.camera;
+  const aspect = canvas.clientWidth / canvas.clientHeight;
+  const halfFov = (cam.fov * Math.PI) / 360;
+  // fov horizontal si horizontalFov, sinon vertical (convention PlayCanvas).
+  const tanV = cam.horizontalFov ? Math.tan(halfFov) / aspect : Math.tan(halfFov);
+  return { local, tanV, aspect };
+}
+
+// Projection perspective manuelle (pixels CSS), vérifiée contre Mat4.setPerspective.
+function projectToScreen(point, out) {
+  const info = cameraLocal(point);
+  if (!info || info.local.z >= -1e-6) return false;
+  const { local, tanV, aspect } = info;
+  const depth = -local.z * tanV;
   const width = canvas.clientWidth;
   const height = canvas.clientHeight;
-  const tanHalf = Math.tan((cameraEntity.camera.fov * Math.PI) / 360);
-  const depth = -local.z * tanHalf;
-  const ndcX = local.x / (depth * (width / height));
-  const ndcY = local.y / depth;
-  out.set((ndcX * 0.5 + 0.5) * width, (0.5 - ndcY * 0.5) * height, -local.z);
+  out.set(
+    (((local.x / (depth * aspect)) * 0.5) + 0.5) * width,
+    (0.5 - (local.y / depth) * 0.5) * height,
+    -local.z
+  );
   return true;
+}
+
+// Pixels écran par unité de monde à ce point (0 si derrière la caméra).
+function pixelScaleAt(point) {
+  const info = cameraLocal(point);
+  if (!info || info.local.z >= -1e-6) return 0;
+  return canvas.clientHeight / (2 * info.tanV * -info.local.z);
 }
 
 function parseNumbers(value, count) {
@@ -1617,6 +1633,7 @@ async function initialize() {
         getViewerDirection: () => camera.getWorldDirection(new THREE.Vector3()).toArray(),
         getViewerTarget: () => sceneCenter.toArray(),
         worldToScreen: (point, out) => projectToScreen(point, out),
+        pixelScaleAt,
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {

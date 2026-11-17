@@ -543,6 +543,7 @@ export function createColmapLayer({
   getViewerDirection,
   getViewerTarget,
   worldToScreen,
+  pixelScaleAt,
   registerLayer,
   registerGroup,
   onBoundsChanged,
@@ -746,30 +747,31 @@ export function createColmapLayer({
   }
 
   // Projette un point du repère COLMAP vers l'écran (pixels CSS), ou null si derrière la caméra.
-  function toScreen(model, point) {
-    const world = model.rootEntity.getWorldTransform().transformPoint(
+  function toWorld(model, point) {
+    return model.rootEntity.getWorldTransform().transformPoint(
       new pc.Vec3(point[0], point[1], point[2]),
       new pc.Vec3()
     );
-    const out = new pc.Vec3();
-    return worldToScreen(world, out) ? out : null;
   }
 
-  // Taille à l'écran (px) du cadre nominal d'une caméra, 0 si hors champ.
+  function toScreen(model, point) {
+    const out = new pc.Vec3();
+    return worldToScreen(toWorld(model, point), out) ? out : null;
+  }
+
+  // Taille à l'écran (px) du cadre nominal d'une caméra, mesurée au centre du cadre :
+  // fonctionne même quand ses coins sont derrière le point de vue. 0 si le cadre est derrière.
   function nominalScreenSize(model, index) {
     const image = model.colmapImages[index];
     const camera = model.cameras.get(image.cameraId);
     if (!camera) return 0;
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const corner of frustumCorners(image, camera, model.depth)) {
-      const s = toScreen(model, corner);
-      if (!s) return 0;
-      minX = Math.min(minX, s.x);
-      maxX = Math.max(maxX, s.x);
-      minY = Math.min(minY, s.y);
-      maxY = Math.max(maxY, s.y);
-    }
-    return Math.max(maxX - minX, maxY - minY);
+    // Indice 0 = sommet de la pyramide ; 1..4 = coins du cadre.
+    const frame = frustumCorners(image, camera, model.depth).slice(1).map((c) => toWorld(model, c));
+    const center = frame
+      .reduce((acc, c) => acc.add(c), new pc.Vec3())
+      .mulScalar(1 / frame.length);
+    const extent = Math.max(frame[0].distance(frame[1]), frame[1].distance(frame[2]));
+    return extent * pixelScaleAt(center);
   }
 
   // Replace sur le cadre agrandi les libellés des images affichées (coin supérieur droit).
