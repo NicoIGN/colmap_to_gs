@@ -456,6 +456,32 @@ function applyUpFlip() {
   }
 }
 
+async function removeSplatLayer(layer) {
+  const index = splatLayers.indexOf(layer);
+  if (index < 0) return;
+  splatLayers.splice(index, 1);
+  layer.unregister?.();
+  layer.entity.destroy();
+  layer.importer.dispose();
+
+  if (!splatLayers.length) {
+    releaseScene();
+    return;
+  }
+
+  splatEntity = splatLayers[0].entity;
+  centers = Float32Array.from(splatLayers.flatMap((item) => Array.from(item.centers)));
+  sceneCount = splatLayers.reduce((total, item) => total + item.count, 0);
+  sceneTools?.setSceneInfo({
+    name: splatLayers.map((item) => item.name).join(", "),
+    count: sceneCount,
+  });
+  collision.reset();
+  computeSceneBounds();
+  if (collisionIsEnabled()) await prepareCollision();
+  refreshUI();
+}
+
 function releaseScene() {
   sceneReady = false;
   if (getPrincipalAxisName() === "custom") $("principalAxis").value = "z";
@@ -619,6 +645,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
       id: `splat-${nextSplatLayerId++}`,
       name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
       setVisible(visible) { entity.enabled = visible; },
+      onRemove: () => removeSplatLayer(newLayer),
     });
     splatLayers.push(newLayer);
     splatEntity ??= entity;
