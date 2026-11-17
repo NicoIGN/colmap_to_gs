@@ -837,6 +837,12 @@ async function handleDroppedFiles(fileList, items) {
 
     const file = files[0];
 
+    if (/\.(laz|las)\.json$/i.test(file.name)) {
+      throw new Error(
+        "Ce JSON est le fichier d’accompagnement du LiDAR : dépose-le avec le .laz correspondant."
+      );
+    }
+
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
     } else if (/\.(splat|ply)$/i.test(file.name)) {
