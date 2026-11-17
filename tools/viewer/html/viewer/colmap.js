@@ -947,7 +947,11 @@ export function createColmapLayer({
         direction,
         count: IMAGE_SLOTS,
         maxAngleDeg: 35,
-        accept: (i) => nominalScreenSize(model, i) >= IMAGE_MIN_SCREEN_PX,
+        accept: (i) => {
+          const size = nominalScreenSize(model, i);
+          stats.maxSize = Math.max(stats.maxSize ?? 0, size);
+          return size >= IMAGE_MIN_SCREEN_PX;
+        },
         stats,
       });
       const key = picked.join(",");
@@ -955,7 +959,7 @@ export function createColmapLayer({
         model.pickedKey = key;
         console.log(
           "[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS,
-          `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
+          `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, taille max ${(stats.maxSize ?? 0).toFixed(1)} px, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
           "| point de vue", viewer.map((v) => v.toFixed(2))
         );
       }
