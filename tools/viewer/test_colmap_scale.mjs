@@ -9,10 +9,12 @@ class TestEntity {
   removeChild(child) { child.parent = null; }
   addComponent() {}
   setLocalEulerAngles() {}
+  findComponents() { return []; }
   destroy() {}
 }
 globalThis.testPlayCanvas = {
   Entity: TestEntity,
+  Layer: class { constructor({ name }) { this.name = name; this.id = 1; } },
   ShaderMaterial: class { setParameter() {} update() {} destroy() {} },
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
@@ -32,7 +34,11 @@ test("COLMAP loading, flipping and removal notify the navigation bounds", async 
   const statuses = [];
   try {
     const layer = createColmapLayer({
-      app: { root: new TestEntity(), graphicsDevice: {} },
+      app: {
+        root: new TestEntity(),
+        graphicsDevice: {},
+        scene: { layers: { getLayerByName: () => null, push() {} } },
+      },
       getSceneRadius: () => 1,
       getFlipUp: () => false,
       setStatus: (...args) => statuses.push(args),

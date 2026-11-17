@@ -345,7 +345,7 @@ function setPointSize(app, material, size) {
   ));
 }
 
-function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
+function makeColmapMaterial(app, { points = false, pointSize = 3, onTop = false } = {}) {
   const material = new pc.ShaderMaterial({
     uniqueName: points
       ? "ColmapCircularPointsMaterial"
@@ -400,7 +400,7 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   material.setParameter("uHighlight", 0);
 
   material.cull = pc.CULLFACE_NONE;
-  material.depthTest = true;
+  material.depthTest = !onTop;
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
@@ -427,7 +427,19 @@ function makeColmapMesh(app, positions, rgba, primitive, material) {
   return { mesh, material, meshInstance };
 }
 
-export function makePointMesh(app, positions, colors, pointSize = 3) {
+export function getOverlayLayer(app) {
+  const existing = app.scene.layers.getLayerByName("Overlay");
+  if (existing) return existing;
+  // Calque ajouté après « World » (splats) : il est dessiné par-dessus.
+  const layer = new pc.Layer({ name: "Overlay" });
+  app.scene.layers.push(layer);
+  for (const camera of app.root.findComponents("camera")) {
+    if (!camera.layers.includes(layer.id)) camera.layers = [...camera.layers, layer.id];
+  }
+  return layer;
+}
+
+export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = false } = {}) {
   const count = positions.length / 3;
   const rgba = new Float32Array(count * 4);
 
@@ -443,7 +455,7 @@ export function makePointMesh(app, positions, colors, pointSize = 3) {
     positions,
     rgba,
     pc.PRIMITIVE_POINTS,
-    makeColmapMaterial(app, { points: true, pointSize })
+    makeColmapMaterial(app, { points: true, pointSize, onTop })
   );
 }
 
@@ -736,12 +748,13 @@ export function createColmapLayer({
         centerColors[i * 3] = 1;
       }
       model.cameraCentersResource = makePointMesh(
-        app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4)
-      );
+         app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4), { onTop: true }
+       );
       model.cameraCentersEntity = new pc.Entity("COLMAP camera centers");
       model.cameraCentersEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.cameraCentersResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.cameraCentersEntity);
 

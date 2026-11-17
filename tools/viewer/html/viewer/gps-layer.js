@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { getOverlayLayer } from "./colmap.js";
 
 const LINE_COLOR = new pc.Color(140 / 255, 230 / 255, 0); // vert pomme
 const SPHERE_COLOR = new pc.Color(140 / 255, 230 / 255, 0);
@@ -60,7 +61,7 @@ export function createGpsLayer({ app, registerLayer }) {
     mat.emissive.copy(color);
     mat.diffuse.copy(color);
     mat.cull = pc.CULLFACE_NONE;
-    mat.depthTest = true;
+    mat.depthTest = false;
     mat.depthWrite = false;
     mat.blendType = pc.BLEND_NORMAL;
     mat.update();
@@ -108,11 +109,13 @@ export function createGpsLayer({ app, registerLayer }) {
     lineEntity.addComponent("render", {
       type: "asset",
       meshInstances: [new pc.MeshInstance(lineMesh, lineMaterial)],
+      layers: [getOverlayLayer(app).id],
     });
     rootEntity.addChild(lineEntity);
 
     // Sommets (sphères)
     sphereMaterial = makeUnlitMaterial(SPHERE_COLOR);
+    const overlayLayerId = getOverlayLayer(app).id;
 
     const cameraEntity = app.root.findByName("Camera");
     const cameraPosition = cameraEntity?.getPosition?.();
@@ -124,6 +127,7 @@ export function createGpsLayer({ app, registerLayer }) {
       sphere.addComponent("render", {
         type: "sphere",
         material: sphereMaterial,
+        layers: [overlayLayerId],
       });
 
       sphere.setLocalPosition(p.x, p.y, p.z);
