@@ -822,9 +822,19 @@ async function handleDroppedFiles(fileList, items) {
     if (sceneFile && files.length === 2) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
       const georefFile = files.find((f) => f !== sceneFile && f.name.toLowerCase() === `${base}.georef.json`);
+      console.log("[georef] scan", {
+        scene: sceneFile.name,
+        expected: `${base}.georef.json`,
+        found: georefFile?.name ?? null,
+        files: files.map((f) => f.name),
+      });
       if (georefFile) {
         await loadFile(sceneFile);
+        console.log("[georef] scène chargée, import du georef", georefFile.name, {
+          ready: sceneTools?.getState?.().ready,
+        });
         await sceneTools.importFile(georefFile);
+        console.log("[georef] importFile terminé", { georef: sceneTools?.getGeoref?.() ? "présent" : "absent" });
         return;
       }
     }
