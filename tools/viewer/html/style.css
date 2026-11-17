@@ -200,6 +200,12 @@ textarea:disabled {
   white-space: nowrap;
 }
 
+.layer-group-options.compact {
+  flex-wrap: nowrap;
+  gap: 4px 8px;
+  font-size: 11px;
+}
+
 .layer-option {
   display: flex;
   align-items: center;

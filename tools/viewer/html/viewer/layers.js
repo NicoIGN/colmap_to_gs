@@ -34,7 +34,7 @@ export function createLayerManager(container) {
         group.appendChild(master);
 
         const options = document.createElement("div");
-        options.className = "layer-group-options";
+        options.className = layer.compact ? "layer-group-options compact" : "layer-group-options";
         for (const child of layer.children) {
           const toggle = makeToggle(child.name, child.visible, (visible) => {
             child.visible = visible;
@@ -92,11 +92,12 @@ export function createLayerManager(container) {
         }
       };
     },
-    addGroup({ id, name, children, visible = true }) {
+    addGroup({ id, name, children, visible = true, compact = false }) {
       if (layers.has(id)) throw new Error(`Couche déjà enregistrée : ${id}`);
       const group = {
         name,
         visible,
+        compact,
         children: children.map((child) => ({
           ...child,
           visible: child.visible ?? true,

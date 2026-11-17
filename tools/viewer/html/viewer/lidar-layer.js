@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { makePointMesh } from "./colmap.js";
+import { makePointMesh, setMeshHighlight } from "./colmap.js";
 import { classColor, decodePointRecord, parseLasHeader } from "./las-header.js";
 
 export const LAZ_PERF_URL = "https://cdn.jsdelivr.net/npm/laz-perf@0.0.7/lib/web/laz-perf.js";
@@ -228,7 +228,7 @@ function worldPositions(source, placement) {
   return out;
 }
 
-export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerLayer }) {
+export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup }) {
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
@@ -250,6 +250,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     layer.resource = makePointMesh(
       app, worldPositions(layer.source, placement), layer.source.colors, POINT_SIZE
     );
+    setMeshHighlight(layer.resource, layer.highlighted);
     const pointsEntity = new pc.Entity(`LiDAR points · ${layer.name}`);
     pointsEntity.addComponent("render", {
       type: "asset",
@@ -300,6 +301,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       name: file.name,
       source,
       visible: true,
+      highlighted: false,
       root: null,
       resource: null,
       placement: null,
@@ -311,14 +313,21 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     lastGeoref = georef;
     const placement = render(layer, georef);
 
-    layer.unregister = registerLayer?.({
+    layer.unregister = registerGroup?.({
       id,
       name: `${file.name} · ${source.count.toLocaleString("fr-FR")} points`,
       visible: true,
-      setVisible(visible) {
-        layer.visible = visible;
-        if (layer.root) layer.root.enabled = visible;
-      },
+      children: [{
+        name: "Points",
+        setVisible(visible) {
+          layer.visible = visible;
+          if (layer.root) layer.root.enabled = visible;
+        },
+        setHighlight(on) {
+          layer.highlighted = on;
+          setMeshHighlight(layer.resource, on);
+        },
+      }],
     }) ?? null;
 
     const sampled = source.count < source.totalPoints

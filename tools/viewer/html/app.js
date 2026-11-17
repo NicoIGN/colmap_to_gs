@@ -1567,7 +1567,7 @@ async function initialize() {
         setStatus,
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
-        registerLayer: (layer) => layerManager.add(layer),
+        registerGroup: (group) => layerManager.addGroup(group),
       });
 
       installUI();

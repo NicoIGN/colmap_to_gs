@@ -408,7 +408,7 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   return material;
 }
 
-function setMeshHighlight(resource, on) {
+export function setMeshHighlight(resource, on) {
   resource?.material.setParameter("uHighlight", on ? 1 : 0);
 }
 
@@ -768,6 +768,7 @@ export function createColmapLayer({
         model.unregister = registerGroup({
           id,
           name: `COLMAP · ${label}`,
+          compact: true,
           children,
         });
       } else {
