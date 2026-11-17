@@ -48,3 +48,16 @@ test("selectNearestImages rejects cameras whose axis is outside the cone", () =>
   assert.deepEqual(selectNearestImages({ centers, axes, viewer: [0, 5, 0] }), []);
   assert.deepEqual(selectNearestImages({ centers, axes, viewer: [5, 0, 0] }), [0]);
 });
+
+test("hysteresis keeps the current image while it stays valid, then switches", () => {
+  // Deux caméras sur l'axe de vue (+X) ; la 0 est la mieux alignée.
+  const centers = [5, 0, 0, 5, 0.3, 0];
+  const axes = [-1, 0, 0, -1, 0, 0];
+  const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35 };
+  assert.deepEqual(selectNearestImages({ ...args, keep: -1 }), [0]);
+  // Caméra 1 déjà affichée : elle reste choisie malgré la meilleure caméra 0.
+  assert.deepEqual(selectNearestImages({ ...args, keep: 1 }), [1]);
+  // Caméra 0 sortie du cône : on bascule sur la meilleure valide.
+  const moved = [5, 10, 0, 5, 0.3, 0];
+  assert.deepEqual(selectNearestImages({ ...args, centers: moved, keep: 0 }), [1]);
+});

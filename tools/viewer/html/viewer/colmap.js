@@ -12,6 +12,8 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
+// Hystérésis : une image affichée reste choisie tant que le cadre reste ≥ 60 % du seuil et dans un cône élargi.
+const IMAGE_HYSTERESIS = 0.6;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -952,9 +954,10 @@ export function createColmapLayer({
         maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
         count: IMAGE_SHOWN,
         maxAngleDeg: 35,
-        accept: (i) => {
+        keep: model.slots[0]?.shown ?? -1,
+        accept: (i, relaxed = false) => {
           const size = nominalScreenSize(model, i);
-          stats.maxSize = Math.max(stats.maxSize ?? 0, size);
+          if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(
             viewer[0] - model.cameraCenters[i * 3],
             viewer[1] - model.cameraCenters[i * 3 + 1],
@@ -963,7 +966,7 @@ export function createColmapLayer({
           if (!stats.nearest || dist < stats.nearest.dist) {
             stats.nearest = { name: model.colmapImages[i].name, dist, size, index: i };
           }
-          return size >= IMAGE_MIN_SCREEN_PX;
+          return size >= IMAGE_MIN_SCREEN_PX * (relaxed ? IMAGE_HYSTERESIS : 1);
         },
         stats,
       });
