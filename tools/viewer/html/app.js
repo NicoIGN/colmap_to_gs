@@ -818,6 +818,17 @@ async function handleDroppedFiles(fileList, items) {
       }
     }
 
+    const sceneFile = files.find((f) => isSupportedSceneName(f.name));
+    if (sceneFile && files.length === 2) {
+      const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
+      const georefFile = files.find((f) => f !== sceneFile && f.name.toLowerCase() === `${base}.georef.json`);
+      if (georefFile) {
+        await loadFile(sceneFile);
+        await sceneTools.importFile(georefFile);
+        return;
+      }
+    }
+
     if (hasColmapModel(files)) {
       if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
       await colmapLayer.loadFromFileList(files);
