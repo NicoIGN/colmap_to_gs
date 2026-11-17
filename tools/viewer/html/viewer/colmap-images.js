@@ -35,6 +35,7 @@ export function selectNearestImages({
   count = 5,
   maxAngleDeg = 90,
   maxDistance = Infinity,
+  accept = () => true,
 }) {
   const cosMin = Math.cos((maxAngleDeg * Math.PI) / 180);
   const candidates = [];
@@ -48,6 +49,7 @@ export function selectNearestImages({
     if (dist < 1e-9 || dist > maxDistance) continue;
     const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
     if (dot / dist < cosMin) continue;
+    if (!accept(i)) continue;
     candidates.push({ index: i, dist });
   }
 

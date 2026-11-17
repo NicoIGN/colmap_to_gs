@@ -1582,6 +1582,13 @@ async function initialize() {
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
         getViewerPosition: () => camera.position.toArray(),
+        worldToScreen: (point, out) =>
+          cameraEntity?.camera?.worldToScreen(
+            point,
+            canvas.clientWidth,
+            canvas.clientHeight,
+            out
+          ),
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
