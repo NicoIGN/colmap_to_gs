@@ -71,10 +71,15 @@ async function readRecords(laz, buffer, header, visit, onProgress) {
     const count = zip.getCount();
     const length = zip.getPointLength();
     scratch = laz._malloc(length);
-    // Pas de malloc pendant la boucle : la vue reste valide.
-    const view = new DataView(laz.HEAPU8.buffer, scratch, length);
+    // La mémoire WASM peut grossir (tampon détaché) : la vue est recréée si besoin.
+    let heap = laz.HEAPU8.buffer;
+    let view = new DataView(heap, scratch, length);
     for (let i = 0; i < count; i++) {
       zip.getPoint(scratch);
+      if (laz.HEAPU8.buffer !== heap) {
+        heap = laz.HEAPU8.buffer;
+        view = new DataView(heap, scratch, length);
+      }
       visit(view, 0, i);
       if (i > 0 && i % YIELD_EVERY === 0) {
         onProgress(i / count);
