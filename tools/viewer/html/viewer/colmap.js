@@ -273,6 +273,15 @@ function qvecToMat3(qvec) {
   ];
 }
 
+function sub3(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function normalize3(v) {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / length, v[1] / length, v[2] / length];
+}
+
 function transpose3(m) {
   return [
     m[0], m[3], m[6],
@@ -758,21 +767,25 @@ export function createColmapLayer({
     );
   }
 
-  // Pose de la caméra COLMAP (centre, axe optique, vertical) en coordonnées de la vue.
+  // Pose de l'image COLMAP en coordonnées de la vue : point de vue = centre de la caméra,
+  // cible = point situé sur l'axe optique, vertical = axe -Y de l'image.
   function imageViewPose(model, image) {
     const rwc = transpose3(qvecToMat3(image.qvec));
     const center = getCameraCenter(image);
-    const offset = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
-    const position = toWorld(model, center);
-    const direction = toWorld(model, offset(mulMat3Vec3(rwc, [0, 0, 1]))).sub(position).normalize();
-    const up = toWorld(model, offset(mulMat3Vec3(rwc, [0, -1, 0]))).sub(position).normalize();
+    const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
+    const position = toWorldArray(model, center);
+    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), position));
+    const up = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, -1, 0]))), position));
     const targetDistance = Math.max(getSceneRadius?.() ?? 1, 1e-6) * 0.2;
-    const target = position.clone().addScaledVector(direction, targetDistance);
     return {
-      position: position.toArray(),
-      target: target.toArray(),
-      up: up.toArray(),
+      position,
+      target: position.map((value, axis) => value + forward[axis] * targetDistance),
+      up,
     };
+  }
+
+  function toWorldArray(model, point) {
+    return toWorld(model, point).toArray();
   }
 
   function toScreen(model, point) {
