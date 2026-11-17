@@ -768,19 +768,17 @@ export function createColmapLayer({
   }
 
   // Pose de l'image COLMAP en coordonnées de la vue : point de vue = centre de la caméra,
-  // cible = point situé sur l'axe optique, vertical = axe -Y de l'image.
+  // cible = point situé sur l'axe optique.
   function imageViewPose(model, image) {
     const rwc = transpose3(qvecToMat3(image.qvec));
     const center = getCameraCenter(image);
     const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
     const position = toWorldArray(model, center);
     const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), position));
-    const up = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, -1, 0]))), position));
     const targetDistance = Math.max(getSceneRadius?.() ?? 1, 1e-6) * 0.2;
     return {
       position,
       target: position.map((value, axis) => value + forward[axis] * targetDistance),
-      up,
     };
   }
 

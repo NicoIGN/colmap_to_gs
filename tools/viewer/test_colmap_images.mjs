@@ -70,3 +70,12 @@ test("cameras beyond the scene centre are never selected, even when kept", () =>
   assert.deepEqual(selectNearestImages({ ...args, keep: 0 }), [1]);
   assert.deepEqual(selectNearestImages({ ...args, keep: -1 }), [1]);
 });
+
+test("the camera's own image stays selected when the viewer sits at its centre", () => {
+  const centers = [0, 0, 0, 5, 0, 0];
+  const axes = [1, 0, 0, -1, 0, 0];
+  const picked = selectNearestImages({
+    centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35,
+  });
+  assert.deepEqual(picked, [0]);
+});

@@ -56,7 +56,9 @@ export function selectNearestImages({
     const dy = viewer[1] - centers[i * 3 + 1];
     const dz = viewer[2] - centers[i * 3 + 2];
     const dist = Math.hypot(dx, dy, dz);
-    if (dist < 1e-9 || dist > maxDistance) return null;
+    // Le point de vue est le centre de cette caméra : elle reste toujours valide.
+    if (dist < 1e-9) return { dist, alignment: 0 };
+    if (dist > maxDistance) return null;
     let alignment = 0;
     if (direction) {
       // Caméras situées entre le point de vue et le centre de scène, dans le cône autour de cette direction.

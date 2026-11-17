@@ -1202,7 +1202,9 @@ function goToImageView() {
   }
 
   navigation.clearNavigation();
-  applyCameraString([...pose.position, ...pose.target, ...pose.up].join(","));
+  // L'axe vertical reste celui de l'application (axe principal courant).
+  const axis = getPrincipalAxis();
+  applyCameraString([...pose.position, ...pose.target, axis.x, axis.y, axis.z].join(","));
   rememberCamera();
   requestGifCapture();
   setStatus("Caméra placée sur la vue de l’image COLMAP.", "success");
