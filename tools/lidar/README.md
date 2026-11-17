@@ -78,9 +78,18 @@ grossière du domaine Lambert-93 et une limite de 25 km²/100 tuiles évitent un
 extraction accidentelle trop grande (`--max-area-km2`, `--max-tiles`).
 Des splats aberrants peuvent gonfler l'emprise ; les nettoyer en amont si nécessaire.
 
-Installer également **PDAL avec `readers.copc`, `filters.merge`, `filters.crop`
-et `writers.las`**, par exemple dans un environnement conda-forge adapté.
-Vérifier avec `pdal --drivers`. `--pdal` permet de donner le chemin de l'exécutable.
+Avec `--pdal pdal` (défaut), les scripts créent automatiquement un environnement
+isolé à `~/.cache/colmap_to_gs/lidar-pdal`, défini dans
+`environment/ign.slurm/pdal_env.yml`, puis le réutilisent. Mamba, micromamba ou
+Conda doit être accessible dans le PATH. Un verrou sérialise la création entre
+jobs Slurm. PDAL est exécuté via `run --prefix` : le Python appelant reste dans
+son environnement initial (par exemple `gsplat`). Aucun `pip install pdal`
+n'est nécessaire. La première création nécessite un accès à conda-forge et un
+répertoire personnel accessible en écriture et partagé avec les nœuds.
+`--pdal /chemin/pdal` permet de fournir un exécutable existant sans création.
+PDAL doit proposer `readers.copc`, `filters.merge`, `filters.crop` et `writers.las`.
+Si un environnement incomplet est détecté après interruption, une erreur demande
+de le déplacer avant de relancer ; il n'est jamais supprimé automatiquement.
 Le réseau doit accéder au WFS et aux URL HTTPS COPC ; PDAL extrait la zone via
 les requêtes HTTP partielles plutôt que télécharger chaque tuile entière.
 Les classes ne sont pas filtrées lors de la récupération.

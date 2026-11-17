@@ -198,13 +198,17 @@ def get(flag): return args[args.index(flag) + 1]
 with open(os.environ["TEST_EVENTS"], "a") as log:
     log.write(json.dumps(["spirula", *args]) + "\n")
 if args[0] == "sfm":
-    assert get("--data-type") == "individual"
+    if get("--pairs") == "sequential":
+        assert get("--data-type") == "video"
+        assert get("--sequence") == "."
+    else:
+        assert get("--data-type") == "individual"
+        assert "--sequence" not in args
     assert get("--camera-mode") == "folder"
     assert get("--metric-gps") in ("none", "horizontal", "full")
     assert ("--sensor-pairs" in args) == (get("--metric-gps") != "none")
     if "--sensor-pairs" in args:
         assert get("--sensor-pair-radius") == "30"
-    assert "--sequence" not in args
     for flag, variable in (
         ("--max-error", "SFM_MAX_ERROR"), ("--min-inliers", "SFM_MIN_INLIERS"),
         ("--min-tri-angle", "SFM_MIN_TRI_ANGLE"), ("--ba-loss", "SFM_SP_BA_LOSS"),
@@ -212,23 +216,38 @@ if args[0] == "sfm":
     ):
         assert get(flag) == os.environ[variable]
     assert get("--reuse-matches") == ("auto" if os.environ.get("PIPELINE_RESUME") == "true" else "redo")
-    if os.environ["SFM_MASKS"] == "on":
+    split_pass = args[2].endswith("sfm_cameras/images")
+    if split_pass:
+        if os.environ["SFM_MASKS"] == "on":
+            assert get("--feature-masks").endswith("sfm_cameras/masks")
+            assert Path(get("--feature-masks"), "cam_01/h01/photo.jpg.png").is_file()
+    elif os.environ["SFM_MASKS"] == "on":
         if os.environ.get("PIPELINE_RESUME") == "true":
             assert Path(get("--feature-masks"), "root.jpg.png").is_file()
         else:
             assert Path(get("--feature-masks"), "masks.json").is_file()
     else:
         assert "--feature-masks" not in args
-    sparse = Path(get("--output")) / "sparse/0"
-    sparse.mkdir(parents=True, exist_ok=True)
     import struct
-    (sparse / "cameras.bin").write_bytes(
-        struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
-    (sparse / "images.bin").write_bytes(
-        struct.pack("<QI7dI", 1, 1, 1, 0, 0, 0, 0, 0, 0, 1)
-        + b"root.jpg\0" + struct.pack("<Qddq", 1, 0.5, 0.5, 1))
-    (sparse / "points3D.bin").write_bytes(
-        struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+    def write_model(sparse, names):
+        sparse.mkdir(parents=True, exist_ok=True)
+        (sparse / "cameras.bin").write_bytes(
+            struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
+        images = struct.pack("<Q", len(names))
+        for index, image in enumerate(names, 1):
+            images += struct.pack("<I7dI", index, 1, 0, 0, 0, 0, 0, 0, 1) + image.encode() + b"\0"
+            images += struct.pack("<Qddq", 1, 0.5, 0.5, 1) if index == 1 else struct.pack("<Q", 0)
+        (sparse / "images.bin").write_bytes(images)
+        (sparse / "points3D.bin").write_bytes(
+            struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+    sparse = Path(get("--output")) / "sparse/0"
+    if split_pass:
+        write_model(sparse, ["cam_00/root.jpg", "cam_00/h00/photo.jpg", "cam_01/h01/photo.jpg"])
+    elif os.environ.get("TEST_CAMERA_SPLIT") == "1":
+        write_model(sparse, ["root.jpg", "h00/photo.jpg"])
+        write_model(sparse.parent / "1", ["h01/photo.jpg"])
+    else:
+        write_model(sparse, ["root.jpg"])
     if os.environ.get("TEST_INVALID_SPARSE") == "1":
         (sparse / "points3D.bin").write_bytes(b"interrupted")
     elif os.environ.get("TEST_INVALID_SPARSE") == "tracks":
@@ -455,7 +474,7 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
-        self.assertEqual((filtered / ".density_done").read_text().strip(), "2")
+        self.assertEqual((filtered / ".density_done").read_text().strip(), "2 0.75 0.25")
         self.assertTrue((filtered / "density_report.json").is_file())
         report = json.loads((filtered / "density_report.json").read_text())
         self.assertEqual(report["algorithm_version"], 2)
@@ -592,7 +611,7 @@ if "--wait" in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
         self.assertIn("PIPELINE_RESUME=true", result.stdout + result.stderr)
-        self.assertIn("settings.SFM_MIN_TRI_ANGLE : enregistré='3' ; actuel='4'",
+        self.assertIn("settings.SFM_MIN_TRI_ANGLE : enregistré='6' ; actuel='4'",
                       result.stdout + result.stderr)
         self.assertIn(str(self.output / "inputs.json"), result.stdout + result.stderr)
 
@@ -783,6 +802,58 @@ if "--wait" in args:
                 self.assertIn("Sparse absent ou incomplet", result.stdout + result.stderr)
                 self.assertFalse((self.output / ".prepare_done").exists())
                 self.assertFalse((self.output / "blocks").exists())
+
+    def sfm_runs(self):
+        return [command for command in self.commands() if command[:2] == ["spirula", "sfm"]]
+
+    def test_camera_split_retries_sfm_with_one_camera_per_model(self):
+        sys.path.insert(0, str(SOURCE.parents[1] / "tools/images_to_colmap"))
+        from camera_split import model_dirs, read_image_names
+
+        self.env["TEST_CAMERA_SPLIT"] = "1"
+        self.append("SFM_CAMERA_SPLIT=true\nSFM_CAMERA_SPLIT_MIN_IMAGES=1")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        runs = self.sfm_runs()
+        self.assertEqual(len(runs), 2)
+        self.assertTrue(runs[1][3].endswith("sfm_cameras/images"))
+        sfm = self.output / "sfm"
+        self.assertEqual(read_image_names(sfm / "sparse/0/images.bin"),
+                         ["root.jpg", "h00/photo.jpg", "h01/photo.jpg"])
+        self.assertEqual(len(model_dirs(sfm / "sparse-before-camera-split")), 2)
+        record = json.loads((sfm / "camera_split.json").read_text())
+        self.assertEqual(record["group_images"], [2, 1])
+        self.assertTrue((self.output / "blocks/manifest.json").is_file())
+        self.append("PIPELINE_RESUME=true")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 2)
+
+    def test_camera_split_on_resume_archives_outputs_of_previous_sfm(self):
+        self.env["TEST_CAMERA_SPLIT"] = "1"
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 1)
+        self.append("PIPELINE_RESUME=true\nSFM_CAMERA_SPLIT=true\nSFM_CAMERA_SPLIT_MIN_IMAGES=1")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual(len(self.sfm_runs()), 2)
+        backups = list((self.output / "camera-split-backups").iterdir())
+        self.assertEqual(len(backups), 1)
+        self.assertTrue((backups[0] / "blocks/manifest.json").is_file())
+        self.assertTrue((self.output / "blocks/manifest.json").is_file())
+        self.assertTrue((self.output / ".prepare_done").is_file())
+
+    def test_sequential_video_pairing_and_camera_split_guard(self):
+        self.append("SFM_SP_PAIRS=sequential\nSFM_CAMERA_SPLIT=false")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        run = self.sfm_runs()[0]
+        self.assertEqual(run[run.index("--pairs") + 1], "sequential")
+        self.assertEqual(run[run.index("--data-type") + 1], "video")
+        self.assertEqual(run[run.index("--sequence") + 1], ".")
+
+    def test_sequential_pairing_rejects_camera_split_before_work(self):
+        self.append("SFM_SP_PAIRS=sequential\nSFM_CAMERA_SPLIT=true")
+        result = self.run_pipeline("--validate-only")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_SP_PAIRS=sequential exige SFM_CAMERA_SPLIT=false", result.stderr)
+        self.assertFalse(self.events.exists())
 
     def test_resume_does_not_ignore_mask_policy_metadata(self):
         masks, _ = self.interrupted_workspace()
@@ -1030,6 +1101,8 @@ if "--wait" in args:
             with self.subTest(mode=mode):
                 output = self.root / f"bbox-{mode}"
                 self.append(f'POSTPROCESS_SPARSE_BBOX_MODE="{mode}"\nOUTPUT_DIR="{output}"')
+                if mode == "off":
+                    self.append('POSTPROCESS_SPARSE_SUPPORT_MODE="off"')
                 self.assert_ok(self.run_pipeline())
                 self.assertTrue((output / "scene.splat").is_file())
                 cropped = output / "gs/block_000/splats/block_000.bbox.splat"
@@ -1063,6 +1136,52 @@ if "--wait" in args:
         self.assertIn("recadrage COLMAP", result.stdout + result.stderr)
         self.assertFalse(any(cmd[0] == "merge_splats.py" for cmd in self.commands()))
         self.assertFalse((self.output / "scene.splat").exists())
+
+    def configure_video_launcher(self):
+        video = self.root / "source video.MOV"
+        video.write_bytes(b"video")
+        frames = self.root / "extracted frames"
+        self.append(f'VIDEO="{video}"\nNUM_FRAMES=900\nSFM_IMAGES_DIR="{frames}"')
+        self.env["TEST_VIDEO_SOURCE_IMAGES"] = str(self.images)
+        wrapper = self.bin / "python"
+        wrapper.write_text(wrapper.read_text().replace(
+            "if name not in known:",
+            '''if name == "extract_sharp_frames.py":
+    with open(os.environ["TEST_EVENTS"], "a") as log:
+        log.write(json.dumps([name, *args[1:]]) + "\\n")
+    assert get("--num-frames") == "900"
+    assert Path(get("--video")).is_file()
+    assert "--reset" not in args
+    if os.environ.get("TEST_FAIL_TOOL") == name:
+        sys.exit(7)
+    shutil.copytree(os.environ["TEST_VIDEO_SOURCE_IMAGES"], get("--out"), dirs_exist_ok=True)
+    sys.exit(0)
+if name not in known:'''))
+        return SOURCE.parents[1] / "scripts/launch_videos_to_3dgs.sh", frames
+
+    def test_slurm_video_extracts_before_launching_images(self):
+        launcher, frames = self.configure_video_launcher()
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--wait"],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assert_ok(result)
+        jobs = json.loads(self.jobs.read_text())
+        self.assertEqual(len(jobs), 4)
+        self.assertIn("--wait", jobs[0])
+        self.assertIn("--gres=none", jobs[0])
+        self.assertIn("--job-name=video-frames", jobs[0])
+        self.assertIn("--job-name=images-prepare", jobs[1])
+        self.assertEqual(jobs[1][-1], str(frames))
+        self.assertEqual(self.commands()[0][0], "extract_sharp_frames.py")
+        self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
+
+    def test_slurm_failed_video_extraction_does_not_launch_images(self):
+        launcher, _ = self.configure_video_launcher()
+        self.env["TEST_FAIL_TOOL"] = "extract_sharp_frames.py"
+        result = subprocess.run(["bash", str(launcher), str(self.config)],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(json.loads(self.jobs.read_text())), 1)
+        self.assertEqual([command[0] for command in self.commands()], ["extract_sharp_frames.py"])
 
     def test_slurm_runs_same_config_and_array_then_crops(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))

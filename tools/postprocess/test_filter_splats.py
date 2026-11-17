@@ -14,7 +14,8 @@ from scipy.spatial.transform import Rotation
 
 from tools.postprocess import export_ply as export
 from tools.postprocess.filter_splats import (
-    SPLAT_DTYPE, contextual_mask, load_sparse_points, sparse_bbox_mask, sparse_support_mask,
+    SPLAT_DTYPE, contextual_mask, load_camera_centres, load_sparse_points,
+    planar_sparse_bbox_mask, sparse_bbox_mask, sparse_support_mask,
 )
 
 
@@ -48,28 +49,52 @@ def sparse_cloud():
 
 
 class SparseBBoxTest(unittest.TestCase):
-    def test_surface_patch_support_and_similarity_invariance(self):
+    def test_support_rejects_only_splats_isolated_from_sparse_and_splats(self):
         x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
         points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
-        means = np.array([[0, 0, 0], [0, 0, 4], [0, 0, 0]])
-        scales = np.array([[4, 2, 0.01], [4, 2, 0.01], [40, 20, 0.01]])
-        quats = np.tile([1., 0, 0, 0], (3, 1))
-        mask, report = sparse_support_mask(means, scales, quats, points)
-        self.assertEqual(mask.tolist(), [False, True, True])
-        self.assertEqual(report["centre_supported_but_patch_unsupported"], 1)
+        cluster = np.column_stack((np.arange(9) * 1e-3, np.zeros(9), np.full(9, 4.0)))
+        means = np.vstack(([[0, 0, 0.1], [5, 0, 4]], cluster))
+        opacity = np.zeros(len(means))
+        mask, report = sparse_support_mask(means, points, opacity=opacity)
+        self.assertEqual(mask.tolist(), [False, True] + [False] * 9)
+        self.assertEqual(report["unsupported"], 1)
         rotation = Rotation.from_euler("xyz", [0.4, 1.1, -0.3])
-        for scale in (1e-6, 1e6):
-            transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
-            q = np.tile(rotation.as_quat()[[3, 0, 1, 2]], (3, 1))
-            actual, _ = sparse_support_mask(
-                transform(means), scales * scale, q, transform(points), batch_size=1,
-            )
-            np.testing.assert_array_equal(actual, mask)
+        for scale in (1e-5, 1e5):
+            with self.subTest(scale=scale):
+                transform = lambda x: (rotation.apply(x) + [4, -3, 2]) * scale
+                actual, _ = sparse_support_mask(
+                    transform(means), transform(points), opacity=opacity, batch_size=3,
+                )
+                np.testing.assert_array_equal(actual, mask)
         for factor in (0, float("nan")):
             with self.assertRaises(ValueError):
-                sparse_support_mask(means, scales, quats, points, distance_factor=factor)
+                sparse_support_mask(means, points, opacity=opacity, distance_factor=factor)
 
-    def test_outside_centres_rejected_and_similarity_invariant(self):
+    def test_support_ignores_opacity_below_min_opacity(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        points = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        means = np.array([[5, 0, 4], [-5, 0, 4]])
+        mask, report = sparse_support_mask(
+            means, points, opacity=np.array([0.0, 1.0]), min_opacity=0.5,
+        )
+        self.assertEqual(mask.tolist(), [False, True])
+        self.assertEqual(report["tested"], 1)
+
+    def test_isolated_sparse_point_is_discarded_before_support(self):
+        x, y = np.meshgrid(np.linspace(-10, 10, 81), np.linspace(-5, 5, 41))
+        plane = np.column_stack((x.ravel(), y.ravel(), np.zeros(x.size)))
+        points = np.vstack((plane, [[0, 0, 4.0]]))
+        means = np.vstack(([[0, 0, 4.5]], np.column_stack((np.full(9, 50.0), np.arange(9), np.full(9, 4.5)))))
+        opacity = np.ones(len(means))
+        mask, report = sparse_support_mask(means, points, opacity=opacity)
+        self.assertEqual(mask[0], True)
+        self.assertEqual(report["isolated_sparse_points"], 1)
+        mask, _ = sparse_support_mask(
+            means, points, opacity=opacity, isolation_factor=float("inf"),
+        )
+        self.assertEqual(mask[0], False)
+
+    def test_sparse_bbox_outside_points_and_similarity_invariance(self):
         points = sparse_cloud()
         means = np.array([[0, 0, 0], [9.9, 4.9, 0], [25, 0, 0], [0, 0, 30], [10.5, 0, 0]])
         expected, report = sparse_bbox_mask(means, points)
@@ -92,6 +117,57 @@ class SparseBBoxTest(unittest.TestCase):
             sparse_bbox_mask(np.zeros((1, 3)), points, margin=-1)
         with self.assertRaises(ValueError):
             sparse_bbox_mask(np.zeros((1, 3)), np.zeros((20, 3)))
+
+    def test_planar_bbox_keeps_altitude_and_cleans_plan(self):
+        angles = np.linspace(0, 2 * np.pi, 12, endpoint=False)
+        centres = np.column_stack((15 * np.cos(angles), 15 * np.sin(angles), np.full(12, 1.6)))
+        rng = np.random.default_rng(3)
+        points = rng.uniform([-2, -2, 0], [2, 2, 10], size=(500, 3))
+        means = np.array([[0, 0, 20], [0, 0, -3], [8, 0, 5], [0, 0, 50]])
+        mask, report = planar_sparse_bbox_mask(means, points, centres)
+        self.assertEqual(mask.tolist(), [False, False, True, False])
+        self.assertLess(report["vertical_flatness"], 1e-3)
+        np.testing.assert_allclose(np.abs(report["vertical_axis"]), [0, 0, 1], atol=1e-6)
+        full, _ = sparse_bbox_mask(means, points)
+        self.assertTrue(full[0])
+        with self.assertRaises(ValueError):
+            planar_sparse_bbox_mask(means, points, centres[:2])
+
+    def test_camera_centres_reader_and_planar_cli(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            angles = np.linspace(0, 2 * np.pi, 4, endpoint=False)
+            centres = np.column_stack((15 * np.cos(angles), 15 * np.sin(angles), np.full(4, 1.6)))
+            images = root / "images.bin"
+            with open(images, "wb") as stream:
+                stream.write(struct.pack("<Q", len(centres)))
+                for index, centre in enumerate(centres):
+                    stream.write(struct.pack("<I4d3dI", index, 1, 0, 0, 0, *(-centre), 1))
+                    stream.write(f"frame_{index}.jpg".encode() + b"\0")
+                    stream.write(struct.pack("<Q", 2) + bytes(48))
+            np.testing.assert_allclose(load_camera_centres(images), centres, atol=1e-12)
+            s = scene()
+            s["means"] = np.vstack((s["means"], [[0, 0, 20]], [[8, 0, 5]]))
+            for key in ("scales", "quats", "opacity", "dc"):
+                s[key] = np.concatenate((s[key], s[key][:2]))
+            source, output = root / "raw.splat", root / "result.splat"
+            export.write_world_splat(s, source, np.eye(4), np.eye(3), 1, 100)
+            points = root / "p.bin"
+            write_points3d(points, np.random.default_rng(4).uniform([-13, -6, -1], [13, 6, 4], (500, 3)))
+            command = [sys.executable, str(ROOT / "filter_splats.py"), "--input", str(source),
+                       "--output", str(output), "--sparse-points", str(points),
+                       "--mode", "off", "--sparse-bbox-scope", "planar"]
+            missing = subprocess.run(command, capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(missing.returncode, 0)
+            self.assertIn("--sparse-cameras", missing.stderr)
+            result = subprocess.run(command + ["--sparse-cameras", str(images)],
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.with_suffix(".filter.json").read_text())
+            self.assertEqual(report["sparse_bbox"]["scope"], "planar")
+            self.assertEqual(report["applied_rejections"], report["sparse_bbox"]["outside_sparse_bbox"])
+            kept = np.fromfile(output, dtype=SPLAT_DTYPE)["position"]
+            self.assertTrue(np.any(np.all(kept == [0, 0, 20], axis=1)))
 
     def test_points3d_reader_skips_tracks(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -210,14 +286,12 @@ class ContextualFilterTest(unittest.TestCase):
             self.assertEqual(output.stat().st_size, len(original) - 32)
             records = np.fromfile(output, dtype=SPLAT_DTYPE)
             self.assertFalse(np.any(np.all(records["position"] == [12, 0, 3], axis=1)))
-            before = {p: p.read_bytes() for p in (output, output.with_suffix(".rejected.splat"),
-                                                  output.with_suffix(".filter.json"))}
             guarded = subprocess.run(command + ["--mode", "apply", "--max-removal-fraction", "0",
                                                "--overwrite"],
                                      capture_output=True, text=True, timeout=30)
-            self.assertNotEqual(guarded.returncode, 0)
-            for path, data in before.items():
-                self.assertEqual(path.read_bytes(), data)
+            self.assertEqual(guarded.returncode, 0, guarded.stderr)
+            self.assertIn("filtre ignoré", guarded.stdout)
+            self.assertEqual(output.read_bytes(), original)
             self.assertEqual(source.read_bytes(), original)
             same_path = subprocess.run([*command[:command.index("--output")], "--output", str(source),
                                         "--overwrite"], capture_output=True, text=True, timeout=30)
@@ -229,6 +303,7 @@ class ContextualFilterTest(unittest.TestCase):
             root = Path(temporary)
             source, output, points = root / "raw.splat", root / "result.splat", root / "p.bin"
             s = scene()
+            s["opacity"] = np.full(len(s["means"]), 3.0)
             s["means"] = np.vstack((s["means"], [[200, 0, 0]]))
             for key in ("scales", "quats", "opacity", "dc"):
                 s[key] = np.concatenate((s[key], s[key][:1]))

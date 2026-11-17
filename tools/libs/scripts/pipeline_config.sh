@@ -23,7 +23,7 @@ init_sfm_geometry_config() {
   local sfm_backend="${1:-${COLMAP_METHOD:-spirula}}"
   SFM_MAX_ERROR="${SFM_MAX_ERROR:-2}"
   SFM_MIN_INLIERS="${SFM_MIN_INLIERS:-30}"
-  SFM_MIN_TRI_ANGLE="${SFM_MIN_TRI_ANGLE:-3}"
+  SFM_MIN_TRI_ANGLE="${SFM_MIN_TRI_ANGLE:-6}"
   if [[ "$sfm_backend" == spirula ]]; then
     SFM_SP_BA_LOSS="${SFM_SP_BA_LOSS:-huber}"
     SFM_SP_BA_LOSS_PARAM="${SFM_SP_BA_LOSS_PARAM:-2}"
@@ -48,7 +48,7 @@ validate_sfm_geometry_config() {
   for name in SFM_MAX_ERROR SFM_MIN_TRI_ANGLE; do
     case "$name" in
       SFM_MAX_ERROR) value="${SFM_MAX_ERROR:-2}" ;;
-      SFM_MIN_TRI_ANGLE) value="${SFM_MIN_TRI_ANGLE:-3}" ;;
+      SFM_MIN_TRI_ANGLE) value="${SFM_MIN_TRI_ANGLE:-6}" ;;
     esac
     [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
       awk -v x="$value" -v name="$name" 'BEGIN {

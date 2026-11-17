@@ -2,6 +2,35 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
+## Vidéo sur Slurm
+
+`scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des
+frames dans un job Slurm, puis appel du lanceur existant
+`scripts/launch_images_to_3dgs.sh` après réussite de l'extraction. Le terminal
+attend la fin de l'extraction avant de soumettre les jobs images.
+
+Ajouter ces variables à une configuration images/Slurm :
+
+```bash
+VIDEO="/chemin/IMG_5017.MOV"
+NUM_FRAMES=900
+SFM_IMAGES_DIR="/chemin/nouveau-calcul/frames"
+```
+
+```bash
+bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" /chemin/config-video.sh
+```
+
+Les options `--prepare-only` et `--wait` sont transmises au lanceur images.
+Les ressources `SLURM_*` et `SLURM_ENV_SETUP` sont aussi utilisées pour
+l'extraction. La sélection conserve la couverture temporelle et utilise la
+pondération de netteté par défaut de l'extracteur (0,7).
+Les frames existantes ne sont pas écrasées : utiliser un nouveau dossier
+pour réextraire, ou appeler directement `launch_images_to_3dgs.sh` pour
+reprendre à partir des frames déjà extraites.
+Les journaux d'extraction sont dans `OUTPUT_DIR/logs/video-frames-%j.out`
+et `.err`.
+
 ## 1. Objectif
 
 Pipeline configurable pour produire un Gaussian Splat `.splat` à partir d’images,
@@ -193,8 +222,16 @@ Le SfM estime les positions des caméras et un nuage de points 3D à partir des
 images.
 
 - Images SfM : photos individuelles, sans filtrage des paires GPS.
+- Avec Spirula, `SFM_SP_PAIRS=sequential` traite les images comme une séquence
+  ordonnée par leur chemin et requiert `SFM_CAMERA_SPLIT=false`. Les images
+  doivent être nommées dans l'ordre de prise de vue ; les dossiers issus de la
+  séparation des caméras ne conservent pas cet ordre global. La fermeture de
+  boucle dépend de la version et des réglages de Spirula.
 - Caméra : une caméra par sous-dossier par défaut ; vérifier que les images
   d'un même dossier partagent bien les mêmes caractéristiques optiques.
+  `SFM_CAMERA_SPLIT=true` relance le SfM avec une caméra par modèle quand
+  Spirula en produit plusieurs d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images
+  (changement d'objectif dans une vidéo, par exemple).
 - `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
   [`config.sh.example`](config.sh.example), section « 2. Reconstruction SfM globale ».
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
@@ -335,11 +372,13 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 
 ```bash
 SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
+SFM_DENSITY_VOTE_FRACTION=0.75  # ]0,1[ ; baisser = plus strict
+SFM_DENSITY_FAR_SUPPORT_RATE=0.25  # ]0,1] ; monter = plus strict
 ```
 
 Le filtre expérimental de [`tools/preprocess/filter_sparse_density.py`](../preprocess/README.md) s'exécute
 sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
-ses seuils par défaut et écrit deux modèles COLMAP binaires : `sparse_clean`
+ces seuils et écrit deux modèles COLMAP binaires : `sparse_clean`
 (points conservés) et `sparse_rejected` (points retirés), chacun avec son
 rapport. Aucun PLY n'est produit ; les originaux restent intacts.
 Les blocs et le recadrage bbox final utilisent tous deux ce sparse filtré.
@@ -459,6 +498,18 @@ La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers
 Seuls les fichiers explicitement retenus sont fusionnés (pas de glob mêlant
 bruts, rejets et copies recadrées).
 Les diagnostics `.filter.json` et `.rejected.splat` sont conservés à côté.
-La sécurité de rejet de 20 % s'applique par bloc ; examiner le diagnostic avant
+La bbox planaire (`POSTPROCESS_SPARSE_BBOX_SCOPE=planar`, défaut) ne nettoie que le plan
+horizontal, défini par la normale du plan des centres caméra : l'altitude n'est jamais
+coupée. Elle est resserrée par défaut (quantile 0.02, marge 0.02). Le quantile vaut
+`POSTPROCESS_SPARSE_BBOX_QUANTILE` de chaque axe des points sparse. Un quantile plus petit élargit la bbox et
+évite de couper le haut d'un objet peu couvert par les points sparse.
+Le filtre de support (`POSTPROCESS_SPARSE_SUPPORT_MODE`, défaut `apply`) retire les
+floaters isolés : un splat est retiré si son centre est à plus de
+`POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR` espacements sparse locaux de tout point sparse
+ET si son 8e voisin de splats est aussi à plus de cette distance. Les zones denses en splats
+sont donc conservées même si le sparse y est pauvre. `POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY`
+(défaut `0`) ignore les splats moins opaques. Utiliser `diagnostic` pour examiner `.filter.json` sans retirer.
+La sécurité de rejet de 20 % s'applique par bloc : au-delà, le filtre est ignoré et
+l'entrée est conservée (avertissement, diagnostic écrit). Examiner le diagnostic avant
 de modifier `POSTPROCESS_MAX_REMOVAL_FRACTION`. Le filtre contextuel est désactivé.
 La fusion écrit `OUTPUT_DIR/EXPORT_SPLAT_NAME`, sans réentraîner.

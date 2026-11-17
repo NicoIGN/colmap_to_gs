@@ -86,8 +86,9 @@ python3 tools/postprocess/filter_splats.py \
 - `--neighbors`, `--reference-limit`, `--seed`, `--batch-size` : pilotent le
   voisinage et le coût mémoire.
 - `--mode off` : copie simplement l'entrée.
-- Plus de 20 % de rejets en mode `apply` provoque une erreur sans remplacer les
-  sorties ; examiner le diagnostic avant de modifier `--max-removal-fraction`.
+- Plus de 20 % de rejets en mode `apply` : le filtre est ignoré (entrée copiée
+  telle quelle, `skipped` dans le JSON) et un avertissement est affiché ; le
+  diagnostic `.rejected.splat` et `.filter.json` reste écrit.
 - Un rejet de tous les splats est toujours refusé ; le filtre ne désactive pas
   silencieusement une règle trop destructive.
 
@@ -106,18 +107,20 @@ python3 tools/postprocess/filter_splats.py \
 
 - `--sparse-support-mode` : filtre expérimental des amas flottants ; valeurs
   `off` (défaut), `diagnostic` ou `apply`.
-- Positions testées : neuf points sur le plan central du splat, jusqu'à une
-  échelle gaussienne le long de ses deux plus grands axes.
-- `--sparse-support-distance-factor` : distance sparse maximale en multiples
-  de l'espacement local ; facteur `3`, espacement estimé par la distance au
-  huitième voisin divisée par `sqrt(8)`.
-- `--sparse-support-min-fraction` : fraction minimale de positions supportées ;
-  défaut `0.5`.
+- Positions testées : centre du splat seulement, tous opacités par défaut.
+- `--sparse-support-distance-factor` : distance maximale en multiples de
+  l'espacement sparse local (distance au huitième voisin divisée par `sqrt(8)`) ;
+  facteur `3`.
+- `--sparse-support-isolation-factor` : avant le filtre, les points sparse dont le
+  8e voisin est à plus de ce multiple de la médiane sont retirés (facteur `3`).
+  Cela évite qu'un point sparse isolé gonfle l'espacement local.
+- Règle : un splat est rejeté s'il est loin de tout point sparse ET de tout
+  autre splat (huitième voisin) à cette même échelle. Les zones denses en splats
+  sont conservées.
+- `--sparse-support-min-opacity` : les splats moins opaques ne sont pas testés ;
+  défaut `0`.
 - Invariance : les rapports restent invariants à l'échelle, rotation et translation.
-- Le test ne dépend ni de la couleur ni de la hauteur et préserve les grandes
-  surfaces correctement couvertes par le sparse ; il peut néanmoins retirer
-  des routes, toitures ou végétations peu couvertes.
-- Examiner les rejets avant `--sparse-support-mode apply`.
+- Examiner `.filter.json` en mode diagnostic avant `--sparse-support-mode apply`.
 - Ce mode est indépendant du filtre contextuel et de la bbox ; tous les rejets
   appliqués partagent la limite de sécurité de 20 %.
 - Le JSON contient un compteur distinct `sparse_support.unsupported`.

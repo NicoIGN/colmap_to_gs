@@ -1,4 +1,22 @@
 import * as pc from "playcanvas";
+import {
+  findImageFile,
+  indexImageFiles,
+  isImageFileName,
+  selectNearestImages,
+} from "./colmap-images.js";
+
+// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x5 (5 %).
+const IMAGE_FRUSTUM_SCALE = 5;
+// Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
+const IMAGE_MIN_SCREEN_PX = 32;
+// Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
+const IMAGE_SHOWN = 1;
+// Hystérésis : une image affichée reste choisie tant que le cadre reste ≥ 60 % du seuil et dans un cône élargi.
+const IMAGE_HYSTERESIS = 0.6;
+const IMAGE_SLOTS = 10;
+const IMAGE_MAX_WIDTH = 1024;
+const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 
 /**
  * Couche COLMAP sparse (PlayCanvas)
@@ -49,8 +67,8 @@ export function cameraFrustumDepth(centers, fallbackRadius) {
     const trim = Math.floor(values.length * 0.02);
     return values[values.length - 1 - trim] - values[trim];
   });
-  const radius = Math.hypot(...spans) / 2;
-  const reference = radius > 0 ? radius : fallbackRadius;
+  const extent = Math.max(...spans);
+  const reference = extent > 0 ? extent : fallbackRadius;
   if (!Number.isFinite(reference) || reference <= 0) {
     throw new Error("Échelle COLMAP indéterminée pour les frustums.");
   }
@@ -255,6 +273,15 @@ function qvecToMat3(qvec) {
   ];
 }
 
+function sub3(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function normalize3(v) {
+  const length = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / length, v[1] / length, v[2] / length];
+}
+
 function transpose3(m) {
   return [
     m[0], m[3], m[6],
@@ -345,7 +372,7 @@ function setPointSize(app, material, size) {
   ));
 }
 
-function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
+function makeColmapMaterial(app, { points = false, pointSize = 3, onTop = false } = {}) {
   const material = new pc.ShaderMaterial({
     uniqueName: points
       ? "ColmapCircularPointsMaterial"
@@ -363,16 +390,17 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
       uniform mat4 matrix_model;
       uniform mat4 matrix_viewProjection;
       uniform float uPointSize;
+      uniform float uHighlight;
 
       varying vec4 vColor;
 
       void main(void) {
-        vColor = vertex_color;
+        vColor = mix(vertex_color, vec4(1.0, 0.92, 0.0, 1.0), uHighlight);
         gl_Position =
           matrix_viewProjection *
           matrix_model *
           vec4(vertex_position, 1.0);
-        gl_PointSize = uPointSize;
+        gl_PointSize = uPointSize * (1.0 + 1.5 * uHighlight);
       }
     `,
 
@@ -396,14 +424,19 @@ function makeColmapMaterial(app, { points = false, pointSize = 3 } = {}) {
   });
 
   setPointSize(app, material, pointSize);
+  material.setParameter("uHighlight", 0);
 
   material.cull = pc.CULLFACE_NONE;
-  material.depthTest = true;
+  material.depthTest = !onTop;
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
 
   return material;
+}
+
+export function setMeshHighlight(resource, on) {
+  resource?.material.setParameter("uHighlight", on ? 1 : 0);
 }
 
 function makeColmapMesh(app, positions, rgba, primitive, material) {
@@ -421,7 +454,19 @@ function makeColmapMesh(app, positions, rgba, primitive, material) {
   return { mesh, material, meshInstance };
 }
 
-function makePointMesh(app, positions, colors, pointSize = 3) {
+export function getOverlayLayer(app) {
+  const existing = app.scene.layers.getLayerByName("Overlay");
+  if (existing) return existing;
+  // Calque ajouté après « World » (splats) : il est dessiné par-dessus.
+  const layer = new pc.Layer({ name: "Overlay" });
+  app.scene.layers.push(layer);
+  for (const camera of app.root.findComponents("camera")) {
+    if (!camera.layers.includes(layer.id)) camera.layers = [...camera.layers, layer.id];
+  }
+  return layer;
+}
+
+export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = false } = {}) {
   const count = positions.length / 3;
   const rgba = new Float32Array(count * 4);
 
@@ -437,7 +482,7 @@ function makePointMesh(app, positions, colors, pointSize = 3) {
     positions,
     rgba,
     pc.PRIMITIVE_POINTS,
-    makeColmapMaterial(app, { points: true, pointSize })
+    makeColmapMaterial(app, { points: true, pointSize, onTop })
   );
 }
 
@@ -471,11 +516,47 @@ function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
   );
 }
 
+// Coins en coordonnées du modèle : [centre, haut-gauche, haut-droite, bas-droite, bas-gauche] à la profondeur near.
+function frustumCorners(image, camera, near) {
+  const { fx, fy } = getFxFy(camera);
+  const halfW = (camera.width * near) / (2 * fx);
+  const halfH = (camera.height * near) / (2 * fy);
+  const rwc = transpose3(qvecToMat3(image.qvec));
+  const center = getCameraCenter(image);
+  const local = [
+    [0, 0, 0],
+    [-halfW, -halfH, near],
+    [halfW, -halfH, near],
+    [halfW, halfH, near],
+    [-halfW, halfH, near],
+  ];
+  return local.map((point) => {
+    const rotated = mulMat3Vec3(rwc, point);
+    return [rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]];
+  });
+}
+
+function buildCameraAxes(images) {
+  const out = new Float32Array(images.length * 3);
+  for (let i = 0; i < images.length; i++) {
+    const axis = mulMat3Vec3(transpose3(qvecToMat3(images[i].qvec)), [0, 0, 1]);
+    out[i * 3] = axis[0];
+    out[i * 3 + 1] = axis[1];
+    out[i * 3 + 2] = axis[2];
+  }
+  return out;
+}
+
 export function createColmapLayer({
   app,
   setStatus,
   getSceneRadius,
   getFlipUp,
+  getViewerPosition,
+  getViewerDirection,
+  getViewerTarget,
+  worldToScreen,
+  pixelScaleAt,
   registerLayer,
   registerGroup,
   onBoundsChanged,
@@ -484,12 +565,13 @@ export function createColmapLayer({
   const input = document.getElementById("colmapFolderInput");
   const pointSize = document.getElementById("colmapPointSize");
   const cameraSize = document.getElementById("colmapCameraSize");
-  const removeBtn = document.getElementById("colmapRemove");
 
   let disposed = false;
   let nextModelId = 1;
   const models = new Map();
   const removers = [];
+  let imageIndex = null;
+  const textureCache = new Map();
 
   const refreshPointSizes = () => {
     for (const model of models.values()) {
@@ -558,7 +640,6 @@ export function createColmapLayer({
 
     if (pointSize) pointSize.disabled = !ready;
     if (cameraSize) cameraSize.disabled = !ready;
-    if (removeBtn) removeBtn.disabled = !ready;
   }
 
   function destroyMeshEntity(entity, resource) {
@@ -570,11 +651,31 @@ export function createColmapLayer({
 
   function destroyModel(model) {
     model.unregister?.();
+    for (const slot of model.slots ?? []) destroySlot(slot);
     destroyMeshEntity(model.pointsEntity, model.pointsResource);
     destroyMeshEntity(model.cameraCentersEntity, model.cameraCentersResource);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
     if (model.rootEntity.parent) model.rootEntity.parent.removeChild(model.rootEntity);
     model.rootEntity.destroy();
+  }
+
+  function destroySlot(slot) {
+    slot.label?.remove();
+    destroyMeshEntity(slot.entity, { mesh: slot.mesh, material: slot.material });
+    slot.mesh = null;
+    slot.material = null;
+  }
+
+  function trimTextureCache(limit = 0) {
+    const inUse = new Set(
+      [...models.values()].flatMap((model) => (model.slots ?? []).map((slot) => slot.texture))
+    );
+    for (const [name, texture] of textureCache) {
+      if (textureCache.size <= limit) break;
+      if (inUse.has(texture)) continue;
+      textureCache.delete(name);
+      texture.destroy?.();
+    }
   }
 
   function getCombinedBounds(flip = Boolean(getFlipUp?.())) {
@@ -586,12 +687,426 @@ export function createColmapLayer({
     );
   }
 
+  function removeModel(id) {
+    const model = models.get(id);
+    if (!model) return;
+    destroyModel(model);
+    models.delete(id);
+    onBoundsChanged?.(models.size ? getCombinedBounds() : null, false);
+    refreshUI();
+    refreshInfo();
+  }
+
   function clear() {
     for (const model of models.values()) destroyModel(model);
     models.clear();
+    trimTextureCache(0);
     onBoundsChanged?.(null);
     refreshUI();
     refreshInfo();
+  }
+
+  function rebuildFrustums(model, enlarged = model.enlarged ?? new Set()) {
+    model.enlarged = enlarged;
+    const depthOf = (i) => model.depth * (enlarged.has(i) ? IMAGE_FRUSTUM_SCALE : 1);
+    const frustums = buildFrustumLines(model.colmapImages, model.cameras, depthOf, enlarged);
+    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+    const entity = new pc.Entity("COLMAP frustums");
+    entity.addComponent("render", {
+      type: "asset",
+      meshInstances: [resource.meshInstance],
+    });
+    entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
+    model.rootEntity.addChild(entity);
+    destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
+    model.frustumsEntity = entity;
+    model.frustumsResource = resource;
+    model.frustumsShown = frustums.shown;
+  }
+
+  function ensureSlots(model) {
+    if (model.slots.length) return;
+    const labelParent = document.getElementById("viewer") ?? document.body;
+    for (let i = 0; i < IMAGE_SLOTS; i++) {
+      const entity = new pc.Entity(`COLMAP image ${i + 1}`);
+      entity.enabled = false;
+      model.rootEntity.addChild(entity);
+      const label = document.createElement("div");
+      Object.assign(label.style, {
+        position: "absolute",
+        display: "none",
+        pointerEvents: "none",
+        transform: "translate(-100%, 0)",
+        padding: "1px 4px",
+        borderRadius: "3px",
+        background: "rgba(0, 0, 0, 0.6)",
+        color: "#fff",
+        font: "11px sans-serif",
+        whiteSpace: "nowrap",
+        zIndex: "5",
+      });
+      labelParent.appendChild(label);
+      model.slots.push({ entity, image: null, shown: null, texture: null, mesh: null, material: null, token: null, label });
+    }
+  }
+
+  function resetSlot(slot) {
+    slot.image = null;
+    slot.shown = null;
+    slot.texture = null;
+    slot.token = {};
+    slot.entity.enabled = false;
+    if (slot.label) slot.label.style.display = "none";
+  }
+
+  // Projette un point du repère COLMAP vers l'écran (pixels CSS), ou null si derrière la caméra.
+  function toWorld(model, point) {
+    return model.rootEntity.getWorldTransform().transformPoint(
+      new pc.Vec3(point[0], point[1], point[2]),
+      new pc.Vec3()
+    );
+  }
+
+  // Pose de l'image COLMAP en coordonnées de la vue : point de vue = centre de la caméra,
+  // cible = point situé sur l'axe optique.
+  function imageViewPose(model, image) {
+    const rwc = transpose3(qvecToMat3(image.qvec));
+    const center = getCameraCenter(image);
+    const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
+    const cameraWorld = toWorldArray(model, center);
+    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), cameraWorld));
+    const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
+    // Léger recul derrière le centre de la caméra pour que son image reste devant l'observateur.
+    const back = radius * 0.02;
+    const targetDistance = radius * 0.2;
+    return {
+      position: cameraWorld.map((value, axis) => value - forward[axis] * back),
+      target: cameraWorld.map((value, axis) => value + forward[axis] * targetDistance),
+    };
+  }
+
+  function toWorldArray(model, point) {
+    return toWorld(model, point).toArray();
+  }
+
+  function toScreen(model, point) {
+    const out = new pc.Vec3();
+    return worldToScreen(toWorld(model, point), out) ? out : null;
+  }
+
+  // Taille à l'écran (px) du cadre nominal d'une caméra, mesurée au centre du cadre :
+  // fonctionne même quand ses coins sont derrière le point de vue. 0 si le cadre est derrière.
+  function nominalScreenSize(model, index) {
+    const image = model.colmapImages[index];
+    const camera = model.cameras.get(image.cameraId);
+    if (!camera) return 0;
+    // Indice 0 = sommet de la pyramide ; 1..4 = coins du cadre.
+    const frame = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)
+      .slice(1)
+      .map((c) => toWorld(model, c));
+    const center = frame
+      .reduce((acc, c) => acc.add(c), new pc.Vec3())
+      .mulScalar(1 / frame.length);
+    const extent = Math.max(frame[0].distance(frame[1]), frame[1].distance(frame[2]));
+    return extent * pixelScaleAt(center);
+  }
+
+  // Replace sur le cadre agrandi les libellés des images affichées (coin supérieur droit).
+  function updateSlotLabels(model) {
+    const glCanvas = app.graphicsDevice.canvas;
+    for (const slot of model.slots) {
+      if (!slot.label) continue;
+      const image = slot.shown === null ? null : model.colmapImages[slot.shown];
+      const camera = image && model.cameras.get(image.cameraId);
+      // Coin 2 de frustumCorners : (+x, -y) soit le coin haut-droit de l'image (y vers le bas).
+      const corner = camera ? frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)[2] : null;
+      const s = corner && toScreen(model, corner);
+      if (!s) {
+        slot.label.style.display = "none";
+        continue;
+      }
+      slot.label.textContent = image.name;
+      slot.label.style.left = `${glCanvas.offsetLeft + s.x}px`;
+      slot.label.style.top = `${glCanvas.offsetTop + s.y}px`;
+      slot.label.style.display = "block";
+    }
+  }
+
+  // Agrandit uniquement les cadres des images réellement affichées.
+  function refreshEnlarged(model) {
+    const shown = new Set(model.slots.map((slot) => slot.shown).filter((i) => i !== null));
+    const previous = model.enlarged ?? new Set();
+    const same = shown.size === previous.size && [...shown].every((i) => previous.has(i));
+    if (!same) rebuildFrustums(model, shown);
+  }
+
+  async function getTexture(name) {
+    const cached = textureCache.get(name);
+    if (cached) {
+      textureCache.delete(name);
+      textureCache.set(name, cached);
+      return cached;
+    }
+    const file = imageIndex && findImageFile(imageIndex, name);
+    if (!file) {
+      console.warn("[images] fichier introuvable dans le dossier déposé :", name);
+      return null;
+    }
+    const bitmap = await createImageBitmap(file.blob ?? file, {
+      resizeWidth: IMAGE_MAX_WIDTH,
+      resizeQuality: "medium",
+    });
+    const texture = new pc.Texture(app.graphicsDevice, {
+      width: bitmap.width,
+      height: bitmap.height,
+      format: pc.PIXELFORMAT_RGBA8,
+      mipmaps: false,
+      addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+      addressV: pc.ADDRESS_CLAMP_TO_EDGE,
+    });
+    texture.setSource(bitmap);
+    bitmap.close?.();
+    textureCache.set(name, texture);
+    trimTextureCache(TEXTURE_CACHE_SIZE);
+    return texture;
+  }
+
+  async function showSlotImage(model, slot, index) {
+    const token = {};
+    slot.token = token;
+    const image = model.colmapImages[index];
+    const camera = model.cameras.get(image.cameraId);
+    if (!camera) {
+      console.warn("[images] caméra absente pour l'image", image.name, image.cameraId);
+      return;
+    }
+
+    let texture = null;
+    try {
+      texture = await getTexture(image.name);
+    } catch (error) {
+      console.warn("[COLMAP] Image non chargée :", image.name, error);
+      return;
+    }
+    if (!texture || disposed || slot.token !== token) return;
+    console.log("[images] image affichée", { name: image.name, texture: texture.width + "x" + texture.height });
+
+    // Quad posé sur le plan lointain du frustum, texturé avec l'image.
+    const quad = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE).slice(1);
+    const mesh = new pc.Mesh(app.graphicsDevice);
+    mesh.setPositions(new Float32Array(quad.flat()));
+    mesh.setUvs(0, new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]));
+    mesh.setIndices(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    mesh.update(pc.PRIMITIVE_TRIANGLES, true);
+
+    if (!slot.material) {
+      slot.material = new pc.StandardMaterial();
+      slot.material.useLighting = false;
+      slot.material.emissive = new pc.Color(1, 1, 1);
+      slot.material.cull = pc.CULLFACE_NONE;
+    }
+    slot.material.emissiveMap = texture;
+    slot.material.update();
+
+    const meshInstance = new pc.MeshInstance(mesh, slot.material);
+    meshInstance.cull = false;
+    if (slot.entity.render) {
+      slot.entity.render.meshInstances = [meshInstance];
+    } else {
+      slot.entity.addComponent("render", { type: "asset", meshInstances: [meshInstance] });
+    }
+    slot.entity.enabled = true;
+    slot.texture = texture;
+    slot.shown = index;
+    slot.mesh?.destroy?.();
+    slot.mesh = mesh;
+    refreshEnlarged(model);
+  }
+
+  function assignSlots(model, selected) {
+    model.slots.forEach((slot, i) => {
+      const index = selected[i];
+      if (index === undefined) {
+        resetSlot(slot);
+        return;
+      }
+      if (slot.image === index) return;
+      slot.image = index;
+      showSlotImage(model, slot, index);
+    });
+  }
+
+  function setImagesMode(model, on) {
+    if (model.imagesOn === on) return;
+    model.imagesOn = on;
+    console.log("[images] mode images", on ? "activé" : "désactivé", "modèle", model.label, "images associées :", model.imagesMatched);
+    if (on) {
+      ensureSlots(model);
+    } else {
+      model.slots.forEach(resetSlot);
+    }
+    rebuildFrustums(model, new Set());
+  }
+
+  // Appelée à chaque frame : sélectionne les caméras dont le cadre atteint IMAGE_MIN_SCREEN_PX.
+  function frame() {
+    if (disposed || !getViewerPosition) return;
+    for (const model of models.values()) {
+      if (!model.imagesOn) {
+        if (!model.idleLogged) {
+          model.idleLogged = true;
+          console.log("[images] mode Images désactivé pour", model.label, "(cocher la case Images du modèle)");
+        }
+        continue;
+      }
+      const p = getViewerPosition();
+      // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
+      const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
+      // Direction point de vue -> centre de scène (repli : axe de la caméra).
+      const t = getViewerTarget?.() ?? null;
+      const flip = getFlipUp?.();
+      const target = t ? (flip ? [t[0], -t[1], -t[2]] : t) : null;
+      let direction = target
+        ? [target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]]
+        : null;
+      const len = direction ? Math.hypot(...direction) : 0;
+      if (len > 1e-9) {
+        direction = direction.map((v) => v / len);
+      } else {
+        const d = getViewerDirection?.() ?? [0, 0, -1];
+        direction = flip ? [d[0], -d[1], -d[2]] : d;
+      }
+      const stats = { total: 0, inCone: 0 };
+      const picked = selectNearestImages({
+        centers: model.cameraCenters,
+        axes: model.axes,
+        viewer,
+        direction,
+        maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
+        count: IMAGE_SHOWN,
+        maxAngleDeg: 35,
+        keep: model.slots[0]?.shown ?? -1,
+        accept: (i, relaxed = false) => {
+          const size = nominalScreenSize(model, i);
+          if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
+          const dist = Math.hypot(
+            viewer[0] - model.cameraCenters[i * 3],
+            viewer[1] - model.cameraCenters[i * 3 + 1],
+            viewer[2] - model.cameraCenters[i * 3 + 2]
+          );
+          if (!stats.nearest || dist < stats.nearest.dist) {
+            stats.nearest = { name: model.colmapImages[i].name, dist, size, index: i };
+          }
+          return size >= IMAGE_MIN_SCREEN_PX * (relaxed ? IMAGE_HYSTERESIS : 1);
+        },
+        stats,
+      });
+      const key = picked.join(",");
+      if (key !== model.pickedKey) {
+        model.pickedKey = key;
+        console.log(
+          "[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS,
+          `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, taille max ${(stats.maxSize ?? 0).toFixed(1)} px, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
+          "| point de vue", viewer.map((v) => v.toFixed(2))
+        );
+        if (stats.nearest) {
+          const n = stats.nearest;
+          const c = model.cameraCenters;
+          console.log(
+            "[images] caméra la plus proche (dans le cône) :", n.name,
+            "| distance", n.dist.toFixed(3), "| cadre", n.size.toFixed(1), "px",
+            "| centre", [c[n.index * 3], c[n.index * 3 + 1], c[n.index * 3 + 2]].map((v) => v.toFixed(3)),
+            "| profondeur cadre", model.depth.toFixed(4)
+          );
+        }
+      }
+      assignSlots(model, picked);
+      refreshEnlarged(model);
+      updateSlotLabels(model);
+    }
+    // Libère les textures des images qui ne sont plus dans la pile.
+    trimTextureCache(TEXTURE_CACHE_SIZE);
+  }
+
+  function registerModel(model) {
+    model.unregister?.();
+    model.unregister = null;
+    const { id, label } = model;
+
+    const children = [
+      {
+        name: "Points",
+        setVisible(visible) { model.pointsEntity.enabled = visible; },
+        setHighlight(on) { setMeshHighlight(model.pointsResource, on); },
+      },
+      {
+        name: "Caméras",
+        setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
+        setHighlight(on) { setMeshHighlight(model.cameraCentersResource, on); },
+      },
+      {
+        name: "Frustums",
+        setVisible(visible) { model.frustumsEntity.enabled = visible; },
+        setHighlight(on) { setMeshHighlight(model.frustumsResource, on); },
+      },
+    ];
+    if (imageIndex) {
+      children.push({
+        name: "Images",
+        visible: model.imagesOn,
+        setVisible(visible) { setImagesMode(model, visible); },
+        setHighlight() {},
+      });
+    }
+
+    if (registerGroup) {
+      model.unregister = registerGroup({
+        id,
+        name: `COLMAP · ${label}`,
+        compact: true,
+        children,
+        onRemove: () => removeModel(id),
+      });
+    } else {
+      const unregister = children.map((child) => registerLayer?.({
+        id: `${id}-${child.name.toLowerCase().replaceAll(" ", "-")}`,
+        name: `${child.name} · ${label}`,
+        setVisible: child.setVisible,
+      })).filter(Boolean);
+      model.unregister = () => unregister.forEach((remove) => remove());
+    }
+  }
+
+  async function setImageFiles(files) {
+    if (disposed) return;
+    const index = indexImageFiles(files);
+    const unique = new Set(index.values()).size;
+    if (!unique) {
+      setStatus("Aucune image .jpg/.png trouvée dans le dossier déposé.", true);
+      return;
+    }
+
+    imageIndex = index;
+    console.log("[images] dossier indexé :", index.size, "fichiers image");
+    for (const model of models.values()) {
+      model.slots.forEach(resetSlot);
+      refreshEnlarged(model);
+      model.imagesMatched = model.colmapImages.filter((image) => findImageFile(index, image.name)).length;
+    }
+    trimTextureCache(0);
+    for (const model of models.values()) registerModel(model);
+    refreshInfo();
+
+    if (!models.size) {
+      setStatus(`${unique.toLocaleString("fr-FR")} images prêtes. Déposez maintenant le modèle COLMAP.`, "success");
+      return;
+    }
+    const matched = [...models.values()].reduce((sum, model) => sum + model.imagesMatched, 0);
+    const total = getTotals().images;
+    setStatus(
+      `Images : ${matched.toLocaleString("fr-FR")} / ${total.toLocaleString("fr-FR")} caméras associées.`,
+      matched ? "success" : true
+    );
   }
 
   function buildCameraCenters(images) {
@@ -607,54 +1122,27 @@ export function createColmapLayer({
     return out;
   }
 
-  function buildFrustumLines(images, cameras, near) {
+  function buildFrustumLines(images, cameras, depthOf, enlarged) {
     const maxFrustums = 2000;
     const step = Math.max(
       1,
       Math.floor(images.length / Math.max(1, maxFrustums))
     );
 
+    // Les images affichées sont toujours tracées, même hors du sous-échantillonnage.
+    const indices = new Set();
+    for (let i = 0; i < images.length; i += step) indices.add(i);
+    for (const i of enlarged) indices.add(i);
+
     const positions = [];
     let shown = 0;
 
-    for (let i = 0; i < images.length; i += step) {
+    for (const i of indices) {
       const image = images[i];
       const camera = cameras.get(image.cameraId);
       if (!camera) continue;
 
-      const { fx, fy } = getFxFy(camera);
-      const w = camera.width;
-      const h = camera.height;
-
-      const halfW = (w * near) / (2 * fx);
-      const halfH = (h * near) / (2 * fy);
-
-      const cornersCam = [
-        [0, 0, 0],
-        [-halfW, -halfH, near],
-        [halfW, -halfH, near],
-        [halfW, halfH, near],
-        [-halfW, halfH, near],
-      ];
-
-      const rcw = qvecToMat3(image.qvec);
-      const rwc = transpose3(rcw);
-      const center = getCameraCenter(image);
-
-      const toWorld = (point) => {
-        const rotated = mulMat3Vec3(rwc, point);
-        return [
-          rotated[0] + center[0],
-          rotated[1] + center[1],
-          rotated[2] + center[2],
-        ];
-      };
-
-      const p0 = toWorld(cornersCam[0]);
-      const p1 = toWorld(cornersCam[1]);
-      const p2 = toWorld(cornersCam[2]);
-      const p3 = toWorld(cornersCam[3]);
-      const p4 = toWorld(cornersCam[4]);
+      const [p0, p1, p2, p3, p4] = frustumCorners(image, camera, depthOf(i));
 
       const segments = [
         p0, p1, p0, p2, p0, p3, p0, p4,
@@ -692,11 +1180,14 @@ export function createColmapLayer({
       throw new Error(`Le modèle COLMAP ${candidate.dir || "(racine)"} ne contient aucune position valide.`);
     }
     const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
-    const frustums = buildFrustumLines(images, cameras, depth);
+    const frustums = buildFrustumLines(images, cameras, () => depth, new Set());
     const id = `colmap-${nextModelId++}`;
     const rootEntity = new pc.Entity(`COLMAP sparse ${candidate.dir || id}`);
+    const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
+    const extent = modelBounds.max.map((value, axis) => value - modelBounds.min[axis]);
     const model = {
       id,
+      label,
       bounds: modelBounds,
       images: images.length,
       pointsTotal: points.originalCount,
@@ -704,6 +1195,14 @@ export function createColmapLayer({
       frustumsTotal: frustums.total,
       frustumsShown: frustums.shown,
       rootEntity,
+      colmapImages: images,
+      cameras,
+      depth,
+      cameraCenters,
+      axes: buildCameraAxes(images),
+      imagesOn: false,
+      imagesMatched: imageIndex ? images.filter((image) => findImageFile(imageIndex, image.name)).length : 0,
+      slots: [],
     };
     app.root.addChild(rootEntity);
     try {
@@ -722,12 +1221,13 @@ export function createColmapLayer({
         centerColors[i * 3] = 1;
       }
       model.cameraCentersResource = makePointMesh(
-        app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4)
+        app, cameraCenters, centerColors, Number(cameraSize?.value ?? 4), { onTop: true }
       );
       model.cameraCentersEntity = new pc.Entity("COLMAP camera centers");
       model.cameraCentersEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.cameraCentersResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.cameraCentersEntity);
 
@@ -740,36 +1240,7 @@ export function createColmapLayer({
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
 
-      const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
-      const children = [
-        {
-          name: "Points 3D",
-          setVisible(visible) { model.pointsEntity.enabled = visible; },
-        },
-        {
-          name: "Centres caméra",
-          setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
-        },
-        {
-          name: "Frustums",
-          setVisible(visible) { model.frustumsEntity.enabled = visible; },
-        },
-      ];
-      if (registerGroup) {
-        model.unregister = registerGroup({
-          id,
-          name: `COLMAP · ${label}`,
-          children,
-        });
-      } else {
-        const unregister = children.map((child) => registerLayer?.({
-          id: `${id}-${child.name.toLowerCase().replaceAll(" ", "-")}`,
-          name: `${child.name} · ${label}`,
-          setVisible: child.setVisible,
-        })).filter(Boolean);
-        model.unregister = () => unregister.forEach((remove) => remove());
-      }
-
+      registerModel(model);
       models.set(id, model);
       return model;
     } catch (error) {
@@ -857,18 +1328,24 @@ export function createColmapLayer({
   listen(cameraSize, "input", refreshPointSizes);
   refreshPointSizes();
 
-  listen(removeBtn, "click", () => {
-    clear();
-    setStatus("Modèles COLMAP retirés.");
-  });
-
   refreshUI();
   refreshInfo();
 
   return {
     loadFromFileList,
+    setImageFiles,
+    frame,
     clear,
     refreshUI,
+
+    getShownImagePose() {
+      for (const model of models.values()) {
+        const index = model.slots[0]?.shown;
+        if (index === null || index === undefined) continue;
+        return imageViewPose(model, model.colmapImages[index]);
+      }
+      return null;
+    },
 
     setFlipUp(flip) {
       applyFlipUp(Boolean(flip));

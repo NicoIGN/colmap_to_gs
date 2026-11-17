@@ -16,8 +16,10 @@ import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
 import { createColmapLayer } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
+import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
+import { createLidarLayer } from "./viewer/lidar-layer.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -101,6 +103,7 @@ let sceneTools = null;
 // variable globale
 let colmapLayer = null;
 let gpsLayer = null;
+let lidarLayer = null;
 
 
 const canvas = document.createElement("canvas");
@@ -198,16 +201,22 @@ function updatePrincipalAxisHelp() {
     `Maintenir : rotation positive autour de l’axe ${axis}`;
 }
 
+function hexToColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return new pc.Color(
+    ((n >> 16) & 255) / 255,
+    ((n >> 8) & 255) / 255,
+    (n & 255) / 255
+  );
+}
+
+function applyBackgroundColor() {
+  const hex = $("backgroundColor").value;
+  document.body.style.background = hex;
+  if (cameraEntity) cameraEntity.camera.clearColor = hexToColor(hex);
+}
+
 function updateKeyboardHelp() {
-  const layout =
-    $("keyboardLayout").value === "azerty"
-      ? "ZQSD : déplacer · A/E : descendre / monter"
-      : "WASD : déplacer · Q/E : descendre / monter";
-
-  $("keyboardHelp").dataset.tip =
-    `${layout} · Flèches : avancer / reculer / déplacement latéral · ` +
-    "Maj : accélérer · R : cadrer";
-
   if ($("help")) {
     $("help").textContent =
       "Clic gauche-glisser : tourner autour de la cible · " +
@@ -234,8 +243,7 @@ function refreshUI() {
         element.id === "fileInput" ||
         element.id === "colmapFolderInput" ||
         element.id === "colmapPointSize" ||
-        element.id === "colmapCameraSize" ||
-        element.id === "colmapRemove"
+        element.id === "colmapCameraSize"
       ) {
         return;
       }
@@ -449,6 +457,32 @@ function applyUpFlip() {
   }
 }
 
+async function removeSplatLayer(layer) {
+  const index = splatLayers.indexOf(layer);
+  if (index < 0) return;
+  splatLayers.splice(index, 1);
+  layer.unregister?.();
+  layer.entity.destroy();
+  layer.importer.dispose();
+
+  if (!splatLayers.length) {
+    releaseScene();
+    return;
+  }
+
+  splatEntity = splatLayers[0].entity;
+  centers = Float32Array.from(splatLayers.flatMap((item) => Array.from(item.centers)));
+  sceneCount = splatLayers.reduce((total, item) => total + item.count, 0);
+  sceneTools?.setSceneInfo({
+    name: splatLayers.map((item) => item.name).join(", "),
+    count: sceneCount,
+  });
+  collision.reset();
+  computeSceneBounds();
+  if (collisionIsEnabled()) await prepareCollision();
+  refreshUI();
+}
+
 function releaseScene() {
   sceneReady = false;
   if (getPrincipalAxisName() === "custom") $("principalAxis").value = "z";
@@ -456,6 +490,7 @@ function releaseScene() {
   updatePrincipalAxisHelp();
   sceneTools?.reset();
   colmapLayer?.clear();
+  lidarLayer?.clear();
   gpsLayer?.clear();
   layerManager?.clear();
 
@@ -611,6 +646,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
       id: `splat-${nextSplatLayerId++}`,
       name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
       setVisible(visible) { entity.enabled = visible; },
+      onRemove: () => removeSplatLayer(newLayer),
     });
     splatLayers.push(newLayer);
     splatEntity ??= entity;
@@ -798,9 +834,48 @@ async function handleDroppedFiles(fileList, items) {
     const { files, hasDirectory } = await collectDroppedFiles(items, fileList);
     if (!files.length) throw new Error("Le dossier déposé ne contient aucun fichier.");
 
+    if (files.every((f) => isImageFileName(f.name))) {
+      if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
+      await colmapLayer.setImageFiles(files);
+      return;
+    }
+
+    const lidarFile = files.find((f) => /\.(laz|las)$/i.test(f.name));
+    if (lidarFile) {
+      const sidecarName = `${lidarFile.name}.json`.toLowerCase();
+      const sidecar = files.find((f) => f.name.toLowerCase() === sidecarName) ?? null;
+      if (files.length === (sidecar ? 2 : 1)) {
+        if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
+        await lidarLayer.loadFile(lidarFile, sidecar);
+        return;
+      }
+    }
+
+    const sceneFile = files.find((f) => isSupportedSceneName(f.name));
+    if (sceneFile && files.length === 2) {
+      const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
+      const georefFile = files.find((f) => f !== sceneFile && f.name.toLowerCase() === `${base}.georef.json`);
+      console.log("[georef] scan", {
+        scene: sceneFile.name,
+        expected: `${base}.georef.json`,
+        found: georefFile?.name ?? null,
+        files: files.map((f) => f.name),
+      });
+      if (georefFile) {
+        await loadFile(sceneFile);
+        console.log("[georef] scène chargée, import du georef", georefFile.name, {
+          ready: sceneTools?.getState?.().ready,
+        });
+        await sceneTools.importFile(georefFile);
+        console.log("[georef] importFile terminé", { georef: sceneTools?.getGeoref?.() ? "présent" : "absent" });
+        return;
+      }
+    }
+
     if (hasColmapModel(files)) {
       if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
       await colmapLayer.loadFromFileList(files);
+      if (files.some((f) => isImageFileName(f.name))) await colmapLayer.setImageFiles(files);
       return;
     }
 
@@ -816,6 +891,12 @@ async function handleDroppedFiles(fileList, items) {
     }
 
     const file = files[0];
+
+    if (/\.(laz|las)\.json$/i.test(file.name)) {
+      throw new Error(
+        "Ce JSON est le fichier d’accompagnement du LiDAR : dépose-le avec le .laz correspondant."
+      );
+    }
 
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
@@ -833,6 +914,22 @@ async function handleDroppedFiles(fileList, items) {
 }
 
 async function selectPointInView(key, button) {
+  // Sans splat, rien n'est pickable : le pivot est le centre des données COLMAP.
+  if (!splatLayers.length) {
+    if (sceneBox.isEmpty()) return false;
+    target.copy(sceneCenter);
+    if (target.distanceToSquared(camera.position) < 1e-12) {
+      target.copy(camera.position).addScaledVector(
+        camera.getWorldDirection(new THREE.Vector3()),
+        Math.max(sceneRadius, 1e-3)
+      );
+    }
+    syncCamera();
+    requestGifCapture();
+    setStatus(`Pivot au centre des données COLMAP · axe ${getPrincipalAxisLabel()}.`);
+    return true;
+  }
+
   const serial = ++pickSerial;
   picking = true;
 
@@ -906,6 +1003,45 @@ async function selectPointInView(key, button) {
   } finally {
     if (serial === pickSerial) picking = false;
   }
+}
+
+// Repère caméra PlayCanvas (regarde vers -Z) : { local, tanV } ou null si pas de caméra.
+function cameraLocal(point) {
+  if (!cameraEntity?.camera) return null;
+  const local = cameraEntity
+    .getWorldTransform()
+    .clone()
+    .invert()
+    .transformPoint(new pc.Vec3(point.x, point.y, point.z), new pc.Vec3());
+  const cam = cameraEntity.camera;
+  const aspect = canvas.clientWidth / canvas.clientHeight;
+  const halfFov = (cam.fov * Math.PI) / 360;
+  // fov horizontal si horizontalFov, sinon vertical (convention PlayCanvas).
+  const tanV = cam.horizontalFov ? Math.tan(halfFov) / aspect : Math.tan(halfFov);
+  return { local, tanV, aspect };
+}
+
+// Projection perspective manuelle (pixels CSS), vérifiée contre Mat4.setPerspective.
+function projectToScreen(point, out) {
+  const info = cameraLocal(point);
+  if (!info || info.local.z >= -1e-6) return false;
+  const { local, tanV, aspect } = info;
+  const depth = -local.z * tanV;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  out.set(
+    (((local.x / (depth * aspect)) * 0.5) + 0.5) * width,
+    (0.5 - (local.y / depth) * 0.5) * height,
+    -local.z
+  );
+  return true;
+}
+
+// Pixels écran par unité de monde à ce point (0 si derrière la caméra).
+function pixelScaleAt(point) {
+  const info = cameraLocal(point);
+  if (!info || info.local.z >= -1e-6) return 0;
+  return canvas.clientHeight / (2 * info.tanV * -info.local.z);
 }
 
 function parseNumbers(value, count) {
@@ -1056,6 +1192,24 @@ async function exportCamera() {
   }
 }
 
+function goToImageView() {
+  if (!canNavigate()) return;
+
+  const pose = colmapLayer?.getShownImagePose();
+  if (!pose) {
+    setStatus("Aucune image COLMAP affichée.", true);
+    return;
+  }
+
+  navigation.clearNavigation();
+  // L'axe vertical reste celui de l'application (axe principal courant).
+  const axis = getPrincipalAxis();
+  applyCameraString([...pose.position, ...pose.target, axis.x, axis.y, axis.z].join(","));
+  rememberCamera();
+  requestGifCapture();
+  setStatus("Caméra placée sur la vue de l’image COLMAP.", "success");
+}
+
 function importCamera() {
   if (!canNavigate()) return;
 
@@ -1103,6 +1257,7 @@ function installUI() {
   $("defineVertical").addEventListener("click", navigation.defineVertical);
   $("exportCam").addEventListener("click", exportCamera);
   $("importCam").addEventListener("click", importCamera);
+  $("goToImageView").addEventListener("click", goToImageView);
 
   $("principalAxis").addEventListener("change", () => {
     navigation.clearNavigation();
@@ -1154,14 +1309,7 @@ function installUI() {
     );
   });
 
-  $("step").addEventListener("input", () => {
-    $("stepValue").value = $("step").value;
-  });
-
-  $("keyboardLayout").addEventListener("change", () => {
-    navigation.clearNavigation();
-    updateKeyboardHelp();
-  });
+  $("backgroundColor").addEventListener("input", applyBackgroundColor);
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1187,6 +1335,7 @@ function installUI() {
 
     applyUpFlip();
     colmapLayer?.setFlipUp($("flipUp").checked);
+    lidarLayer?.setFlipUp($("flipUp").checked);
 
     computeSceneBounds();
     syncCamera();
@@ -1348,7 +1497,7 @@ async function initialize() {
 
     cameraEntity = new pc.Entity("Camera");
     cameraEntity.addComponent("camera", {
-      clearColor: new pc.Color(0x10 / 255, 0x13 / 255, 0x1b / 255),
+      clearColor: hexToColor($("backgroundColor").value),
       fov: camera.fov,
       nearClip: camera.near,
       farClip: camera.far,
@@ -1400,8 +1549,8 @@ async function initialize() {
       hasCustomPrincipalAxis: () => getPrincipalAxisName() === "custom",
       getPrincipalAxisName: getPrincipalAxisLabel,
       isRotationLocked: () => $("lockPrincipalRotation").checked,
-      getSpeedValue: () => Number($("step").value),
-      getKeyboardLayout: () => $("keyboardLayout").value,
+      getSpeedValue: () => 10,
+      getKeyboardLayout: () => "azerty",
 
       navigateWithCollision: (move, enabled) =>
         collision.navigateWithCollision(() => {
@@ -1499,6 +1648,11 @@ async function initialize() {
         setStatus,
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
+        getViewerPosition: () => camera.position.toArray(),
+        getViewerDirection: () => camera.getWorldDirection(new THREE.Vector3()).toArray(),
+        getViewerTarget: () => sceneCenter.toArray(),
+        worldToScreen: (point, out) => projectToScreen(point, out),
+        pixelScaleAt,
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
@@ -1531,6 +1685,14 @@ async function initialize() {
         registerLayer: (layer) => layerManager.add(layer),
       });
 
+      lidarLayer = createLidarLayer({
+        app,
+        setStatus,
+        getFlipUp: () => $("flipUp").checked,
+        getGeoref: () => sceneTools?.getGeoref() ?? null,
+        registerGroup: (group) => layerManager.addGroup(group),
+      });
+
       installUI();
       installDnD();
 
@@ -1539,6 +1701,8 @@ async function initialize() {
 
         navigation?.frame(dt);
         sceneTools?.frame(dt);
+        lidarLayer?.refreshPlacement();
+        colmapLayer?.frame();
 
         // Peut être null pendant init/teardown.
         if (gpsLayer && sceneTools?.getGpsTrack) {
@@ -1595,6 +1759,9 @@ async function initialize() {
 
         gpsLayer?.dispose();
         gpsLayer = null;
+
+        lidarLayer?.dispose();
+        lidarLayer = null;
     
       progress.dispose();
       app?.destroy();

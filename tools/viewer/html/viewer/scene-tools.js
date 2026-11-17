@@ -793,8 +793,16 @@ export function createSceneTools({
         setStatus(`Lecture de ${file.name}…`);
 
         const reference = await readGeorefFile(file);
+        console.log("[georef] lu", file.name, {
+          epsg: reference.epsg,
+          origin: reference.origin,
+          originGeographic: reference.originGeographic,
+        });
 
-        if (!valid()) return;
+        if (!valid()) {
+          console.warn("[georef] ignoré : scène changée pendant la lecture", { ready: getState().ready });
+          return;
+        }
 
         georef = reference;
         resetTrack();
@@ -1105,6 +1113,10 @@ export function createSceneTools({
 
         getGpsTrack() {
           return track;
+        },
+
+        getGeoref() {
+          return georef;
         },
 
         isAutoEnabled() {

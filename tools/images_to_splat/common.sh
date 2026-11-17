@@ -86,6 +86,8 @@ load_config() {
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   REMOVE_LOCKS="${REMOVE_LOCKS:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+  SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"
+  SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
   SFM_COLMAP_BIN="${SFM_COLMAP_BIN:-colmap}"
   SFM_COLMAP_USE_GPU="${SFM_COLMAP_USE_GPU:-true}"
@@ -113,6 +115,8 @@ load_config() {
   SFM_THREADS="${SFM_THREADS:-16}"
   SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
   SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}"
+  SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
+  SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
   SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
   GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
   GEOREF_VIEW_PREFIX="${GEOREF_VIEW_PREFIX:-}"
@@ -162,7 +166,13 @@ load_config() {
   TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
   TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
   POSTPROCESS_SPARSE_BBOX_MODE="${POSTPROCESS_SPARSE_BBOX_MODE:-apply}"
-  POSTPROCESS_SPARSE_BBOX_MARGIN="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.05}"
+  POSTPROCESS_SPARSE_BBOX_MARGIN="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.02}"
+  POSTPROCESS_SPARSE_BBOX_SCOPE="${POSTPROCESS_SPARSE_BBOX_SCOPE:-planar}"
+  POSTPROCESS_SPARSE_BBOX_QUANTILE="${POSTPROCESS_SPARSE_BBOX_QUANTILE:-0.02}"
+  POSTPROCESS_SPARSE_SUPPORT_MODE="${POSTPROCESS_SPARSE_SUPPORT_MODE:-apply}"
+  POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="${POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR:-3.0}"
+  POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR="${POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR:-3.0}"
+  POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY="${POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY:-0}"
   POSTPROCESS_MAX_REMOVAL_FRACTION="${POSTPROCESS_MAX_REMOVAL_FRACTION:-0.20}"
   MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
   EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-scene.splat}"
@@ -201,6 +211,12 @@ load_config() {
     config_error "REMOVE_LOCKS=true exige PIPELINE_RESUME=true."
   fi
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
+  if ! awk -v v="$SFM_DENSITY_VOTE_FRACTION" 'BEGIN { exit !(v > 0 && v < 1) }'; then
+    config_error "SFM_DENSITY_VOTE_FRACTION='$SFM_DENSITY_VOTE_FRACTION' doit être dans ]0,1[."
+  fi
+  if ! awk -v v="$SFM_DENSITY_FAR_SUPPORT_RATE" 'BEGIN { exit !(v > 0 && v <= 1) }'; then
+    config_error "SFM_DENSITY_FAR_SUPPORT_RATE='$SFM_DENSITY_FAR_SUPPORT_RATE' doit être dans ]0,1]."
+  fi
   config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
   config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'
   config_choice SFM_COLMAP_MATCHING "$SFM_COLMAP_MATCHING" 'exhaustive|sequential'
@@ -244,12 +260,20 @@ load_config() {
   if [[ "$COLMAP_METHOD" == spirula ]]; then
     config_choice SFM_SP_FEATURES "$SFM_SP_FEATURES" 'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
     config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
-    config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive'
+    config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive|sequential'
     config_choice SFM_SP_QUALITY "$SFM_SP_QUALITY" 'low|medium|high|extreme'
   elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" || -n "$SFM_SP_QUALITY" ]]; then
     config_error "SFM_SP_FEATURES, SFM_SP_MATCHER, SFM_SP_PAIRS et SFM_SP_QUALITY ne s'appliquent qu'à COLMAP_METHOD=spirula."
   fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
+  config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'true|false'
+  config_positive_integer SFM_CAMERA_SPLIT_MIN_IMAGES "$SFM_CAMERA_SPLIT_MIN_IMAGES"
+  if [[ "$SFM_CAMERA_SPLIT" == true && ( "$COLMAP_METHOD" != spirula || "$SFM_CAMERA_MODE" == image ) ]]; then
+    config_error "SFM_CAMERA_SPLIT=true exige COLMAP_METHOD=spirula et SFM_CAMERA_MODE folder ou single."
+  fi
+  if [[ "$COLMAP_METHOD" == spirula && "$SFM_SP_PAIRS" == sequential && "$SFM_CAMERA_SPLIT" == true ]]; then
+    config_error "SFM_SP_PAIRS=sequential exige SFM_CAMERA_SPLIT=false : les sous-dossiers de caméras ne préservent pas l'ordre temporel global."
+  fi
   if [[ "$TRAIN_BACKEND" == spirula ]]; then
     config_choice TRAIN_SP_PRESET "$TRAIN_SP_PRESET" '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'
     config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'
@@ -267,11 +291,24 @@ load_config() {
         config_error "TRAIN_SP_GROWTH_FACTOR doit être vide ou > 1."
     fi
   fi
+  config_choice POSTPROCESS_SPARSE_BBOX_SCOPE "$POSTPROCESS_SPARSE_BBOX_SCOPE" 'full|planar'
+  config_choice POSTPROCESS_SPARSE_SUPPORT_MODE "$POSTPROCESS_SPARSE_SUPPORT_MODE" 'apply|diagnostic|off'
   for name in SPLIT_OVERLAP_MAX_FRACTION \
-    POSTPROCESS_SPARSE_BBOX_MARGIN POSTPROCESS_MAX_REMOVAL_FRACTION MERGE_STRENGTH; do
+    POSTPROCESS_SPARSE_BBOX_MARGIN POSTPROCESS_SPARSE_BBOX_QUANTILE \
+    POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR \
+    POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY \
+    POSTPROCESS_MAX_REMOVAL_FRACTION MERGE_STRENGTH; do
     [[ "${!name}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
       config_error "$name doit être un nombre positif ou nul."
   done
+  awk -v q="$POSTPROCESS_SPARSE_BBOX_QUANTILE" 'BEGIN { exit !(q < 0.5) }' ||
+    config_error "POSTPROCESS_SPARSE_BBOX_QUANTILE doit être dans [0, 0.5[."
+  awk -v o="$POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY" 'BEGIN { exit !(o <= 1) }' ||
+    config_error "POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY doit être dans [0, 1]."
+  awk -v d="$POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR" 'BEGIN { exit !(d > 0) }' ||
+    config_error "POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR doit être > 0."
+  awk -v d="$POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR" 'BEGIN { exit !(d > 0) }' ||
+    config_error "POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR doit être > 0."
   awk -v o="$SPLIT_OVERLAP_MAX_FRACTION" -v r="$POSTPROCESS_MAX_REMOVAL_FRACTION" \
     -v s="$MERGE_STRENGTH" 'BEGIN {
       exit !(o < 1 && r <= 1 && s > 0)

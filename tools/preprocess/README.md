@@ -26,9 +26,23 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `extract_sharp_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
 | `image_info.py` | Inspection d'une image et de ses informations GPS |
 | `images_to_colmap.py` | Reconstruction COLMAP depuis des images |
+| `diagnose_colmap_models.py` | Compare deux modèles COLMAP et leurs correspondances Spirula VKMT facultatives |
 | `georef_colmap_from_gpx.py` | Recalage d'un modèle COLMAP sur une trace GPX |
 | `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
 | `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
+
+`extract_sharp_frames.py` retient une frame par tranche temporelle non vide,
+sans éliminer globalement les séquences floues ou similaires. Le score combine
+la netteté relative à la plus nette de la tranche et la proximité du centre.
+`--sharpness-weight` règle le poids de la netteté entre 0 et 1 (défaut 0,7) ;
+1 privilégie la netteté, 0 une répartition plus régulière. La couverture d'une
+tranche non vide reste prioritaire quel que soit ce poids.
+Le nombre obtenu peut être inférieur à la demande si la vidéo est trop courte.
+L'écart maximal entre deux frames est affiché en nombre de frames vidéo et
+en secondes approximatives d'après la cadence moyenne.
+Utiliser `--index-csv /chemin/frames.csv` avec une seule vidéo pour conserver
+l'indice source de chaque frame (indice zéro, pas un horodatage). Les frames
+existantes ne sont pas recalculées automatiquement.
 
 - Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
@@ -36,6 +50,19 @@ python3 tools/preprocess/images_to_colmap.py --help
 - `tools/libs/python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
   appelée par `tools/libs/scripts/run.sh`.
 - `tools/libs/python/estimate_planes.py` : estimation des plans, appelée par `tools/libs/scripts/run.sh`.
+
+Pour diagnostiquer deux modèles issus d'un même SfM Spirula :
+
+```bash
+python tools/preprocess/diagnose_colmap_models.py \
+  /chemin/sfm/sparse/0 /chemin/sfm/sparse/1 \
+  --matches /chemin/sfm/matches.bin
+```
+
+`--matches` est facultatif. Les modèles et le fichier de correspondances doivent
+provenir du même calcul et employer les mêmes noms d'images. Le fichier ne
+permet pas de distinguer une paire non sélectionnée d'une paire rejetée. Les
+modèles seuls ne prouvent pas pourquoi la fusion a échoué.
 
 ## 3. Configuration et utilisation
 

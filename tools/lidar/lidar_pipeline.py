@@ -4,7 +4,6 @@
 import argparse
 import hashlib
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -14,6 +13,7 @@ from common import Reporter, class_codes, gaussian_geometry, open_scene, vector,
 from common import validate_support_opacity
 from fetch_ign_lidar import CRS, fetch_lidar, validate_cached_lidar
 from geographic import local_laz, projected_enu, reference_metadata
+from pdal_runtime import pdal_command
 
 
 def scene_bbox(scene, origin, margin, sigma=3.):
@@ -54,8 +54,8 @@ def run(args):
     from filter_splats_by_lidar import validate_aerial_options
 
     validate_aerial_options(args.ground_clearance, args.aerial_cell_size, args.aerial_min_returns)
-    if args.lidar_file is None and not shutil.which(args.pdal):
-        raise ValueError("PDAL introuvable ; installer PDAL avec le lecteur COPC")
+    if args.lidar_file is None:
+        pdal_command(args.pdal)
     if args.output_dir.exists():
         raise ValueError("Choisir un nouveau --output-dir ; aucune reprise implicite")
     origin = vector(args.origin)

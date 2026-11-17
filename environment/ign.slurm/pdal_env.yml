@@ -1,0 +1,19 @@
+name: lidar-pdal
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip
+  - pdal
+  - numpy
+  - scipy
+  - pyproj
+  - tqdm
+  - pillow
+  - laspy
+  - lazrs-python
+  - pycolmap>=4.2
+  - pip:
+      - plyfile
+      - laspy[lazrs]

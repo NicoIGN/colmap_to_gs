@@ -233,10 +233,17 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
   [[ -s "$raw" ]] || die "Splat brut absent : $raw"
   [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
   set_stage "recadrage COLMAP $id avant fusion"
-  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off ]]; then
+  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off || "$POSTPROCESS_SPARSE_SUPPORT_MODE" != off ]]; then
     cropped="$gs_root/$id/splats/$id.bbox.splat"
     crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
       "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
+      --sparse-bbox-quantile "$POSTPROCESS_SPARSE_BBOX_QUANTILE" \
+      --sparse-bbox-scope "$POSTPROCESS_SPARSE_BBOX_SCOPE" \
+      --sparse-cameras "$sparse/images.bin" \
+      --sparse-support-mode "$POSTPROCESS_SPARSE_SUPPORT_MODE" \
+      --sparse-support-distance-factor "$POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR" \
+      --sparse-support-isolation-factor "$POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR" \
+      --sparse-support-min-opacity "$POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY" \
       --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
     inputs+=("$cropped")
   else

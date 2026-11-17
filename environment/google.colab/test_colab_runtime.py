@@ -283,6 +283,8 @@ class ColabRuntimeTests(unittest.TestCase):
                          OUTPUT=self.root / "output", FRAMES=self.root / "frames",
                          SOURCE_IMAGES=self.root / "frames", COLMAP_ARCHIVE="",
                          REMOVE_LOCKS="false", PIPELINE_RESUME="true", MASKS_JOBS=3,
+                         SFM_CAMERA_MODE="folder", SFM_CAMERA_SPLIT="true", SFM_CAMERA_SPLIT_MIN_IMAGES=100,
+                         SFM_SP_PAIRS="sequential",
                          TRAIN_NUM_ITER=1234, TRAIN_SP_CAP_MAX=54321, SPLIT_NUM_BLOCKS=1,
                          SPIRULA_ROOT=self.root / "spirula", SPIRULA_BIN=self.root / "spirula/bin",
                          SAM_MODEL=self.root / "sam.ggml", RUN_NAME="video", PHASE="all")
@@ -296,6 +298,11 @@ class ColabRuntimeTests(unittest.TestCase):
         jobs = subprocess.check_output(
             ["bash", "-c", 'source "$1"; printf "%s" "$MASKS_JOBS"', "_", str(config)], text=True)
         self.assertEqual(jobs, "3")
+        split = subprocess.check_output(
+            ["bash", "-c", 'source "$1"; printf "%s %s" "$SFM_CAMERA_SPLIT" "$SFM_CAMERA_SPLIT_MIN_IMAGES"',
+             "_", str(config)], text=True)
+        self.assertEqual(split, "true 100")
+        self.assertIn("SFM_SP_PAIRS=sequential\n", config.read_text())
         inherited = subprocess.check_output(
             ["bash", "-c", 'source "$1"; bash -c \'printf "%s" "$SS_NN_LOG"\'', "_", str(config)],
             text=True)
@@ -475,7 +482,8 @@ class ColabRuntimeTests(unittest.TestCase):
         tree = ast.parse("".join(next(cell for cell in notebook["cells"]
                                     if cell["metadata"]["id"] == "parameters")["source"]))
         names = {"TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SPLIT_NUM_BLOCKS", "COLMAP_ARCHIVE",
-                 "PIPELINE_RESUME", "REMOVE_LOCKS", "MASKS_JOBS"}
+                 "PIPELINE_RESUME", "REMOVE_LOCKS", "MASKS_JOBS", "SFM_CAMERA_SPLIT",
+                 "SFM_CAMERA_SPLIT_MIN_IMAGES", "SFM_SP_PAIRS"}
         assignments = [node for node in tree.body if isinstance(node, ast.Assign)
                        and any(isinstance(target, ast.Name) and target.id in names for target in node.targets)]
         code = compile(ast.Module(body=assignments, type_ignores=[]), "parameters", "exec")
@@ -487,14 +495,19 @@ class ColabRuntimeTests(unittest.TestCase):
             self.assertEqual(namespace["REMOVE_LOCKS"], "false")
             self.assertEqual(namespace["PIPELINE_RESUME"], "true")
             self.assertEqual(namespace["MASKS_JOBS"], 2)
+            self.assertEqual(namespace["SFM_CAMERA_SPLIT"], "true")
+            self.assertEqual(namespace["SFM_CAMERA_SPLIT_MIN_IMAGES"], 100)
+            self.assertEqual(namespace["SFM_SP_PAIRS"], "prefilter")
         with patch.dict(os.environ, TRAIN_NUM_ITER="9876", TRAIN_SP_CAP_MAX="456789",
-                        SPLIT_NUM_BLOCKS="3", COLMAP_ARCHIVE="/drive/model.zip", MASKS_JOBS="4"):
+                        SPLIT_NUM_BLOCKS="3", COLMAP_ARCHIVE="/drive/model.zip", MASKS_JOBS="4",
+                        SFM_SP_PAIRS="sequential"):
             exec(code, namespace)
             self.assertEqual(namespace["TRAIN_NUM_ITER"], 9876)
             self.assertEqual(namespace["TRAIN_SP_CAP_MAX"], 456789)
             self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 3)
             self.assertEqual(namespace["COLMAP_ARCHIVE"], "/drive/model.zip")
             self.assertEqual(namespace["MASKS_JOBS"], 4)
+            self.assertEqual(namespace["SFM_SP_PAIRS"], "sequential")
 
     def test_colmap_restore_rejects_missing_images_unsafe_paths_and_existing_workspace(self):
         validator = [sys.executable, str(Path(__file__).resolve().parents[2]

@@ -110,7 +110,7 @@ SFM_MAX_ERROR="2"
 SFM_MIN_INLIERS="30"
 # Angle de triangulation en degres : ]0,90]. Rejette les faibles parallaxes.
 # Augmenter peut supprimer des batiments lointains valides.
-SFM_MIN_TRI_ANGLE="3"
+SFM_MIN_TRI_ANGLE="6"
 # Perte du bundle adjustment : huber|cauchy|trivial.
 SFM_SP_BA_LOSS="huber"
 # Echelle robuste ]0,1000] en pixels d'extraction (Huber delta / Cauchy c).

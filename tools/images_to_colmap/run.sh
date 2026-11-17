@@ -76,6 +76,10 @@ prepare() {
     fi
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
+  camera_split="$repo_root/tools/images_to_colmap/camera_split.py"
+  if [[ "$COLMAP_METHOD" == spirula ]]; then
+    "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"
+  fi
   if ! sparse_ready; then
     if [[ "$PIPELINE_RESUME" == true ]]; then
       for downstream in georef sparse_filtered sparse_clean sparse_rejected blocks gs gs-nerfstudio; do
@@ -93,6 +97,27 @@ prepare() {
   for name in cameras images points3D; do
     [[ -s "$sfm/sparse/0/$name.bin" ]] || die "SfM incomplet : $name.bin"
   done
+  if [[ "$COLMAP_METHOD" == spirula && "$SFM_CAMERA_SPLIT" == true ]]; then
+    split_args=(--output "$OUTPUT_DIR" --min-images "$SFM_CAMERA_SPLIT_MIN_IMAGES")
+    split_status=0
+    if [[ "$SFM_MASKS" == on ]]; then
+      "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" --masks "$sfm_masks" || split_status=$?
+    else
+      "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" || split_status=$?
+    fi
+    if ((split_status == 0)); then
+      begin_stage "SfM avec une caméra par modèle initial"
+      SFM_RECONSTRUCT_IMAGES="$OUTPUT_DIR/sfm_cameras/images" \
+        SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
+        SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
+        SFM_RECONSTRUCT_CAMERA_MODE=folder \
+        bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+      "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
+      "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
+    elif ((split_status != 3)); then
+      die "Séparation des caméras impossible."
+    fi
+  fi
   if [[ "$COLMAP_METHOD" != spirula ]]; then
     "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
   fi
@@ -107,17 +132,21 @@ prepare() {
     [[ "$density_version" =~ ^[0-9]+$ ]] ||
       die "Version du filtre de densité invalide : $density_version"
     cached_density_version=""
+    density_key="$density_version $SFM_DENSITY_VOTE_FRACTION $SFM_DENSITY_FAR_SUPPORT_RATE"
+    cached_density_version=""
     if [[ -f "$sparse/.density_done" ]]; then
       IFS= read -r cached_density_version < "$sparse/.density_done" || true
     fi
-    if [[ "$cached_density_version" != "$density_version" ]]; then
+    if [[ "$cached_density_version" != "$density_key" ]]; then
       [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" && ! -e "$OUTPUT_DIR/gs-nerfstudio" ]] ||
-        die "Version du filtre de densité modifiée : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
+        die "Réglages ou version du filtre de densité modifiés : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
       "$PYTHON_BIN" "$density_filter" \
         --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
+        --vote-fraction "$SFM_DENSITY_VOTE_FRACTION" \
+        --far-support-rate "$SFM_DENSITY_FAR_SUPPORT_RATE" \
         --workers "$SFM_THREADS" --verbose
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-      printf '%s\n' "$density_version" > "$sparse/.density_done"
+      printf '%s\n' "$density_key" > "$sparse/.density_done"
     else
       check_filtered_sparse
     fi

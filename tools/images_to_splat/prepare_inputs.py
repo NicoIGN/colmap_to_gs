@@ -176,6 +176,9 @@ def prepare(check=False):
     # Keep old unfiltered signatures compatible without adopting new provenance.
     if settings.get("SFM_FILTER_DENSITY") == "false":
         settings.pop("SFM_FILTER_DENSITY")
+    if settings.get("SFM_CAMERA_SPLIT", "false") == "false":
+        settings.pop("SFM_CAMERA_SPLIT", None)
+        settings.pop("SFM_CAMERA_SPLIT_MIN_IMAGES", None)
     settings["mask_policies"] = policies()
     for prefix, mask in settings["mask_policies"].items():
         if mask is None:

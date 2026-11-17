@@ -2,12 +2,15 @@
 # Invoked with the validated pipeline configuration exported in the environment.
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-selected="$OUTPUT_DIR/images"
-sfm="$OUTPUT_DIR/sfm"
+# Overrides used by the per-model camera split pass.
+selected="${SFM_RECONSTRUCT_IMAGES:-$OUTPUT_DIR/images}"
+sfm="${SFM_RECONSTRUCT_DIR:-$OUTPUT_DIR/sfm}"
+camera_mode="${SFM_RECONSTRUCT_CAMERA_MODE:-$SFM_CAMERA_MODE}"
 mask_args=()
 if [[ "$SFM_MASKS" == on ]]; then
   mask_dir="$OUTPUT_DIR/feature_masks"
   [[ ! -d "$OUTPUT_DIR/masks" ]] || mask_dir="$OUTPUT_DIR/masks"
+  mask_dir="${SFM_RECONSTRUCT_MASKS:-$mask_dir}"
   mask_args=(--feature-masks "$mask_dir")
 fi
 
@@ -27,16 +30,20 @@ case "$COLMAP_METHOD" in
     echo "[COLMAP] Spirula, GPS EXIF=$metric_gps ; GPX configuré=${GEOREF_GPX_FILE:-non}."
     reuse_matches=redo
     [[ "${PIPELINE_RESUME:-false}" != true ]] || reuse_matches=auto
+    sequence_args=(--data-type individual --sequence=)
+    if [[ "$SFM_SP_PAIRS" == sequential ]]; then
+      sequence_args=(--data-type video --sequence .)
+    fi
     bash "$repo_root/tools/libs/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
-      --preset video --no-prepare --data-type individual --sequence= \
+      --preset video --no-prepare "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
       --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
-      --camera-mode "$SFM_CAMERA_MODE" --camera-model "$SFM_CAMERA_MODEL" \
+      --camera-mode "$camera_mode" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps "$metric_gps" "${sensor_args[@]}" \
       --threads "$SFM_THREADS" "${mask_args[@]}" \
       "${exposure_args[@]}"

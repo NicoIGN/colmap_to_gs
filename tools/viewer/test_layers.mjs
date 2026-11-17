@@ -45,7 +45,7 @@ test("layer manager adds, toggles, and unregisters visibility controls", () => {
 
   assert.equal(manager.size, 1);
   assert.equal(container.parentElement.hidden, false);
-  const checkbox = container.children[0].children[0];
+  const checkbox = container.children[0].children[0].children[0];
   assert.equal(checkbox.checked, true);
   checkbox.checked = false;
   checkbox.listeners.get("change")();

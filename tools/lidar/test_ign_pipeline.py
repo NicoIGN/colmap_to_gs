@@ -82,7 +82,7 @@ class IgnPipelineTests(unittest.TestCase):
                 xyz = np.array([[650010, 6860010, 1], [650020, 6860020, 2],
                                 [650030, 6860030, 3]])
                 cloud_file(destination, xyz, [3, 5, 67])
-            with patch.object(fetcher.shutil, "which", return_value="/bin/pdal"), \
+            with patch.object(fetcher, "pdal_command", return_value=["pdal"]), \
                     patch.object(fetcher, "discover_tiles", return_value=["https://a"]), \
                     patch.object(fetcher.subprocess, "run", side_effect=pdal):
                 report = fetcher.fetch_lidar(bbox, output)
@@ -121,7 +121,7 @@ class IgnPipelineTests(unittest.TestCase):
     def test_master_real_alignment_and_cleanup_with_simulated_retrieval(self):
         with tempfile.TemporaryDirectory() as directory:
             args, retrieve = self.setup_scene(directory)
-            with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
+            with patch.object(master, "pdal_command", return_value=["pdal"]), \
                     patch.object(master, "fetch_lidar", side_effect=retrieve):
                 master.run(args)
             state = json.loads((args.output_dir/"pipeline.json").read_text())
@@ -139,7 +139,7 @@ class IgnPipelineTests(unittest.TestCase):
             args, retrieve = self.setup_scene(directory)
             args.dry_run_clean = True
             args.min_support_opacity = 0.1
-            with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
+            with patch.object(master, "pdal_command", return_value=["pdal"]), \
                     patch.object(master, "fetch_lidar", side_effect=retrieve):
                 master.run(args)
             self.assertTrue((args.output_dir/"aligned.splat").exists())
@@ -147,7 +147,7 @@ class IgnPipelineTests(unittest.TestCase):
             report = json.loads((args.output_dir/"cleaned.splat.json").read_text())
             self.assertEqual(report["min_support_opacity"], 0.1)
             args.output_dir = Path(directory)/"failed"
-            with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
+            with patch.object(master, "pdal_command", return_value=["pdal"]), \
                     patch.object(master, "fetch_lidar", side_effect=OSError("WFS indisponible")):
                 with self.assertRaises(OSError):
                     master.run(args)
@@ -156,7 +156,7 @@ class IgnPipelineTests(unittest.TestCase):
             self.assertIn("WFS indisponible", state["error"])
             args.output_dir = Path(directory)/"invalid"
             args.margin = 0.1
-            with patch.object(master.shutil, "which", return_value="/bin/pdal"):
+            with patch.object(master, "pdal_command", return_value=["pdal"]):
                 with self.assertRaisesRegex(ValueError, "marge"):
                     master.run(args)
             self.assertFalse(args.output_dir.exists())
@@ -183,7 +183,7 @@ class IgnPipelineTests(unittest.TestCase):
                     data.tofile(aligned)
                     return
                 self.fail("Nettoyage lancé malgré sortie hors couverture")
-            with patch.object(master.shutil, "which", return_value="/bin/pdal"), \
+            with patch.object(master, "pdal_command", return_value=["pdal"]), \
                     patch.object(master, "fetch_lidar", side_effect=retrieve), \
                     patch.object(master.subprocess, "run", side_effect=moved):
                 with self.assertRaisesRegex(ValueError, "hors couverture"):

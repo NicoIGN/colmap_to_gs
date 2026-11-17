@@ -229,6 +229,39 @@ class ConversionTest(unittest.TestCase):
                     block_main()
 
 
+class CameraSplitTest(unittest.TestCase):
+    def test_unregistered_frames_follow_nearest_model_and_small_models_are_ignored(self):
+        from camera_split import assign_groups
+
+        names = [f"f{index}.jpg" for index in range(8)]
+        models = [["f0.jpg", "f1.jpg", "f6.jpg"], ["f4.jpg", "f5.jpg"], ["f7.jpg"]]
+        significant, groups = assign_groups(names, models, 2)
+        self.assertEqual(len(significant), 2)
+        self.assertEqual([groups[name] for name in names], [0, 0, 0, 1, 1, 1, 0, 0])
+        self.assertEqual(assign_groups(names, models, 3), ([models[0]], {}))
+
+    def test_interrupted_adoption_is_completed_or_rolled_back(self):
+        from camera_split import recover
+
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            sfm = output / "sfm"
+            (sfm / "sparse-before-camera-split/0").mkdir(parents=True)
+            (sfm / "sparse.camera-split.tmp/0").mkdir(parents=True)
+            (output / "sfm_cameras").mkdir()
+            (output / "sfm_cameras/plan.json").write_text(json.dumps(
+                {"min_images": 1, "model_images": [1, 1], "group_images": [1, 1], "groups": {}}))
+            with patch("camera_split.read_image_names", return_value=["a.jpg"]):
+                recover(output)
+            self.assertTrue((sfm / "sparse/0").is_dir())
+            self.assertTrue((sfm / "camera_split.json").is_file())
+            shutil.rmtree(sfm / "sparse")
+            (sfm / "camera_split.json").unlink()
+            recover(output)
+            self.assertTrue((sfm / "sparse/0").is_dir())
+            self.assertFalse((sfm / "sparse-before-camera-split").exists())
+
+
 class RuntimeTest(unittest.TestCase):
     def test_missing_torch_has_explicit_error(self):
         with patch.dict(sys.modules, {"torch": None}):

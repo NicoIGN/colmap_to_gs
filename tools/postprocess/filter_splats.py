@@ -178,20 +178,89 @@ def sparse_bbox_mask(means, points, *, quantile=0.005, margin=0.05):
     return outside, report
 
 
-def sparse_support_mask(means, scales, quats, points, *, distance_factor=3.0,
-                        min_fraction=0.5, batch_size=20000):
-    """Sample the central principal-plane patch, not just the splat centre.
+def load_camera_centres(path):
+    """Return camera centres in the COLMAP world frame from images.bin."""
+    centres = []
+    with open(path, "rb") as stream:
+        header = stream.read(8)
+        if len(header) != 8:
+            raise ValueError(f"images.bin tronqué : {path}")
+        image_struct = struct.Struct("<I4d3dI")
+        for index in range(struct.unpack("<Q", header)[0]):
+            data = stream.read(image_struct.size)
+            if len(data) != image_struct.size:
+                raise ValueError(f"images.bin tronqué à l'image {index} : {path}")
+            _, qw, qx, qy, qz, tx, ty, tz, _ = image_struct.unpack(data)
+            rotation = Rotation.from_quat([qx, qy, qz, qw]).as_matrix()
+            centres.append(-rotation.T @ np.array([tx, ty, tz]))
+            while stream.read(1) != b"\0":
+                pass
+            count = struct.unpack("<Q", stream.read(8))[0]
+            stream.seek(count * 24, 1)
+    return np.asarray(centres, dtype=np.float64).reshape(-1, 3)
 
-    Nine samples span +/- one sigma along the two largest axes. Distances
-    are divided by sparse local spacing (eighth neighbour / sqrt(8)).
-    No absolute scene-unit threshold or colour/height classification is used.
+
+def planar_sparse_bbox_mask(means, points, centres, *, quantile=0.005, margin=0.05):
+    """Clean only the horizontal plane; altitude is never cut.
+
+    The vertical is the normal of the best-fit plane through the camera
+    centres (smallest principal axis). The robust sparse box is computed on
+    the two horizontal axes only, so a tall object whose top is sparse in
+    the points is kept. Only centres are tested, as in sparse_bbox_mask.
+    """
+    if not 0 <= quantile < 0.5:
+        raise ValueError("Quantile de bbox sparse attendu dans [0,0.5)")
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError("Marge relative de bbox sparse attendue finie et >= 0")
+    if len(points) < 10:
+        raise ValueError("Moins de 10 points sparse valides : bbox impossible")
+    if len(centres) < 3:
+        raise ValueError("Au moins 3 caméras requises pour estimer la verticale")
+    camera_origin = np.median(centres, axis=0)
+    values, vectors = np.linalg.eigh(np.cov((centres - camera_origin).T))
+    if not np.isfinite(values).all() or values[1] <= 0:
+        raise ValueError("Positions caméra dégénérées : verticale impossible")
+    horizontal = vectors[:, 1:]
+    origin = np.median(points, axis=0)
+    flat_points = (points - origin) @ horizontal
+    _, plan_axes = np.linalg.eigh(np.cov(flat_points.T))
+    projected = flat_points @ plan_axes
+    lo, hi = np.quantile(projected, [quantile, 1 - quantile], axis=0)
+    span = float(np.max(hi - lo))
+    if not np.isfinite(span) or span <= 0:
+        raise ValueError("Points sparse dégénérés : bbox planaire impossible")
+    pad = margin * span
+    frame = ((means - origin) @ horizontal) @ plan_axes
+    outside = np.any((frame < lo - pad) | (frame > hi + pad), axis=1)
+    report = dict(
+        scope="planar", sparse_points=len(points), quantile=quantile,
+        margin_fraction=margin, outside_sparse_bbox=int(outside.sum()),
+        cameras=len(centres), vertical_axis=vectors[:, 0].tolist(),
+        vertical_flatness=float(values[0] / values[1]),
+    )
+    return outside, report
+
+
+def sparse_support_mask(means, points, *, opacity, min_opacity=0.0,
+                       distance_factor=3.0, isolation_factor=3.0, batch_size=20000):
+    """Reject splats isolated from both sparse points and other splats.
+
+    Sparse points whose eighth nearest sparse neighbour is farther than
+    isolation_factor times the median such distance are discarded first, so
+    stray COLMAP points do not inflate local spacing. A splat is rejected if
+    its centre is farther than distance_factor sparse local spacings from the
+    nearest remaining sparse point AND its eighth nearest splat is also farther
+    than that bound. Splats in a dense splat neighbourhood are kept. Distances
+    are divided by sparse local spacing (eighth neighbour / sqrt(8)); no
+    absolute unit is used. Splats below min_opacity are not tested.
     """
     if not np.isfinite(distance_factor) or distance_factor <= 0:
         raise ValueError("Facteur de distance sparse attendu fini et > 0")
-    if not np.isfinite(min_fraction) or not 0 < min_fraction <= 1:
-        raise ValueError("Fraction de support sparse attendue dans ]0,1]")
+    if not np.isfinite(min_opacity) or not 0 <= min_opacity <= 1:
+        raise ValueError("Opacité minimale attendue dans [0,1]")
     if batch_size < 1:
         raise ValueError("Taille de lot attendue >= 1")
+    tested = np.asarray(opacity) >= min_opacity
     points = np.unique(points, axis=0)
     if len(points) < 10 or not np.isfinite(points).all():
         raise ValueError("Au moins 10 points sparse distincts et finis requis")
@@ -200,30 +269,30 @@ def sparse_support_mask(means, scales, quats, points, *, distance_factor=3.0,
     if not np.isfinite(extent) or extent <= 0:
         raise ValueError("Étendue sparse indéterminable")
     points = (points - origin) / extent
+    raw = cKDTree(points).query(points, k=9)[0][:, -1]
+    kept = raw <= isolation_factor * np.median(raw)
+    points = points[kept]
+    if len(points) < 10:
+        raise ValueError("Trop de points sparse isolés retirés ; augmenter isolation_factor")
     tree = cKDTree(points)
     spacing = tree.query(points, k=9)[0][:, -1] / np.sqrt(8)
-    offsets = np.array([(a, b) for a in (-1, 0, 1) for b in (-1, 0, 1)])
+    means = (means - origin) / extent
+    splat_tree = cKDTree(means)
+    neighbours = min(9, len(means))
     rejected = np.zeros(len(means), dtype=bool)
-    centre_only = 0
     for start in range(0, len(means), batch_size):
         stop = min(start + batch_size, len(means))
-        q = quats[start:stop]
-        q = q / np.max(np.abs(q), axis=1, keepdims=True)
-        rotation = Rotation.from_quat(q[:, [1, 2, 3, 0]]).as_matrix()
-        axes = np.argsort(scales[start:stop], axis=1)[:, -2:]
-        directions = np.take_along_axis(rotation, axes[:, None, :], axis=2)
-        lengths = np.take_along_axis(scales[start:stop], axes, axis=1) / extent
-        samples = ((means[start:stop] - origin) / extent)[:, None, :] + np.einsum(
-            "nij,nj,kj->nki", directions, lengths, offsets,
-        )
-        distances, near = tree.query(samples.reshape(-1, 3))
-        supported = (distances <= distance_factor * spacing[near]).reshape(-1, 9)
-        rejected[start:stop] = supported.mean(axis=1) < min_fraction
-        centre_only += int((supported[:, 4] & rejected[start:stop]).sum())
+        centres = means[start:stop]
+        distances, near = tree.query(centres)
+        splat_gaps = splat_tree.query(centres, k=neighbours)[0].reshape(len(centres), -1)[:, -1]
+        bound = distance_factor * spacing[near]
+        rejected[start:stop] = (distances > bound) & (splat_gaps > bound)
+    rejected &= tested
     return rejected, dict(
-        unsupported=int(rejected.sum()), centre_supported_but_patch_unsupported=centre_only,
-        sparse_points=len(points), distance_factor=distance_factor,
-        min_fraction=min_fraction, samples=9, patch_sigma=1,
+        unsupported=int(rejected.sum()), tested=int(tested.sum()),
+        sparse_points=len(points), isolated_sparse_points=int((~kept).sum()),
+        distance_factor=distance_factor, isolation_factor=isolation_factor,
+        min_opacity=min_opacity,
         warning="Filtre expérimental : les surfaces peu représentées dans le sparse peuvent être rejetées.",
     )
 
@@ -256,13 +325,21 @@ def main():
                         help="COLMAP points3D.bin in the same world frame as the splats")
     parser.add_argument("--sparse-bbox-mode", choices=("apply", "diagnostic", "off"),
                         default="apply")
+    parser.add_argument("--sparse-bbox-scope", choices=("full", "planar"), default="full",
+                        help="planar : nettoie seulement le plan horizontal, verticale "
+                             "estimee depuis --sparse-cameras")
+    parser.add_argument("--sparse-cameras", type=Path,
+                        help="COLMAP images.bin dans le meme repere, requis en planar")
     parser.add_argument("--sparse-bbox-quantile", type=float, default=0.005)
     parser.add_argument("--sparse-bbox-margin", type=float, default=0.05,
                         help="Margin as a fraction of the largest box side")
     parser.add_argument("--sparse-support-mode", choices=("off", "diagnostic", "apply"),
                         default="off")
     parser.add_argument("--sparse-support-distance-factor", type=float, default=3.0)
-    parser.add_argument("--sparse-support-min-fraction", type=float, default=0.5)
+    parser.add_argument("--sparse-support-isolation-factor", type=float, default=3.0,
+                        help="Sparse points farther than this multiple of median spacing are discarded")
+    parser.add_argument("--sparse-support-min-opacity", type=float, default=0.0,
+                        help="Splats with opacity below this value are never rejected")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
     try:
@@ -303,10 +380,19 @@ def main():
         outside = np.zeros(count, dtype=bool)
         bbox_report = None
         if bbox_mode != "off":
-            outside, bbox_report = sparse_bbox_mask(
-                means, points,
-                quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
-            )
+            if args.sparse_bbox_scope == "planar":
+                if not args.sparse_cameras:
+                    raise ValueError("--sparse-cameras requis pour la bbox planaire")
+                centres = load_camera_centres(args.sparse_cameras.resolve())
+                outside, bbox_report = planar_sparse_bbox_mask(
+                    means, points, centres,
+                    quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
+                )
+            else:
+                outside, bbox_report = sparse_bbox_mask(
+                    means, points,
+                    quantile=args.sparse_bbox_quantile, margin=args.sparse_bbox_margin,
+                )
             bbox_report.update(mode=bbox_mode, points=str(args.sparse_points.resolve()))
             if outside.all():
                 raise ValueError(
@@ -331,10 +417,13 @@ def main():
         support_report = dict(mode="off")
         if args.sparse_support_mode != "off":
             inside = np.flatnonzero(~outside)
+            opacity = records["rgba"][:, 3].astype(np.float64) / 255.0
             subset, support_report = sparse_support_mask(
-                means[inside], scales[inside], quats[inside], points,
+                means[inside], points,
+                opacity=opacity[inside],
+                min_opacity=args.sparse_support_min_opacity,
                 distance_factor=args.sparse_support_distance_factor,
-                min_fraction=args.sparse_support_min_fraction,
+                isolation_factor=args.sparse_support_isolation_factor,
                 batch_size=args.batch_size,
             )
             unsupported[inside[subset]] = True
@@ -357,14 +446,17 @@ def main():
             applied_rejections=int(applied.sum()),
         )
         fraction = float(applied.mean())
-        print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if "warning" in report:
             print("[AVERTISSEMENT] " + report["warning"], flush=True)
         if fraction > args.max_removal_fraction:
-            raise ValueError(
+            warning = (
                 f"Rejet appliqué {fraction:.1%} > limite {args.max_removal_fraction:.1%} ; "
-                "aucune sortie remplacée. Examiner d'abord le mode diagnostic."
+                "filtre ignoré, entrée conservée. Examiner le diagnostic (.filter.json)."
             )
+            report.update(skipped=warning, applied_rejections=0)
+            applied[:] = False
+            print("[AVERTISSEMENT] " + warning, flush=True)
+        print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if applied.all():
             raise ValueError("Le filtre supprimerait tous les splats ; aucune sortie remplacée")
         write_records(rejected_path, records, rejected)

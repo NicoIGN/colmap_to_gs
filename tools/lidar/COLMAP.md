@@ -234,6 +234,22 @@ Les points injectés peuvent servir à l'initialisation 3DGS après vérificatio
 L'injection échoue explicitement si aucun point ne satisfait les conditions.
 Le modèle exporté est relu et sa cohérence vérifiée.
 
+## Recalage des points SfM sur sol et façades (`align_sfm_points_to_lidar.py`)
+
+Script distinct de `align_colmap_to_lidar.py`. Il n'utilise ni la trajectoire ni les axes de rue :
+seuls les points 3D SfM sont recalés, par un ICP Sim(3) point-à-plan sur le sol (classe 2)
+et les murs verticaux (classe 6, |n_z| ≤ 0,5). Les toits sont donc écartés. Le repère
+ENU vient de `georef_stats.json` du modèle (ou `--georef`).
+
+```bash
+python tools/lidar/align_sfm_points_to_lidar.py \
+  --model workspace/sparse/0 --lidar aerien.laz --output workspace/sparse_lidar
+```
+
+Le script refuse le résultat si une direction n'est pas contrainte (par exemple la
+translation le long de la rue sans façade transversale) : `lidar_alignment_sfm.json`
+donne les valeurs propres relatives de la contrainte.
+
 ## Tests
 
 ```bash

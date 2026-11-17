@@ -5,7 +5,6 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import shutil
 import subprocess
 from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
@@ -13,6 +12,7 @@ from urllib.request import Request, urlopen
 import numpy as np
 
 from common import load_lidar, write_report
+from pdal_runtime import pdal_command
 
 WFS = "https://data.geopf.fr/wfs"
 LAYER = "IGNF_LIDAR-HD_METADONNEE:metadata"
@@ -133,8 +133,7 @@ def pdal_pipeline(urls, bbox, output):
 
 
 def fetch_lidar(bbox, output, *, pdal="pdal", max_tiles=100):
-    if not shutil.which(pdal):
-        raise ValueError("PDAL introuvable ; installer PDAL avec readers.copc et writers.las")
+    command = pdal_command(pdal)
     manifest = output.with_suffix(output.suffix + ".json")
     pipeline_path = output.with_suffix(output.suffix + ".pipeline.json")
     partial = output.with_name(output.stem + ".partial.laz")
@@ -145,7 +144,7 @@ def fetch_lidar(bbox, output, *, pdal="pdal", max_tiles=100):
     output.parent.mkdir(parents=True, exist_ok=True)
     write_report(pipeline_path, pdal_pipeline(urls, bbox, partial))
     print(f"[lidar] Extraction COPC de {len(urls)} tuile(s) via PDAL.", flush=True)
-    subprocess.run([pdal, "pipeline", str(pipeline_path)], check=True)
+    subprocess.run([*command, "pipeline", str(pipeline_path)], check=True)
     if not partial.is_file():
         raise ValueError("PDAL n'a pas produit de LAZ")
     # Validation before publishing; a failed extraction keeps its partial for diagnosis.

@@ -114,7 +114,7 @@ Variables:
   SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
-  SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (3)
+  SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (6)
   SFM_SP_BA_LOSS               Bundle adjustment loss: huber, cauchy, trivial (huber)
   SFM_SP_BA_LOSS_PARAM         Robust loss scale, extraction pixels (2)
   SFM_SP_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)

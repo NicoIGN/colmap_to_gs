@@ -118,12 +118,13 @@ SFM_THREADS="16"
 # ses propres seuils. Plus strict = moins de parasites, mais couverture reduite.
 SFM_MAX_ERROR="2"         # [0.1,100], pixels d'extraction : verification + mapping
 SFM_MIN_INLIERS="30"      # entier [4,1000000] par paire, pas par point 3D
-SFM_MIN_TRI_ANGLE="3"     # ]0,90] degres ; augmente = moins de faible parallaxe
+SFM_MIN_TRI_ANGLE="6"     # ]0,90] degres ; augmente = moins de faible parallaxe
 
 # --- COLMAP_METHOD=spirula uniquement ---
 SFM_SP_FEATURES="aliked-n16rot"
 SFM_SP_MATCHER="bruteforce"
-# prefilter|auto|exhaustive ; exhaustive couteux sur plusieurs milliers d'images.
+# prefilter|auto|exhaustive|sequential ; exhaustive est couteux.
+# sequential : noms tries dans l'ordre de la video, SFM_CAMERA_SPLIT=false.
 SFM_SP_PAIRS="prefilter"
 # low|medium|high|extreme : préréglage Spirula ; high plafonne les points max à 8192
 # et écrase SFM_ALIKED_MAX_FEATURES. Utiliser extreme pour aller au-delà.
@@ -137,11 +138,21 @@ SFM_SP_IMAGE_EXPOSURE=""
 # folder : intrinseques partages par sous-dossier ; single : une camera ;
 # image : intrinseques independants par image.
 SFM_CAMERA_MODE="folder"
+# true : si Spirula produit plusieurs modeles d'au moins SFM_CAMERA_SPLIT_MIN_IMAGES
+# images (ex. video avec changement d'objectif), relance le SfM avec une camera
+# par modele dans OUTPUT_DIR/sfm_cameras ; ancien SfM dans sfm/sparse-before-camera-split.
+# Avec PIPELINE_RESUME=true, les sorties derivees de l'ancien SfM sont archivees
+# dans camera-split-backups/. Spirula uniquement, pas avec SFM_CAMERA_MODE=image.
+SFM_CAMERA_SPLIT="false"
+SFM_CAMERA_SPLIT_MIN_IMAGES=50
 SFM_CAMERA_MODEL="opencv"
 # Filtre experimental des points isoles/lointains avant decoupage (CPU).
 # Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.
 # Activer avant preparation ; changer apres decoupage exige un nouveau workspace.
 SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+# Seuils du filtre : augmenter far-support-rate ou baisser vote-fraction = plus strict.
+SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"   # ]0,1[
+SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"  # ]0,1]
 # Photos individuelles, sans sequence.
 # Sans GPX, les GPS EXIF de plusieurs images georeferencent automatiquement le SfM.
 # Un GPX configure ci-dessous reste prioritaire sur les coordonnees EXIF.
@@ -230,8 +241,24 @@ TRAIN_CLEAN="false"
 # diagnostic ecrit le diagnostic mais ne retire rien ; off ne calcule pas la bbox.
 # Bbox orientee robuste (quantiles 0.5/99.5 %), pas bbox de chaque sous-bloc.
 POSTPROCESS_SPARSE_BBOX_MODE="apply"
-POSTPROCESS_SPARSE_BBOX_MARGIN="0.05"  # fraction du plus grand cote
-# Securite PAR BLOC : refuser plus de 20 % de rejets.
+POSTPROCESS_SPARSE_BBOX_MARGIN="0.02"  # fraction du plus grand cote (plani : resserree)
+# Quantile de chaque cote de la bbox sparse (0.005 = 0.5 %). Plus petit = bbox plus large,
+# moins de risque de couper le haut d'un objet (ex. statue) avec peu de points sparse.
+POSTPROCESS_SPARSE_BBOX_QUANTILE="0.02"
+# planar : nettoyage seulement en plani (verticale = normale du plan des centres
+# camera, altitude jamais coupee). full : boite 3D complete (coupe le haut d'un objet).
+POSTPROCESS_SPARSE_BBOX_SCOPE="planar"
+# Filtre de support (floaters isoles) : un splat est retire s'il est loin de tout point
+# sparse ET de tout autre splat (8e voisin). diagnostic = ecrit .filter.json sans retirer ;
+# apply = retire. DISTANCE_FACTOR : en densites sparse locales. MIN_OPACITY : splats
+# moins opaques ne sont pas testes (0 : tous).
+POSTPROCESS_SPARSE_SUPPORT_MODE="apply"
+POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR="3.0"
+# Points sparse isolés retirés avant le filtre : distance au 8e voisin sparse > ISOLATION_FACTOR
+# fois la médiane.
+POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR="3.0"
+POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY="0"
+# Securite PAR BLOC : au-dela, le filtre est ignore (entree conservee, avertissement).
 # Examiner les diagnostics avant d'augmenter cette limite [0,1].
 POSTPROCESS_MAX_REMOVAL_FRACTION="0.20"
 # Les bruts sont conserves. Pas de filtre contextuel additionnel dans cet outil.
