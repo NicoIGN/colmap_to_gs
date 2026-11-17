@@ -16,6 +16,7 @@ import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
 import { createColmapLayer } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
+import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
@@ -833,6 +834,12 @@ async function handleDroppedFiles(fileList, items) {
     const { files, hasDirectory } = await collectDroppedFiles(items, fileList);
     if (!files.length) throw new Error("Le dossier déposé ne contient aucun fichier.");
 
+    if (files.every((f) => isImageFileName(f.name))) {
+      if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
+      await colmapLayer.setImageFiles(files);
+      return;
+    }
+
     const lidarFile = files.find((f) => /\.(laz|las)$/i.test(f.name));
     if (lidarFile) {
       const sidecarName = `${lidarFile.name}.json`.toLowerCase();
@@ -868,6 +875,7 @@ async function handleDroppedFiles(fileList, items) {
     if (hasColmapModel(files)) {
       if (!colmapLayer) throw new Error("L’importeur COLMAP n’est pas initialisé.");
       await colmapLayer.loadFromFileList(files);
+      if (files.some((f) => isImageFileName(f.name))) await colmapLayer.setImageFiles(files);
       return;
     }
 
@@ -1566,6 +1574,7 @@ async function initialize() {
         setStatus,
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
+        getViewerPosition: () => camera.position.toArray(),
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
@@ -1615,6 +1624,7 @@ async function initialize() {
         navigation?.frame(dt);
         sceneTools?.frame(dt);
         lidarLayer?.refreshPlacement();
+        colmapLayer?.frame();
 
         // Peut être null pendant init/teardown.
         if (gpsLayer && sceneTools?.getGpsTrack) {
