@@ -427,7 +427,7 @@ function makeColmapMesh(app, positions, rgba, primitive, material) {
   return { mesh, material, meshInstance };
 }
 
-function makePointMesh(app, positions, colors, pointSize = 3) {
+export function makePointMesh(app, positions, colors, pointSize = 3) {
   const count = positions.length / 3;
   const rgba = new Float32Array(count * 4);
 

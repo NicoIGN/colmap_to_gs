@@ -18,6 +18,7 @@ import { createColmapLayer } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
+import { createLidarLayer } from "./viewer/lidar-layer.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -101,6 +102,7 @@ let sceneTools = null;
 // variable globale
 let colmapLayer = null;
 let gpsLayer = null;
+let lidarLayer = null;
 
 
 const canvas = document.createElement("canvas");
@@ -462,6 +464,7 @@ function releaseScene() {
   updatePrincipalAxisHelp();
   sceneTools?.reset();
   colmapLayer?.clear();
+  lidarLayer?.clear();
   gpsLayer?.clear();
   layerManager?.clear();
 
@@ -827,6 +830,9 @@ async function handleDroppedFiles(fileList, items) {
       await sceneTools.importFile(file);
     } else if (/\.(splat|ply)$/i.test(file.name)) {
       await appendScene(file, file.name);
+    } else if (/\.(laz|las)$/i.test(file.name)) {
+      if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
+      await lidarLayer.loadFile(file);
     } else {
       await loadFile(file);
     }
@@ -1186,6 +1192,7 @@ function installUI() {
 
     applyUpFlip();
     colmapLayer?.setFlipUp($("flipUp").checked);
+    lidarLayer?.setFlipUp($("flipUp").checked);
 
     computeSceneBounds();
     syncCamera();
@@ -1530,6 +1537,14 @@ async function initialize() {
         registerLayer: (layer) => layerManager.add(layer),
       });
 
+      lidarLayer = createLidarLayer({
+        app,
+        setStatus,
+        getFlipUp: () => $("flipUp").checked,
+        getGeoref: () => sceneTools?.getGeoref() ?? null,
+        registerLayer: (layer) => layerManager.add(layer),
+      });
+
       installUI();
       installDnD();
 
@@ -1538,6 +1553,7 @@ async function initialize() {
 
         navigation?.frame(dt);
         sceneTools?.frame(dt);
+        lidarLayer?.refreshPlacement();
 
         // Peut être null pendant init/teardown.
         if (gpsLayer && sceneTools?.getGpsTrack) {
@@ -1594,6 +1610,9 @@ async function initialize() {
 
         gpsLayer?.dispose();
         gpsLayer = null;
+
+        lidarLayer?.dispose();
+        lidarLayer = null;
     
       progress.dispose();
       app?.destroy();

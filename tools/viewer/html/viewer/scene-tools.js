@@ -1107,6 +1107,10 @@ export function createSceneTools({
           return track;
         },
 
+        getGeoref() {
+          return georef;
+        },
+
         isAutoEnabled() {
           return auto;
         },
