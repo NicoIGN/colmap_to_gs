@@ -956,6 +956,13 @@ async function selectPointInView(key, button) {
     if (valid) {
       target.copy(selected);
     } else if (
+      !splatLayers.length &&
+      !sceneBox.isEmpty() &&
+      sceneCenter.distanceToSquared(camera.position) >= 1e-12
+    ) {
+      // Sans splat, rien n'est pickable : on pivote autour du centre de la scène COLMAP.
+      target.copy(sceneCenter);
+    } else if (
       !target.toArray().every(Number.isFinite) ||
       target.distanceToSquared(camera.position) < 1e-12
     ) {
