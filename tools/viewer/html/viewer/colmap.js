@@ -729,7 +729,10 @@ export function createColmapLayer({
       return cached;
     }
     const file = imageIndex && findImageFile(imageIndex, name);
-    if (!file) return null;
+    if (!file) {
+      console.warn("[images] fichier introuvable dans le dossier déposé :", name);
+      return null;
+    }
     const bitmap = await createImageBitmap(file, {
       resizeWidth: IMAGE_MAX_WIDTH,
       resizeQuality: "medium",
@@ -754,7 +757,10 @@ export function createColmapLayer({
     slot.token = token;
     const image = model.colmapImages[index];
     const camera = model.cameras.get(image.cameraId);
-    if (!camera) return;
+    if (!camera) {
+      console.warn("[images] caméra absente pour l'image", image.name, image.cameraId);
+      return;
+    }
 
     let texture = null;
     try {
@@ -764,6 +770,7 @@ export function createColmapLayer({
       return;
     }
     if (!texture || disposed || slot.token !== token) return;
+    console.log("[images] image affichée", { name: image.name, texture: texture.width + "x" + texture.height });
 
     // Quad posé sur le plan lointain du frustum, texturé avec l'image.
     const quad = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE).slice(1);
@@ -811,6 +818,7 @@ export function createColmapLayer({
   function setImagesMode(model, on) {
     if (model.imagesOn === on) return;
     model.imagesOn = on;
+    console.log("[images] mode images", on ? "activé" : "désactivé", "modèle", model.label, "images associées :", model.imagesMatched);
     rebuildFrustums(model);
     if (on) {
       ensureSlots(model);
@@ -833,13 +841,15 @@ export function createColmapLayer({
         continue;
       }
       model.lastViewer = viewer;
-      assignSlots(model, selectNearestImages({
+      const picked = selectNearestImages({
         centers: model.cameraCenters,
         axes: model.axes,
         viewer,
         count: IMAGE_SLOTS,
         maxDistance: model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_NEAR_FACTOR,
-      }));
+      });
+      console.log("[images] point de vue", viewer.map((v) => v.toFixed(2)), "caméras proches :", picked.length, "(rayon", (model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_NEAR_FACTOR).toFixed(2) + ")");
+      assignSlots(model, picked);
       // Libère les textures des images qui ne sont plus dans la pile.
       trimTextureCache(TEXTURE_CACHE_SIZE);
     }
