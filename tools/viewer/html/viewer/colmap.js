@@ -10,6 +10,8 @@ import {
 const IMAGE_FRUSTUM_SCALE = 5;
 // Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
 const IMAGE_MIN_SCREEN_PX = 32;
+// Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
+const IMAGE_SHOWN = 1;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -948,7 +950,7 @@ export function createColmapLayer({
         viewer,
         direction,
         maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
-        count: IMAGE_SLOTS,
+        count: IMAGE_SHOWN,
         maxAngleDeg: 35,
         accept: (i) => {
           const size = nominalScreenSize(model, i);
