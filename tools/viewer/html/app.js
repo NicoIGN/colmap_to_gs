@@ -914,6 +914,22 @@ async function handleDroppedFiles(fileList, items) {
 }
 
 async function selectPointInView(key, button) {
+  // Sans splat, rien n'est pickable : le pivot est le centre des données COLMAP.
+  if (!splatLayers.length) {
+    if (sceneBox.isEmpty()) return false;
+    target.copy(sceneCenter);
+    if (target.distanceToSquared(camera.position) < 1e-12) {
+      target.copy(camera.position).addScaledVector(
+        camera.getWorldDirection(new THREE.Vector3()),
+        Math.max(sceneRadius, 1e-3)
+      );
+    }
+    syncCamera();
+    requestGifCapture();
+    setStatus(`Pivot au centre des données COLMAP · axe ${getPrincipalAxisLabel()}.`);
+    return true;
+  }
+
   const serial = ++pickSerial;
   picking = true;
 
@@ -956,13 +972,6 @@ async function selectPointInView(key, button) {
     if (valid) {
       target.copy(selected);
     } else if (
-      !splatLayers.length &&
-      !sceneBox.isEmpty() &&
-      sceneCenter.distanceToSquared(camera.position) >= 1e-12
-    ) {
-      // Sans splat, rien n'est pickable : on pivote autour du centre de la scène COLMAP.
-      target.copy(sceneCenter);
-    } else if (
       !target.toArray().every(Number.isFinite) ||
       target.distanceToSquared(camera.position) < 1e-12
     ) {
@@ -994,6 +1003,29 @@ async function selectPointInView(key, button) {
   } finally {
     if (serial === pickSerial) picking = false;
   }
+}
+
+// Projection perspective manuelle (pixels CSS) : évite worldToScreen de PlayCanvas.
+function projectToScreen(point, out) {
+  if (!cameraEntity?.camera) return false;
+  const view = cameraEntity
+    .getWorldTransform()
+    .clone()
+    .invert();
+  const local = view.transformPoint(
+    new pc.Vec3(point.x, point.y, point.z),
+    new pc.Vec3()
+  );
+  // La caméra regarde vers -Z en repère local.
+  if (local.z >= -1e-6) return false;
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  const tanHalf = Math.tan((cameraEntity.camera.fov * Math.PI) / 360);
+  const depth = -local.z * tanHalf;
+  const ndcX = local.x / (depth * (width / height));
+  const ndcY = local.y / depth;
+  out.set((ndcX * 0.5 + 0.5) * width, (0.5 - ndcY * 0.5) * height, -local.z);
+  return true;
 }
 
 function parseNumbers(value, count) {
@@ -1582,13 +1614,7 @@ async function initialize() {
         getSceneRadius: () => sceneRadius,
         getFlipUp: () => $("flipUp").checked,
         getViewerPosition: () => camera.position.toArray(),
-        worldToScreen: (point, out) =>
-          cameraEntity?.camera?.worldToScreen(
-            point,
-            canvas.clientWidth,
-            canvas.clientHeight,
-            out
-          ),
+        worldToScreen: (point, out) => projectToScreen(point, out),
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
