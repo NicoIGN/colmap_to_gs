@@ -773,12 +773,15 @@ export function createColmapLayer({
     const rwc = transpose3(qvecToMat3(image.qvec));
     const center = getCameraCenter(image);
     const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
-    const position = toWorldArray(model, center);
-    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), position));
-    const targetDistance = Math.max(getSceneRadius?.() ?? 1, 1e-6) * 0.2;
+    const cameraWorld = toWorldArray(model, center);
+    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), cameraWorld));
+    const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
+    // Léger recul derrière le centre de la caméra pour que son image reste devant l'observateur.
+    const back = radius * 0.02;
+    const targetDistance = radius * 0.2;
     return {
-      position,
-      target: position.map((value, axis) => value + forward[axis] * targetDistance),
+      position: cameraWorld.map((value, axis) => value - forward[axis] * back),
+      target: cameraWorld.map((value, axis) => value + forward[axis] * targetDistance),
     };
   }
 
