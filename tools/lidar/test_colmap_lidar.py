@@ -260,5 +260,37 @@ class ColmapLidarTests(unittest.TestCase):
                 tool.run(args)
 
 
+class SfmPointsToLidarTests(unittest.TestCase):
+    def setUp(self):
+        import align_sfm_points_to_lidar as sfm_tool
+        self.tool = sfm_tool
+        rng = np.random.default_rng(3)
+        self.ground = np.column_stack((rng.uniform(-20, 20, (40000, 2)), np.zeros(40000)))
+        self.walls = np.vstack([
+            np.column_stack((np.full(20000, x), rng.uniform(-20, 20, 20000),
+                             rng.uniform(0, 10, 20000)))
+            for x in (-8., 8.)])
+        self.facade = np.column_stack((rng.uniform(-8, 8, 20000), np.full(20000, 15.),
+                                       rng.uniform(0, 10, 20000)))
+        self.parameters = dict(normal_voxel=1.0, distance=2.0, iterations=60,
+                               min_overlap=0.3, min_ground_nz=0.8, max_wall_nz=0.5,
+                               min_constraint=1e-3)
+
+    def test_recovers_translation_when_transverse_facade_constrains_street_axis(self):
+        shift = np.array([0.6, -0.4, 0.2])
+        walls = np.vstack((self.walls, self.facade))
+        targets = np.vstack((self.ground, walls))
+        pick = np.random.default_rng(5).choice(len(targets), 1500, replace=False)
+        sfm = targets[pick] - shift
+        s, r, t, _ = self.tool.align_points(sfm, self.ground, walls, **self.parameters)
+        self.assertAlmostEqual(s, 1.0, delta=0.02)
+        np.testing.assert_allclose(t, shift, atol=0.1)
+
+    def test_street_axis_without_transverse_facade_is_refused(self):
+        sfm = self.ground[:1000] - np.array([0.6, -0.4, 0.])
+        with self.assertRaisesRegex(ValueError, "non contraint dans la direction ty"):
+            self.tool.align_points(sfm, self.ground, self.walls, **self.parameters)
+
+
 if __name__ == "__main__":
     unittest.main()
