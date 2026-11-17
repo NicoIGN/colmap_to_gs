@@ -6,7 +6,10 @@ import {
   selectNearestImages,
 } from "./colmap-images.js";
 
-const IMAGE_FRUSTUM_SCALE = 3;
+// Mode Images : profondeur du cadre = 10 % de l'étendue des caméras.
+const IMAGE_FRUSTUM_SCALE = 10;
+// Les images s'affichent à moins de 2 profondeurs de cadre : le cadre occupe alors une part visible de la vue.
+const IMAGE_SHOW_DISTANCE = 2;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -850,8 +853,9 @@ export function createColmapLayer({
         axes: model.axes,
         viewer,
         count: IMAGE_SLOTS,
+        maxDistance: model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_SHOW_DISTANCE,
       });
-      console.log("[images] point de vue", viewer.map((v) => v.toFixed(2)), "caméras retenues :", picked.length, "/", IMAGE_SLOTS);
+      console.log("[images] point de vue", viewer.map((v) => v.toFixed(2)), "caméras retenues :", picked.length, "/", IMAGE_SLOTS, "(distance max", (model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_SHOW_DISTANCE).toFixed(3) + ")");
       assignSlots(model, picked);
       // Libère les textures des images qui ne sont plus dans la pile.
       trimTextureCache(TEXTURE_CACHE_SIZE);
