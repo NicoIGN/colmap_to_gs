@@ -749,12 +749,12 @@ export function createColmapLayer({
       const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
       const children = [
         {
-          name: "Points 3D",
+          name: "Points",
           setVisible(visible) { model.pointsEntity.enabled = visible; },
           setHighlight(on) { setMeshHighlight(model.pointsResource, on); },
         },
         {
-          name: "Centres caméra",
+          name: "Caméras",
           setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
           setHighlight(on) { setMeshHighlight(model.cameraCentersResource, on); },
         },

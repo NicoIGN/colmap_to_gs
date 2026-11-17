@@ -202,8 +202,20 @@ textarea:disabled {
 
 .layer-group-options.compact {
   flex-wrap: nowrap;
-  gap: 4px 8px;
-  font-size: 11px;
+  gap: 2px 6px;
+  padding-left: 16px;
+  font-size: 10px;
+}
+
+.layer-group-options.compact .check {
+  gap: 4px;
+  font-size: 10px;
+}
+
+.layer-group-options.compact .highlight-btn {
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 3px;
 }
 
 .layer-option {
