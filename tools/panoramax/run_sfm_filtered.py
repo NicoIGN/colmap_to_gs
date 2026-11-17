@@ -142,7 +142,7 @@ def main():
     parser.add_argument("--threads", type=int, default=0)
     parser.add_argument("--max-error", type=float, default=2)
     parser.add_argument("--min-inliers", type=int, default=30)
-    parser.add_argument("--min-tri-angle", type=float, default=3)
+    parser.add_argument("--min-tri-angle", type=float, default=6)
     parser.add_argument("--ba-loss", choices=("huber", "cauchy", "trivial"), default="huber")
     parser.add_argument("--ba-loss-param", type=float, default=2)
     parser.add_argument("--feature-masks", type=Path)

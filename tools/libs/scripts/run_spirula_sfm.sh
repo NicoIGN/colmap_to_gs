@@ -89,7 +89,7 @@ Extraction et appariement :
 Vérification géométrique :
   --max-error X              2 [défaut], en pixels d'extraction
   --min-inliers N            30 [défaut], minimum par paire vérifiée
-  --min-tri-angle X          3 [défaut], degrés, parallaxe minimale
+  --min-tri-angle X          6 [défaut], degrés, parallaxe minimale
   --ba-loss LOSS             huber [défaut] | cauchy | trivial
   --ba-loss-param X          2 [défaut], échelle de perte, pixels d'extraction
 
@@ -153,7 +153,7 @@ for name in "${option_names[@]}"; do
     lightglue-min-score) value=0.1 ;;
     max-error) value=2 ;;
     min-inliers) value=30 ;;
-    min-tri-angle) value=3 ;;
+    min-tri-angle) value=6 ;;
     ba-loss) value=huber ;;
     ba-loss-param) value=2 ;;
     camera-mode) value=folder ;;

@@ -118,7 +118,7 @@ SFM_THREADS="16"
 # ses propres seuils. Plus strict = moins de parasites, mais couverture reduite.
 SFM_MAX_ERROR="2"         # [0.1,100], pixels d'extraction : verification + mapping
 SFM_MIN_INLIERS="30"      # entier [4,1000000] par paire, pas par point 3D
-SFM_MIN_TRI_ANGLE="3"     # ]0,90] degres ; augmente = moins de faible parallaxe
+SFM_MIN_TRI_ANGLE="6"     # ]0,90] degres ; augmente = moins de faible parallaxe
 
 # --- COLMAP_METHOD=spirula uniquement ---
 SFM_SP_FEATURES="aliked-n16rot"

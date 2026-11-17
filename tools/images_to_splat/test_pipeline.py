@@ -611,7 +611,7 @@ if "--wait" in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("choisir un nouvel OUTPUT_DIR", result.stdout + result.stderr)
         self.assertIn("PIPELINE_RESUME=true", result.stdout + result.stderr)
-        self.assertIn("settings.SFM_MIN_TRI_ANGLE : enregistré='3' ; actuel='4'",
+        self.assertIn("settings.SFM_MIN_TRI_ANGLE : enregistré='6' ; actuel='4'",
                       result.stdout + result.stderr)
         self.assertIn(str(self.output / "inputs.json"), result.stdout + result.stderr)
 

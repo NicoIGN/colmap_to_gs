@@ -97,7 +97,7 @@ class BlockPipelineTest(unittest.TestCase):
                 for flag, key, default in (
                     ("--max-error", "SFM_MAX_ERROR", "2"),
                     ("--min-inliers", "SFM_MIN_INLIERS", "30"),
-                    ("--min-tri-angle", "SFM_MIN_TRI_ANGLE", "3"),
+                    ("--min-tri-angle", "SFM_MIN_TRI_ANGLE", "6"),
                     ("--ba-loss", "SFM_SP_BA_LOSS", "huber"),
                     ("--ba-loss-param", "SFM_SP_BA_LOSS_PARAM", "2"),
                 ):
