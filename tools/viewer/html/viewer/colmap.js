@@ -541,6 +541,7 @@ export function createColmapLayer({
   getFlipUp,
   getViewerPosition,
   getViewerDirection,
+  getViewerTarget,
   worldToScreen,
   registerLayer,
   registerGroup,
@@ -922,8 +923,21 @@ export function createColmapLayer({
       const p = getViewerPosition();
       // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
       const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
-      const d = getViewerDirection?.() ?? [0, 0, -1];
-      const direction = getFlipUp?.() ? [d[0], -d[1], -d[2]] : d;
+      // Direction point de vue -> centre de scène (repli : axe de la caméra).
+      const t = getViewerTarget?.() ?? null;
+      const flip = getFlipUp?.();
+      const target = t ? (flip ? [t[0], -t[1], -t[2]] : t) : null;
+      let direction = target
+        ? [target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]]
+        : null;
+      const len = direction ? Math.hypot(...direction) : 0;
+      if (len > 1e-9) {
+        direction = direction.map((v) => v / len);
+      } else {
+        const d = getViewerDirection?.() ?? [0, 0, -1];
+        direction = flip ? [d[0], -d[1], -d[2]] : d;
+      }
+      const stats = { total: 0, inCone: 0 };
       const picked = selectNearestImages({
         centers: model.cameraCenters,
         axes: model.axes,
@@ -932,11 +946,16 @@ export function createColmapLayer({
         count: IMAGE_SLOTS,
         maxAngleDeg: 35,
         accept: (i) => nominalScreenSize(model, i) >= IMAGE_MIN_SCREEN_PX,
+        stats,
       });
       const key = picked.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
-        console.log("[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS, `(cadre ≥ ${IMAGE_MIN_SCREEN_PX} px)`, "point de vue", viewer.map((v) => v.toFixed(2)));
+        console.log(
+          "[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS,
+          `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
+          "| point de vue", viewer.map((v) => v.toFixed(2))
+        );
       }
       assignSlots(model, picked);
       refreshEnlarged(model);

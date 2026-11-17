@@ -38,10 +38,15 @@ export function selectNearestImages({
   maxAngleDeg = 90,
   maxDistance = Infinity,
   accept = () => true,
+  stats = null,
 }) {
   const cosMin = Math.cos((maxAngleDeg * Math.PI) / 180);
   const candidates = [];
   const total = centers.length / 3;
+  if (stats) {
+    stats.total = total;
+    stats.inCone = 0;
+  }
 
   for (let i = 0; i < total; i++) {
     const dx = viewer[0] - centers[i * 3];
@@ -53,7 +58,7 @@ export function selectNearestImages({
     if (dot / dist < cosMin) continue;
     let alignment = 0;
     if (direction) {
-      // Alignement entre l'axe de vue et la direction point de vue -> caméra.
+      // Alignement entre la direction point de vue -> centre de scène et point de vue -> caméra.
       const ux = -dx / dist;
       const uy = -dy / dist;
       const uz = -dz / dist;
@@ -61,6 +66,7 @@ export function selectNearestImages({
       if (cosView < cosMin) continue;
       alignment = 1 - cosView;
     }
+    if (stats) stats.inCone += 1;
     if (!accept(i)) continue;
     candidates.push({ index: i, dist, alignment });
   }
