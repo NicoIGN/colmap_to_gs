@@ -8,6 +8,7 @@ function readEntryFile(entry) {
         type: file.type,
         lastModified: file.lastModified,
         webkitRelativePath: relativePath,
+        blob: file,
         arrayBuffer: () => file.arrayBuffer(),
       });
     }, reject);

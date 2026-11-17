@@ -8,8 +8,6 @@ import {
 
 const IMAGE_FRUSTUM_SCALE = 3;
 const IMAGE_SLOTS = 10;
-// Une image s'affiche quand le point de vue est à moins de cette fraction de la profondeur d'image.
-const IMAGE_NEAR_FACTOR = 1;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 
@@ -733,7 +731,7 @@ export function createColmapLayer({
       console.warn("[images] fichier introuvable dans le dossier déposé :", name);
       return null;
     }
-    const bitmap = await createImageBitmap(file, {
+    const bitmap = await createImageBitmap(file.blob ?? file, {
       resizeWidth: IMAGE_MAX_WIDTH,
       resizeQuality: "medium",
     });
@@ -832,7 +830,13 @@ export function createColmapLayer({
   function frame() {
     if (disposed || !getViewerPosition) return;
     for (const model of models.values()) {
-      if (!model.imagesOn) continue;
+      if (!model.imagesOn) {
+        if (!model.idleLogged) {
+          model.idleLogged = true;
+          console.log("[images] mode Images désactivé pour", model.label, "(cocher la case Images du modèle)");
+        }
+        continue;
+      }
       const p = getViewerPosition();
       // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
       const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
@@ -846,9 +850,8 @@ export function createColmapLayer({
         axes: model.axes,
         viewer,
         count: IMAGE_SLOTS,
-        maxDistance: model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_NEAR_FACTOR,
       });
-      console.log("[images] point de vue", viewer.map((v) => v.toFixed(2)), "caméras proches :", picked.length, "(rayon", (model.depth * IMAGE_FRUSTUM_SCALE * IMAGE_NEAR_FACTOR).toFixed(2) + ")");
+      console.log("[images] point de vue", viewer.map((v) => v.toFixed(2)), "caméras retenues :", picked.length, "/", IMAGE_SLOTS);
       assignSlots(model, picked);
       // Libère les textures des images qui ne sont plus dans la pile.
       trimTextureCache(TEXTURE_CACHE_SIZE);
@@ -914,6 +917,7 @@ export function createColmapLayer({
     }
 
     imageIndex = index;
+    console.log("[images] dossier indexé :", index.size, "fichiers image");
     for (const model of models.values()) {
       model.slots.forEach(resetSlot);
       model.lastViewer = null;
