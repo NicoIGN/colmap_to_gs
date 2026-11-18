@@ -41,7 +41,7 @@ validate_config() {
   if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula ]]; then
     config_error "SFM_CAMERA_MODEL=equirectangular exige TRAIN_BACKEND=spirula."
   fi
-  for name in PANORAMAX_IMAGE_MAX SFM_THREADS; do
+  for name in PANORAMAX_IMAGE_MAX NUM_CPUS; do
     value="${!name:-}"
     [[ -z "$value" ]] || config_positive_integer "$name" "$value"
   done
@@ -70,7 +70,7 @@ validate_config() {
   config_choice MASKS_ACCEPT_LICENSE "${MASKS_ACCEPT_LICENSE:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   local suffix sfm_name train_name backend
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     value="${!sfm_name:-${!train_name:-}}"
@@ -192,8 +192,8 @@ validate_config() {
     config_error "PANORAMAX_API_URL='$value' doit être une URL HTTP(S)."
 
   if [[ "${1:-local}" == slurm ]]; then
-    config_positive_integer SLURM_CPUS_PER_TASK "${SLURM_CPUS_PER_TASK:-16}"
-    config_positive_integer SLURM_BLOCK_PARALLELISM "${SLURM_BLOCK_PARALLELISM:-${SPLIT_NUM_BLOCKS:-}}"
+    config_positive_integer NUM_CPUS "${NUM_CPUS:-16}"
+    config_positive_integer NUM_GPUS "${NUM_GPUS:-${SPLIT_NUM_BLOCKS:-}}"
     value="${SLURM_MEMORY:-64G}"
     [[ "$value" =~ ^[0-9]+[KkMmGgTt]?$ ]] ||
       config_error "SLURM_MEMORY='$value' attend un entier et une unité K, M, G ou T facultative."

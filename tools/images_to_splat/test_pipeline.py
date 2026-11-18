@@ -76,7 +76,7 @@ class ImagesPipelineTest(unittest.TestCase):
             f'SPIRULA_BIN="{self.bin / "spirula"}"\nPYTHON_BIN="{self.bin / "python"}"\n'
             'COLMAP_METHOD="spirula"\n'
             f'TRAIN_MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
-            'SLURM_BLOCK_PARALLELISM=2\n'
+            'NUM_GPUS=2\n'
         )
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_EVENTS=str(self.events), TEST_JOBS=str(self.jobs),
@@ -470,7 +470,7 @@ if "--wait" in args:
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
 
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
-        self.append("SFM_FILTER_DENSITY=true\nSFM_THREADS=8")
+        self.append("SFM_FILTER_DENSITY=true\nNUM_CPUS=8")
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
@@ -1035,7 +1035,7 @@ if "--wait" in args:
         self.append(
             f'OUTPUT_DIR="{new_output}"\n'
             f'SFM_MASKS_DIR="{source_masks}"\nTRAIN_MASKS_DIR="{source_masks}"\n'
-            'SFM_THREADS="8"'
+            'NUM_CPUS="8"'
         )
         before = len(self.commands())
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

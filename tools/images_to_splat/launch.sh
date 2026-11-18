@@ -38,7 +38,7 @@ exec > >(tee -a "$OUTPUT_DIR/logs/submit.log") 2>&1
 gres="gpu:1"
 [[ -z "$SLURM_GPU_TYPE" ]] || gres="gpu:$SLURM_GPU_TYPE:1"
 args=(--parsable --nodes=1 --ntasks=1 --export=ALL
-      "--partition=$SLURM_PARTITION" "--cpus-per-task=$SLURM_CPUS_PER_TASK"
+      "--partition=$SLURM_PARTITION" "--cpus-per-task=$NUM_CPUS"
       "--mem=$SLURM_MEMORY" "--time=$SLURM_TIME_LIMIT" "--chdir=$PWD")
 [[ -z "${SLURM_ACCOUNT:-}" ]] || args+=("--account=$SLURM_ACCOUNT")
 [[ -z "${SLURM_QOS:-}" ]] || args+=("--qos=$SLURM_QOS")
@@ -95,7 +95,7 @@ if [[ "$prepare_only" == true ]]; then
   exit 0
 fi
 submit train-block --job-name=images-block "--gres=$gres" \
-  "--array=0-$((SPLIT_NUM_BLOCKS - 1))%$SLURM_BLOCK_PARALLELISM" \
+  "--array=0-$((SPLIT_NUM_BLOCKS - 1))%$NUM_GPUS" \
   "--dependency=afterok:$prepare_job" --kill-on-invalid-dep=yes \
   "--output=$OUTPUT_DIR/logs/block-%A_%a.out" "--error=$OUTPUT_DIR/logs/block-%A_%a.err"
 blocks_job="$job"

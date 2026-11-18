@@ -32,10 +32,10 @@ class PrepareMasksTest(unittest.TestCase):
                 "MODEL": "", "SPIRULA_MODEL": str(model),
                 "PYTHON": sys.executable, "DEVICE": "auto",
                 "CONFIDENCE": "0.5", "DILATE": "0.002", "MAX_FRACTION": "0.95",
-                "NUM_JOBS": "2",
             }.items():
                 env[f"{prefix}_{key}"] = value
         env["SPIRULA_DEVICE"] = "auto"
+        env["NUM_CPUS"] = "2"
         self.addCleanup(patch.stopall)
         patch.dict(os.environ, env).start()
         self.prepare_images = patch.object(masks, "prepare_images").start()

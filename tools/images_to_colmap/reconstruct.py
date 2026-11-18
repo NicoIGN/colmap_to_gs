@@ -62,7 +62,7 @@ def reconstruct():
             "--SiftExtraction.use_gpu", gpu,
             "--SiftExtraction.max_image_size", env["SFM_MAX_IMAGE_SIZE"],
             "--SiftExtraction.max_num_features", env["SFM_ALIKED_MAX_FEATURES"],
-            "--SiftExtraction.num_threads", env["SFM_THREADS"], *camera_flags,
+            "--SiftExtraction.num_threads", env["NUM_CPUS"], *camera_flags,
         ]
         if env["SFM_MASKS"] == "on":
             masks = output / "masks"
@@ -74,7 +74,7 @@ def reconstruct():
             raise ValueError("Le matching vocab_tree exige un vocabulaire ; utiliser exhaustive ou sequential.")
         run([
             binary, env["SFM_COLMAP_MATCHING"] + "_matcher", "--database_path", database,
-            "--SiftMatching.use_gpu", gpu, "--SiftMatching.num_threads", env["SFM_THREADS"],
+            "--SiftMatching.use_gpu", gpu, "--SiftMatching.num_threads", env["NUM_CPUS"],
             "--SiftMatching.max_error", env["SFM_MAX_ERROR"],
             "--SiftMatching.min_num_inliers", env["SFM_MIN_INLIERS"],
         ])
@@ -82,7 +82,7 @@ def reconstruct():
         sparse.mkdir()
         run([
             binary, "mapper", "--database_path", database, "--image_path", images,
-            "--output_path", sparse, "--Mapper.num_threads", env["SFM_THREADS"],
+            "--output_path", sparse, "--Mapper.num_threads", env["NUM_CPUS"],
             "--Mapper.filter_max_reproj_error", env["SFM_MAX_ERROR"],
             "--Mapper.filter_min_tri_angle", env["SFM_MIN_TRI_ANGLE"],
         ])

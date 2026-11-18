@@ -151,7 +151,7 @@ class ConversionTest(unittest.TestCase):
             "SFM_COLMAP_BIN": "colmap", "SFM_COLMAP_USE_GPU": "false",
             "SFM_COLMAP_MATCHING": "exhaustive", "SFM_CAMERA_MODE": "folder",
             "SFM_CAMERA_MODEL": "opencv", "SFM_MAX_IMAGE_SIZE": "2048",
-            "SFM_ALIKED_MAX_FEATURES": "4096", "SFM_THREADS": "4",
+            "SFM_ALIKED_MAX_FEATURES": "4096", "NUM_CPUS": "4",
             "SFM_MASKS": "on", "SFM_MAX_ERROR": "2", "SFM_MIN_INLIERS": "30",
             "SFM_MIN_TRI_ANGLE": "3",
         }

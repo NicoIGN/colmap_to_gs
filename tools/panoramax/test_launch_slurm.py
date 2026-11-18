@@ -65,7 +65,7 @@ class SlurmLaunchTest(unittest.TestCase):
                     "SLURM_CONDA_ENV", "SLURM_CONDA_BASE", "SLURM_ENV_SETUP",
                     "SLURM_CPUS_PER_TASK", "SLURM_ACCOUNT", "SLURM_PARTITION",
                     "SLURM_QOS", "SLURM_GPU_TYPE", "SLURM_MEMORY",
-                    "SLURM_TIME_LIMIT", "SLURM_BLOCK_PARALLELISM"):
+                    "SLURM_TIME_LIMIT", "NUM_GPUS"):
             self.env.pop(key, None)
         self.make_tool("sbatch", f"#!{sys.executable}\n" + '''
 import concurrent.futures
@@ -188,7 +188,7 @@ if "--wait" in args:
         )
         with self.config.open("a") as stream:
             stream.write(
-                'SLURM_PARTITION=gpu-test\nSLURM_CPUS_PER_TASK=6\n'
+                'SLURM_PARTITION=gpu-test\nNUM_CPUS=6\n'
                 'SLURM_MEMORY=32G\nSLURM_TIME_LIMIT=02:30:00\n'
                 'SLURM_GPU_TYPE=a100\nSLURM_ACCOUNT=project\nSLURM_QOS=normal\n'
                 f'SLURM_ENV_SETUP="{setup}"\nSLURM_CONDA_ENV=gsplat\n'
@@ -217,7 +217,7 @@ if "--wait" in args:
 
     def test_parallelism_limit(self):
         with self.config.open("a") as stream:
-            stream.write("SLURM_BLOCK_PARALLELISM=1\n")
+            stream.write("NUM_GPUS=1\n")
         result = self.launch("--wait")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("--array=0-1%1", self.jobs()[1])
@@ -271,10 +271,10 @@ if "--wait" in args:
 
     def test_invalid_parallelism_fails_before_submission(self):
         with self.config.open("a") as stream:
-            stream.write("SLURM_BLOCK_PARALLELISM=0\n")
+            stream.write("NUM_GPUS=0\n")
         result = self.launch()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("SLURM_BLOCK_PARALLELISM", result.stderr)
+        self.assertIn("NUM_GPUS", result.stderr)
         self.assertFalse(self.record.exists())
 
     def test_missing_config_fails_before_submission(self):

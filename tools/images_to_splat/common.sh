@@ -112,7 +112,7 @@ load_config() {
   fi
   SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
   SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-8192}"
-  SFM_THREADS="${SFM_THREADS:-16}"
+  NUM_CPUS="${NUM_CPUS:-16}"
   SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
   SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}"
   SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
@@ -138,9 +138,8 @@ load_config() {
   TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-0.002}"
   TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-1.0}"
   TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
-  TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
   local suffix sfm_name train_name
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -178,11 +177,10 @@ load_config() {
   MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
   EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-scene.splat}"
   SLURM_PARTITION="${SLURM_PARTITION:-jz}"
-  SLURM_CPUS_PER_TASK="${SLURM_CPUS_PER_TASK:-16}"
   SLURM_MEMORY="${SLURM_MEMORY:-64G}"
   SLURM_TIME_LIMIT="${SLURM_TIME_LIMIT:-48:00:00}"
   SLURM_GPU_TYPE="${SLURM_GPU_TYPE:-}"
-  SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-1}"
+  NUM_GPUS="${NUM_GPUS:-1}"
   set +a
   [[ "$SFM_IMAGES_DIR" == /* && -d "$SFM_IMAGES_DIR" ]] ||
     die "SFM_IMAGES_DIR doit être un dossier existant avec un chemin absolu."
@@ -198,8 +196,8 @@ load_config() {
   reject_legacy_config || exit 1
   validate_sfm_geometry_config
   validate_spirula_photometric_config "$TRAIN_BACKEND" "$COLMAP_METHOD"
-  for name in SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES SFM_THREADS \
-    SPLIT_NUM_BLOCKS TRAIN_NUM_ITER SLURM_CPUS_PER_TASK SLURM_BLOCK_PARALLELISM; do
+  for name in SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES NUM_CPUS \
+    SPLIT_NUM_BLOCKS TRAIN_NUM_ITER NUM_GPUS; do
     config_positive_integer "$name" "${!name}"
   done
   if [[ "$TRAIN_BACKEND" == spirula ]]; then

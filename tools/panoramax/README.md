@@ -19,7 +19,7 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
 de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
-`SFM_ALIKED_MAX_FEATURES`, `SFM_THREADS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
+`SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
 à cette étape. Pour des photos 360, mettre `SFM_CAMERA_MODEL="equirectangular"` (sans focale,
 avec `TRAIN_BACKEND=spirula`). Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
@@ -449,8 +449,8 @@ conditions sont satisfaites, il poursuit avec un avertissement explicite.
 Des fichiers préexistants, absents, vides ou tronqués restent bloquants.
 Cette récupération ne corrige pas le crash et ne certifie pas la qualité du
 modèle ; les codes d'erreur de qualité ou de géoréférencement restent propagés.
-`SFM_THREADS` permet de limiter les fils SfM ; sous Slurm, son défaut suit
-`SLURM_CPUS_PER_TASK` au lieu du nombre de CPU physiques du nœud.
+`NUM_CPUS` (défaut `16`) limite les CPU utilisés par SfM, les masques et les
+processus parallèles ; sous Slurm, il sert aussi à `--cpus-per-task`.
 
 Les étapes sont également accessibles individuellement, avec la même config :
 

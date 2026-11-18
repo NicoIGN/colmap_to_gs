@@ -125,7 +125,7 @@ depuis plusieurs images.
   ou arrière-plans réels mais peu reconstruits. Le rapport enregistre
   `far_support_rate`.
 - Le pipeline parallélise les requêtes de voisinage angulaire selon
-  `SFM_THREADS` ; augmenter cette valeur peut accélérer cette étape si autant
+  `NUM_CPUS` ; augmenter cette valeur peut accélérer cette étape si autant
   de CPU sont alloués au job.
 - La progression s'affiche par défaut ; `--verbose` ajoute des détails et
   `--no-progress` désactive les barres de progression.

@@ -63,7 +63,7 @@ TRAIN_SP_PRESET=3dgz
 SPLIT_NUM_BLOCKS=0
 TRAIN_NUM_ITER=-1
 TRAIN_SP_CAP_MAX=1.5
-SFM_THREADS=4.5
+NUM_CPUS=4.5
 SFM_SP_PAIR_MAX_DISTANCE=nan
 SPLIT_OVERLAP_MAX_FRACTION=1.1
 TRAIN_CLEAN=flase
@@ -95,18 +95,17 @@ MASKS_ACCEPT_LICENSE=maybe
 TRAIN_MASKS_CONFIDENCE=-1
 TRAIN_MASKS_DILATE=0.5
 TRAIN_MASKS_MAX_FRACTION=2
-SLURM_CPUS_PER_TASK=0
-SLURM_BLOCK_PARALLELISM=-1
+NUM_GPUS=-1
 SLURM_GPU_TYPE=gpu:a40
 SLURM_MEMORY=64GB
 SLURM_TIME_LIMIT=48:99:00
 """, "slurm")
         self.assertEqual(result.returncode, 1)
         for name in ("SFM_SP_MATCHER", "SFM_SP_FEATURES", "SFM_SP_PAIRS", "TRAIN_SP_PRESET",
-                     "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SFM_THREADS",
+                     "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "NUM_CPUS",
                      "SFM_SP_PAIR_MAX_DISTANCE", "SPLIT_OVERLAP_MAX_FRACTION", "TRAIN_CLEAN", "PANORAMAX_REPLACE_REQUEST",
                      "PANORAMAX_QUALITY", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "PANORAMAX_API_URL",
-                     "EXPORT_SPLAT_NAME", "MERGE_STRENGTH", "SLURM_CPUS_PER_TASK",
+                     "EXPORT_SPLAT_NAME", "MERGE_STRENGTH",
                      "POSTPROCESS_FILTER_MODE", "POSTPROCESS_FILTER_SIZE_FACTOR",
                      "POSTPROCESS_CLEANER", "CLEANGS_MODE", "CLEANGS_MIN_VIEWS",
                      "CLEANGS_SKY_CONFIDENCE", "CLEANGS_MAX_REMOVAL_FRACTION",
@@ -114,7 +113,7 @@ SLURM_TIME_LIMIT=48:99:00
                      "TRAIN_SP_SPLATS_PER_IMAGE", "TRAIN_SP_GROWTH_FACTOR", "TRAIN_SP_REFINE_STOP_ITER", "TRAIN_SP_REFINE_STOP_NUM_ITER",
                      "TRAIN_SP_FLOATER_SUPPRESSION", "TRAIN_MASKS", "TRAIN_MASKS_BACKEND", "TRAIN_MASKS_MODE",
                      "TRAIN_MASKS_CONFIDENCE", "TRAIN_MASKS_DILATE", "TRAIN_MASKS_MAX_FRACTION",
-                     "SLURM_BLOCK_PARALLELISM", "SLURM_GPU_TYPE", "SLURM_MEMORY",
+                     "NUM_GPUS", "SLURM_GPU_TYPE", "SLURM_MEMORY",
                      "SLURM_TIME_LIMIT"):
             self.assertIn(name, result.stderr)
         self.assertFalse((root / "output").exists())
@@ -123,9 +122,9 @@ SLURM_TIME_LIMIT=48:99:00
         for mode in ("local", "slurm"):
             result, root = self.execute("validate_config.sh", """
 SFM_SP_PAIR_MAX_DISTANCE=""
-SFM_THREADS=""
+NUM_CPUS=""
 PANORAMAX_IMAGE_MAX=""
-SLURM_BLOCK_PARALLELISM=""
+NUM_GPUS=""
 SFM_SP_MATCHER=bruteforce
 TRAIN_SP_SPLATS_PER_IMAGE=""
 TRAIN_SP_GROWTH_FACTOR=""
@@ -175,9 +174,9 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             re.MULTILINE))
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
-        self.assertIn('SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"',
-                      (ROOT.parents[1] / "script/panoramax_to_3dgs.sh").read_text())
-        self.assertEqual(values["SFM_THREADS"], "")
+        self.assertIn('NUM_CPUS="${NUM_CPUS:-16}"',
+                      (ROOT.parents[1] / "scripts/panoramax_to_3dgs.sh").read_text())
+        self.assertEqual(values["NUM_CPUS"], "16")
 
     def test_training_masks_require_model_and_labels(self):
         result, _ = self.execute("validate_config.sh", 'TRAIN_MASKS=on\nTRAIN_MASKS_LABELS=" , "\n')

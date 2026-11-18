@@ -16,7 +16,7 @@ SFM_CAMERA_MODEL="opencv"
 SFM_CAMERA_MODE="single" # ns-process-data : single obligatoire
 SFM_MAX_IMAGE_SIZE="2048"
 SFM_ALIKED_MAX_FEATURES="4096"
-SFM_THREADS="4"
+NUM_CPUS="4"
 # Pas d'entrainement ici ; sa preparation peut etre anticipee si souhaite.
 SFM_MASKS="off"
 TRAIN_MASKS="off"

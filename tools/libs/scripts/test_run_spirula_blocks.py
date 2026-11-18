@@ -358,7 +358,7 @@ class BlockPipelineTest(unittest.TestCase):
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
                 (sparse / name).unlink()
             env.update(SFM_SP_FEATURES="aliked-n16rot", SFM_SP_MATCHER="bruteforce",
-                       SFM_THREADS="6", PREPARE="false")
+                       NUM_CPUS="6", PREPARE="false")
             prepared = execute("--prepare-only")
             self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
             commands = [json.loads(line) for line in log.read_text().splitlines()]

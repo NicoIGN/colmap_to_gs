@@ -51,7 +51,7 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
 command -v srun >/dev/null 2>&1 || die "srun introuvable."
 export PYTHONUNBUFFERED=1
-export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+export OMP_NUM_THREADS="${NUM_CPUS:-1}"
 runtime_parent="${SLURM_TMPDIR:-${TMPDIR:-/tmp}}"
 XDG_RUNTIME_DIR="$(mktemp -d "$runtime_parent/panoramax-${SLURM_JOB_ID}-XXXXXXXX")"
 export XDG_RUNTIME_DIR

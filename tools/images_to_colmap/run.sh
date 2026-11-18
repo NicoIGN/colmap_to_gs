@@ -144,7 +144,7 @@ prepare() {
         --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
         --vote-fraction "$SFM_DENSITY_VOTE_FRACTION" \
         --far-support-rate "$SFM_DENSITY_FAR_SUPPORT_RATE" \
-        --workers "$SFM_THREADS" --verbose
+        --workers "$NUM_CPUS" --verbose
       "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
       printf '%s\n' "$density_key" > "$sparse/.density_done"
     else

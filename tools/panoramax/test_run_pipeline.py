@@ -243,7 +243,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_SP_CAP_MAX="1000"\n'
                 'TRAIN_SP_PRESET="3dgs"\nTRAIN_SP_QUALITY="high"\nTRAIN_SP_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
                 'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_SP_PAIRS="prefilter"\n'
-                'SFM_SP_PAIR_MAX_DISTANCE="30"\nSFM_SP_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
+                'SFM_SP_PAIR_MAX_DISTANCE="30"\nSFM_SP_MATCHER="bruteforce"\nNUM_CPUS="6"\n'
                 'SFM_MAX_ERROR="1.5"\nSFM_MIN_INLIERS="40"\nSFM_MIN_TRI_ANGLE="4"\n'
                 'SFM_SP_BA_LOSS="cauchy"\nSFM_SP_BA_LOSS_PARAM="1"\n'
                 'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'

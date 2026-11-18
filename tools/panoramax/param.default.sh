@@ -112,11 +112,6 @@ SFM_SP_FEATURES="aliked-n16rot"
 # bruteforce contourne LightGlue si celui-ci plante (par exemple erreur gemm).
 SFM_SP_MATCHER="lightglue"
 
-# Defaut : "". Vide = SLURM_CPUS_PER_TASK si defini, sinon defaut Spirula.
-# Sinon entier > 0 : nombre de fils CPU du SfM. Definir explicitement en local
-# pour ne pas utiliser la valeur SLURM_CPUS_PER_TASK de ce fichier.
-SFM_THREADS=""
-
 # Defauts geometriques stricts : moins de points fragiles, couverture possible reduite.
 # Erreur maximale en pixels d'extraction [0.1,100], verification et mapping.
 SFM_MAX_ERROR="2"
@@ -213,10 +208,6 @@ TRAIN_MASKS_MAX_FRACTION="0.8"
 # auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
 TRAIN_MASKS_DEVICE="auto"
 
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
-TRAIN_MASKS_NUM_JOBS="2"
-
 # --- Masques des caracteristiques SfM (avant extraction/appariement) ---
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
 # on prepare les images et calcule les masques AVANT le SfM.
@@ -248,10 +239,6 @@ SFM_MASKS_MAX_FRACTION=""
 # Defaut : "" = TRAIN_MASKS_DEVICE (auto par defaut).
 # Transformers : auto|cpu|mps|cuda|cuda:N ; ignore avec Spirula.
 SFM_MASKS_DEVICE=""
-
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
-SFM_MASKS_NUM_JOBS="2"
 
 # Si les deux politiques de generation sont identiques, feature_masks est
 # un lien vers train_masks : un seul calcul. Des seuils/modeles differents
@@ -437,7 +424,7 @@ CLEANGS_SKY_CONFIDENCE="0.9"
 CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 
 # ============================================================================
-# 7. Execution Slurm (ignore en local, sauf repli de SFM_THREADS)
+# 7. Execution Slurm et CPU
 # ============================================================================
 # Un GPU pour la preparation, un par bloc, fusion sans GPU sauf si cleangs.
 # Chaque job dispose des CPU/RAM/duree ci-dessous. Chemins et config partages.
@@ -445,9 +432,9 @@ CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 # Defaut : jean-zellou. Nom de partition GPU existante ; adapter au cluster.
 SLURM_PARTITION="jean-zellou"
 
-# Defaut : 16. Entier > 0 : CPU alloues par job (preparation, bloc, fusion).
-# Sert aussi de repli a SFM_THREADS, meme en local si defini dans la config.
-SLURM_CPUS_PER_TASK="16"
+# Defaut : 16. Entier > 0 : CPU par job (preparation, bloc, fusion ; threads SfM,
+# masques, entrainement). Reference unique pour le parallelisme CPU, meme en local.
+NUM_CPUS="16"
 
 # Defaut : 64G. Entier >= 0 avec suffixe optionnel K|M|G|T (casse indifferente).
 # Sans suffixe : Mo Slurm ; 0 = memoire du noeud selon le site. RAM, pas VRAM.
@@ -462,11 +449,11 @@ SLURM_TIME_LIMIT="48:00:00"
 # lettres/chiffres/"_"/"-" uniquement (ex. a100), sans ":".
 SLURM_GPU_TYPE=""
 
-# Defaut : "" (repli SPLIT_NUM_BLOCKS). Sinon entier > 0 : blocs simultanes au plus.
+# Defaut : "" (repli SPLIT_NUM_BLOCKS en Slurm, 2 en local). Entier > 0 : jobs
+# simultanes au plus (blocs Slurm, entrainement Nerfstudio local).
 # 1 = sequentiel ; une valeur > SPLIT_NUM_BLOCKS n'ajoute aucun bloc.
 # Le cluster peut reduire le parallelisme effectif.
-SLURM_BLOCK_PARALLELISM=""
-
+NUM_GPUS=""
 # Defaut : "". Compte de facturation Slurm ; vide = defaut du site.
 SLURM_ACCOUNT=""
 

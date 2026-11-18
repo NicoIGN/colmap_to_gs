@@ -12,7 +12,7 @@ MODEL="splatfacto"
 # =========================================
 DATASET_DIR=""
 GSPLAT_PROFILE=""
-TRAIN_NS_MAX_JOBS=2
+NUM_GPUS=2
 SKIP_CONDA=false
 SKIP_TRAINING=false
 SKIP_EXPORT=false
@@ -88,7 +88,7 @@ while [[ $# -gt 0 ]]; do
     --name) BASENAME="$2"; shift 2 ;;
     --use-defaults) USE_DEFAULTS=True; shift ;;
     --gsplat-profile) GSPLAT_PROFILE="$2"; shift 2 ;;
-    --max-jobs) TRAIN_NS_MAX_JOBS="$2"; shift 2 ;;
+    --max-jobs) NUM_GPUS="$2"; shift 2 ;;
     --two-stages) TWO_STAGES=true; shift ;;
     --skip-conda) SKIP_CONDA=true; shift ;;
     --skip-training) SKIP_TRAINING=true; shift ;;
@@ -170,7 +170,7 @@ echo "🖥️ DEVICE     : $DEVICE"
 # Load config + profile
 # =========================================
 
-NO_PROXY="$IGNORE_PROXY" TRAIN_NS_MAX_JOBS="$TRAIN_NS_MAX_JOBS" SKIP_TRAINING="$SKIP_TRAINING" \
+NO_PROXY="$IGNORE_PROXY" NUM_GPUS="$NUM_GPUS" SKIP_TRAINING="$SKIP_TRAINING" \
     source "$SCRIPT_DIR/../../../config/config.sh"
 
 DEFAULT_GSPLAT_PROFILE_DIR="$SCRIPT_DIR/../../../config/profiles"
@@ -277,7 +277,7 @@ run_train() {
     TRAIN_NS_MODEL_IMPLEMENTATION="${TRAIN_NS_MODEL_IMPLEMENTATION:-}" \
     EXPERIMENT_NAME="${EXPERIMENT_NAME:-}" \
     TRAIN_NS_MAX_ITER="${TRAIN_NS_MAX_ITER:-}" \
-    TRAIN_NS_MAX_JOBS="${TRAIN_NS_MAX_JOBS:-}" \
+    NUM_GPUS="${NUM_GPUS:-}" \
     TRAIN_NS_REFINE_EVERY="${TRAIN_NS_REFINE_EVERY:-}" \
     TRAIN_NS_STEPS_PER_SAVE="${TRAIN_NS_STEPS_PER_SAVE:-}" \
     TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES="${TRAIN_NS_STEPS_PER_EVAL_ALL_IMAGES:-}" \

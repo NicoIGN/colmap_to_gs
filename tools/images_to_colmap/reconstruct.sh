@@ -45,7 +45,7 @@ case "$COLMAP_METHOD" in
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
       --camera-mode "$camera_mode" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps "$metric_gps" "${sensor_args[@]}" \
-      --threads "$SFM_THREADS" "${mask_args[@]}" \
+      --threads "$NUM_CPUS" "${mask_args[@]}" \
       "${exposure_args[@]}"
     ;;
   colmap|nerfstudio)

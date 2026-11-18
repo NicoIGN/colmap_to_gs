@@ -31,7 +31,7 @@ bloc) et un job de fusion, liés par dépendances. Les ressources viennent des
 variables `SLURM_*` de la configuration. Ajouter `--wait` pour attendre la fin
 de la fusion et obtenir un échec si elle échoue ; sans cette option, un retour
 réussi confirme seulement la soumission. Chaque bloc actif dispose de son GPU ;
-`SLURM_BLOCK_PARALLELISM` fixe le nombre maximal de blocs simultanés.
+`NUM_GPUS` fixe le nombre maximal de blocs simultanés.
 Aucune partition ni ressource CPU/RAM n'est à répéter dans la commande.
 
 Pour les images locales, si les masques SfM et entraînement sont activés avec
@@ -85,13 +85,13 @@ La RAM est la mémoire du nœud, pas la mémoire vidéo du GPU (VRAM).
 
 - `SLURM_PARTITION` : partition du cluster ; défaut `jz` pour les images locales,
   `jean-zellou` pour Panoramax. Adapter au site.
-- `SLURM_CPUS_PER_TASK` : CPU par tâche ; défaut `16`.
+- `NUM_CPUS` : CPU parallélisables (SfM, masques, `--cpus-per-task` sous Slurm) ; défaut `16`.
 - `SLURM_MEMORY` : RAM par tâche ; défaut `64G`.
 - `SLURM_TIME_LIMIT` : durée maximale de chaque job ; défaut `48:00:00`,
   sous réserve des limites de la partition.
 - `SLURM_GPU_TYPE` : type de GPU reconnu par le cluster, sans préfixe `gpu:` ;
   vide par défaut pour demander un GPU sans imposer son type.
-- `SLURM_BLOCK_PARALLELISM` : nombre maximal de blocs entraînés simultanément ;
+- `NUM_GPUS` : nombre maximal de blocs entraînés simultanément ;
   défaut `1` pour les images locales, `SPLIT_NUM_BLOCKS` pour Panoramax.
   `1` entraîne les blocs successivement ; la disponibilité du cluster peut
   réduire le parallélisme effectif.
@@ -108,9 +108,8 @@ Les syntaxes, limites et exemples complets sont dans les configurations
 [images locales, section « 7. Slurm uniquement »](../tools/images_to_splat/param.default.sh)
 et [Panoramax, section « 7. Execution Slurm »](../tools/panoramax/param.default.sh).
 Les réglages Slurm ne réservent aucune ressource en exécution directe.
-Pour Panoramax, `SLURM_CPUS_PER_TASK` sert aussi de valeur de repli à
-`SFM_THREADS`, même en exécution directe ; les images locales ont leur propre
-réglage `SFM_THREADS`.
+`NUM_CPUS` est le même réglage pour les images locales et Panoramax ; il ne
+réserve aucune ressource en exécution directe.
 
 ### Environnement Conda de Panoramax
 
