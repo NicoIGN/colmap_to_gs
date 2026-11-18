@@ -327,12 +327,9 @@ if [[ "${OS}" == "Linux" ]]; then
     command -v pkg-config >/dev/null 2>&1 ||
         die "pkg-config introuvable."
 
-    REQUIRED_PC_PACKAGES=(
-        vulkan
-    )
-
     if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
-        REQUIRED_PC_PACKAGES+=(
+
+        REQUIRED_PC_PACKAGES=(
             x11
             xinerama
             xcursor
@@ -340,15 +337,16 @@ if [[ "${OS}" == "Linux" ]]; then
             xrandr
             gl
         )
-    fi
 
-    for package in "${REQUIRED_PC_PACKAGES[@]}"; do
-        if pkg-config --exists "${package}"; then
-            log "pkg-config OK : ${package} ($(pkg-config --modversion "${package}"))"
-        else
-            die "Package pkg-config manquant : ${package}"
-        fi
-    done
+        for package in "${REQUIRED_PC_PACKAGES[@]}"; do
+            if pkg-config --exists "${package}"; then
+                log "pkg-config OK : ${package} ($(pkg-config --modversion "${package}"))"
+            else
+                die "Package pkg-config manquant : ${package}"
+            fi
+        done
+
+    fi
 
     # -----------------------------------------------------------
     # Vérification ICD
