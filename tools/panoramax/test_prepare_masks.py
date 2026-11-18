@@ -32,6 +32,7 @@ class PrepareMasksTest(unittest.TestCase):
                 "MODEL": "", "SPIRULA_MODEL": str(model),
                 "PYTHON": sys.executable, "DEVICE": "auto",
                 "CONFIDENCE": "0.5", "DILATE": "0.002", "MAX_FRACTION": "0.95",
+                "NUM_JOBS": "2",
             }.items():
                 env[f"{prefix}_{key}"] = value
         env["SPIRULA_DEVICE"] = "auto"
@@ -168,6 +169,29 @@ class PrepareMasksTest(unittest.TestCase):
             marker.write_text(json.dumps(report))
             self.run_prepare()
             self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
+
+    def test_sfm_is_reused_when_only_spirula_device_changed(self):
+        os.environ["SPIRULA_DEVICE"] = "NVIDIA A40"
+        self.run_prepare()
+        marker = self.workspace / "sfm_mask_policy.json"
+        report = json.loads(marker.read_text())
+        image = self.data / "images/a.jpg"
+        model = Path(os.environ["SFM_MASKS_SPIRULA_MODEL"])
+        binary = Path(os.environ["SPIRULA_BIN"]).resolve()
+        generator = hashlib.sha256((Path(masks.__file__).parents[1] /
+                                    "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
+        # Marker written before the device was excluded from the signature.
+        payload = [report["settings"],
+                   [("images/a.jpg", image.stat().st_size, image.stat().st_mtime_ns)],
+                   [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
+                   (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
+                   generator]
+        report["signature"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        marker.write_text(json.dumps(report))
+        (self.workspace / "sparse").mkdir()
+        os.environ["SPIRULA_DEVICE"] = "auto"
+        self.run_prepare()
+        self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
 
 
 if __name__ == "__main__":

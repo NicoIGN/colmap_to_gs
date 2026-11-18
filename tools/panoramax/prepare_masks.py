@@ -15,6 +15,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"
 from mask_policies import enabled, generate, policy
 
 
+def without_device(settings):
+    # The device selects where SAM runs, not which masks are produced.
+    if not settings:
+        return settings
+    return {key: value for key, value in settings.items() if key != "device"}
+
+
 def prepare(dataset, workspace, check_only=False):
     sfm = policy("SFM_MASKS")
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
@@ -32,12 +39,12 @@ def prepare(dataset, workspace, check_only=False):
     binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
     generator_hash = hashlib.sha256((Path(__file__).parents[1] /
                                      "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
-    def fingerprint(code_hash):
+    def fingerprint(code_hash, policy):
         return hashlib.sha256(json.dumps(
-            [sfm, inputs, metadata, weights, binary_stamp, code_hash],
+            [policy, inputs, metadata, weights, binary_stamp, code_hash],
             sort_keys=True).encode()).hexdigest()
 
-    signature = fingerprint(generator_hash)
+    signature = fingerprint(generator_hash, without_device(sfm))
     marker = workspace / "sfm_mask_policy.json"
     previous = json.loads(marker.read_text()) if marker.is_file() else {}
     if not isinstance(previous, dict):
@@ -45,12 +52,19 @@ def prepare(dataset, workspace, check_only=False):
     artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
     artifacts = artifacts or any(workspace.glob("blocks-*"))
     compatible = {signature}
+    # Markers written before the device was left out of the signature hashed it too.
+    previous_settings = previous.get("settings")
+    if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
+        compatible.add(fingerprint(generator_hash, previous_settings))
     # These generator updates change only consent forwarding and diagnostics.
     if generator_hash in (
             "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
             "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896"):
-        compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"))
-        compatible.add(fingerprint("6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e"))
+        if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
+            compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379",
+                                       previous_settings))
+            compatible.add(fingerprint("6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
+                                       previous_settings))
     if (artifacts or previous) and previous.get("signature") not in compatible:
         raise ValueError(
             "SfM existant/partiel avec une autre politique de masques (ou sans signature). "
@@ -62,7 +76,7 @@ def prepare(dataset, workspace, check_only=False):
     shared = train == sfm
     if check_only:
         if (previous.get("status") != "complete" or
-                previous.get("training_settings") != train):
+                without_device(previous.get("training_settings")) != without_device(train)):
             raise ValueError("Politique de masques non préparée : relancer la préparation")
         for directory in ([features, training] if train else [features]):
             report = directory / "masks.json"
