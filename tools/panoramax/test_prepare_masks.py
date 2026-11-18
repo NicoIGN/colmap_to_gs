@@ -156,7 +156,7 @@ class PrepareMasksTest(unittest.TestCase):
         model = Path(os.environ["SFM_MASKS_SPIRULA_MODEL"])
         binary = Path(os.environ["SPIRULA_BIN"]).resolve()
         payload = [masks.policy("SFM_MASKS"),
-                   [("images/a.jpg", image.stat().st_size, image.stat().st_mtime_ns)],
+                   [("images/a.jpg", hashlib.sha256(image.read_bytes()).hexdigest())],
                    [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
                    (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
                    "5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"]
@@ -182,7 +182,7 @@ class PrepareMasksTest(unittest.TestCase):
                                     "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
         # Marker written before the device was excluded from the signature.
         payload = [report["settings"],
-                   [("images/a.jpg", image.stat().st_size, image.stat().st_mtime_ns)],
+                   [("images/a.jpg", hashlib.sha256(image.read_bytes()).hexdigest())],
                    [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
                    (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
                    generator]

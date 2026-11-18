@@ -27,7 +27,8 @@ def prepare(dataset, workspace, check_only=False):
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
     # Include source images and checkpoint metadata so a completed SfM is never
     # silently reused after its extraction mask policy or inputs have changed.
-    inputs = [(str(p.relative_to(dataset)), p.stat().st_size, p.stat().st_mtime_ns)
+    # Content hashes keep a re-download of identical photos from invalidating the SfM.
+    inputs = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
               for p in sorted((dataset / "images").rglob("*")) if p.is_file()]
     metadata = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
                 for p in sorted((dataset / "metadata").rglob("*.json"))]
