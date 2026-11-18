@@ -18,6 +18,8 @@
 # 0. Chemins et environnement communs
 # ============================================================================
 
+# Moteur d'entrainement 3DGS des blocs. spirula (defaut) ou nerfstudio. Le SfM Panoramax
+# reste toujours Spirula. Avec nerfstudio, les masques passent par le backend segmentation.
 TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
 # Nerfstudio : PyTorch + NVIDIA/CUDA requis, TRAIN_MASKS_MODE=ignore si masques.
 # Masques Nerfstudio : backend segmentation, modele local Mask2Former ou SegFormer.
