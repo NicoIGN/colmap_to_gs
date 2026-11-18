@@ -44,7 +44,7 @@ load_config() {
   init_sfm_geometry_config "${COLMAP_METHOD:-spirula}"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
-    if [[ -v "$name" ]]; then
+    if [[ "${!name+x}" == x ]]; then
       case "$name" in
         INPUT_IMAGES_DIR) replacement=SFM_IMAGES_DIR ;;
         INPUT_RECURSIVE) replacement=SFM_IMAGES_RECURSIVE ;;
