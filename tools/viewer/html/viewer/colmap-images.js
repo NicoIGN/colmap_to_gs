@@ -49,8 +49,8 @@ export function selectNearestImages({
 }) {
   // Axe de la caméra courante : les candidats doivent regarder à peu près dans la même direction.
   const cosRef = Math.cos((maxRefAngleDeg * Math.PI) / 180);
-  const axisDot = (i) =>
-    axes[i * 3] * refAxis[0] + axes[i * 3 + 1] * refAxis[1] + axes[i * 3 + 2] * refAxis[2];
+  const axisDot = (i, v) =>
+    axes[i * 3] * v[0] + axes[i * 3 + 1] * v[1] + axes[i * 3 + 2] * v[2];
   const total = centers.length / 3;
   if (stats) {
     stats.total = total;
@@ -73,6 +73,8 @@ export function selectNearestImages({
       const cosView = direction[0] * (-dx / dist) + direction[1] * (-dy / dist) + direction[2] * (-dz / dist);
       if (cosView < cosMin) return null;
       if (dist * cosView > maxAlong) return null;
+      // La photo doit regarder dans le sens de la vue : sinon l'image montre l'arrière (180°).
+      if (axisDot(i, direction) <= 0) return null;
       alignment = 1 - cosView;
     } else {
       const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
@@ -100,7 +102,7 @@ export function selectNearestImages({
     if (stats) stats.inCone += 1;
     let axisPenalty = 0;
     if (refAxis) {
-      const dot = axisDot(i);
+      const dot = axisDot(i, refAxis);
       if (dot < cosRef) continue;
       axisPenalty = 1 - dot;
     }
