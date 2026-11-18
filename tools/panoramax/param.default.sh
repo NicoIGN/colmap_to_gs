@@ -268,7 +268,7 @@ SFM_MASKS_NUM_JOBS="2"
 
 # Valeur initiale : 4 (defaut du lanceur de blocs). Entier >= 1 ;
 # champ obligatoire du pipeline : nombre de modeles COLMAP/3DGS.
-SPLIT_NUM_BLOCKS="4"
+SPLIT_NUM_BLOCKS="1"
 
 # Defaut : 0.05. Nombre dans [0,1] : fraction maximale d'images supplementaires
 # par bloc pour le recouvrement. 0 = aucun recouvrement.

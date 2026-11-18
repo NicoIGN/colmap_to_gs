@@ -14,7 +14,7 @@ SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
-SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
+SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-1}"
 if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-1500000}"
   TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
@@ -84,7 +84,7 @@ block_index=""
 usage() {
   cat <<'EOF'
 Usage:
-  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=4] bash run_spirula_blocks.sh [options]
+  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=1] bash run_spirula_blocks.sh [options]
 
 Options:
   --prepare-only            Run/reuse SfM and partition, without training
@@ -95,7 +95,7 @@ Variables:
   SPIRULA_BIN               Spirula executable (default: shared launcher logic)
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
   TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
-  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (4)
+  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (1)
   TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
   TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
   TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]

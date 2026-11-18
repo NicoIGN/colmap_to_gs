@@ -18,8 +18,12 @@ crop_splat_to_sparse() {
 merge_pipeline_splats() {
   local output="$1" strength="$2"
   shift 2
-  "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
-    "$@" --output "$output" --strength "$strength"
+  if [[ $# -eq 1 && "${1##*.}" == "${output##*.}" ]]; then
+    cp -f "$1" "$output"
+  else
+    "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
+      "$@" --output "$output" --strength "$strength"
+  fi
   [[ -s "$output" ]] || {
     printf '[ERREUR] Splat fusionné absent ou vide : %s\n' "$output" >&2
     return 1

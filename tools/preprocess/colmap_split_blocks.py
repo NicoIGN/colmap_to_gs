@@ -1522,6 +1522,74 @@ def export_colored_ply(
 # CLI et pipeline
 # ---------------------------------------------------------------------------
 
+def single_block_partition(images, points3D):
+    """Un seul bloc couvre tout le modèle : aucun graphe ni partition à calculer."""
+    all_ids = set(images)
+    block_images = [all_ids]
+    primary_images = [set(all_ids)]
+    point_blocks = {
+        pid: {0} for pid, point in points3D.items() if point.track
+    }
+    return block_images, primary_images, point_blocks
+
+
+def partition_into_blocks(args, images, points3D):
+    info("Building covisibility graph...")
+    W, image_ids = build_covisibility_graph(
+        images,
+        points3D,
+        min_covisibility=args.min_covisibility,
+        distance_sigma=args.distance_sigma,
+    )
+    info(
+        f"Graph: {len(image_ids)} nodes, "
+        f"{W.nnz // 2:,} undirected edges"
+    )
+
+    graph_components = connected_components(
+        W, directed=False, return_labels=False
+    )
+    info(f"Graph connected components: {graph_components}")
+
+    if graph_components > args.num_blocks:
+        warn(
+            "Le graphe possède plus de composantes connexes que de blocs "
+            "demandés : il est impossible de couvrir toutes les images "
+            "avec seulement K blocs connexes dans ce graphe."
+        )
+
+    info(f"Spectral clustering into K={args.num_blocks}...")
+    labels = spectral_partition(W, args.num_blocks, seed=args.seed)
+
+    labels = enforce_connectivity(labels, W)
+
+    unique = np.unique(labels)
+    remap = {int(old): new for new, old in enumerate(unique)}
+    labels = np.array(
+        [remap[int(label)] for label in labels],
+        dtype=np.int32,
+    )
+
+    info("Soft balancing primary image counts (connectivity first)...")
+    labels = balance_primary_blocks(labels, W, args.num_blocks)
+
+    report_connectivity(labels, W, args.num_blocks)
+
+    info("Building blocks with limited overlap...")
+    return build_blocks(
+        images,
+        points3D,
+        image_ids,
+        labels,
+        overlap_min_shared_points=args.overlap_min_shared_points,
+        W=W,
+        overlap_min_shared_ratio=args.overlap_min_shared_ratio,
+        overlap_min_affinity_ratio=args.overlap_min_affinity_ratio,
+        overlap_max_fraction=args.overlap_max_fraction,
+        overlap_max_extra_blocks=args.overlap_max_extra_blocks,
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Découpage COLMAP sparse avec recouvrement contrôlé."
@@ -1678,60 +1746,15 @@ def main():
                 "Augmenter le rayon ou réduire le nombre minimal de voisins."
             )
 
-    info("Building covisibility graph...")
-    W, image_ids = build_covisibility_graph(
-        images,
-        points3D,
-        min_covisibility=args.min_covisibility,
-        distance_sigma=args.distance_sigma,
-    )
-    info(
-        f"Graph: {len(image_ids)} nodes, "
-        f"{W.nnz // 2:,} undirected edges"
-    )
-
-    graph_components = connected_components(
-        W, directed=False, return_labels=False
-    )
-    info(f"Graph connected components: {graph_components}")
-
-    if graph_components > args.num_blocks:
-        warn(
-            "Le graphe possède plus de composantes connexes que de blocs "
-            "demandés : il est impossible de couvrir toutes les images "
-            "avec seulement K blocs connexes dans ce graphe."
+    if args.num_blocks == 1:
+        info("Un seul bloc : pas de graphe de covisibilité ni de partition.")
+        block_images, primary_images, point_blocks = single_block_partition(
+            images, points3D
         )
-
-    info(f"Spectral clustering into K={args.num_blocks}...")
-    labels = spectral_partition(W, args.num_blocks, seed=args.seed)
-
-    labels = enforce_connectivity(labels, W)
-
-    unique = np.unique(labels)
-    remap = {int(old): new for new, old in enumerate(unique)}
-    labels = np.array(
-        [remap[int(label)] for label in labels],
-        dtype=np.int32,
-    )
-    
-    info("Soft balancing primary image counts (connectivity first)...")
-    labels = balance_primary_blocks(labels, W, args.num_blocks)
-    
-    report_connectivity(labels, W, args.num_blocks)
-
-    info("Building blocks with limited overlap...")
-    block_images, primary_images, point_blocks = build_blocks(
-        images,
-        points3D,
-        image_ids,
-        labels,
-        overlap_min_shared_points=args.overlap_min_shared_points,
-        W=W,
-        overlap_min_shared_ratio=args.overlap_min_shared_ratio,
-        overlap_min_affinity_ratio=args.overlap_min_affinity_ratio,
-        overlap_max_fraction=args.overlap_max_fraction,
-        overlap_max_extra_blocks=args.overlap_max_extra_blocks,
-    )
+    else:
+        block_images, primary_images, point_blocks = partition_into_blocks(
+            args, images, points3D
+        )
 
     colors = generate_block_colors_excluding_yellow(len(block_images))
 
