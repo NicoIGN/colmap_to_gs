@@ -375,6 +375,37 @@ class DownloadTest(unittest.TestCase):
             self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
             self.assertEqual(json.loads((output / "summary.json").read_text())["selected"], 1)
 
+    def test_dry_run_writes_only_request_summary_and_geojson(self):
+        lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
+        feature = {
+            "type": "Feature", "id": "inside", "collection": "sequence",
+            "geometry": {"type": "Point", "coordinates": [lon, lat]},
+            "assets": {"hd": {"href": "https://example.test/photo.jpg"}},
+        }
+        bbox = (lon - 0.01, lat - 0.01, lon + 0.01, lat + 0.01)
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            args = Namespace(
+                bbox=bbox, bbox_epsg=4326, output_dir=output,
+                api_url="https://example.test/api", datetime=None,
+                quality="hd", timeout=5, image_max=None, dry_run=True,
+            )
+            with patch.object(
+                download, "read_json",
+                return_value={"features": [feature], "links": []},
+            ), patch.object(download, "download_image") as download_image, \
+                contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(download.run(args), 0)
+
+            download_image.assert_not_called()
+            self.assertEqual(
+                sorted(path.name for path in output.iterdir()),
+                ["positions.geojson", "request.json", "summary.json"],
+            )
+            self.assertEqual(json.loads((output / "summary.json").read_text())["selected"], 1)
+            geojson = json.loads((output / "positions.geojson").read_text())
+            self.assertEqual(len(geojson["features"]), 1)
+
     def test_http_retry_limit(self):
         error = HTTPError("http://localhost/api/search", 429, "Too many requests", {}, None)
         with patch.object(download, "urlopen", side_effect=error) as opening:

@@ -2,6 +2,7 @@
 """Télécharger les photos Panoramax prises dans une bbox en coordonnées EPSG."""
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -270,8 +271,11 @@ def run(args):
             f"La bbox EPSG:{bbox_epsg} ne produit pas une bbox WGS84 exploitable."
         )
     output = args.output_dir.expanduser().resolve()
-    for folder in ("images", "metadata", "pages"):
-        (output / folder).mkdir(parents=True, exist_ok=True)
+    dry_run = bool(getattr(args, "dry_run", False))
+    output.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        for folder in ("images", "metadata", "pages"):
+            (output / folder).mkdir(parents=True, exist_ok=True)
     picture_type = getattr(args, "picture_type", "all")
     if picture_type not in PICTURE_TYPES:
         raise ValueError("Le type d'image doit être all, normal ou 360.")
@@ -291,6 +295,7 @@ def run(args):
         "picture_type": stac_type,
         "provider": provider,
         "api_limit": api_limit,
+        "dry_run": dry_run,
     })
     counts = {
         "pages": 0, "available": 0, "selected": 0,
@@ -315,7 +320,8 @@ def run(args):
         counts["pages"] += 1
         last_page_count = len(page["features"])
         api_features += last_page_count
-        atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
+        if not dry_run:
+            atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
         for feature in page["features"]:
             if not isinstance(feature, dict) or not feature.get("id"):
                 raise ValueError("Photo STAC sans identifiant.")
@@ -367,7 +373,8 @@ def run(args):
         )
 
     located = []
-    with (output / "manifest.jsonl").open("w", encoding="utf-8") as manifest:
+    manifest_path = output / "manifest.jsonl"
+    with (contextlib.nullcontext() if dry_run else manifest_path.open("w", encoding="utf-8")) as manifest:
         for feature, source_url, key in selected:
             counts["selected"] += 1
             name = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -380,6 +387,9 @@ def run(args):
                 "source_page": source_url,
             }
             located.append((feature, record))
+            if dry_run:
+                record["status"] = "planned"
+                continue
             temporary = None
             try:
                 asset = feature.get("assets", {}).get(args.quality)
@@ -436,7 +446,7 @@ def run(args):
             f"{usable} utilisable(s). Détails : {output / 'manifest.jsonl'}",
             file=sys.stderr,
         )
-    if not usable:
+    if not dry_run and not usable:
         print(
             f"[ERREUR] Aucune photo utilisable après la recherche et le téléchargement "
             f"({counts['selected']} sélectionnée(s), {counts['failed']} en échec). "
@@ -473,6 +483,10 @@ def main():
     parser.add_argument(
         "--provider",
         help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Chercher et sélectionner seulement : écrit request.json, summary.json et positions.geojson",
     )
     parser.add_argument(
         "--geojson", action=argparse.BooleanOptionalAction, default=True,
