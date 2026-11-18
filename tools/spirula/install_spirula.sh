@@ -16,6 +16,9 @@ REPO_DIR="${SPIRULA_REPO_DIR:-$(dirname "${PROJECT_ROOT}")/spirula-studio}"
 SAM3_MODEL_URL="https://huggingface.co/PABannier/sam3.cpp/resolve/main/sam3-q4_0.ggml"
 SAM3_MODEL_PATH="${SPIRULA_SAM3_MODEL:-${REPO_DIR}/models/sam3-q4_0.ggml}"
 
+# GUI désactivée par défaut : elle nécessite X11 et OpenGL (SPIRULA_BUILD_GUI=ON pour l'activer).
+SPIRULA_BUILD_GUI="${SPIRULA_BUILD_GUI:-OFF}"
+
 # ===============================================================
 # Logging et gestion des erreurs
 # ===============================================================
@@ -69,6 +72,7 @@ Variables :
   SPIRULA_JOBS       Nombre de jobs de compilation
   SPIRULA_REPO_DIR   Répertoire du dépôt Spirula
   SPIRULA_SAM3_MODEL Chemin du modèle SAM3
+  SPIRULA_BUILD_GUI  ON pour compiler l'interface graphique (OFF par défaut)
 EOF
 }
 
@@ -247,21 +251,26 @@ if [[ "${OS}" == "Linux" ]]; then
     # -----------------------------------------------------------
 
     REQUIRED_HEADERS=(
-        X11/X.h
-        X11/Xlib.h
-        X11/Xatom.h
-        X11/Xresource.h
-        X11/keysym.h
-        X11/extensions/Xrandr.h
-        X11/extensions/Xinerama.h
-        X11/extensions/XInput2.h
-        X11/Xcursor/Xcursor.h
-        GL/gl.h
-        GL/glx.h
         vulkan/vulkan.h
         vulkan/vulkan_core.h
         vulkan/vk_platform.h
     )
+
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
+        REQUIRED_HEADERS+=(
+            X11/X.h
+            X11/Xlib.h
+            X11/Xatom.h
+            X11/Xresource.h
+            X11/keysym.h
+            X11/extensions/Xrandr.h
+            X11/extensions/Xinerama.h
+            X11/extensions/XInput2.h
+            X11/Xcursor/Xcursor.h
+            GL/gl.h
+            GL/glx.h
+        )
+    fi
 
     for header in "${REQUIRED_HEADERS[@]}"; do
         check_header "${header}"
@@ -281,17 +290,22 @@ if [[ "${OS}" == "Linux" ]]; then
     # -----------------------------------------------------------
 
     REQUIRED_LIBRARIES=(
-        libX11.so
-        libXext.so
-        libXrandr.so
-        libXi.so
-        libXcursor.so
-        libXinerama.so
-        libGL.so
-        libGLX.so
-        libOpenGL.so
         libvulkan.so
     )
+
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
+        REQUIRED_LIBRARIES+=(
+            libX11.so
+            libXext.so
+            libXrandr.so
+            libXi.so
+            libXcursor.so
+            libXinerama.so
+            libGL.so
+            libGLX.so
+            libOpenGL.so
+        )
+    fi
 
     for library in "${REQUIRED_LIBRARIES[@]}"; do
         check_library "${library}"
@@ -315,13 +329,18 @@ if [[ "${OS}" == "Linux" ]]; then
 
     REQUIRED_PC_PACKAGES=(
         vulkan
-        x11
-        xinerama
-        xcursor
-        xi
-        xrandr
-        gl
     )
+
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
+        REQUIRED_PC_PACKAGES+=(
+            x11
+            xinerama
+            xcursor
+            xi
+            xrandr
+            gl
+        )
+    fi
 
     for package in "${REQUIRED_PC_PACKAGES[@]}"; do
         if pkg-config --exists "${package}"; then
@@ -480,6 +499,7 @@ BUILD_CMD=(
     bash build_develop.bash
     -DSS_BACKEND=vulkan
     -DSS_BUILD_SAM=ON
+    "-DSS_BUILD_GUI=${SPIRULA_BUILD_GUI}"
     -DCMAKE_BUILD_TYPE=Release
 )
 
