@@ -328,10 +328,19 @@ case "$prepare" in
   *) die "PREPARE invalide : $prepare" ;;
 esac
 
+# Le device n'est pas un argument positionnel de `sfm auto` : il passe par
+# --device. Un --device explicite prime sur SPIRULA_DEVICE.
+spirula_device="$(resolve_spirula_device "$spirula_bin" "${SPIRULA_DEVICE:-auto}")"
+for ((i = 0; i < ${#option_names[@]}; i++)); do
+  if [[ "${option_names[$i]}" == device && -z "${option_values[$i]}" && "$spirula_device" != auto ]]; then
+    option_values[$i]="$spirula_device"
+  fi
+done
+
 # Spirula valide les types numériques, les valeurs autorisées et les
 # compatibilités entre options. Le wrapper ne duplique pas son parseur.
 cmd=(
-  "$spirula_bin" sfm "$(resolve_spirula_device "$spirula_bin" "${SPIRULA_DEVICE:-auto}")" "$dataset"
+  "$spirula_bin" sfm auto "$dataset"
   --output "$output_dir"
 )
 
