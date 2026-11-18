@@ -36,6 +36,11 @@ validate_config() {
   fi
   config_positive_integer SFM_MAX_IMAGE_SIZE "${SFM_MAX_IMAGE_SIZE:-4096}"
   config_positive_integer SFM_ALIKED_MAX_FEATURES "${SFM_ALIKED_MAX_FEATURES:-4096}"
+  config_choice SFM_CAMERA_MODEL "${SFM_CAMERA_MODEL:-opencv}" \
+    'opencv|pinhole|opencv-fisheye|equirectangular'
+  if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula ]]; then
+    config_error "SFM_CAMERA_MODEL=equirectangular exige TRAIN_BACKEND=spirula."
+  fi
   for name in PANORAMAX_IMAGE_MAX SFM_THREADS; do
     value="${!name:-}"
     [[ -z "$value" ]] || config_positive_integer "$name" "$value"

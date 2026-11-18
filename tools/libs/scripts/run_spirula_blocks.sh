@@ -363,6 +363,7 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
+      --camera-model "$SFM_CAMERA_MODEL"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
@@ -389,7 +390,7 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-      --reuse-matches redo
+      --reuse-matches redo --camera-model "$SFM_CAMERA_MODEL"
     )
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")

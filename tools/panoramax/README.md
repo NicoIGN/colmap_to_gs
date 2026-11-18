@@ -19,8 +19,9 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
 de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
-`SFM_ALIKED_MAX_FEATURES` et `SFM_THREADS` sont les paramètres communs exposés
-à cette étape. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+`SFM_ALIKED_MAX_FEATURES`, `SFM_THREADS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
+à cette étape. Pour des photos 360, mettre `SFM_CAMERA_MODEL="equirectangular"` (sans focale,
+avec `TRAIN_BACKEND=spirula`). Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
 [`param.default.sh`](param.default.sh) regroupent ces paramètres par backend.

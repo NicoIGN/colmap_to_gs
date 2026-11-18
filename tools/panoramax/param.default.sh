@@ -93,6 +93,11 @@ SFM_MAX_IMAGE_SIZE="4096"
 # Defaut : 4096. Entier > 0 ; budget de points ALIKED par image.
 SFM_ALIKED_MAX_FEATURES="4096"
 
+# Defaut : opencv. Modele camera transmis a Spirula : opencv | pinhole |
+# opencv-fisheye | equirectangular. Utiliser equirectangular pour des photos 360
+# (sans focale) ; cette valeur exige TRAIN_BACKEND=spirula.
+SFM_CAMERA_MODEL="opencv"
+
 # --- Reglages Spirula uniquement ---
 # Defaut : prefilter. Valeurs : auto|prefilter|exhaustive|sequential.
 # prefilter convient aux photos Panoramax sans ordre chronologique des noms.
