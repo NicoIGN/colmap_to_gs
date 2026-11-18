@@ -178,6 +178,17 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
                       (ROOT.parents[1] / "scripts/panoramax_to_3dgs.sh").read_text())
         self.assertEqual(values["NUM_CPUS"], "2")
 
+    def test_explicit_empty_labels_never_fall_back_to_sky(self):
+        result, _ = self.execute("validate_config.sh", """
+SFM_MASKS=on
+SFM_MASKS_BACKEND=spirula
+SFM_MASKS_SPIRULA_MODEL=/models/sam3.ggml
+SFM_MASKS_LABELS=""
+TRAIN_MASKS=off
+""")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("SFM_MASKS_LABELS doit contenir au moins un label", result.stderr)
+
     def test_training_masks_require_model_and_labels(self):
         result, _ = self.execute("validate_config.sh", 'TRAIN_MASKS=on\nTRAIN_MASKS_LABELS=" , "\n')
         self.assertEqual(result.returncode, 1)

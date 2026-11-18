@@ -91,7 +91,7 @@ validate_config() {
       else
         [[ -n "$SFM_MASKS_MODEL" ]] || config_error "SFM_MASKS_MODEL doit être défini."
       fi
-      [[ -n "$(printf '%s' "${SFM_MASKS_LABELS:-sky}" | tr -d ',[:space:]')" ]] ||
+      [[ -n "$(printf '%s' "${SFM_MASKS_LABELS-sky}" | tr -d ',[:space:]')" ]] ||
         config_error "SFM_MASKS_LABELS doit contenir au moins un label."
       value="${SFM_MASKS_CONFIDENCE:-0.5}"
       [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
@@ -117,7 +117,7 @@ validate_config() {
         [[ -n "${TRAIN_MASKS_MODEL:-}" ]] ||
           config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/segmentation_masks/install.sh)."
       fi
-      [[ -n "$(printf '%s' "${TRAIN_MASKS_LABELS:-sky}" | tr -d ',[:space:]')" ]] ||
+      [[ -n "$(printf '%s' "${TRAIN_MASKS_LABELS-sky}" | tr -d ',[:space:]')" ]] ||
         config_error "TRAIN_MASKS_LABELS doit contenir au moins un label."
       ;;
   esac
