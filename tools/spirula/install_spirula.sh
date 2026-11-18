@@ -429,6 +429,26 @@ BUILD_SCRIPT="${REPO_DIR}/build_develop.bash"
 BUILD_PATH="${REPO_DIR}/${BUILD_DIR}"
 SPIRULA_BIN="${BUILD_PATH}/spirula"
 
+BUILD_CMD=(
+    bash build_develop.bash
+    -DSS_BACKEND=vulkan
+    -DSS_BUILD_SAM=ON
+    -DCMAKE_BUILD_TYPE=Release
+)
+
+if [[ "${OS}" == "Linux" ]]; then
+    BUILD_CMD+=(
+        "-DVulkan_INCLUDE_DIR:PATH=${VULKAN_INCLUDE_DIR}"
+        "-DVulkan_LIBRARY:FILEPATH=${VULKAN_LIBRARY}"
+    )
+fi
+
+print_build_command() {
+    echo "  cd $(printf '%q' "${REPO_DIR}") && \\"
+    printf '  %q' "${BUILD_CMD[@]}"
+    echo
+}
+
 BUILD_NEEDED=0
 
 if [[ "${CLEAN}" -eq 1 ]]; then
@@ -451,6 +471,8 @@ elif [[ ! -x "${SPIRULA_BIN}" ]]; then
     BUILD_NEEDED=1
 else
     log "Dépôt inchangé et exécutable présent : compilation ignorée."
+    log "Commande pour recompiler manuellement :"
+    print_build_command
 fi
 
 if [[ "${BUILD_NEEDED}" -eq 1 ]]; then
@@ -485,23 +507,8 @@ if [[ "${BUILD_NEEDED}" -eq 1 ]]; then
 
     cd "${REPO_DIR}"
 
-    BUILD_CMD=(
-        bash build_develop.bash
-        -DSS_BACKEND=vulkan
-        -DSS_BUILD_SAM=ON
-        -DCMAKE_BUILD_TYPE=Release
-    )
-
-    if [[ "${OS}" == "Linux" ]]; then
-        BUILD_CMD+=(
-            "-DVulkan_INCLUDE_DIR:PATH=${VULKAN_INCLUDE_DIR}"
-            "-DVulkan_LIBRARY:FILEPATH=${VULKAN_LIBRARY}"
-        )
-    fi
-
     log "Commande de compilation :"
-    printf '  %q' "${BUILD_CMD[@]}"
-    echo
+    print_build_command
 
     log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
 
