@@ -157,6 +157,20 @@ def parse_positive_int(text):
 PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
 
 
+def picture_type_of(feature):
+    """Renvoie le type STAC ; certaines photos n'ont que les métadonnées de projection."""
+    properties = feature.get("properties", {})
+    if properties.get("type") is not None:
+        return properties["type"]
+    exif = properties.get("exif") or {}
+    if exif.get("Xmp.GPano.ProjectionType") == "equirectangular":
+        return "equirectangular"
+    orientation = properties.get("pers:interior_orientation") or {}
+    if str(orientation.get("field_of_view")) == "360":
+        return "equirectangular"
+    return None
+
+
 def item_matches_provider(feature, provider):
     providers = feature.get("properties", {}).get("providers")
     if not isinstance(providers, list):
@@ -263,8 +277,8 @@ def run(args):
             if key in seen_items:
                 continue
             seen_items.add(key)
-            api_types[str(feature.get("properties", {}).get("type"))] += 1
-            if stac_type is not None and feature.get("properties", {}).get("type") != stac_type:
+            api_types[str(picture_type_of(feature))] += 1
+            if stac_type is not None and picture_type_of(feature) != stac_type:
                 continue
             if provider is not None and not item_matches_provider(feature, provider):
                 continue

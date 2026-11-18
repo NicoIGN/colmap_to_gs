@@ -20,6 +20,19 @@ download = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(download)
 
 
+class PictureTypeTest(unittest.TestCase):
+    def test_360_detected_from_projection_metadata_without_type(self):
+        gpano = {"properties": {"exif": {"Xmp.GPano.ProjectionType": "equirectangular"}}}
+        fov = {"properties": {"pers:interior_orientation": {"field_of_view": 360}}}
+        self.assertEqual(download.picture_type_of(gpano), "equirectangular")
+        self.assertEqual(download.picture_type_of(fov), "equirectangular")
+
+    def test_explicit_type_wins_and_missing_stays_none(self):
+        explicit = {"properties": {"type": "flat", "exif": {"Xmp.GPano.ProjectionType": "equirectangular"}}}
+        self.assertEqual(download.picture_type_of(explicit), "flat")
+        self.assertIsNone(download.picture_type_of({"properties": {}}))
+
+
 class DownloadTest(unittest.TestCase):
     def test_jpeg_and_generic_binary_content_types(self):
         photo = b"\xff\xd8test-image\xff\xd9"
