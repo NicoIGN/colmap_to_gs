@@ -479,7 +479,7 @@ class BlockPipelineTest(unittest.TestCase):
             model.write_bytes(b"sam")
             env.update(TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
                        TRAIN_MASKS_SPIRULA_MODEL=str(model),
-                       TRAIN_MASKS_SPIRULA_DEVICE="0",
+                       SPIRULA_DEVICE="0",
                        TRAIN_MASKS_MODEL="", TRAIN_MASKS_PYTHON="/missing/python",
                        SPLIT_NUM_BLOCKS="1", MASKS_ACCEPT_LICENSE="true")
             result = execute()

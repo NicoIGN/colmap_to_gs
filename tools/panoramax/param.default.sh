@@ -169,7 +169,7 @@ TRAIN_MASKS_SPIRULA_MODEL=""
 
 # Defaut : auto. Backend spirula : auto, indice GPU Vulkan (0,1,...),
 # fragment du nom du GPU ou uuid:<hex>. Pas de noms cuda/mps ici.
-TRAIN_MASKS_SPIRULA_DEVICE="auto"
+SPIRULA_DEVICE="auto"
 
 # Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
 # avertissements/erreurs et la progression du pipeline. 0 = silencieux,
@@ -229,10 +229,6 @@ SFM_MASKS_BACKEND=""
 SFM_MASKS_PYTHON=""
 SFM_MASKS_MODEL=""
 SFM_MASKS_SPIRULA_MODEL=""
-
-# Defaut : "" = TRAIN_MASKS_SPIRULA_DEVICE (auto par defaut).
-# Vulkan : auto, indice, fragment du nom GPU ou uuid:<hex>.
-SFM_MASKS_SPIRULA_DEVICE=""
 
 # Defaut : "" = TRAIN_MASKS_LABELS (sky par defaut).
 # Liste de labels/prompts separes par des virgules ; ordre/casse ignores.

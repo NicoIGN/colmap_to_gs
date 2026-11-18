@@ -48,6 +48,7 @@ load_config() {
       case "$name" in
         INPUT_IMAGES_DIR) replacement=SFM_IMAGES_DIR ;;
         INPUT_RECURSIVE) replacement=SFM_IMAGES_RECURSIVE ;;
+        MASKS_SPIRULA_DEVICE) replacement=SPIRULA_DEVICE ;;
         *) replacement="SFM_$name / TRAIN_$name" ;;
       esac
       die "Ancien paramètre $name : utiliser $replacement."
@@ -131,7 +132,7 @@ load_config() {
   TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
   TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
   TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-$(default_spirula_model)}"
-  TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
+  SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
   TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
   TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
   TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-0.002}"
@@ -139,7 +140,7 @@ load_config() {
   TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
   TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
   local suffix sfm_name train_name
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"

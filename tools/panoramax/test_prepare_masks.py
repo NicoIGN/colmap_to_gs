@@ -29,11 +29,12 @@ class PrepareMasksTest(unittest.TestCase):
         for prefix in ("TRAIN_MASKS", "SFM_MASKS"):
             for key, value in {
                 "LABELS": "sky,person,car", "BACKEND": "spirula",
-                "MODEL": "", "SPIRULA_MODEL": str(model), "SPIRULA_DEVICE": "auto",
+                "MODEL": "", "SPIRULA_MODEL": str(model),
                 "PYTHON": sys.executable, "DEVICE": "auto",
                 "CONFIDENCE": "0.5", "DILATE": "0.002", "MAX_FRACTION": "0.95",
             }.items():
                 env[f"{prefix}_{key}"] = value
+        env["SPIRULA_DEVICE"] = "auto"
         self.addCleanup(patch.stopall)
         patch.dict(os.environ, env).start()
         self.prepare_images = patch.object(masks, "prepare_images").start()

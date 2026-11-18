@@ -70,7 +70,7 @@ validate_config() {
   config_choice MASKS_ACCEPT_LICENSE "${MASKS_ACCEPT_LICENSE:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   local suffix sfm_name train_name backend
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     value="${!sfm_name:-${!train_name:-}}"

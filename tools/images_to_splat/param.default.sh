@@ -64,7 +64,7 @@ TRAIN_MASKS_DIR=""
 TRAIN_MASKS_BACKEND="spirula" # spirula|segmentation ; defaut local : spirula
 TRAIN_MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
 # auto, indice Vulkan, nom du GPU (ex. NVIDIA A40), uuid:...
-TRAIN_MASKS_SPIRULA_DEVICE="auto"
+SPIRULA_DEVICE="auto"
 # Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
 # avertissements/erreurs et la progression du pipeline. 0 = silencieux,
 # 2 = informations et temps (defaut Spirula), 3 = detaille.
@@ -88,7 +88,6 @@ TRAIN_MASKS_NUM_JOBS="2"
 SFM_MASKS_BACKEND=""
 SFM_MASKS_DIR=""
 SFM_MASKS_SPIRULA_MODEL=""
-SFM_MASKS_SPIRULA_DEVICE=""
 SFM_MASKS_LABELS=""
 SFM_MASKS_CONFIDENCE=""
 SFM_MASKS_DILATE="0.002"

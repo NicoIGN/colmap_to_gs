@@ -116,7 +116,7 @@ if name == "generate_masks.py":
     if get("--backend") == "spirula":
         assert "--accept-spirula-license" in args
         assert get("--model") == os.environ[prefix + "_SPIRULA_MODEL"]
-        assert get("--spirula-device") == os.environ[prefix + "_SPIRULA_DEVICE"]
+        assert get("--spirula-device") == os.environ["SPIRULA_DEVICE"]
     else:
         assert "--accept-spirula-license" not in args
         assert get("--model") == os.environ[prefix + "_MODEL"]
@@ -978,7 +978,7 @@ if "--wait" in args:
                 self.assertEqual((output / "train_masks").exists(), train == "on" and sfm == "off")
 
     def test_prefixed_policies_are_independent_local_and_slurm(self):
-        self.append('SFM_MASKS_LABELS="sky"\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"\n'
+        self.append('SFM_MASKS_LABELS="sky"\nSPIRULA_DEVICE="NVIDIA A40"\n'
                     'SFM_MASKS_CONFIDENCE=0.7\nSFM_MASKS_MAX_FRACTION=0.9\n'
                     'TRAIN_MASKS_LABELS="sky,cloud"')
         for slurm in (False, True):
@@ -997,8 +997,8 @@ if "--wait" in args:
                 self.assertTrue((output / "scene.splat").is_file())
 
     def test_identical_prefixed_policies_share_one_generation(self):
-        self.append('SFM_MASKS_SPIRULA_DEVICE=""\nSFM_MASKS_LABELS=""\n'
-                    'TRAIN_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+        self.append('SFM_MASKS_LABELS=""\n'
+                    'SPIRULA_DEVICE="NVIDIA A40"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
         self.assertEqual(len(generated), 1)
@@ -1074,7 +1074,7 @@ if "--wait" in args:
     def test_sfm_only_policy_does_not_require_a_training_model(self):
         self.append(f'TRAIN_MASKS=off\nTRAIN_MASKS_SPIRULA_MODEL=""\n'
                     f'SFM_MASKS_SPIRULA_MODEL="{self.model}"\n'
-                    'SFM_MASKS_LABELS=sky\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+                    'SFM_MASKS_LABELS=sky\nSPIRULA_DEVICE="NVIDIA A40"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
         self.assertEqual(len(generated), 1)

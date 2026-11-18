@@ -59,7 +59,7 @@ TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
-TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
+SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
 MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
@@ -72,7 +72,7 @@ TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
 TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 SFM_MASKS="${SFM_MASKS:-off}"
 # SfM settings inherit generation settings, not the training loss mode.
-for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
   sfm_name="SFM_MASKS_$suffix"
   train_name="TRAIN_MASKS_$suffix"
   printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -128,7 +128,7 @@ Variables:
   TRAIN_MASKS               off (default) or on: segmentation masks for training
   TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
   TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
-  TRAIN_MASKS_SPIRULA_DEVICE Vulkan device: auto, index, name or uuid
+  SPIRULA_DEVICE            Vulkan device: auto, index, name or uuid
   MASKS_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
@@ -336,8 +336,8 @@ SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
-  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE NUM_JOBS; do
+  export PYTHON_BIN SPIRULA_BIN SPIRULA_DEVICE TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE NUM_JOBS; do
     export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
   done
 fi
@@ -429,7 +429,7 @@ prepare_blocks() {
     "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
       --images "$SFM_DIR/images" --output "$MASKS_DIR" \
       --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
-      --spirula-device "$TRAIN_MASKS_SPIRULA_DEVICE" \
+      --spirula-device "$SPIRULA_DEVICE" \
       --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
       --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
