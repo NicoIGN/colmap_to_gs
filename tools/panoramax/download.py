@@ -241,6 +241,7 @@ def run(args):
     candidates = []
     api_features = 0
     after_filters = 0
+    api_types = Counter()
     last_page_count = 0
     while url:
         page_key = (url, method, json.dumps(body, sort_keys=True))
@@ -261,6 +262,7 @@ def run(args):
             if key in seen_items:
                 continue
             seen_items.add(key)
+            api_types[str(feature.get("properties", {}).get("type"))] += 1
             if stac_type is not None and feature.get("properties", {}).get("type") != stac_type:
                 continue
             if provider is not None and not item_matches_provider(feature, provider):
