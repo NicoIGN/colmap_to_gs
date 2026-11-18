@@ -437,7 +437,7 @@ CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 # Defaut : jean-zellou. Nom de partition GPU existante ; adapter au cluster.
 SLURM_PARTITION="jean-zellou"
 
-# Defaut : 16. Entier > 0 : CPU par job (preparation, bloc, fusion ; threads SfM,
+# Defaut : 2. Entier > 0 : CPU par job (preparation, bloc, fusion ; threads SfM,
 # masques, entrainement). Reference unique pour le parallelisme CPU, meme en local.
 NUM_CPUS="2"
 
