@@ -206,7 +206,7 @@ TRAIN_MASKS_CONFIDENCE="0.5"
 TRAIN_MASKS_DILATE="auto"
 
 # Defaut : 0.8. Nombre dans ]0,1] : fraction masquee maximale par image.
-# Au-dela, masque entierement blanc avec avertissement (vue conservee).
+# Au-dela, aucun masque n'est applique a l'image (vue conservee entiere) avec avertissement.
 TRAIN_MASKS_MAX_FRACTION="0.8"
 
 # Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
