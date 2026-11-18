@@ -724,11 +724,12 @@ export function createColmapLayer({
     model.enlarged = enlarged;
     const depthOf = (i) => model.depth * (enlarged.has(i) ? IMAGE_FRUSTUM_SCALE : 1);
     const frustums = buildFrustumLines(model.colmapImages, model.cameras, depthOf, enlarged);
-    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
     const entity = new pc.Entity("COLMAP frustums");
     entity.addComponent("render", {
       type: "asset",
       meshInstances: [resource.meshInstance],
+      layers: [getOverlayLayer(app).id],
     });
     entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
     model.rootEntity.addChild(entity);
