@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import time
+from collections import Counter
 from http.client import HTTPException
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -289,7 +290,7 @@ def run(args):
     selected = candidates[:image_max] if image_max is not None else candidates
     progress = Progress(len(selected))
     print(
-        f"Photos renvoyées par l'API : {api_features} ; "
+        f"Photos renvoyées par l'API : {api_features} (types : {dict(api_types)}) ; "
         f"après filtres type/provider : {after_filters}"
     )
     print(
