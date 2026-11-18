@@ -369,6 +369,7 @@ LIDAR_SPARSE="$SFM_DIR/sparse/0"
 lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
 
 set_pipeline_stage "vérification des splats avant fusion"
+rm -f -- "$OUTPUT_DIR/.merge_done"
 MERGE_INPUTS=()
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
@@ -413,6 +414,7 @@ else
     --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
 fi
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
+touch -- "$OUTPUT_DIR/.merge_done"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
 GEOREF_DIR="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.georef"

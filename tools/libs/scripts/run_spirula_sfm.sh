@@ -361,6 +361,8 @@ if [[ "$dry_run" == true ]]; then
 fi
 
 mkdir -p -- "$output_dir"
+# A stale marker must not vouch for a reconstruction that is about to change.
+rm -f -- "$output_dir/.sfm_done"
 
 # Do not mistake files from a previous reconstruction for recovered output.
 existing_sparse=false
@@ -369,6 +371,7 @@ for name in cameras images points3D; do
 done
 
 if "${cmd[@]}"; then
+  touch -- "$output_dir/.sfm_done"
   printf '[SFM] Reconstruction terminée : %s\n' "$output_dir"
 else
   status=$?
@@ -415,6 +418,7 @@ print(f"[SFM] sparse/0 lisible : {counts[0]} caméras, {counts[1]} images, {coun
 PY
     then
       printf '[AVERTISSEMENT] Spirula a terminé avec SIGSEGV (code 139), mais sparse/0 vient d’être écrit et se lit entièrement. Poursuite avec ce modèle ; la cause du crash reste à diagnostiquer.\n' >&2
+      touch -- "$output_dir/.sfm_done"
       exit 0
     fi
     if [[ "$existing_sparse" == true ]]; then
