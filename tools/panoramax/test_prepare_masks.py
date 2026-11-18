@@ -194,5 +194,19 @@ class PrepareMasksTest(unittest.TestCase):
         self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
 
 
+    def test_legacy_completed_marker_is_migrated_once(self):
+        os.environ["SPIRULA_DEVICE"] = "auto"
+        self.run_prepare()
+        marker = self.workspace / "sfm_mask_policy.json"
+        report = json.loads(marker.read_text())
+        report.pop("input_digest")
+        report["signature"] = "legacy-stat-digest"
+        marker.write_text(json.dumps(report))
+        self.run_prepare()
+        migrated = json.loads(marker.read_text())
+        self.assertEqual(migrated["input_digest"], "sha256")
+        self.assertNotEqual(migrated["signature"], "legacy-stat-digest")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -57,6 +57,14 @@ def prepare(dataset, workspace, check_only=False):
     previous_settings = previous.get("settings")
     if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
         compatible.add(fingerprint(generator_hash, previous_settings))
+    # One-time migration: markers written before inputs were content-hashed carry a
+    # stat-based digest that cannot be recomputed. Trust a completed marker without
+    # an input digest and with the same mask settings; the new marker is rewritten below.
+    if (isinstance(previous_settings, dict) and previous.get("status") == "complete" and
+            "input_digest" not in previous and
+            without_device(previous_settings) == without_device(sfm)):
+        print("[masques] Signature SfM héritée acceptée (migration unique vers SHA-256).", flush=True)
+        compatible.add(previous.get("signature"))
     # These generator updates change only consent forwarding and diagnostics.
     if generator_hash in (
             "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
@@ -91,7 +99,7 @@ def prepare(dataset, workspace, check_only=False):
     if not previous and any((p / "masks.json").exists() for p in (features, training)):
         raise ValueError("Masques préexistants sans signature : choisir un nouveau workspace")
     prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
-    record = {"signature": signature, "settings": sfm, "training_settings": train,
+    record = {"signature": signature, "input_digest": "sha256", "settings": sfm, "training_settings": train,
               "shared_with_training": shared, "status": "partial"}
     marker.write_text(json.dumps(record, indent=2) + "\n")
     if features.is_symlink():
