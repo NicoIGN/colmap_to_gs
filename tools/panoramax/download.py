@@ -156,6 +156,16 @@ def parse_positive_int(text):
 PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
 
 
+def item_matches_provider(feature, provider):
+    providers = feature.get("properties", {}).get("providers")
+    if not isinstance(providers, list):
+        return False
+    return any(
+        isinstance(entry, dict) and str(entry.get("name", "")).casefold() == provider.casefold()
+        for entry in providers
+    )
+
+
 def item_in_bbox(feature, bbox, to_bbox_crs):
     geometry = feature.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") != "Point":
@@ -205,6 +215,7 @@ def run(args):
     if picture_type not in PICTURE_TYPES:
         raise ValueError("Le type d'image doit être all, normal ou 360.")
     stac_type = PICTURE_TYPES[picture_type]
+    provider = getattr(args, "provider", None) or None
     api_limit = SEARCH_LIMIT
     parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
@@ -217,6 +228,7 @@ def run(args):
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
         "picture_type": stac_type,
+        "provider": provider,
         "api_limit": api_limit,
     })
     counts = {
@@ -249,6 +261,8 @@ def run(args):
                 continue
             seen_items.add(key)
             if stac_type is not None and feature.get("properties", {}).get("type") != stac_type:
+                continue
+            if provider is not None and not item_matches_provider(feature, provider):
                 continue
             if item_in_bbox(feature, args.bbox, to_bbox_crs):
                 candidates.append((feature, url, key))
@@ -379,6 +393,10 @@ def main():
     parser.add_argument(
         "--picture-type", choices=tuple(PICTURE_TYPES), default="all",
         help="all (défaut), normal (photos classiques) ou 360 (équirectangulaires)",
+    )
+    parser.add_argument(
+        "--provider",
+        help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

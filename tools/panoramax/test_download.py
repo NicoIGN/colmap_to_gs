@@ -281,6 +281,15 @@ class DownloadTest(unittest.TestCase):
                 server.shutdown()
                 thread.join()
 
+    def test_provider_matches_item_providers_case_insensitively(self):
+        feature = {"id": "p", "properties": {"providers": [
+            {"name": "IGN", "roles": ["producer"]}, {"name": "Commune X", "roles": ["host"]},
+        ]}}
+        self.assertTrue(download.item_matches_provider(feature, "ign"))
+        self.assertTrue(download.item_matches_provider(feature, "Commune X"))
+        self.assertFalse(download.item_matches_provider(feature, "IG"))
+        self.assertFalse(download.item_matches_provider({"id": "none", "properties": {}}, "IGN"))
+
     def test_invalid_geometry(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):

@@ -73,6 +73,7 @@ PANORAMAX_QUALITY="${PANORAMAX_QUALITY:-hd}"
 PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
 PANORAMAX_PICTURE_TYPE="${PANORAMAX_PICTURE_TYPE:-all}"
+PANORAMAX_PROVIDER="${PANORAMAX_PROVIDER:-}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -185,11 +186,12 @@ prepare_images() {
   if [[ -e "$DATASET_DIR/request.json" ]]; then
     "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
-    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" "$PANORAMAX_PICTURE_TYPE" <<'PY' || request_status=$?
+    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" "$PANORAMAX_PICTURE_TYPE" \
+    "$PANORAMAX_PROVIDER" <<'PY' || request_status=$?
 import json
 import sys
 
-path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type = sys.argv[1:]
+path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider = sys.argv[1:]
 stac_types = {"all": None, "normal": "flat", "360": "equirectangular"}
 with open(path, encoding="utf-8") as stream:
     previous = json.load(stream)
@@ -201,6 +203,7 @@ expected = {
     "quality": quality,
     "image_max": int(image_max) if image_max else None,
     "picture_type": stac_types[picture_type],
+    "provider": provider or None,
 }
 for key, value in expected.items():
     actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
@@ -240,6 +243,7 @@ PY
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
   bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
+  [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
   printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
   set_pipeline_stage "téléchargement des photos Panoramax"
   "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
