@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copier en conservant/adaptant ce chemin vers l'exemple commun du depot.
-source "/chemin/colmap_to_gs/tools/images_to_splat/param.default"
+source "/chemin/colmap_to_gs/tools/images_to_splat/param.default.sh"
 
 SFM_IMAGES_DIR="/chemin/images"
 OUTPUT_DIR="/chemin/resultats-nerfstudio"

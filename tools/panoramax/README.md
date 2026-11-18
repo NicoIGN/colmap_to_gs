@@ -23,7 +23,7 @@ de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 à cette étape. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
-[`param.default`](param.default) regroupent ces paramètres par backend.
+[`param.default.sh`](param.default.sh) regroupent ces paramètres par backend.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
@@ -32,7 +32,7 @@ vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
 si ces métadonnées sont présentes. Ces options ne sont pas transmises à
 Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
 `SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
-[`param.default`](param.default).
+[`param.default.sh`](param.default.sh).
 
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
@@ -172,8 +172,8 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
-  [`tools/panoramax/param.default`](param.default), organisé par étape du pipeline.
-- Défauts : `param.default` est chargé en premier par le pipeline ; la configuration
+  [`tools/panoramax/param.default.sh`](param.default.sh), organisé par étape du pipeline.
+- Défauts : `param.default.sh` est chargé en premier par le pipeline ; la configuration
   utilisateur ne contient que ses surcharges. Il n'y a pas de préréglage de croissance sobre.
 - Valeurs à définir dans la configuration utilisateur (sans défaut) : `OUTPUT_DIR` et `PANORAMAX_BBOX`.
 
@@ -184,7 +184,7 @@ acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
-# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de param.default.
+# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de param.default.sh.
 OUTPUT_DIR="/chemin/vers/resultats/paris"
 PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
 bash scripts/panoramax_to_3dgs.sh /chemin/vers/paris.sh
@@ -276,7 +276,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour le SfM / l'entraînement ;
   réglages, héritage et défauts dans
-  [`param.default`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](param.default).
+  [`param.default.sh`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](param.default.sh).
 - `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
   `--accept-license sam3=yes` pour les deux calculs SAM 3 non interactifs.
   Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.

@@ -65,7 +65,7 @@ grille bilatérale pendant l'entraînement. `no_crf` inclut la correction du
 vignettage, contrairement à `no_crf_no_vig`. `TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF`
 peut initialiser la correction depuis les balises EXIF disponibles. Ces options
 ne sont pas transmises à Nerfstudio. Les valeurs vides conservent les défauts
-de Spirula installée ; voir [`param.default`](param.default).
+de Spirula installée ; voir [`param.default.sh`](param.default.sh).
 
 **Paramètres par backend.** Le fichier d'exemple regroupe les réglages SfM
 communs (`SFM_MAX_*`, seuils géométriques et threads), puis les options
@@ -90,7 +90,7 @@ qualité, croissance, flottants et distractions ne sont pas appliqués à Splatf
 correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
 
 **Exemple Nerfstudio.** Le fichier
-[`param.nerfstudio.default`](param.nerfstudio.default) montre une
+[`param.nerfstudio.default.sh`](param.nerfstudio.default.sh) montre une
 configuration avec masques sémantiques pour le SfM et l'entraînement.
 Les modèles ADE20K/Mapillary ont le label `sky`, pas de label `cloud` distinct.
 Les masques SfM peuvent aussi garder une politique indépendante.
@@ -125,7 +125,7 @@ Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côt�
 
 ## 3. Configuration et utilisation
 
-- Configuration : copier [`param.default`](param.default) vers un fichier personnel et
+- Configuration : copier [`param.default.sh`](param.default.sh) vers un fichier personnel et
   régler les chemins et les ressources.
 - `MASKS_ACCEPT_LICENSE=true` : accepte les conditions SAM 3 après les avoir
   lues.
@@ -136,7 +136,7 @@ Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côt�
 - Dépendances réutilisées : notamment numpy, scipy, tqdm, Pillow et plyfile.
 
 Les valeurs possibles, défauts et exemples des réglages avancés sont documentés
-dans [`param.default`](param.default), organisé par étape du pipeline.
+dans [`param.default.sh`](param.default.sh), organisé par étape du pipeline.
 
 Depuis la racine du dépôt :
 
@@ -160,7 +160,7 @@ Les masques indiquent les zones d'image à exclure de la reconstruction ou à
 traiter séparément pendant l'entraînement.
 
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour l'extraction / l'entraînement ;
-  réglages et héritage dans [`param.default`](param.default),
+  réglages et héritage dans [`param.default.sh`](param.default.sh),
   section « 1. Masques SfM / train ». Le fonctionnement des moteurs est décrit
   dans le [README des masques](../segmentation_masks/README.md).
 - `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier optionnel de masques déjà
@@ -190,7 +190,7 @@ Les budgets fixent la durée de l'entraînement en itérations et le nombre maxi
 de splats pour chaque bloc.
 
 - `TRAIN_*` : budgets, croissance et arrêt de l'entraînement ; voir
-  [`param.default`](param.default), section « 4. Entrainement de chaque bloc ».
+  [`param.default.sh`](param.default.sh), section « 4. Entrainement de chaque bloc ».
   Les budgets s'appliquent **par bloc**.
 - Cap : maximum ; ni le nombre final ni la qualité ne sont garantis.
 - `TRAIN_SP_GROWTH_FACTOR` vide : le worker existant estime le facteur en supposant
@@ -233,7 +233,7 @@ images.
   Spirula en produit plusieurs d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images
   (changement d'objectif dans une vidéo, par exemple).
 - `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
-  [`param.default`](param.default), section « 2. Reconstruction SfM globale ».
+  [`param.default.sh`](param.default.sh), section « 2. Reconstruction SfM globale ».
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
   des bâtiments lointains valides et fragmenter la reconstruction.
 - Avec `COLMAP_METHOD=spirula`, sans GPX, Spirula utilise les coordonnées GPS EXIF valides
@@ -275,7 +275,7 @@ les doublons dans leurs zones de recouvrement, sans modifier leurs coordonnées.
   les splats du bloc au meilleur score moyen sont conservés.
 - `MERGE_STRENGTH` : règle la taille des cellules et donc l'intensité de la
   fusion ; `EXPORT_SPLAT_NAME` définit le nom du fichier final. Voir
-  [`param.default`](param.default), section « 6. Fusion et export ».
+  [`param.default.sh`](param.default.sh), section « 6. Fusion et export ».
 - Nombre final : peut être inférieur à la somme des budgets des blocs.
 - Détails de l'algorithme : voir le [README du post-traitement](../postprocess/README.md).
 

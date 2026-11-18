@@ -141,7 +141,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             root = Path(temporary)
             config = root / "config.sh"
             config.write_text(
-                f'source "{ROOT / "param.default"}"\n'
+                f'source "{ROOT / "param.default.sh"}"\n'
                 f'OUTPUT_DIR="{root / "output"}"\n'
                 'PANORAMAX_BBOX="652600,6863300,652900,6863500"\n'
             )
@@ -152,7 +152,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_example_covers_pipeline_parameters_with_actual_defaults(self):
-        example = (ROOT / "param.default").read_text()
+        example = (ROOT / "param.default.sh").read_text()
         assignments = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)="([^"]*)"$',
                                  example, re.MULTILINE)
         values = dict(assignments)
@@ -308,7 +308,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
 
     def test_example_parameters_have_stage_prefixes_or_are_shared(self):
         names = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)=',
-                           (ROOT / "param.default").read_text(), re.MULTILINE)
+                           (ROOT / "param.default.sh").read_text(), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "PYTHON_BIN", "MVK_CONFIG_LOG_LEVEL"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
                     "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_")

@@ -20,7 +20,7 @@ class SlurmLaunchTest(unittest.TestCase):
         self.tools.mkdir()
         self.pipeline_dir = self.root / "repo with spaces" / "tools" / "panoramax"
         self.pipeline_dir.mkdir(parents=True)
-        for name in ("launch.sh", "launch.slurm", "validate_config.sh", "param.default"):
+        for name in ("launch.sh", "launch.slurm", "validate_config.sh", "param.default.sh"):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
         shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
         shared_scripts.mkdir(parents=True)
