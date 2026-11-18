@@ -540,6 +540,16 @@ function frustumCorners(image, camera, near) {
   });
 }
 
+// Vrai si les quatre coins du cadre affiché sont tous devant le point de vue, dans le sens du regard.
+function imageInFrontOfViewer(model, index, viewer, forward) {
+  const image = model.colmapImages[index];
+  const camera = model.cameras.get(image.cameraId);
+  if (!camera) return false;
+  return frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)
+    .slice(1)
+    .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
+}
+
 function buildCameraAxes(images) {
   const out = new Float32Array(images.length * 3);
   for (let i = 0; i < images.length; i++) {
@@ -965,39 +975,26 @@ export function createColmapLayer({
       }
       const p = getViewerPosition();
       // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
-      const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
-      // Direction point de vue -> centre de scène (repli : axe de la caméra).
-      const t = getViewerTarget?.() ?? null;
       const flip = getFlipUp?.();
-      const target = t ? (flip ? [t[0], -t[1], -t[2]] : t) : null;
-      let direction = target
-        ? [target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]]
-        : null;
-      const len = direction ? Math.hypot(...direction) : 0;
-      if (len > 1e-9) {
-        direction = direction.map((v) => v / len);
-      } else {
-        const d = getViewerDirection?.() ?? [0, 0, -1];
-        direction = flip ? [d[0], -d[1], -d[2]] : d;
-      }
+      const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
+      const look = getViewerDirection?.() ?? [0, 0, -1];
+      const forward = flip ? [look[0], -look[1], -look[2]] : look;
       const shownIndex = model.slots[0]?.shown ?? -1;
-      const refAxis = shownIndex >= 0
-        ? [model.axes[shownIndex * 3], model.axes[shownIndex * 3 + 1], model.axes[shownIndex * 3 + 2]]
-        : null;
       const stats = { total: 0, inCone: 0 };
+      // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
         centers: model.cameraCenters,
         axes: model.axes,
         viewer,
-        direction,
-        maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
+        direction: forward,
+        maxAlong: Infinity,
         count: IMAGE_SHOWN,
         maxAngleDeg: 35,
         keepAngleDeg: IMAGE_CENTER_DEG,
         keep: shownIndex,
-        refAxis,
-        maxRefAngleDeg: IMAGE_AXIS_DEG,
+        rankByDistance: true,
         accept: (i, relaxed = false) => {
+          if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(

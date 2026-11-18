@@ -45,6 +45,7 @@ export function selectNearestImages({
   keep = -1,
   refAxis = null,
   maxRefAngleDeg = 180,
+  rankByDistance = false,
   stats = null,
 }) {
   // Axe de la caméra courante : les candidats doivent regarder à peu près dans la même direction.
@@ -89,7 +90,7 @@ export function selectNearestImages({
     if (kept && keptAngleDeg <= keepAngleDeg && accept(keep, true)) {
       const others = selectNearestImages({
         centers, axes, viewer, direction, maxAlong, count: count - 1,
-        maxAngleDeg, maxDistance, accept, keep: -1, refAxis, maxRefAngleDeg,
+        maxAngleDeg, maxDistance, accept, keep: -1, refAxis, maxRefAngleDeg, rankByDistance,
       });
       return [keep, ...others.filter((i) => i !== keep)].slice(0, count);
     }
@@ -107,7 +108,8 @@ export function selectNearestImages({
       axisPenalty = 1 - dot;
     }
     if (!accept(i, false)) continue;
-    candidates.push({ index: i, ...hit, score: hit.alignment + axisPenalty });
+    const score = rankByDistance ? hit.dist : hit.alignment + axisPenalty;
+    candidates.push({ index: i, ...hit, score });
   }
 
   candidates.sort((a, b) => a.score - b.score || a.dist - b.dist);

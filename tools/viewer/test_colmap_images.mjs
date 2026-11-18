@@ -109,3 +109,12 @@ test("cameras facing away from the view direction are rejected (no 180° mirror)
   const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35 };
   assert.deepEqual(selectNearestImages(args), []);
 });
+
+test("rankByDistance picks the camera nearest the viewpoint, not the most centred one", () => {
+  // Caméra 0 : proche mais décalée ; caméra 1 : plus loin mais parfaitement dans l'axe.
+  const centers = [1, 0.6, 0, 4, 0, 0];
+  const axes = [1, 0, 0, 1, 0, 0];
+  const base = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: Infinity, count: 1, maxAngleDeg: 35 };
+  assert.deepEqual(selectNearestImages({ ...base }), [1]);
+  assert.deepEqual(selectNearestImages({ ...base, rankByDistance: true }), [0]);
+});
