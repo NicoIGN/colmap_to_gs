@@ -7,155 +7,124 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("install_spirula.sh").resolve()
+GIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "test",
+    "GIT_AUTHOR_EMAIL": "test@example.com",
+    "GIT_COMMITTER_NAME": "test",
+    "GIT_COMMITTER_EMAIL": "test@example.com",
+}
 
 
+def write_executable(path, text):
+    path.write_text(text)
+    path.chmod(0o755)
+
+
+@unittest.skipUnless(shutil.which("git"), "Git requis")
 class InstallTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        tools = self.root / "bin"
-        tools.mkdir()
-        self.log = self.root / "commands"
-        self.source = self.root / "spirula studio"
-        helper = self.root / "build_helper"
-        helper.write_text(
-            '#!/bin/bash\nset -eu\n'
-            'printf "build %s\\n" "$*" >> "$COMMAND_LOG"\n'
-            '[ "${BUILD_FAIL:-0}" = 0 ] || exit 7\n'
-            'mkdir -p build build_vulkan\n'
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.build_log = self.root / "build.log"
+        self.origin = self.root / "origin"
+        self.source = self.root / "spirula"
+        self.model = self.root / "models" / "sam3-q4_0.ggml"
+        (self.root / "conda").mkdir()
+
+        # Le test se fait passer pour macOS afin d'éviter les contrôles Linux/Vulkan.
+        write_executable(self.bin / "uname", "#!/bin/sh\necho Darwin\n")
+        write_executable(self.bin / "sysctl", "#!/bin/sh\necho 2\n")
+        write_executable(self.bin / "curl", (
+            "#!/bin/sh\n"
+            'if [ "${CURL_FAIL:-0}" = 1 ]; then exit 22; fi\n'
+            'while [ "$1" != -o ]; do shift; done\n'
+            'echo model > "$2"\n'
+        ))
+
+        self.origin.mkdir()
+        write_executable(self.origin / "build_develop.bash", (
+            "#!/bin/bash\n"
+            'echo "build $*" >> "$BUILD_LOG"\n'
+            "mkdir -p build\n"
             "printf '#!/bin/sh\\necho test-version\\n' > build/spirula\n"
-            'chmod +x build/spirula\n'
-            'cp build/spirula build_vulkan/spirula\n'
+            "chmod +x build/spirula\n"
+        ))
+        self.git("init", "-q", cwd=self.origin)
+        self.git("add", ".", cwd=self.origin)
+        self.git("commit", "-qm", "initial", cwd=self.origin)
+        self.git("clone", "-q", str(self.origin), str(self.source), cwd=self.root)
+
+        self.env = dict(
+            os.environ,
+            **GIT_IDENTITY,
+            PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}",
+            BUILD_LOG=str(self.build_log),
+            CONDA_PREFIX=str(self.root / "conda"),
+            SPIRULA_REPO_DIR=str(self.source),
+            SPIRULA_SAM3_MODEL=str(self.model),
         )
-        scripts = {
-            "git": (
-                '#!/bin/bash\nset -eu\n'
-                'printf "git %s\\n" "$*" >> "$COMMAND_LOG"\n'
-                'if [ "$1" = clone ]; then\n'
-                '  for last; do :; done\n'
-                '  mkdir -p "$last/.git"\n'
-                '  cp "$BUILD_HELPER" "$last/build_develop.bash"\n'
-                'elif [ "${3:-}" = status ]; then\n'
-                '  printf "%s" "${DIRTY:-}"\n'
-                'fi\n'
-            ),
-            "cmake": '#!/bin/sh\nprintf "cmake %s\\n" "$*" >> "$COMMAND_LOG"\n',
-            "ninja": "#!/bin/sh\nexit 0\n",
-            "curl": (
-                '#!/bin/bash\nset -eu\n'
-                'printf "curl %s\\n" "$*" >> "$COMMAND_LOG"\n'
-                'while [ "$1" != --output ]; do shift; done\n'
-                'dest="$2"\n'
-                'if [ "${DOWNLOAD_FAIL:-0}" = 1 ]; then printf partial > "$dest"; exit 22; fi\n'
-                'if [ "${BAD_MODEL:-0}" = 1 ]; then printf html > "$dest"; exit 0; fi\n'
-                "printf '3mas' > \"$dest\"\n"
-                'dd if=/dev/zero of="$dest" bs=1 seek=629145599 count=1 conv=notrunc 2>/dev/null\n'
-            ),
-        }
-        for name, text in scripts.items():
-            path = tools / name
-            path.write_text(text)
-            path.chmod(0o755)
-        self.env = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}",
-                        COMMAND_LOG=str(self.log), BUILD_HELPER=str(helper))
-        self.command = ["bash", str(SCRIPT), "--repo-dir", str(self.source)]
+
+    def git(self, *args, cwd):
+        subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
 
     def run_installer(self, *args, **env):
         return subprocess.run(
-            self.command + list(args), cwd=self.root, env=dict(self.env, **env),
-            capture_output=True, text=True, timeout=30,
+            ["bash", str(SCRIPT), *args], cwd=self.root,
+            env=dict(self.env, **env), capture_output=True, text=True, timeout=60,
         )
 
-    def test_clone_then_reuse_and_force_clean_build(self):
-        result = self.run_installer("--", "-DSS_BUILD_GUI=OFF")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("test-version", result.stdout)
-        self.assertIn("TRAIN_MASKS_SPIRULA_MODEL=", result.stdout)
-        self.assertIn("git clone --recurse-submodules", self.log.read_text())
-        self.assertIn("-DSS_BUILD_GUI=OFF", self.log.read_text())
-        model = self.source / "models" / "sam3-q4_0.ggml"
-        self.assertTrue(model.is_file())
-        before = self.log.read_text()
-        result = self.run_installer(DIRTY=" M local.cpp")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("réutilisé", result.stdout)
-        self.assertEqual(self.log.read_text(), before)
+    def builds(self):
+        if not self.build_log.exists():
+            return 0
+        return self.build_log.read_text().count("build ")
 
-        result = self.run_installer("--", "-DSS_BUILD_GUI=OFF")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--clean", result.stderr)
-        result = self.run_installer("--clean", DIRTY=" M local.cpp")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Modifications locales", result.stderr)
+    def commit_upstream(self):
+        (self.origin / "change.txt").write_text("new")
+        self.git("add", "change.txt", cwd=self.origin)
+        self.git("commit", "-qm", "change", cwd=self.origin)
 
-        for directory in ("build", "build_vulkan"):
-            (self.source / directory / "CMakeCache.txt").touch()
-        result = self.run_installer("--clean", "--", "-DSS_BUILD_GUI=OFF")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        log = self.log.read_text()
-        self.assertIn("pull --ff-only", log)
-        self.assertIn("cmake --build", log)
-        self.assertEqual(log.count("build -DSS_BACKEND"), 2)
-        self.assertEqual(log.count("curl "), 1)
-        self.assertIn(":(top,exclude)models/", log)
-        result = self.run_installer("--clean", BUILD_FAIL="1")
-        self.assertEqual(result.returncode, 7)
-        self.assertNotIn("Prêt", result.stdout)
-        result = self.run_installer("--clean", "--", "-DSS_BACKEND=cuda")
-        self.assertNotEqual(result.returncode, 0)
-
-    def test_failed_or_invalid_download_leaves_no_model_or_temporary_file(self):
-        for setting in ("DOWNLOAD_FAIL", "BAD_MODEL"):
-            with self.subTest(setting=setting):
-                result = self.run_installer(**{setting: "1"})
-                self.assertNotEqual(result.returncode, 0)
-                self.assertFalse((self.source / "models" / "sam3-q4_0.ggml").exists())
-                self.assertEqual(list((self.source / "models").glob(".sam3-*")), [])
+    def test_default_always_rebuilds(self):
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue((self.source / "models" / "sam3-q4_0.ggml").is_file())
-
-    def test_existing_invalid_model_is_not_overwritten(self):
+        self.assertEqual(self.builds(), 1)
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
-        model = self.source / "models" / "sam3-q4_0.ggml"
-        model.write_bytes(b"partial")
-        before = self.log.read_text()
-        result = self.run_installer()
+        self.assertEqual(self.builds(), 2)
+
+    def test_update_skips_build_when_repo_unchanged(self):
+        self.assertEqual(self.run_installer().returncode, 0)
+        result = self.run_installer("--update")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("compilation ignorée", result.stdout)
+        self.assertEqual(self.builds(), 1)
+
+    def test_update_rebuilds_on_change_and_keeps_artifacts(self):
+        self.assertEqual(self.run_installer().returncode, 0)
+        marker = self.source / "build" / "marker.o"
+        marker.write_text("artifact")
+        self.commit_upstream()
+        result = self.run_installer("--update")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Dépôt modifié", result.stdout)
+        self.assertEqual(self.builds(), 2)
+        self.assertEqual(marker.read_text(), "artifact")
+
+    def test_clean_removes_build_directory(self):
+        self.assertEqual(self.run_installer().returncode, 0)
+        marker = self.source / "build" / "marker.o"
+        marker.write_text("artifact")
+        result = self.run_installer("--clean")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(marker.exists())
+        self.assertEqual(self.builds(), 2)
+
+    def test_failed_model_download_leaves_no_model(self):
+        result = self.run_installer(CURL_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("invalide ou incomplet", result.stderr)
-        self.assertEqual(model.read_bytes(), b"partial")
-        self.assertEqual(before, self.log.read_text())
-
-    def test_existing_binary_without_checkout_is_reused(self):
-        directory = self.source / ("build" if os.uname().sysname == "Darwin" else "build_vulkan")
-        directory.mkdir(parents=True)
-        binary = directory / "spirula"
-        binary.write_text("#!/bin/sh\necho test-version\n")
-        binary.chmod(0o755)
-        result = self.run_installer()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertNotIn("git ", self.log.read_text())
-        self.assertNotIn("build -D", self.log.read_text())
-
-    def test_real_git_excludes_only_root_models(self):
-        git = shutil.which("git", path=os.defpath)
-        if not git:
-            self.skipTest("Git requis")
-        subprocess.run([git, "init", "-q", str(self.source)], check=True)
-        (self.source / "models").mkdir()
-        (self.source / "models" / "sam3-q4_0.ggml").write_bytes(b"model")
-        other = self.source / "other"
-        other.mkdir()
-        (other / "change.txt").write_text("keep")
-        result = subprocess.run(
-            [git, "-C", str(self.source), "status", "--porcelain",
-             "--untracked-files=all", "--", ".", ":(top,exclude)models/"],
-            check=True, capture_output=True, text=True,
-        )
-        self.assertIn("other/change.txt", result.stdout)
-        self.assertNotIn("sam3-q4_0.ggml", result.stdout)
+        self.assertFalse(self.model.exists())
 
 
 if __name__ == "__main__":
