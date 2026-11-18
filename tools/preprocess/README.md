@@ -77,7 +77,8 @@ DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
   bash /chemin/vers/colmap_to_gs/tools/libs/scripts/run_spirula_blocks.sh
 ```
 
-- **SfM :** réutilise `DIR/sfm-TRAIN_NUM_ITER` s'il est complet ; sinon, lance
+- **SfM :** réutilise `DIR/sfm` s'il est complet et si les seuils géométriques
+  sont inchangés (indépendant de `TRAIN_NUM_ITER`) ; sinon, lance
   la [reconstruction Panoramax](../panoramax/README.md).
 - **Découpage :** applique ce script à `sparse/0` et écrit les blocs dans
   `blocks-SPLIT_NUM_BLOCKS/`.

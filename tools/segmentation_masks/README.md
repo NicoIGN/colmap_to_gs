@@ -37,8 +37,8 @@ pas cette prise en charge des masques d'entraînement.
 
 ## 2. Entrées et sorties
 
-- **Entrée** : `sfm-*/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
-- **Sortie** : `sfm-*/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
+- Entrée : `sfm/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
+- **Sortie** : `sfm/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
 - **`masks.json`** : paramètres de génération, fraction masquée et statut pour chaque image, ainsi qu'un résumé global.
 - **Reprise** : si les paramètres enregistrés sont identiques, les masques existants présents dans le rapport sont réutilisés lorsque `--verbose` n'est pas activé. Si les paramètres changent, les masques sont régénérés dans un dossier temporaire puis remplacent l'ancien dossier à la fin du traitement.
 - **Mode verbose** : `tmp_labels/` est recréé et les images sont recalculées pour produire les diagnostics, même si des masques existaient déjà.
@@ -204,8 +204,8 @@ export TRAIN_MASKS_PYTHON="$TRAIN_MASKS_INSTALL_DIR/venv/bin/python"
 
 "$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
   --backend segmentation \
-  --images DATASET/sfm-12000/images \
-  --output DATASET/sfm-12000/train_masks \
+  --images DATASET/sfm/images \
+  --output DATASET/sfm/train_masks \
   --model mapillary \
   --labels "sky" \
   --confidence 0 \

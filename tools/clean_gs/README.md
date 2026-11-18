@@ -12,7 +12,7 @@ Exemple d’invocation :
 python tools/clean_gs/clean_sky.py \
   --input /chemin/scene.unfiltered.splat \
   --output /chemin/scene.cleangs.splat \
-  --scene /chemin/sfm-12000 \
+  --scene /chemin/sfm \
   --model /chemin/segformer --mode diagnostic
 ```
 

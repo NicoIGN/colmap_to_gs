@@ -50,8 +50,8 @@ class BlockPipelineTest(unittest.TestCase):
     def test_spirula_analysis_exposure_reaches_sfm_and_training_options_reach_blocks(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
-            shutil.rmtree(data / "sfm-3")
-            (data / "sfm-3/images").mkdir(parents=True)
+            shutil.rmtree(data / "sfm")
+            (data / "sfm/images").mkdir(parents=True)
             (data / "images/img.jpg").write_bytes(
                 b"\xff\xd8\xff\xc0\x00\x11\x08\x00\x01\x00\x01" + b"\x00" * 12)
             env.update(
@@ -87,8 +87,8 @@ class BlockPipelineTest(unittest.TestCase):
                                "SFM_SP_BA_LOSS_PARAM": "1"}):
             with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
-                shutil.rmtree(data / "sfm-3")
-                (data / "sfm-3/images").mkdir(parents=True)
+                shutil.rmtree(data / "sfm")
+                (data / "sfm/images").mkdir(parents=True)
                 env.update(PREPARE="false", **overrides)
                 result = execute("--prepare-only")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -103,7 +103,7 @@ class BlockPipelineTest(unittest.TestCase):
                 ):
                     self.assertEqual(sfm[sfm.index(flag) + 1], overrides.get(key, default))
                 self.assertEqual(sfm[sfm.index("--reuse-matches") + 1], "redo")
-                self.assertTrue((data / "sfm-3/sfm_geometry_policy.json").is_file())
+                self.assertTrue((data / "sfm/sfm_geometry_policy.json").is_file())
                 before = log.read_text()
                 env["SFM_MIN_TRI_ANGLE"] = "5"
                 for args in (("--prepare-only",), ("--block", "0")):
@@ -118,14 +118,14 @@ class BlockPipelineTest(unittest.TestCase):
             result = execute("--prepare-only")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("les nouveaux seuils ne sont PAS appliqués", result.stderr)
-            self.assertFalse((data / "sfm-3/sfm_geometry_policy.json").exists())
+            self.assertFalse((data / "sfm/sfm_geometry_policy.json").exists())
 
     def fixture(self, temporary):
             root = Path(temporary)
             data = root / "dataset"
             (data / "images").mkdir(parents=True)
-            sparse = data / "sfm-3" / "sparse" / "0"
-            images = data / "sfm-3" / "images"
+            sparse = data / "sfm" / "sparse" / "0"
+            images = data / "sfm" / "images"
             sparse.mkdir(parents=True)
             images.mkdir()
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
@@ -219,7 +219,6 @@ class BlockPipelineTest(unittest.TestCase):
                     env["TRAIN_SP_GROWTH_FACTOR"] = ""
                 else:
                     env.pop("TRAIN_SP_GROWTH_FACTOR")
-                (data / "sfm-3").rename(data / "sfm-20000")
                 if mode == "array":
                     prepared = execute("--prepare-only")
                     self.assertEqual(prepared.returncode, 0, prepared.stdout + prepared.stderr)
@@ -263,7 +262,7 @@ class BlockPipelineTest(unittest.TestCase):
                 env.update(settings)
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
                      "--output-dir", str(root / "worker"), *args],
                     env=env, capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -290,7 +289,7 @@ class BlockPipelineTest(unittest.TestCase):
                 env.pop("TRAIN_SP_GROWTH_FACTOR")
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
                      "--output-dir", str(root / "unused"), *args],
                     env=env, capture_output=True, text=True, timeout=10)
                 self.assertNotEqual(result.returncode, 0)
@@ -323,7 +322,7 @@ class BlockPipelineTest(unittest.TestCase):
                        TRAIN_SP_REFINE_STOP_ITER="12000", TRAIN_SP_REFINE_STOP_NUM_ITER="3000")
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
                  "--output-dir", str(root / "worker"), "--num-iterations", "15000"],
                 env=env,
                 capture_output=True, text=True, timeout=30,
@@ -388,7 +387,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             masks = next(cmd for cmd in commands if cmd[0] == "masks")
-            masks_dir = data / "sfm-3" / "train_masks"
+            masks_dir = data / "sfm" / "train_masks"
             self.assertEqual(masks[masks.index("--output") + 1], str(masks_dir))
             self.assertEqual(masks[masks.index("--dilate-fraction") + 1], "0")
             train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
@@ -454,10 +453,10 @@ class BlockPipelineTest(unittest.TestCase):
                             commands.index(sfm))
             self.assertIn("--reuse-features", sfm)
             self.assertEqual(sfm[sfm.index("--matcher") + 1], "lightglue")
-            features = data / "sfm-3/feature_masks"
+            features = data / "sfm/feature_masks"
             self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(features))
             self.assertTrue(features.is_symlink())
-            self.assertEqual(features.resolve(), data / "sfm-3/train_masks")
+            self.assertEqual(features.resolve(), data / "sfm/train_masks")
             block = execute("--block", "0")
             self.assertEqual(block.returncode, 0, block.stderr + block.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -598,7 +597,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertIn("TRAIN_SP_QUALITY", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
                  "--output-dir", str(root / "unused"), "--quality", "invalid"],
                 env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
@@ -614,7 +613,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm-3/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
                  "--output-dir", str(root / "unused"),
                  "--distraction-robustness", "invalid"],
                 env=env, capture_output=True, text=True, timeout=10)

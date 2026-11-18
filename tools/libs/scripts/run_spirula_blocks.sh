@@ -94,7 +94,7 @@ Variables:
   DIR                       Panoramax dataset; contains images/ and metadata/
   SPIRULA_BIN               Spirula executable (default: shared launcher logic)
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
-  TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
+  TRAIN_NUM_ITER                  Training iterations (30000); the SfM workspace does not depend on it
   SPLIT_NUM_BLOCKS                Number of COLMAP blocks (1)
   TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
   TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
@@ -298,7 +298,7 @@ else
 fi
 
 DIR="$(cd -- "$DIR" && pwd)"
-SFM_DIR="$DIR/sfm-$TRAIN_NUM_ITER"
+SFM_DIR="$DIR/sfm"
 SPARSE_DIR="$SFM_DIR/sparse/0"
 RAW_SPARSE_DIR="$SPARSE_DIR"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"

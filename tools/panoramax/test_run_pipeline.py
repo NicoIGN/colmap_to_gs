@@ -130,8 +130,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
             root = Path(temporary)
             output = root / "output"
             dataset = output / "panoramax"
-            sparse = dataset / "sfm-3" / "sparse" / "0"
-            images = dataset / "sfm-3" / "images"
+            sparse = dataset / "sfm" / "sparse" / "0"
+            images = dataset / "sfm" / "images"
             sparse.mkdir(parents=True)
             images.mkdir()
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
@@ -194,7 +194,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  premerge=args[args.index('--output')+1].endswith('.bbox.splat')\n"
                 "  assert args[args.index('--mode')+1]==('off' if premerge else 'apply')\n"
                 "  if not premerge: assert args[args.index('--size-factor')+1]=='12'\n"
-                "  assert args[args.index('--sparse-points')+1].endswith('sfm-3/sparse/0/points3D.bin')\n"
+                "  assert args[args.index('--sparse-points')+1].endswith('sfm/sparse/0/points3D.bin')\n"
                 "  assert args[args.index('--sparse-bbox-mode')+1]==('apply' if premerge or os.environ.get('TEST_PREMERGE_BBOX')=='1' else 'diagnostic')\n"
                 "  assert args[args.index('--sparse-bbox-margin')+1]=='0.1'\n"
                 "  out=pathlib.Path(args[args.index('--output')+1])\n"
@@ -203,7 +203,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  out.with_suffix('.filter.json').write_text('{}')\n"
                 "elif args and args[0].endswith('clean_sky.py'):\n"
                 "  import pathlib, shutil\n"
-                "  assert args[args.index('--scene')+1].endswith('sfm-3')\n"
+                "  assert args[args.index('--scene')+1].endswith('sfm')\n"
                 "  assert args[args.index('--model')+1]=='/local/model'\n"
                 "  assert args[args.index('--mode')+1]=='diagnostic'\n"
                 "  out=pathlib.Path(args[args.index('--output')+1])\n"
@@ -270,7 +270,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
             self.assertFalse((dataset / "gs-3-blocks-2").exists())
             self.assertFalse((output / "test.splat").exists())
-            gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
+            gps_args = json.loads((dataset / "sfm/gps_filter_args.json").read_text())
             for flag, value in (("--max-distance", "30"), ("--matcher", "bruteforce"),
                                 ("--threads", "6"), ("--max-image-size", "1600"),
                                 ("--aliked-max-features", "2048"),
@@ -288,15 +288,15 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n')
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            mask_env = json.loads((dataset / "sfm-3/mask_env.json").read_text())
+            mask_env = json.loads((dataset / "sfm/mask_env.json").read_text())
             self.assertEqual(mask_env["SFM_MASKS_LABELS"], "sky,car,person")
             self.assertEqual(mask_env["SFM_MASKS_BACKEND"], "spirula")
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
             self.assertEqual(mask_env["SFM_MASKS_DILATE"], "0.003")
             self.assertEqual(mask_env["MASKS_ACCEPT_LICENSE"], "true")
-            gps_args = json.loads((dataset / "sfm-3/gps_filter_args.json").read_text())
+            gps_args = json.loads((dataset / "sfm/gps_filter_args.json").read_text())
             self.assertEqual(gps_args[gps_args.index("--feature-masks") + 1],
-                             str(dataset / "sfm-3/feature_masks"))
+                             str(dataset / "sfm/feature_masks"))
             result = execute("train-block", "0")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((dataset / "gs-3-blocks-2/block_001").exists())
@@ -363,7 +363,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertIn("Ce SfM a été filtré par GPS", result.stderr)
             with config.open("a") as stream:
                 stream.write('SFM_SP_PAIR_MAX_DISTANCE="30"\n')
-            (dataset / "sfm-3").rename(dataset / "sfm-3-backup")
+            (dataset / "sfm").rename(dataset / "sfm-backup")
             result = execute("prepare")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("anciens entraînements", result.stderr)

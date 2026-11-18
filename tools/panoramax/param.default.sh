@@ -143,7 +143,7 @@ SFM_SP_PAIR_MAX_DISTANCE=""
 # ============================================================================
 # 3. Calcul optionnel des masques SfM et d'entrainement
 # ============================================================================
-# TRAIN_MASKS seul ne filtre pas le SfM. Sortie : sfm-*/train_masks/<image>.png,
+# TRAIN_MASKS seul ne filtre pas le SfM. Sortie : sfm/train_masks/<image>.png,
 # 255 = garde, 0 = masque ; controle visuel conseille avant un long calcul.
 
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -312,7 +312,7 @@ TRAIN_SP_BILAGRID_TYPE=""
 # --- Parametres partages ---
 # Nombre d'iterations par bloc ; utilise par Spirula et Nerfstudio.
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
-# Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.
+# Iterations par bloc ; suffixe gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS. Le SfM (sfm/) ne dépend pas de cette valeur.
 TRAIN_NUM_ITER="30000"
 
 # Valeur initiale : 1500000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
