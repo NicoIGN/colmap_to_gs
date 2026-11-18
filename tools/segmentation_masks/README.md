@@ -140,7 +140,7 @@ adaptation et leur export. Chaque mise à jour est une ligne lisible dans
 les logs Slurm. `--verbose` reste réservé aux diagnostics détaillés et
 force la régénération : il n'est pas nécessaire pour suivre l'avancement.
 
-`TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`.
+`TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`. Avec `auto`, Spirula choisit le premier GPU `discrete` (ex. NVIDIA), sinon le premier `integrated` (ex. Apple M2 Pro via MoltenVK), sinon laisse Spirula décider (CPU). Le même choix s'applique à `SFM_SPIRULA_DEVICE` pour le SfM.
 
 Les labels deviennent des **prompts anglais libres**, unis par SAM : `"sky,person,car"` devient `"sky; person; car"`. SAM 2 seul n'accepte pas de texte ; cette intégration attend donc SAM 3. Chaque image est segmentée indépendamment (`spirula sam track --mask-mode image --remove-prompted`), sans suivi vidéo, car les photos Panoramax ne constituent pas une séquence ordonnée. Les sorties `frame_XXXXX.png` sont renommées pour l'entraînement, y compris pour des images dans des sous-dossiers. Formats pris en charge par ce backend : JPEG, PNG, BMP et TIFF ; un autre format provoque une erreur explicite.
 

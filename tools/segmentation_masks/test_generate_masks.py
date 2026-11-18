@@ -210,5 +210,34 @@ class RunTest(unittest.TestCase):
             gm.run(self.args(), FakeSegmenter())
 
 
+class ResolveSpirulaDeviceTest(unittest.TestCase):
+    TABLE = (
+        "[mvk-info] logs\n"
+        "no  nom                                        type        VRAM     UUID                                   état\n"
+        "0   NVIDIA A40                                 discrete      45.0 G uuid:a84efce6  ok\n"
+        "1   llvmpipe (LLVM 20.1.2, 256 bits)           cpu          503.5 G uuid:6d65      ok\n"
+    )
+
+    def fake_binary(self, directory, table):
+        path = Path(directory) / "spirula"
+        path.write_text(f"#!/bin/sh\ncat <<'EOF'\n{table}EOF\n")
+        path.chmod(0o755)
+        return str(path)
+
+    def test_auto_prefers_discrete_gpu_over_cpu(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = self.fake_binary(tmp, self.TABLE)
+            self.assertEqual(gm.resolve_spirula_device(binary, "auto"), "0")
+
+    def test_auto_falls_back_to_integrated_then_auto(self):
+        integrated = self.TABLE.replace("discrete", "integrated").replace("NVIDIA A40", "Apple M2 Pro")
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(gm.resolve_spirula_device(self.fake_binary(tmp, integrated), "auto"), "0")
+            self.assertEqual(gm.resolve_spirula_device(self.fake_binary(tmp, "no nom\n"), "auto"), "auto")
+
+    def test_explicit_device_is_kept(self):
+        self.assertEqual(gm.resolve_spirula_device("/nonexistent", "NVIDIA"), "NVIDIA")
+
+
 if __name__ == "__main__":
     unittest.main()

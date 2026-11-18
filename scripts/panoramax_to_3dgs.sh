@@ -62,14 +62,6 @@ source "$script_dir/param.default.sh"
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config || exit 1
-# Sous Slurm, les jobs tournent sur des nœuds GPU : "auto" choisit le GPU NVIDIA
-# (llvmpipe CPU sinon). Une valeur explicite de la configuration est conservée.
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-  [[ "${TRAIN_MASKS_SPIRULA_DEVICE:-auto}" != auto ]] || TRAIN_MASKS_SPIRULA_DEVICE="NVIDIA"
-  [[ "${SFM_MASKS_SPIRULA_DEVICE:-}" != auto ]] || SFM_MASKS_SPIRULA_DEVICE="NVIDIA"
-  SFM_SPIRULA_DEVICE="${SFM_SPIRULA_DEVICE:-NVIDIA}"
-  # SFM vide : hérite de TRAIN_MASKS_SPIRULA_DEVICE (ligne plus bas).
-fi
 
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"

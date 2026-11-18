@@ -100,6 +100,24 @@ def progress(current, total, args, label="Traitement", *, force=False):
         flush=True,
     )
 
+def resolve_spirula_device(binary, requested):
+    """Return the index of the first ok discrete GPU, then integrated, else requested."""
+    if requested != "auto":
+        return requested
+    try:
+        result = subprocess.run([binary, "sam", "devices"], capture_output=True,
+                                text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return requested
+    rows = [line.split() for line in (result.stdout + "\n" + result.stderr).splitlines()]
+    for kind in ("discrete", "integrated"):
+        for tokens in rows:
+            # Columns: no, name (may contain spaces), type, VRAM (2 tokens), uuid, état.
+            if len(tokens) >= 5 and tokens[0].isdigit() and tokens[-1] == "ok" and tokens[-5] == kind:
+                return tokens[0]
+    return requested
+
+
 def parse_labels(text):
     labels = []
     for item in text.split(","):
@@ -209,10 +227,11 @@ class SpirulaSegmenter:
             self.close()
             raise ValueError(f"Spirula introuvable : {args.spirula_bin}")
         self.binary = str(Path(binary).resolve())
+        self.device = resolve_spirula_device(self.binary, args.spirula_device)
         stat = Path(self.binary).stat()
         self.settings = {"backend": "spirula", "binary": self.binary,
                          "binary_fingerprint": f"{stat.st_size}:{stat.st_mtime_ns}",
-                         "device": args.spirula_device}
+                         "device": self.device}
         self.jobs = args.jobs
         if self.jobs < 1:
             self.close()
@@ -227,7 +246,7 @@ class SpirulaSegmenter:
              "--text", "; ".join(self.id2label.values()),
              "--mask-mode", "image", "--remove-prompted", "--dilate-ratio", "0",
              "--threshold", str(self.args.confidence),
-             "--device", self.args.spirula_device]
+             "--device", self.device]
         if self.args.accept_spirula_license:
             command += ["--accept-license", "sam3=yes"]
         return command
