@@ -379,15 +379,60 @@ fi
 repo_state() {
     git -C "${REPO_DIR}" rev-parse HEAD
     git -C "${REPO_DIR}" submodule status --recursive
+    git -C "${REPO_DIR}" diff --stat HEAD
+}
+
+# ===============================================================
+# Correctifs locaux (tools/spirula/patch/*.patch)
+# ===============================================================
+
+PATCH_DIR="${SCRIPT_DIR}/patch"
+
+patches_apply() {
+    local p files changed
+    for p in "${PATCH_DIR}"/*.patch; do
+        [[ -e "${p}" ]] || continue
+        if git -C "${REPO_DIR}" apply --reverse --check "${p}" >/dev/null 2>&1; then
+            log "Correctif déjà appliqué : $(basename "${p}")"
+        elif git -C "${REPO_DIR}" apply --check "${p}" >/dev/null 2>&1; then
+            log "Application du correctif : $(basename "${p}")"
+            git -C "${REPO_DIR}" apply "${p}"
+        else
+            files="$(git -C "${REPO_DIR}" apply --numstat "${p}" | awk '{print $3}')"
+            changed=""
+            if [[ -n "${REPO_HEAD_BEFORE_PULL}" ]]; then
+                changed="$(git -C "${REPO_DIR}" diff --name-only "${REPO_HEAD_BEFORE_PULL}" HEAD)"
+            fi
+            if [[ -n "$(comm -12 <(sort -u <<<"${files}") <(sort -u <<<"${changed}"))" ]]; then
+                die "Correctif non applicable, fichiers modifiés par la mise à jour : $(basename "${p}")"
+            fi
+            log "[AVERTISSEMENT] Correctif ignoré (fichiers non modifiés par la mise à jour) : $(basename "${p}")"
+        fi
+    done
+}
+
+
+patches_revert() {
+    local p
+    for p in "${PATCH_DIR}"/*.patch; do
+        [[ -e "${p}" ]] || continue
+        if git -C "${REPO_DIR}" apply --reverse --check "${p}" >/dev/null 2>&1; then
+            log "Retrait du correctif avant mise à jour : $(basename "${p}")"
+            git -C "${REPO_DIR}" apply --reverse "${p}"
+        fi
+    done
 }
 
 REPO_STATE_BEFORE=""
+REPO_HEAD_BEFORE_PULL=""
 
 if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
+    patches_revert
     REPO_STATE_BEFORE="$(repo_state)"
+    REPO_HEAD_BEFORE_PULL="$(git -C "${REPO_DIR}" rev-parse HEAD)"
     git -C "${REPO_DIR}" pull --ff-only
 
 else
@@ -410,6 +455,8 @@ log "Mise à jour des sous-modules"
 
 git -C "${REPO_DIR}" submodule sync --recursive
 git -C "${REPO_DIR}" submodule update --init --recursive
+
+patches_apply
 
 REPO_STATE_AFTER="$(repo_state)"
 
