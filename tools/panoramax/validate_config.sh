@@ -4,7 +4,6 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/tools/libs/scr
 
 validate_config() {
   local config_errors=0 name value train_backend="${TRAIN_BACKEND:-spirula}"
-  normalize_backend_config_names || return 1
   reject_legacy_config || return 1
   config_choice TRAIN_BACKEND "$train_backend" 'spirula|nerfstudio'
   if [[ "$train_backend" == nerfstudio ]]; then
@@ -37,6 +36,11 @@ validate_config() {
   fi
   config_positive_integer SFM_MAX_IMAGE_SIZE "${SFM_MAX_IMAGE_SIZE:-4096}"
   config_positive_integer SFM_ALIKED_MAX_FEATURES "${SFM_ALIKED_MAX_FEATURES:-4096}"
+  config_choice SFM_CAMERA_MODEL "${SFM_CAMERA_MODEL:-opencv}" \
+    'opencv|pinhole|opencv-fisheye|equirectangular'
+  if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula ]]; then
+    config_error "SFM_CAMERA_MODEL=equirectangular exige TRAIN_BACKEND=spirula."
+  fi
   for name in PANORAMAX_IMAGE_MAX SFM_THREADS; do
     value="${!name:-}"
     [[ -z "$value" ]] || config_positive_integer "$name" "$value"
@@ -52,9 +56,11 @@ validate_config() {
     [[ -z "${TRAIN_SP_QUALITY:-}" ]] ||
       config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'
     config_choice TRAIN_SP_DISTRACTION_ROBUSTNESS "${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}" 'off|mild|strong'
+    config_choice TRAIN_SP_WARP_SPHERICAL "${TRAIN_SP_WARP_SPHERICAL:-true}" 'true|false'
     config_choice TRAIN_SP_FLOATER_SUPPRESSION "${TRAIN_SP_FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
   fi
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
+  config_choice PANORAMAX_PICTURE_TYPE "${PANORAMAX_PICTURE_TYPE:-all}" 'all|normal|360'
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice POSTPROCESS_FILTER_MODE "${POSTPROCESS_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
@@ -64,7 +70,7 @@ validate_config() {
   config_choice MASKS_ACCEPT_LICENSE "${MASKS_ACCEPT_LICENSE:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   local suffix sfm_name train_name backend
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     value="${!sfm_name:-${!train_name:-}}"

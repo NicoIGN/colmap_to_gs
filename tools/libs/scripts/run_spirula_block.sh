@@ -38,6 +38,7 @@ growth_factor="${TRAIN_SP_GROWTH_FACTOR:-}"
 refine_stop_iter="${TRAIN_SP_REFINE_STOP_ITER:-}"
 refine_stop_num_iter="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
 floater_suppression="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+warp_spherical="${TRAIN_SP_WARP_SPHERICAL:-}"
 masks_dir="${MASKS_DIR:-}"
 mask_mode="${MASK_MODE:-ignore}"
 
@@ -82,6 +83,7 @@ Options:
   --refine-stop-iter N      Pas minimal d'arrêt de la croissance
   --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
   --floater-suppression M   off, mild ou strong
+  --warp-spherical-to-pinhole B  true (défaut Spirula) : 360 découpée en vues pinhole ; false : équirectangulaire direct
   --masks-dir PATH          Masques d'entraînement (<image>.png, 255 gardé, 0 masqué)
   --mask-mode MODE          ignore (pixels exclus de la perte) ou empty (appris vides)
   --python-bin PATH
@@ -145,6 +147,7 @@ while [[ $# -gt 0 ]]; do
     --refine-stop-iter) need_arg "$@"; refine_stop_iter="$2"; shift 2 ;;
     --refine-stop-num-iter) need_arg "$@"; refine_stop_num_iter="$2"; shift 2 ;;
     --floater-suppression) need_arg "$@"; floater_suppression="$2"; shift 2 ;;
+    --warp-spherical-to-pinhole) need_arg "$@"; warp_spherical="$2"; shift 2 ;;
     --masks-dir) need_arg "$@"; masks_dir="$2"; shift 2 ;;
     --mask-mode) need_arg "$@"; mask_mode="$2"; shift 2 ;;
     --python-bin) need_arg "$@"; python_bin="$2"; shift 2 ;;
@@ -235,6 +238,10 @@ photometric_signature_file="$output_dir/train_sp_photometric.txt"
 if [[ -n "$min_init_fraction" ]]; then
   is_number "$min_init_fraction" || die "--min-init-fraction invalide"
 fi
+case "$warp_spherical" in
+  ""|true|false) ;;
+  *) die "TRAIN_SP_WARP_SPHERICAL doit être vide, true ou false." ;;
+esac
 if [[ -z "$growth_factor" ]]; then
   # Spirula grows at multiples of 100 strictly after 500 and before the stop.
   growth_estimate="$(LC_ALL=C awk \
@@ -546,6 +553,7 @@ cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
+[[ -z "$warp_spherical" ]] || cmd+=(--warp-spherical-to-pinhole "$warp_spherical")
 for pair in \
   "use-ppisp:$sp_use_ppisp" \
   "ppisp-exposure-from-exif:$sp_ppisp_exposure_from_exif" \

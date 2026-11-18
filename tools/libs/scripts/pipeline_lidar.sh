@@ -34,7 +34,7 @@ for name, default in runpy.run_path(sys.argv[1])["DEFAULTS"].items():
 PY
 )" || return 1
   while IFS='|' read -r name default; do
-    [[ -v "$name" ]] || printf -v "$name" '%s' "$default"
+    [[ "${!name+x}" == x ]] || printf -v "$name" '%s' "$default"
     export "$name"
   done <<< "$defaults"
   "${PYTHON_BIN:-python3}" "$repo_root/tools/lidar/pipeline_options.py" validate

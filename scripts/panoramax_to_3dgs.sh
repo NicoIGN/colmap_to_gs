@@ -10,7 +10,8 @@ usage() {
 Usage:
   bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
-The config is a trusted Bash file. Start from tools/panoramax/config.sh.example.
+The config is a trusted Bash file. It overrides tools/panoramax/param.default.sh,
+which is always sourced first; only set the variables you want to change.
 It defines the Panoramax bbox and its EPSG code, output directory, SfM/block/training parameters,
 and final .splat name.
 Default: all. prepare downloads, reconstructs and partitions; train-block trains
@@ -57,10 +58,11 @@ case "$phase" in
   *) die "Étape inconnue : $phase" ;;
 esac
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
-# The config is an explicitly selected Bash file, equivalent to sourcing env vars.
+source "$script_dir/param.default.sh"
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config || exit 1
+
 
 : "${OUTPUT_DIR:?OUTPUT_DIR doit être défini dans la configuration}"
 : "${PANORAMAX_BBOX:?PANORAMAX_BBOX doit être défini dans la configuration}"
@@ -72,6 +74,8 @@ PANORAMAX_BBOX_EPSG="${PANORAMAX_BBOX_EPSG:-2154}"
 PANORAMAX_QUALITY="${PANORAMAX_QUALITY:-hd}"
 PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
+PANORAMAX_PICTURE_TYPE="${PANORAMAX_PICTURE_TYPE:-all}"
+PANORAMAX_PROVIDER="${PANORAMAX_PROVIDER:-}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -150,6 +154,7 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 
 [[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
 [[ "$TRAIN_NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "TRAIN_NUM_ITER doit être un entier positif."
@@ -162,6 +167,8 @@ fi
   die "PANORAMAX_IMAGE_MAX doit être vide ou un entier positif."
 [[ "$PANORAMAX_QUALITY" == hd || "$PANORAMAX_QUALITY" == sd || "$PANORAMAX_QUALITY" == thumb ]] ||
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
+[[ "$PANORAMAX_PICTURE_TYPE" == all || "$PANORAMAX_PICTURE_TYPE" == normal || "$PANORAMAX_PICTURE_TYPE" == 360 ]] ||
+  die "PANORAMAX_PICTURE_TYPE doit être all, normal ou 360."
 [[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* && "$EXPORT_SPLAT_NAME" != .splat ]] ||
   die "EXPORT_SPLAT_NAME doit être un nom de fichier terminé par .splat."
 [[ "$MERGE_STRENGTH" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
@@ -182,11 +189,13 @@ prepare_images() {
   if [[ -e "$DATASET_DIR/request.json" ]]; then
     "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
-    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" <<'PY' || request_status=$?
+    "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" "$PANORAMAX_PICTURE_TYPE" \
+    "$PANORAMAX_PROVIDER" <<'PY' || request_status=$?
 import json
 import sys
 
-path, bbox, bbox_epsg, api_url, datetime, quality, image_max = sys.argv[1:]
+path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider = sys.argv[1:]
+stac_types = {"all": None, "normal": "flat", "360": "equirectangular"}
 with open(path, encoding="utf-8") as stream:
     previous = json.load(stream)
 expected = {
@@ -196,6 +205,8 @@ expected = {
     "datetime": datetime or None,
     "quality": quality,
     "image_max": int(image_max) if image_max else None,
+    "picture_type": stac_types[picture_type],
+    "provider": provider or None,
 }
 for key, value in expected.items():
     actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
@@ -234,6 +245,8 @@ PY
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
+  bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
+  [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
   printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
   set_pipeline_stage "téléchargement des photos Panoramax"
   "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
@@ -331,6 +344,7 @@ if [[ "$phase" != merge ]]; then
   SFM_MASKS_DILATE="${SFM_MASKS_DILATE:-0.002}" \
   SFM_MASKS_MAX_FRACTION="${SFM_MASKS_MAX_FRACTION:-$TRAIN_MASKS_MAX_FRACTION}" \
   SFM_MASKS_DEVICE="${SFM_MASKS_DEVICE:-$TRAIN_MASKS_DEVICE}" \
+  SFM_MASKS_NUM_JOBS="${SFM_MASKS_NUM_JOBS:-$TRAIN_MASKS_NUM_JOBS}" \
   TRAIN_MASKS="$TRAIN_MASKS" \
   TRAIN_MASKS_BACKEND="$TRAIN_MASKS_BACKEND" \
   TRAIN_MASKS_SPIRULA_MODEL="$TRAIN_MASKS_SPIRULA_MODEL" \
@@ -344,6 +358,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_MASKS_DILATE="$TRAIN_MASKS_DILATE" \
   TRAIN_MASKS_MAX_FRACTION="$TRAIN_MASKS_MAX_FRACTION" \
   TRAIN_MASKS_DEVICE="$TRAIN_MASKS_DEVICE" \
+  TRAIN_MASKS_NUM_JOBS="$TRAIN_MASKS_NUM_JOBS" \
   bash "$repo_root/tools/libs/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
 fi
 if [[ "$phase" == prepare || "$phase" == train-block ]]; then

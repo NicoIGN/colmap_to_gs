@@ -16,6 +16,9 @@ REPO_DIR="${SPIRULA_REPO_DIR:-$(dirname "${PROJECT_ROOT}")/spirula-studio}"
 SAM3_MODEL_URL="https://huggingface.co/PABannier/sam3.cpp/resolve/main/sam3-q4_0.ggml"
 SAM3_MODEL_PATH="${SPIRULA_SAM3_MODEL:-${REPO_DIR}/models/sam3-q4_0.ggml}"
 
+# GUI désactivée par défaut : elle nécessite X11 et OpenGL (SPIRULA_BUILD_GUI=ON pour l'activer).
+SPIRULA_BUILD_GUI="${SPIRULA_BUILD_GUI:-OFF}"
+
 # ===============================================================
 # Logging et gestion des erreurs
 # ===============================================================
@@ -53,12 +56,15 @@ trap 'on_error $LINENO' ERR
 # ===============================================================
 
 CLEAN=0
+UPDATE=0
 
 usage() {
     cat <<EOF
 Usage : $0 [OPTIONS]
 
 Options :
+  --update   Recompile seulement si le dépôt a changé ou si l'exécutable
+             est absent (artefacts de compilation conservés)
   --clean    Supprime le répertoire de compilation avant le build
   --help     Affiche cette aide
 
@@ -66,6 +72,7 @@ Variables :
   SPIRULA_JOBS       Nombre de jobs de compilation
   SPIRULA_REPO_DIR   Répertoire du dépôt Spirula
   SPIRULA_SAM3_MODEL Chemin du modèle SAM3
+  SPIRULA_BUILD_GUI  ON pour compiler l'interface graphique (OFF par défaut)
 EOF
 }
 
@@ -73,6 +80,9 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             CLEAN=1
+            ;;
+        --update)
+            UPDATE=1
             ;;
         --help|-h)
             usage
@@ -241,21 +251,26 @@ if [[ "${OS}" == "Linux" ]]; then
     # -----------------------------------------------------------
 
     REQUIRED_HEADERS=(
-        X11/X.h
-        X11/Xlib.h
-        X11/Xatom.h
-        X11/Xresource.h
-        X11/keysym.h
-        X11/extensions/Xrandr.h
-        X11/extensions/Xinerama.h
-        X11/extensions/XInput2.h
-        X11/Xcursor/Xcursor.h
-        GL/gl.h
-        GL/glx.h
         vulkan/vulkan.h
         vulkan/vulkan_core.h
         vulkan/vk_platform.h
     )
+
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
+        REQUIRED_HEADERS+=(
+            X11/X.h
+            X11/Xlib.h
+            X11/Xatom.h
+            X11/Xresource.h
+            X11/keysym.h
+            X11/extensions/Xrandr.h
+            X11/extensions/Xinerama.h
+            X11/extensions/XInput2.h
+            X11/Xcursor/Xcursor.h
+            GL/gl.h
+            GL/glx.h
+        )
+    fi
 
     for header in "${REQUIRED_HEADERS[@]}"; do
         check_header "${header}"
@@ -275,17 +290,22 @@ if [[ "${OS}" == "Linux" ]]; then
     # -----------------------------------------------------------
 
     REQUIRED_LIBRARIES=(
-        libX11.so
-        libXext.so
-        libXrandr.so
-        libXi.so
-        libXcursor.so
-        libXinerama.so
-        libGL.so
-        libGLX.so
-        libOpenGL.so
         libvulkan.so
     )
+
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
+        REQUIRED_LIBRARIES+=(
+            libX11.so
+            libXext.so
+            libXrandr.so
+            libXi.so
+            libXcursor.so
+            libXinerama.so
+            libGL.so
+            libGLX.so
+            libOpenGL.so
+        )
+    fi
 
     for library in "${REQUIRED_LIBRARIES[@]}"; do
         check_library "${library}"
@@ -307,23 +327,26 @@ if [[ "${OS}" == "Linux" ]]; then
     command -v pkg-config >/dev/null 2>&1 ||
         die "pkg-config introuvable."
 
-    REQUIRED_PC_PACKAGES=(
-        vulkan
-        x11
-        xinerama
-        xcursor
-        xi
-        xrandr
-        gl
-    )
+    if [[ "${SPIRULA_BUILD_GUI}" == "ON" ]]; then
 
-    for package in "${REQUIRED_PC_PACKAGES[@]}"; do
-        if pkg-config --exists "${package}"; then
-            log "pkg-config OK : ${package} ($(pkg-config --modversion "${package}"))"
-        else
-            die "Package pkg-config manquant : ${package}"
-        fi
-    done
+        REQUIRED_PC_PACKAGES=(
+            x11
+            xinerama
+            xcursor
+            xi
+            xrandr
+            gl
+        )
+
+        for package in "${REQUIRED_PC_PACKAGES[@]}"; do
+            if pkg-config --exists "${package}"; then
+                log "pkg-config OK : ${package} ($(pkg-config --modversion "${package}"))"
+            else
+                die "Package pkg-config manquant : ${package}"
+            fi
+        done
+
+    fi
 
     # -----------------------------------------------------------
     # Vérification ICD
@@ -370,10 +393,63 @@ fi
 # Mise à jour du dépôt Spirula
 # ===============================================================
 
+repo_state() {
+    git -C "${REPO_DIR}" rev-parse HEAD
+    git -C "${REPO_DIR}" submodule status --recursive
+    git -C "${REPO_DIR}" diff --stat HEAD
+}
+
+# ===============================================================
+# Correctifs locaux (tools/spirula/patch/*.patch)
+# ===============================================================
+
+PATCH_DIR="${SCRIPT_DIR}/patch"
+
+patches_apply() {
+    local p files changed
+    for p in "${PATCH_DIR}"/*.patch; do
+        [[ -e "${p}" ]] || continue
+        if git -C "${REPO_DIR}" apply --reverse --check "${p}" >/dev/null 2>&1; then
+            log "Correctif déjà appliqué : $(basename "${p}")"
+        elif git -C "${REPO_DIR}" apply --check "${p}" >/dev/null 2>&1; then
+            log "Application du correctif : $(basename "${p}")"
+            git -C "${REPO_DIR}" apply "${p}"
+        else
+            files="$(git -C "${REPO_DIR}" apply --numstat "${p}" | awk '{print $3}')"
+            changed=""
+            if [[ -n "${REPO_HEAD_BEFORE_PULL}" ]]; then
+                changed="$(git -C "${REPO_DIR}" diff --name-only "${REPO_HEAD_BEFORE_PULL}" HEAD)"
+            fi
+            if [[ -n "$(comm -12 <(sort -u <<<"${files}") <(sort -u <<<"${changed}"))" ]]; then
+                die "Correctif non applicable, fichiers modifiés par la mise à jour : $(basename "${p}")"
+            fi
+            log "[AVERTISSEMENT] Correctif ignoré (fichiers non modifiés par la mise à jour) : $(basename "${p}")"
+        fi
+    done
+}
+
+
+patches_revert() {
+    local p
+    for p in "${PATCH_DIR}"/*.patch; do
+        [[ -e "${p}" ]] || continue
+        if git -C "${REPO_DIR}" apply --reverse --check "${p}" >/dev/null 2>&1; then
+            log "Retrait du correctif avant mise à jour : $(basename "${p}")"
+            git -C "${REPO_DIR}" apply --reverse "${p}"
+        fi
+    done
+}
+
+REPO_STATE_BEFORE=""
+REPO_HEAD_BEFORE_PULL=""
+
 if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
+    patches_revert
+    REPO_STATE_BEFORE="$(repo_state)"
+    REPO_HEAD_BEFORE_PULL="$(git -C "${REPO_DIR}" rev-parse HEAD)"
     git -C "${REPO_DIR}" pull --ff-only
 
 else
@@ -397,6 +473,10 @@ log "Mise à jour des sous-modules"
 git -C "${REPO_DIR}" submodule sync --recursive
 git -C "${REPO_DIR}" submodule update --init --recursive
 
+patches_apply
+
+REPO_STATE_AFTER="$(repo_state)"
+
 # ===============================================================
 # Vérification du script de compilation
 # ===============================================================
@@ -411,46 +491,13 @@ BUILD_SCRIPT="${REPO_DIR}/build_develop.bash"
 # ===============================================================
 
 BUILD_PATH="${REPO_DIR}/${BUILD_DIR}"
-
-if [[ "${CLEAN}" -eq 1 && -d "${BUILD_PATH}" ]]; then
-    log "Suppression du répertoire de compilation : ${BUILD_PATH}"
-    rm -rf "${BUILD_PATH}"
-fi
-
-# ===============================================================
-# Vérification Vulkan avant CMake
-# ===============================================================
-
-if [[ "${OS}" == "Linux" ]]; then
-
-    log "Contrôle final des ressources Vulkan"
-
-    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
-        die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
-
-    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
-        die "Header vulkan_core.h inaccessible."
-
-    [[ -e "${VULKAN_LIBRARY}" ]] ||
-        die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
-
-    log "Headers Vulkan : OK"
-    log "Bibliothèque Vulkan : OK"
-
-fi
-
-# ===============================================================
-# Compilation de Spirula
-# ===============================================================
-
-log "Compilation de Spirula"
-
-cd "${REPO_DIR}"
+SPIRULA_BIN="${BUILD_PATH}/spirula"
 
 BUILD_CMD=(
     bash build_develop.bash
     -DSS_BACKEND=vulkan
     -DSS_BUILD_SAM=ON
+    "-DSS_BUILD_GUI=${SPIRULA_BUILD_GUI}"
     -DCMAKE_BUILD_TYPE=Release
 )
 
@@ -461,19 +508,82 @@ if [[ "${OS}" == "Linux" ]]; then
     )
 fi
 
-log "Commande de compilation :"
-printf '  %q' "${BUILD_CMD[@]}"
-echo
+print_build_command() {
+    echo "  cd $(printf '%q' "${REPO_DIR}") && \\"
+    printf '  %q' "${BUILD_CMD[@]}"
+    echo
+}
 
-log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
+BUILD_NEEDED=0
 
-"${BUILD_CMD[@]}"
+if [[ "${CLEAN}" -eq 1 ]]; then
+    BUILD_NEEDED=1
+    if [[ -d "${BUILD_PATH}" ]]; then
+        log "Suppression du répertoire de compilation : ${BUILD_PATH}"
+        rm -rf "${BUILD_PATH}"
+    fi
+elif [[ "${UPDATE}" -eq 0 ]]; then
+    log "Compilation complète (comportement par défaut)."
+    BUILD_NEEDED=1
+elif [[ -z "${REPO_STATE_BEFORE}" ]]; then
+    log "Premier clone : compilation nécessaire."
+    BUILD_NEEDED=1
+elif [[ "${REPO_STATE_BEFORE}" != "${REPO_STATE_AFTER}" ]]; then
+    log "Dépôt modifié : recompilation (artefacts conservés)."
+    BUILD_NEEDED=1
+elif [[ ! -x "${SPIRULA_BIN}" ]]; then
+    log "Exécutable absent : compilation nécessaire."
+    BUILD_NEEDED=1
+else
+    log "Dépôt inchangé et exécutable présent : compilation ignorée."
+    log "Commande pour recompiler manuellement :"
+    print_build_command
+fi
+
+if [[ "${BUILD_NEEDED}" -eq 1 ]]; then
+
+    # ===========================================================
+    # Vérification Vulkan avant CMake
+    # ===========================================================
+
+    if [[ "${OS}" == "Linux" ]]; then
+
+        log "Contrôle final des ressources Vulkan"
+
+        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
+            die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
+
+        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
+            die "Header vulkan_core.h inaccessible."
+
+        [[ -e "${VULKAN_LIBRARY}" ]] ||
+            die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
+
+        log "Headers Vulkan : OK"
+        log "Bibliothèque Vulkan : OK"
+
+    fi
+
+    # ===========================================================
+    # Compilation de Spirula
+    # ===========================================================
+
+    log "Compilation de Spirula"
+
+    cd "${REPO_DIR}"
+
+    log "Commande de compilation :"
+    print_build_command
+
+    log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+    "${BUILD_CMD[@]}"
+
+fi
 
 # ===============================================================
 # Vérification de l'exécutable
 # ===============================================================
-
-SPIRULA_BIN="${BUILD_PATH}/spirula"
 
 if [[ ! -x "${SPIRULA_BIN}" ]]; then
     die "Exécutable Spirula introuvable ou non exécutable : ${SPIRULA_BIN}"

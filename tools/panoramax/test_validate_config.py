@@ -34,7 +34,7 @@ SFM_SP_BA_LOSS_PARAM=nan
         config.write_text(
             f'OUTPUT_DIR="{root / "output"}"\n'
             'PANORAMAX_BBOX="652600,6863300,652900,6863500"\n'
-            'SPLIT_NUM_BLOCKS=3\nTRAIN_NUM_ITER=15000\nTRAIN_CAP_MAX=4000000\nTRAIN_PRESET=3dgs\n'
+            'SPLIT_NUM_BLOCKS=3\nTRAIN_NUM_ITER=15000\nTRAIN_SP_CAP_MAX=4000000\nTRAIN_SP_PRESET=3dgs\n'
             + extra
         )
         command = ["bash", str(ROOT / script), str(config)]
@@ -137,14 +137,22 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             self.assertFalse((root / "output").exists())
 
     def test_documented_example_is_valid_without_installed_tools(self):
-        result = subprocess.run(
-            ["bash", str(ROOT / "validate_config.sh"), str(ROOT / "config.sh.example"), "slurm"],
-            capture_output=True, text=True, timeout=10,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "config.sh"
+            config.write_text(
+                f'source "{ROOT / "param.default.sh"}"\n'
+                f'OUTPUT_DIR="{root / "output"}"\n'
+                'PANORAMAX_BBOX="652600,6863300,652900,6863500"\n'
+            )
+            result = subprocess.run(
+                ["bash", str(ROOT / "validate_config.sh"), str(config), "slurm"],
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_example_covers_pipeline_parameters_with_actual_defaults(self):
-        example = (ROOT / "config.sh.example").read_text()
+        example = (ROOT / "param.default.sh").read_text()
         assignments = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)="([^"]*)"$',
                                  example, re.MULTILINE)
         values = dict(assignments)
@@ -300,7 +308,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
 
     def test_example_parameters_have_stage_prefixes_or_are_shared(self):
         names = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)=',
-                           (ROOT / "config.sh.example").read_text(), re.MULTILINE)
+                           (ROOT / "param.default.sh").read_text(), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "PYTHON_BIN", "MVK_CONFIG_LOG_LEVEL"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
                     "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_")

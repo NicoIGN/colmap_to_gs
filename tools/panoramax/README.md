@@ -2,7 +2,7 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
-**Entraînement.** Le pipeline global est `script/panoramax_to_3dgs.sh`.
+**Entraînement.** Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
 Le SfM géoréférencé reste celui de Spirula ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
@@ -19,11 +19,12 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
 de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
-`SFM_ALIKED_MAX_FEATURES` et `SFM_THREADS` sont les paramètres communs exposés
-à cette étape. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+`SFM_ALIKED_MAX_FEATURES`, `SFM_THREADS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
+à cette étape. Pour des photos 360, mettre `SFM_CAMERA_MODEL="equirectangular"` (sans focale,
+avec `TRAIN_BACKEND=spirula`). Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
-[`config.sh.example`](config.sh.example) regroupent ces paramètres par backend.
+[`param.default.sh`](param.default.sh) regroupent ces paramètres par backend.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
@@ -32,7 +33,7 @@ vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
 si ces métadonnées sont présentes. Ces options ne sont pas transmises à
 Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
 `SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
-[`config.sh.example`](config.sh.example).
+[`param.default.sh`](param.default.sh).
 
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
@@ -149,7 +150,7 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Pipeline complet bbox → `.splat`
 
-- `script/panoramax_to_3dgs.sh` exécute :
+- `scripts/panoramax_to_3dgs.sh` exécute :
 
 ```text
 Bbox + configuration
@@ -172,9 +173,10 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
-  [`tools/panoramax/config.sh.example`](config.sh.example), organisé par étape du pipeline.
-- Défauts : le modèle reprend les défauts, sans préréglage de croissance sobre.
-- Valeurs d'exemple à remplacer : `OUTPUT_DIR` et `PANORAMAX_BBOX`.
+  [`tools/panoramax/param.default.sh`](param.default.sh), organisé par étape du pipeline.
+- Défauts : `param.default.sh` est chargé en premier par le pipeline ; la configuration
+  utilisateur ne contient que ses surcharges. Il n'y a pas de préréglage de croissance sobre.
+- Valeurs à définir dans la configuration utilisateur (sans défaut) : `OUTPUT_DIR` et `PANORAMAX_BBOX`.
 
 Le découpage privilégie les séparations de faible covisibilité et vise des
 blocs d'environ `N / SPLIT_NUM_BLOCKS` images principales (tolérance de 20 %,
@@ -183,9 +185,10 @@ acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
-cp tools/panoramax/config.sh.example /chemin/vers/paris.sh
-# Éditer paris.sh : bbox et code EPSG, OUTPUT_DIR, nombre de blocs, TRAIN_SP_CAP_MAX, etc.
-bash script/panoramax_to_3dgs.sh /chemin/vers/paris.sh
+# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de param.default.sh.
+OUTPUT_DIR="/chemin/vers/resultats/paris"
+PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
+bash scripts/panoramax_to_3dgs.sh /chemin/vers/paris.sh
 ```
 
 - Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
@@ -255,6 +258,8 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   l'influence des incohérences entre photos. Commencer par `mild` ; `strong`
   peut aussi atténuer des détails peu observés.
 - Ce réglage ne remplace ni les masques ni `TRAIN_SP_FLOATER_SUPPRESSION`.
+- `TRAIN_SP_WARP_SPHERICAL=true` (défaut Spirula) découpe les photos 360 en vues
+  pinhole ; `false` entraîne directement sur l'équirectangulaire (rendu à vérifier).
 - Appliquer à un bloc terminé : réentraîner avec `TRAIN_CLEAN=true`.
 
 - `TRAIN_SP_QUALITY=""` : défaut ; valeurs possibles `low`, `medium`, `high` ou
@@ -274,7 +279,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour le SfM / l'entraînement ;
   réglages, héritage et défauts dans
-  [`config.sh.example`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](config.sh.example).
+  [`param.default.sh`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](param.default.sh).
 - `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
   `--accept-license sam3=yes` pour les deux calculs SAM 3 non interactifs.
   Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.
@@ -450,9 +455,9 @@ modèle ; les codes d'erreur de qualité ou de géoréférencement restent propa
 Les étapes sont également accessibles individuellement, avec la même config :
 
 ```bash
-bash script/panoramax_to_3dgs.sh config.sh prepare
-bash script/panoramax_to_3dgs.sh config.sh train-block 0  # indices 0 à N-1
-bash script/panoramax_to_3dgs.sh config.sh merge
+bash scripts/panoramax_to_3dgs.sh config.sh prepare
+bash scripts/panoramax_to_3dgs.sh config.sh train-block 0  # indices 0 à N-1
+bash scripts/panoramax_to_3dgs.sh config.sh merge
 ```
 
 Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifie

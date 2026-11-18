@@ -99,7 +99,7 @@ def run(args):
         args.spirula_bin, "sfm", "match", str(features), "--output", str(original),
         "--pairs", ("prefilter" if selection["selected"] >= 100 else "exhaustive")
         if args.pairs == "auto" else args.pairs,
-        "--matcher", args.matcher, "--camera-mode", "folder", "--camera-model", "opencv",
+        "--matcher", args.matcher, "--camera-mode", "folder", "--camera-model", args.camera_model,
         "--max-error", str(args.max_error), "--min-inliers", str(args.min_inliers),
         *common,
     ]
@@ -145,6 +145,8 @@ def main():
     parser.add_argument("--min-tri-angle", type=float, default=6)
     parser.add_argument("--ba-loss", choices=("huber", "cauchy", "trivial"), default="huber")
     parser.add_argument("--ba-loss-param", type=float, default=2)
+    parser.add_argument("--camera-model", default="opencv",
+                        choices=("opencv", "pinhole", "opencv-fisheye", "equirectangular"))
     parser.add_argument("--feature-masks", type=Path)
     args = parser.parse_args()
     try:

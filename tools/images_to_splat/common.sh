@@ -41,11 +41,10 @@ load_config() {
   set -a
   source "$config"
   source "$repo_root/tools/libs/scripts/pipeline_config.sh"
-  normalize_backend_config_names || exit 1
   init_sfm_geometry_config "${COLMAP_METHOD:-spirula}"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
-    if [[ -v "$name" ]]; then
+    if [[ "${!name+x}" == x ]]; then
       case "$name" in
         INPUT_IMAGES_DIR) replacement=SFM_IMAGES_DIR ;;
         INPUT_RECURSIVE) replacement=SFM_IMAGES_RECURSIVE ;;
@@ -138,8 +137,9 @@ load_config() {
   TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-0.002}"
   TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-1.0}"
   TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+  TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
   local suffix sfm_name train_name
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -148,7 +148,7 @@ load_config() {
   SFM_MASKS_DILATE="${SFM_MASKS_DILATE:-0.002}"
   MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
   TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-empty}"
-  SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
+  SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-1}"
   SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.10}"
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-ultra}"
@@ -312,7 +312,7 @@ load_config() {
   awk -v o="$SPLIT_OVERLAP_MAX_FRACTION" -v r="$POSTPROCESS_MAX_REMOVAL_FRACTION" \
     -v s="$MERGE_STRENGTH" 'BEGIN {
       exit !(o < 1 && r <= 1 && s > 0)
-    }' || config_error "Seuils hors limites : consulter config.sh.example."
+    }' || config_error "Seuils hors limites : consulter param.default.sh."
   [[ -n "$SFM_CAMERA_MODEL" ]] || config_error "SFM_CAMERA_MODEL ne doit pas être vide."
   local prefix backend model_key
   for prefix in SFM_MASKS TRAIN_MASKS; do
@@ -345,7 +345,7 @@ load_config() {
           if (field == "CONFIDENCE") exit !(x <= 1)
           if (field == "DILATE") exit !(x < 0.1)
           exit !(x > 0 && x <= 1)
-        }' || config_error "$name hors limites : consulter config.sh.example."
+        }' || config_error "$name hors limites : consulter param.default.sh."
     done
   done
   [[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* ]] ||

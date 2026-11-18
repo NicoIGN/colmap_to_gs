@@ -162,6 +162,31 @@ class SoftBalanceTest(unittest.TestCase):
                 memberships.extend(json.loads((folder / "image_membership.json").read_text())["primary_image_ids"])
             self.assertEqual(sorted(memberships), list(range(1, 11)))
 
+    def test_single_block_skips_covisibility_graph_and_keeps_whole_model(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "input", root / "blocks"
+            source.mkdir()
+            (source / "cameras.txt").write_text("1 PINHOLE 100 100 50 50 50 50\n")
+            (source / "images.txt").write_text("".join(
+                f"{i} 1 0 0 0 {i} 0 0 1 image-{i}.jpg\n0 0 1\n" for i in (1, 2, 3)
+            ))
+            (source / "points3D.txt").write_text("1 0 0 1 255 255 255 0 1 0 2 0 3 0\n")
+            argv = ["split", "--input", str(source), "--output", str(output),
+                    "--num-blocks", "1", "--overlap-max-fraction", "0"]
+            with (mock.patch.object(sys, "argv", argv),
+                  mock.patch.object(splitter, "build_covisibility_graph",
+                                    side_effect=AssertionError("graphe inutile")),
+                  contextlib.redirect_stdout(io.StringIO()),
+                  contextlib.redirect_stderr(io.StringIO())):
+                splitter.main()
+            manifest = json.loads((output / "manifest.json").read_text())
+            self.assertEqual([block["num_primary_images"] for block in manifest["blocks"]], [3])
+            with contextlib.redirect_stderr(io.StringIO()):
+                _, images, points, _ = splitter.load_colmap_model(output / "block_000")
+            self.assertEqual(sorted(images), [1, 2, 3])
+            self.assertEqual(sorted(points), [1])
+
 
 if __name__ == "__main__":
     unittest.main()

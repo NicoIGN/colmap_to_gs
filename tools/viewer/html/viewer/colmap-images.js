@@ -28,8 +28,8 @@ export function findImageFile(index, name) {
 
 // Retient les caméras les plus alignées sur la direction point de vue -> centre de scène,
 // dans un cône de maxAngleDeg, entre le point de vue et le centre (maxAlong).
-// Hystérésis : la caméra `keep` reste choisie tant qu'elle reste valide selon des critères
-// relâchés (cône x1.5, accept(i, true)). Sans direction, les plus proches d'abord.
+// Hystérésis : la caméra `keep` reste choisie tant qu'elle reste dans le même cône et accept(i, true).
+// Sans direction, les plus proches d'abord.
 export function selectNearestImages({
   centers,
   axes,
@@ -74,7 +74,7 @@ export function selectNearestImages({
   };
 
   if (keep >= 0 && keep < total && direction) {
-    const kept = evaluate(keep, maxAngleDeg * 1.5, true);
+    const kept = evaluate(keep, maxAngleDeg, true);
     if (kept && accept(keep, true)) {
       const others = selectNearestImages({
         centers, axes, viewer, direction, maxAlong, count: count - 1,

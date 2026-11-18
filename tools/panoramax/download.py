@@ -10,6 +10,7 @@ import shutil
 import sys
 import tempfile
 import time
+from collections import Counter
 from http.client import HTTPException
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -153,6 +154,33 @@ def parse_positive_int(text):
     return value
 
 
+PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
+
+
+def picture_type_of(feature):
+    """Renvoie le type STAC ; certaines photos n'ont que les métadonnées de projection."""
+    properties = feature.get("properties", {})
+    if properties.get("type") is not None:
+        return properties["type"]
+    exif = properties.get("exif") or {}
+    if exif.get("Xmp.GPano.ProjectionType") == "equirectangular":
+        return "equirectangular"
+    orientation = properties.get("pers:interior_orientation") or {}
+    if str(orientation.get("field_of_view")) == "360":
+        return "equirectangular"
+    return None
+
+
+def item_matches_provider(feature, provider):
+    providers = feature.get("properties", {}).get("providers")
+    if not isinstance(providers, list):
+        return False
+    return any(
+        isinstance(entry, dict) and str(entry.get("name", "")).casefold() == provider.casefold()
+        for entry in providers
+    )
+
+
 def item_in_bbox(feature, bbox, to_bbox_crs):
     geometry = feature.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") != "Point":
@@ -198,6 +226,11 @@ def run(args):
     output = args.output_dir.expanduser().resolve()
     for folder in ("images", "metadata", "pages"):
         (output / folder).mkdir(parents=True, exist_ok=True)
+    picture_type = getattr(args, "picture_type", "all")
+    if picture_type not in PICTURE_TYPES:
+        raise ValueError("Le type d'image doit être all, normal ou 360.")
+    stac_type = PICTURE_TYPES[picture_type]
+    provider = getattr(args, "provider", None) or None
     api_limit = SEARCH_LIMIT
     parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
@@ -209,6 +242,8 @@ def run(args):
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
+        "picture_type": stac_type,
+        "provider": provider,
         "api_limit": api_limit,
     })
     counts = {
@@ -220,6 +255,8 @@ def run(args):
     body, method = None, "GET"
     candidates = []
     api_features = 0
+    after_filters = 0
+    api_types = Counter()
     last_page_count = 0
     while url:
         page_key = (url, method, json.dumps(body, sort_keys=True))
@@ -240,6 +277,12 @@ def run(args):
             if key in seen_items:
                 continue
             seen_items.add(key)
+            api_types[str(picture_type_of(feature))] += 1
+            if stac_type is not None and picture_type_of(feature) != stac_type:
+                continue
+            if provider is not None and not item_matches_provider(feature, provider):
+                continue
+            after_filters += 1
             if item_in_bbox(feature, args.bbox, to_bbox_crs):
                 candidates.append((feature, url, key))
         next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
@@ -260,6 +303,10 @@ def run(args):
     counts["available_is_exact"] = total_is_exact
     selected = candidates[:image_max] if image_max is not None else candidates
     progress = Progress(len(selected))
+    print(
+        f"Photos renvoyées par l'API : {api_features} (types : {dict(api_types)}) ; "
+        f"après filtres type/provider : {after_filters}"
+    )
     print(
         f"Photos dans la bbox EPSG:{bbox_epsg} : "
         f"{counts['available']}{'' if total_is_exact else '+'}"
@@ -365,6 +412,14 @@ def main():
         "--image-max",
         type=parse_positive_int,
         help="Nombre maximum de photos à sélectionner et télécharger (toutes pages confondues)",
+    )
+    parser.add_argument(
+        "--picture-type", choices=tuple(PICTURE_TYPES), default="all",
+        help="all (défaut), normal (photos classiques) ou 360 (équirectangulaires)",
+    )
+    parser.add_argument(
+        "--provider",
+        help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

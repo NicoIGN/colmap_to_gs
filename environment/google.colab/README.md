@@ -23,8 +23,8 @@ La première cellule lit les variables d'environnement `TRAIN_NUM_ITER`
 (12000), `TRAIN_SP_CAP_MAX` (500000 splats maximum **par bloc**),
 `SPLIT_NUM_BLOCKS` (**1** par défaut), `MAMBA_ENV` (`gsplat`) et `RUN_NAME`
 (`video_run`). On peut aussi modifier directement leurs valeurs Python.
-`MASKS_JOBS` vaut **2** par défaut : les images sont réparties entre deux
-processus Spirula SAM parallèles sur le même GPU. Chaque processus charge son
+`TRAIN_MASKS_NUM_JOBS` et `SFM_MASKS_NUM_JOBS` valent **2** par défaut : les
+images sont réparties entre deux processus Spirula SAM parallèles sur le même GPU. Chaque processus charge son
 modèle ; réduire à **1** en cas de mémoire GPU insuffisante. Le gain de vitesse
 n'est pas garanti si un seul processus sature déjà le GPU. Ce paramètre
 ne change pas les masques demandés et n'invalide pas les résultats existants.

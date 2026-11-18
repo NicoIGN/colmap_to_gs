@@ -623,5 +623,29 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertFalse((root / "unused").exists())
 
 
+class SingleBlockMergeTest(unittest.TestCase):
+    def test_single_splat_is_copied_and_converted_formats_still_use_merge(self):
+        helper = SCRIPT.with_name("pipeline_postprocess.sh")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "block.splat"
+            source.write_bytes(b"splat-data")
+            command = (
+                f"repo_root={str(root)!r}; source {str(helper)!r}; "
+                f"merge_pipeline_splats {str(root / 'out.splat')!r} 1.0 {str(source)!r}"
+            )
+            env = dict(os.environ, PYTHON_BIN="/bin/false")
+            result = subprocess.run(["bash", "-c", command], env=env,
+                                    capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "out.splat").read_bytes(), b"splat-data")
+
+            converted = command.replace("out.splat", "out.ply")
+            result = subprocess.run(["bash", "-c", converted], env=env,
+                                    capture_output=True, text=True, timeout=30)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((root / "out.ply").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

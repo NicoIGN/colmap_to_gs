@@ -1,12 +1,13 @@
-# Configuration complete du pipeline Panoramax (Bash de confiance).
-# Copier vers config.sh, puis adapter les deux champs obligatoires ci-dessous.
-# Execution locale : bash script/panoramax_to_3dgs.sh config.sh
+# Valeurs par defaut du pipeline Panoramax (Bash de confiance).
+# Sourcees automatiquement par scripts/panoramax_to_3dgs.sh et tools/panoramax/launch.sh
+# avant la configuration utilisateur, qui ne doit contenir que les surcharges.
+# Execution locale : bash scripts/panoramax_to_3dgs.sh config.sh
 # Slurm : bash tools/panoramax/launch.sh config.sh [--wait]
 # Validation sans calcul : bash tools/panoramax/validate_config.sh config.sh slurm
 #
 # Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
 # "" signifie une option non forcee ; le commentaire indique alors le repli.
-# OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : valeurs d'exemple a remplacer.
+# OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : a definir dans la configuration utilisateur.
 # SPLIT_NUM_BLOCKS et TRAIN_NUM_ITER sont communs et obligatoires.
 # TRAIN_SP_CAP_MAX et TRAIN_SP_PRESET sont obligatoires seulement si
 # TRAIN_BACKEND=spirula. Les options TRAIN_SP_* sont ignorees par Nerfstudio.
@@ -24,7 +25,7 @@ TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
 # Obligatoire, aucun defaut. Dossier de sortie non vide, accessible en ecriture.
 # Contient panoramax/ (photos, SfM, blocs), le .splat final et les references GPS.
 # Slurm : choisir un chemin absolu visible depuis tous les noeuds.
-OUTPUT_DIR="/chemin/vers/resultats/panoramax-paris"
+OUTPUT_DIR=""
 
 # Defaut : "". Chemin executable ou commande ; vide = spirula dans PATH,
 # puis ../spirula-studio/build/spirula a cote de ce depot.
@@ -45,7 +46,7 @@ export MVK_CONFIG_LOG_LEVEL="1"
 
 # Obligatoire, aucun defaut. Ordre xmin,ymin,xmax,ymax dans le systeme indique
 # ci-dessous ; quatre nombres finis, xmin<xmax et ymin<ymax.
-PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
+PANORAMAX_BBOX=""
 
 # Defaut : 2154 (Lambert-93). Code EPSG des coordonnees de PANORAMAX_BBOX.
 PANORAMAX_BBOX_EPSG="2154"
@@ -65,6 +66,14 @@ PANORAMAX_DATETIME=""
 # a 10000 resultats) ; sinon entier > 0, nombre maximal de photos.
 PANORAMAX_IMAGE_MAX=""
 
+# Defaut : all. Valeurs : all (toutes), normal (photos classiques, type "flat"),
+# 360 (photos equirectangulaires, type "equirectangular").
+PANORAMAX_PICTURE_TYPE="all"
+
+# Defaut : "". Vide = tous les providers ; sinon nom exact du provider STAC
+# (properties.providers[].name), insensible à la casse.
+PANORAMAX_PROVIDER=""
+
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # false = arret si la requete differe de celle du dataset existant.
 # true = archive panoramax/ dans panoramax.replaced-DATE, puis retelecharge.
@@ -83,6 +92,11 @@ SFM_MAX_IMAGE_SIZE="4096"
 
 # Defaut : 4096. Entier > 0 ; budget de points ALIKED par image.
 SFM_ALIKED_MAX_FEATURES="4096"
+
+# Defaut : opencv. Modele camera transmis a Spirula : opencv | pinhole |
+# opencv-fisheye | equirectangular. Utiliser equirectangular pour des photos 360
+# (sans focale) ; cette valeur exige TRAIN_BACKEND=spirula.
+SFM_CAMERA_MODEL="opencv"
 
 # --- Reglages Spirula uniquement ---
 # Defaut : prefilter. Valeurs : auto|prefilter|exhaustive|sequential.
@@ -167,10 +181,6 @@ export SS_NN_LOG=1
 # conditions SAM 3 Meta : transmet --accept-license sam3=yes pour chaque
 # calcul natif SfM ou 3DGS, y compris les jobs Slurm non interactifs.
 MASKS_ACCEPT_LICENSE="false"
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Vide = nombre de CPU accessibles ; chaque processus charge le modèle sur le GPU,
-# réduire si la mémoire GPU est saturée.
-MASKS_JOBS=""
 
 # Defaut : sky. Liste non vide, separee par des virgules.
 # segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
@@ -202,6 +212,10 @@ TRAIN_MASKS_MAX_FRACTION="0.8"
 # Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
 # auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
 TRAIN_MASKS_DEVICE="auto"
+
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
+TRAIN_MASKS_NUM_JOBS="2"
 
 # --- Masques des caracteristiques SfM (avant extraction/appariement) ---
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -239,6 +253,10 @@ SFM_MASKS_MAX_FRACTION=""
 # Transformers : auto|cpu|mps|cuda|cuda:N ; ignore avec Spirula.
 SFM_MASKS_DEVICE=""
 
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
+SFM_MASKS_NUM_JOBS="2"
+
 # Si les deux politiques de generation sont identiques, feature_masks est
 # un lien vers train_masks : un seul calcul. Des seuils/modeles differents
 # imposent deux calculs meme avec des labels identiques.
@@ -250,7 +268,7 @@ SFM_MASKS_DEVICE=""
 
 # Valeur initiale : 4 (defaut du lanceur de blocs). Entier >= 1 ;
 # champ obligatoire du pipeline : nombre de modeles COLMAP/3DGS.
-SPLIT_NUM_BLOCKS="4"
+SPLIT_NUM_BLOCKS="1"
 
 # Defaut : 0.05. Nombre dans [0,1] : fraction maximale d'images supplementaires
 # par bloc pour le recouvrement. 0 = aucun recouvrement.
@@ -331,6 +349,14 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
 # Suppression native des flotteurs ; mild/strong limitent aussi leur taille
 # a l'ecran. Comparer sur un bloc avant de generaliser.
 TRAIN_SP_FLOATER_SUPPRESSION="off"
+
+# Spirula, 360 uniquement (equirectangular) :
+#   true  (defaut Spirula) : la photo 360 est decoupee en vues pinhole (faces),
+#          sans couture et sans distorsion equirectangulaire, mais plus de
+#          cameras a entrainer (plus de VRAM et de temps).
+#   false : entrainement direct sur l'equirectangulaire, sans decoupage.
+#          Le rendu doit supporter ce modele.
+TRAIN_SP_WARP_SPHERICAL="true"
 
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # true = supprime uniquement les sorties GS des blocs et les reentraine.

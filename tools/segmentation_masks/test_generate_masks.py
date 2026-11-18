@@ -63,6 +63,22 @@ class PureFunctionsTest(unittest.TestCase):
         self.assertEqual(int((gm.keep_mask(probability, 0.5, 1) == 0).sum()), 5)
         self.assertEqual(gm.dilation_radius(300, 400, 0.01), 5)
 
+    def test_black_border_mask_only_keeps_dark_regions_touching_edges(self):
+        rgb = np.full((6, 6, 3), 200, np.uint8)
+        rgb[:2, :] = 0
+        rgb[3, 2:4] = 0
+        black = gm.black_border_mask(rgb)
+        self.assertEqual(int(black[:2].sum()), 12)
+        self.assertFalse(black[3, 2:4].any())
+
+    def test_is_equirectangular_reads_gpano_xmp(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "pano.jpg"
+            path.write_bytes(b"\xff\xd8 <GPano:ProjectionType>equirectangular</GPano:ProjectionType> \xff\xd9")
+            self.assertTrue(gm.is_equirectangular(path))
+            path.write_bytes(b"\xff\xd8 plain photo \xff\xd9")
+            self.assertFalse(gm.is_equirectangular(path))
+
 
 @unittest.skipIf(Image is None, "Pillow requis")
 class ProgressTest(unittest.TestCase):

@@ -7,7 +7,6 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
 config_errors=0
-normalize_backend_config_names || exit 1
 reject_legacy_config || exit 1
 
 DIR="${DIR:-}"
@@ -15,7 +14,7 @@ SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
-SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-4}"
+SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-1}"
 if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-1500000}"
   TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
@@ -26,6 +25,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-true}"
 else
   TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-}"
   TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
@@ -36,6 +36,7 @@ else
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-}"
 fi
 TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
 TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
@@ -50,6 +51,7 @@ SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 SFM_THREADS="${SFM_THREADS:-}"
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
+SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
 init_sfm_geometry_config
 SFM_SP_PAIR_MAX_DISTANCE="${SFM_SP_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
@@ -67,9 +69,10 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 SFM_MASKS="${SFM_MASKS:-off}"
 # SfM settings inherit generation settings, not the training loss mode.
-for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
   sfm_name="SFM_MASKS_$suffix"
   train_name="TRAIN_MASKS_$suffix"
   printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -81,7 +84,7 @@ block_index=""
 usage() {
   cat <<'EOF'
 Usage:
-  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=4] bash run_spirula_blocks.sh [options]
+  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=1] bash run_spirula_blocks.sh [options]
 
 Options:
   --prepare-only            Run/reuse SfM and partition, without training
@@ -92,7 +95,7 @@ Variables:
   SPIRULA_BIN               Spirula executable (default: shared launcher logic)
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
   TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
-  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (4)
+  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (1)
   TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
   TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
   TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
@@ -104,6 +107,8 @@ Variables:
   TRAIN_SP_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
   TRAIN_SP_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
+  TRAIN_SP_WARP_SPHERICAL      true (default, Spirula): 360 split into pinhole faces;
+                            false: direct equirectangular training
   TRAIN_SP_*                Optional Spirula-only photometric training correction
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
@@ -332,7 +337,7 @@ SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
   export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE NUM_JOBS; do
     export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
   done
 fi
@@ -364,6 +369,7 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
+      --camera-model "$SFM_CAMERA_MODEL"
     )
     [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
@@ -390,7 +396,7 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-      --reuse-matches redo
+      --reuse-matches redo --camera-model "$SFM_CAMERA_MODEL"
     )
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
@@ -427,6 +433,7 @@ prepare_blocks() {
       --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
       --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
+      --jobs "$TRAIN_MASKS_NUM_JOBS" \
       "${license_args[@]}" ||
       die "Génération des masques d’entraînement échouée."
   fi
@@ -538,6 +545,7 @@ for ((index = first_index; index < last_index; index++)); do
     [[ -z "$TRAIN_SP_QUALITY" ]] || block_args+=(--quality "$TRAIN_SP_QUALITY")
     block_args+=(--distraction-robustness "$TRAIN_SP_DISTRACTION_ROBUSTNESS")
     [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_SP_GROWTH_FACTOR")
+    [[ -z "$TRAIN_SP_WARP_SPHERICAL" ]] || block_args+=(--warp-spherical-to-pinhole "$TRAIN_SP_WARP_SPHERICAL")
     [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
     [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
     [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")
