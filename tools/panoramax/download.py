@@ -153,6 +153,9 @@ def parse_positive_int(text):
     return value
 
 
+PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
+
+
 def item_in_bbox(feature, bbox, to_bbox_crs):
     geometry = feature.get("geometry")
     if not isinstance(geometry, dict) or geometry.get("type") != "Point":
@@ -198,6 +201,10 @@ def run(args):
     output = args.output_dir.expanduser().resolve()
     for folder in ("images", "metadata", "pages"):
         (output / folder).mkdir(parents=True, exist_ok=True)
+    picture_type = getattr(args, "picture_type", "all")
+    if picture_type not in PICTURE_TYPES:
+        raise ValueError("Le type d'image doit être all, normal ou 360.")
+    stac_type = PICTURE_TYPES[picture_type]
     api_limit = SEARCH_LIMIT
     parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
     if args.datetime:
@@ -209,6 +216,7 @@ def run(args):
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
+        "picture_type": stac_type,
         "api_limit": api_limit,
     })
     counts = {
@@ -240,6 +248,8 @@ def run(args):
             if key in seen_items:
                 continue
             seen_items.add(key)
+            if stac_type is not None and feature.get("properties", {}).get("type") != stac_type:
+                continue
             if item_in_bbox(feature, args.bbox, to_bbox_crs):
                 candidates.append((feature, url, key))
         next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
@@ -365,6 +375,10 @@ def main():
         "--image-max",
         type=parse_positive_int,
         help="Nombre maximum de photos à sélectionner et télécharger (toutes pages confondues)",
+    )
+    parser.add_argument(
+        "--picture-type", choices=tuple(PICTURE_TYPES), default="all",
+        help="all (défaut), normal (photos classiques) ou 360 (équirectangulaires)",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

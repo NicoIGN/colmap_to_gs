@@ -65,6 +65,10 @@ PANORAMAX_DATETIME=""
 # a 10000 resultats) ; sinon entier > 0, nombre maximal de photos.
 PANORAMAX_IMAGE_MAX=""
 
+# Defaut : all. Valeurs : all (toutes), normal (photos classiques, type "flat"),
+# 360 (photos equirectangulaires, type "equirectangular").
+PANORAMAX_PICTURE_TYPE="all"
+
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # false = arret si la requete differe de celle du dataset existant.
 # true = archive panoramax/ dans panoramax.replaced-DATE, puis retelecharge.

@@ -226,6 +226,61 @@ class DownloadTest(unittest.TestCase):
                 server.shutdown()
                 thread.join()
 
+    def test_picture_type_filters_candidates(self):
+        photo = b"\xff\xd8test-image\xff\xd9"
+        lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
+
+        def feature(identifier, picture_type):
+            return {
+                "type": "Feature", "id": identifier, "collection": "sequence",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": {"type": picture_type},
+                "assets": {"hd": {"href": "/photo.jpg", "type": "image/jpeg"}},
+            }
+
+        page = {"features": [
+            feature("flat-photo", "flat"), feature("sphere-photo", "equirectangular"),
+        ], "links": []}
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                is_image = self.path == "/photo.jpg"
+                payload = photo if is_image else json.dumps(page).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg" if is_image else "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, *args):
+                pass
+
+        with ThreadingHTTPServer(("127.0.0.1", 0), Handler) as server:
+            thread = threading.Thread(target=server.serve_forever)
+            thread.start()
+            try:
+                for picture_type, expected_available in (("all", 2), ("normal", 1), ("360", 1)):
+                    with self.subTest(picture_type=picture_type), tempfile.TemporaryDirectory() as temporary:
+                        output = Path(temporary)
+                        args = Namespace(
+                            bbox=(651000, 6861000, 652000, 6862000), bbox_epsg=2154,
+                            output_dir=output, api_url=f"http://127.0.0.1:{server.server_port}/api",
+                            datetime=None, quality="hd", timeout=5, image_max=None,
+                            picture_type=picture_type,
+                        )
+                        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                            self.assertEqual(download.run(args), 0)
+                        summary = json.loads((output / "summary.json").read_text())
+                        self.assertEqual(summary["available"], expected_available)
+                        self.assertEqual(summary["downloaded"], expected_available)
+                        request_metadata = json.loads((output / "request.json").read_text())
+                        self.assertEqual(
+                            request_metadata["picture_type"], download.PICTURE_TYPES[picture_type]
+                        )
+            finally:
+                server.shutdown()
+                thread.join()
+
     def test_invalid_geometry(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):

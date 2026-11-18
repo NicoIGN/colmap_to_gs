@@ -55,6 +55,7 @@ validate_config() {
     config_choice TRAIN_SP_FLOATER_SUPPRESSION "${TRAIN_SP_FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
   fi
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
+  config_choice PANORAMAX_PICTURE_TYPE "${PANORAMAX_PICTURE_TYPE:-all}" 'all|normal|360'
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice POSTPROCESS_FILTER_MODE "${POSTPROCESS_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
