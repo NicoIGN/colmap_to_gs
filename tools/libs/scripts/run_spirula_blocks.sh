@@ -25,6 +25,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-true}"
 else
   TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-}"
   TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
@@ -35,6 +36,7 @@ else
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-}"
 fi
 TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
 TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
@@ -105,6 +107,8 @@ Variables:
   TRAIN_SP_QUALITY             Optional macro: low, medium, high, ultra;
                             explicit cap and iterations remain authoritative
   TRAIN_SP_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
+  TRAIN_SP_WARP_SPHERICAL      true (default, Spirula): 360 split into pinhole faces;
+                            false: direct equirectangular training
   TRAIN_SP_*                Optional Spirula-only photometric training correction
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
@@ -541,6 +545,7 @@ for ((index = first_index; index < last_index; index++)); do
     [[ -z "$TRAIN_SP_QUALITY" ]] || block_args+=(--quality "$TRAIN_SP_QUALITY")
     block_args+=(--distraction-robustness "$TRAIN_SP_DISTRACTION_ROBUSTNESS")
     [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_SP_GROWTH_FACTOR")
+    [[ -z "$TRAIN_SP_WARP_SPHERICAL" ]] || block_args+=(--warp-spherical-to-pinhole "$TRAIN_SP_WARP_SPHERICAL")
     [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
     [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
     [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")

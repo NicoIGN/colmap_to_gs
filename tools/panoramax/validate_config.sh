@@ -56,6 +56,7 @@ validate_config() {
     [[ -z "${TRAIN_SP_QUALITY:-}" ]] ||
       config_choice TRAIN_SP_QUALITY "$TRAIN_SP_QUALITY" 'low|medium|high|ultra'
     config_choice TRAIN_SP_DISTRACTION_ROBUSTNESS "${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}" 'off|mild|strong'
+    config_choice TRAIN_SP_WARP_SPHERICAL "${TRAIN_SP_WARP_SPHERICAL:-true}" 'true|false'
     config_choice TRAIN_SP_FLOATER_SUPPRESSION "${TRAIN_SP_FLOATER_SUPPRESSION:-off}" 'off|mild|strong'
   fi
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'

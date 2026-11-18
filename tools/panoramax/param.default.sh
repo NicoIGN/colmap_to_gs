@@ -350,6 +350,14 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
 # a l'ecran. Comparer sur un bloc avant de generaliser.
 TRAIN_SP_FLOATER_SUPPRESSION="off"
 
+# Spirula, 360 uniquement (equirectangular) :
+#   true  (defaut Spirula) : la photo 360 est decoupee en vues pinhole (faces),
+#          sans couture et sans distorsion equirectangulaire, mais plus de
+#          cameras a entrainer (plus de VRAM et de temps).
+#   false : entrainement direct sur l'equirectangulaire, sans decoupage.
+#          Le rendu doit supporter ce modele.
+TRAIN_SP_WARP_SPHERICAL="true"
+
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # true = supprime uniquement les sorties GS des blocs et les reentraine.
 # Ne supprime ni photos, ni SfM, ni decoupage. Necessaire pour appliquer de

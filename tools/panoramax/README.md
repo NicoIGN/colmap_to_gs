@@ -258,6 +258,8 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   l'influence des incohérences entre photos. Commencer par `mild` ; `strong`
   peut aussi atténuer des détails peu observés.
 - Ce réglage ne remplace ni les masques ni `TRAIN_SP_FLOATER_SUPPRESSION`.
+- `TRAIN_SP_WARP_SPHERICAL=true` (défaut Spirula) découpe les photos 360 en vues
+  pinhole ; `false` entraîne directement sur l'équirectangulaire (rendu à vérifier).
 - Appliquer à un bloc terminé : réentraîner avec `TRAIN_CLEAN=true`.
 
 - `TRAIN_SP_QUALITY=""` : défaut ; valeurs possibles `low`, `medium`, `high` ou
