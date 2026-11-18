@@ -12,9 +12,9 @@ Les lanceurs lisent les paramètres `SLURM_*` de la configuration et appellent
 Ce guide concerne trois pipelines :
 
 - [Images locales vers Gaussian Splats](../tools/images_to_splat/README.md) :
-  configuration `tools/images_to_splat/config.sh.example`.
+  configuration `tools/images_to_splat/param.default`.
 - [Panoramax vers Gaussian Splats](../tools/panoramax/README.md) :
-  configuration `tools/panoramax/config.sh.example`.
+  configuration `tools/panoramax/param.default` (surcharges utilisateur à côté des défauts).
 - [Nerfstudio / Splatfacto](nerfstudio.md) : lanceur distinct dans
   `environment/ign.slurm/`, avec ses propres paramètres.
 
@@ -105,8 +105,8 @@ Quatre blocs simultanés peuvent réserver quatre GPU et quatre fois les CPU/RAM
 configurés. Augmenter le parallélisme ne change pas le budget de chaque bloc.
 
 Les syntaxes, limites et exemples complets sont dans les configurations
-[images locales, section « 7. Slurm uniquement »](../tools/images_to_splat/config.sh.example)
-et [Panoramax, section « 7. Execution Slurm »](../tools/panoramax/config.sh.example).
+[images locales, section « 7. Slurm uniquement »](../tools/images_to_splat/param.default)
+et [Panoramax, section « 7. Execution Slurm »](../tools/panoramax/param.default).
 Les réglages Slurm ne réservent aucune ressource en exécution directe.
 Pour Panoramax, `SLURM_CPUS_PER_TASK` sert aussi de valeur de repli à
 `SFM_THREADS`, même en exécution directe ; les images locales ont leur propre

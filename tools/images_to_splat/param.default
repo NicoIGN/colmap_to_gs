@@ -49,7 +49,7 @@ TRAIN_BACKEND="spirula"              # spirula | nerfstudio
 # Nerfstudio exige PyTorch + GPU NVIDIA/CUDA ; aucun repli CPU/Metal.
 # Avec TRAIN_MASKS=on, definir explicitement TRAIN_MASKS_MODE=ignore.
 # Nerfstudio : TRAIN_MASKS_BACKEND=segmentation, modele local Mask2Former/SegFormer,
-# labels sky (pas cloud). Exemple complet : config.nerfstudio.sh.example.
+# labels sky (pas cloud). Exemple complet : param.nerfstudio.default.
 # Les options de cap/croissance/qualite Spirula ne sont pas transposees.
 
 # ============================================================================

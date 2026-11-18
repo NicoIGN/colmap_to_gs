@@ -37,7 +37,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
                 'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
-                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
             result = subprocess.run(
@@ -64,7 +64,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
                 'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
-                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
             result = subprocess.run(
@@ -105,7 +105,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             config.write_text(
                 f'OUTPUT_DIR="{root / "output"}"\n'
                 'PANORAMAX_BBOX="652600,6863400,652800,6863500"\n'
-                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+                'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
                 f'PYTHON_BIN="{python}"\n'
             )
             run = lambda: subprocess.run(["bash", str(SCRIPT), str(config), "prepare"],
@@ -240,18 +240,18 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'PANORAMAX_IMAGE_MAX="5"\n'
                 f'SPIRULA_BIN="{spirula}"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
-                'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_CAP_MAX="1000"\n'
-                'TRAIN_SP_PRESET="3dgs"\nTRAIN_QUALITY="high"\nTRAIN_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
-                'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_PAIRS="prefilter"\n'
-                'SFM_SP_PAIR_MAX_DISTANCE="30"\nSFM_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
+                'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_SP_CAP_MAX="1000"\n'
+                'TRAIN_SP_PRESET="3dgs"\nTRAIN_SP_QUALITY="high"\nTRAIN_SP_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
+                'SFM_ALIKED_MAX_FEATURES="2048"\nSFM_SP_PAIRS="prefilter"\n'
+                'SFM_SP_PAIR_MAX_DISTANCE="30"\nSFM_SP_MATCHER="bruteforce"\nSFM_THREADS="6"\n'
                 'SFM_MAX_ERROR="1.5"\nSFM_MIN_INLIERS="40"\nSFM_MIN_TRI_ANGLE="4"\n'
-                'SFM_SP_BA_LOSS="cauchy"\nSFM_BA_LOSS_PARAM="1"\n'
+                'SFM_SP_BA_LOSS="cauchy"\nSFM_SP_BA_LOSS_PARAM="1"\n'
                 'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'
                 'EXPORT_SPLAT_NAME="test.splat"\nMERGE_STRENGTH="1.0"\n'
                 'POSTPROCESS_FILTER_MODE="apply"\nPOSTPROCESS_FILTER_SIZE_FACTOR="12"\n'
                 'POSTPROCESS_SPARSE_BBOX_MODE="diagnostic"\nPOSTPROCESS_SPARSE_BBOX_MARGIN="0.1"\n'
-                'TRAIN_SP_SPLATS_PER_IMAGE="200"\nTRAIN_GROWTH_FACTOR="1.03"\n'
-                'TRAIN_SP_REFINE_STOP_ITER="2"\nTRAIN_REFINE_STOP_NUM_ITER="1"\nTRAIN_FLOATER_SUPPRESSION="mild"\n'
+                'TRAIN_SP_SPLATS_PER_IMAGE="200"\nTRAIN_SP_GROWTH_FACTOR="1.03"\n'
+                'TRAIN_SP_REFINE_STOP_ITER="2"\nTRAIN_SP_REFINE_STOP_NUM_ITER="1"\nTRAIN_SP_FLOATER_SUPPRESSION="mild"\n'
             )
             log = root / "commands.log"
 

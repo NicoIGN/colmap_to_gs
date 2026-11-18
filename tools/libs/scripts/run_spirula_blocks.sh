@@ -7,7 +7,6 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
 config_errors=0
-normalize_backend_config_names || exit 1
 reject_legacy_config || exit 1
 
 DIR="${DIR:-}"

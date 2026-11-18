@@ -4,7 +4,6 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/tools/libs/scr
 
 validate_config() {
   local config_errors=0 name value train_backend="${TRAIN_BACKEND:-spirula}"
-  normalize_backend_config_names || return 1
   reject_legacy_config || return 1
   config_choice TRAIN_BACKEND "$train_backend" 'spirula|nerfstudio'
   if [[ "$train_backend" == nerfstudio ]]; then

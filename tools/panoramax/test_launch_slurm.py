@@ -20,7 +20,7 @@ class SlurmLaunchTest(unittest.TestCase):
         self.tools.mkdir()
         self.pipeline_dir = self.root / "repo with spaces" / "tools" / "panoramax"
         self.pipeline_dir.mkdir(parents=True)
-        for name in ("launch.sh", "launch.slurm", "validate_config.sh"):
+        for name in ("launch.sh", "launch.slurm", "validate_config.sh", "param.default"):
             shutil.copyfile(SOURCE / name, self.pipeline_dir / name)
         shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
         shared_scripts.mkdir(parents=True)
@@ -31,7 +31,7 @@ class SlurmLaunchTest(unittest.TestCase):
         self.config.write_text(
             f'OUTPUT_DIR="{self.output}"\n'
             'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
-            'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_CAP_MAX=1000\nTRAIN_PRESET=3dgs\n'
+            'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
             'PYTHON_BIN=job-python\n'
         )
         pipeline_script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.sh"

@@ -94,8 +94,8 @@ validate_spirula_photometric_config() {
     config_error "SFM_SP_IMAGE_EXPOSURE est propre au SfM Spirula."
 }
 
-normalize_backend_config_names() {
-  local entry old new old_value new_value
+reject_legacy_config() {
+  local entry name replacement failed=0
   for entry in \
     SFM_FEATURES:SFM_SP_FEATURES SFM_MATCHER:SFM_SP_MATCHER SFM_PAIRS:SFM_SP_PAIRS \
     SFM_BA_LOSS:SFM_SP_BA_LOSS SFM_BA_LOSS_PARAM:SFM_SP_BA_LOSS_PARAM \
@@ -110,29 +110,7 @@ normalize_backend_config_names() {
     NS_PROCESS_DATA_BIN:SFM_NS_PROCESS_DATA_BIN NS_TRAIN_BIN:TRAIN_NS_TRAIN_BIN \
     NS_EXPORT_BIN:TRAIN_NS_EXPORT_BIN NS_DOWNSCALE_FACTOR:TRAIN_NS_DOWNSCALE_FACTOR \
     COLMAP_BIN:SFM_COLMAP_BIN COLMAP_USE_GPU:SFM_COLMAP_USE_GPU \
-    COLMAP_MATCHING:SFM_COLMAP_MATCHING; do
-    old="${entry%%:*}"
-    new="${entry#*:}"
-    [[ "${!old+x}" == x ]] || continue
-    old_value="${!old}"
-    if [[ "${!new+x}" == x ]]; then
-      new_value="${!new}"
-      if [[ "$new_value" != "$old_value" ]]; then
-        config_error "$old et $new sont tous deux définis avec des valeurs différentes."
-        continue
-      fi
-    else
-      printf -v "$new" '%s' "$old_value"
-      export "$new"
-    fi
-    printf '[AVERTISSEMENT] %s est déprécié ; utiliser %s.\n' "$old" "$new" >&2
-  done
-  ((config_errors == 0))
-}
-
-reject_legacy_config() {
-  local entry name replacement failed=0
-  for entry in \
+    COLMAP_MATCHING:SFM_COLMAP_MATCHING \
     BBOX_LAMBERT93:PANORAMAX_BBOX PANORAMAX_BBOX_LAMBERT93:PANORAMAX_BBOX \
     NUM_BLOCKS:SPLIT_NUM_BLOCKS OVERLAP_MAX_FRACTION:SPLIT_OVERLAP_MAX_FRACTION \
     NUM_ITER:TRAIN_NUM_ITER CAP_MAX:TRAIN_SP_CAP_MAX SPLATS_PER_IMAGE:TRAIN_SP_SPLATS_PER_IMAGE \

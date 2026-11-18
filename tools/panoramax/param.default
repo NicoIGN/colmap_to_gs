@@ -1,12 +1,13 @@
-# Configuration complete du pipeline Panoramax (Bash de confiance).
-# Copier vers config.sh, puis adapter les deux champs obligatoires ci-dessous.
-# Execution locale : bash script/panoramax_to_3dgs.sh config.sh
+# Valeurs par defaut du pipeline Panoramax (Bash de confiance).
+# Sourcees automatiquement par scripts/panoramax_to_3dgs.sh et tools/panoramax/launch.sh
+# avant la configuration utilisateur, qui ne doit contenir que les surcharges.
+# Execution locale : bash scripts/panoramax_to_3dgs.sh config.sh
 # Slurm : bash tools/panoramax/launch.sh config.sh [--wait]
 # Validation sans calcul : bash tools/panoramax/validate_config.sh config.sh slurm
 #
 # Les valeurs affectees sont les defauts du pipeline, pas un preset de qualite.
 # "" signifie une option non forcee ; le commentaire indique alors le repli.
-# OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : valeurs d'exemple a remplacer.
+# OUTPUT_DIR et PANORAMAX_BBOX n'ont aucun defaut : a definir dans la configuration utilisateur.
 # SPLIT_NUM_BLOCKS et TRAIN_NUM_ITER sont communs et obligatoires.
 # TRAIN_SP_CAP_MAX et TRAIN_SP_PRESET sont obligatoires seulement si
 # TRAIN_BACKEND=spirula. Les options TRAIN_SP_* sont ignorees par Nerfstudio.
@@ -24,7 +25,7 @@ TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
 # Obligatoire, aucun defaut. Dossier de sortie non vide, accessible en ecriture.
 # Contient panoramax/ (photos, SfM, blocs), le .splat final et les references GPS.
 # Slurm : choisir un chemin absolu visible depuis tous les noeuds.
-OUTPUT_DIR="/chemin/vers/resultats/panoramax-paris"
+OUTPUT_DIR=""
 
 # Defaut : "". Chemin executable ou commande ; vide = spirula dans PATH,
 # puis ../spirula-studio/build/spirula a cote de ce depot.
@@ -45,7 +46,7 @@ export MVK_CONFIG_LOG_LEVEL="1"
 
 # Obligatoire, aucun defaut. Ordre xmin,ymin,xmax,ymax dans le systeme indique
 # ci-dessous ; quatre nombres finis, xmin<xmax et ymin<ymax.
-PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
+PANORAMAX_BBOX=""
 
 # Defaut : 2154 (Lambert-93). Code EPSG des coordonnees de PANORAMAX_BBOX.
 PANORAMAX_BBOX_EPSG="2154"

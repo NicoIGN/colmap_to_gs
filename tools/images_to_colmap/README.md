@@ -23,7 +23,7 @@ bash tools/images_to_colmap/run.sh /chemin/config.sh
   intrinsèques) et d'un PLY coloré, sans nouvelle estimation photogrammétrique.
   `SFM_MASKS=off` est requis.
 
-**Réglages.** Copier [`config.sh.example`](config.sh.example). Les masques,
+**Réglages.** Copier [`param.default`](param.default). Les masques,
 la reprise et le recalage GPX reprennent les réglages du
 [pipeline images](../images_to_splat/README.md). Les options `SFM_SP_FEATURES`,
 `SFM_SP_MATCHER`, `SFM_SP_PAIRS` et de bundle adjustment concernent Spirula.
