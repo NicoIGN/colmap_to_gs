@@ -53,12 +53,15 @@ trap 'on_error $LINENO' ERR
 # ===============================================================
 
 CLEAN=0
+UPDATE=0
 
 usage() {
     cat <<EOF
 Usage : $0 [OPTIONS]
 
 Options :
+  --update   Recompile seulement si le dépôt a changé ou si l'exécutable
+             est absent (artefacts de compilation conservés)
   --clean    Supprime le répertoire de compilation avant le build
   --help     Affiche cette aide
 
@@ -73,6 +76,9 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean)
             CLEAN=1
+            ;;
+        --update)
+            UPDATE=1
             ;;
         --help|-h)
             usage
@@ -370,10 +376,18 @@ fi
 # Mise à jour du dépôt Spirula
 # ===============================================================
 
+repo_state() {
+    git -C "${REPO_DIR}" rev-parse HEAD
+    git -C "${REPO_DIR}" submodule status --recursive
+}
+
+REPO_STATE_BEFORE=""
+
 if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
+    REPO_STATE_BEFORE="$(repo_state)"
     git -C "${REPO_DIR}" pull --ff-only
 
 else
@@ -397,6 +411,8 @@ log "Mise à jour des sous-modules"
 git -C "${REPO_DIR}" submodule sync --recursive
 git -C "${REPO_DIR}" submodule update --init --recursive
 
+REPO_STATE_AFTER="$(repo_state)"
+
 # ===============================================================
 # Vérification du script de compilation
 # ===============================================================
@@ -411,69 +427,91 @@ BUILD_SCRIPT="${REPO_DIR}/build_develop.bash"
 # ===============================================================
 
 BUILD_PATH="${REPO_DIR}/${BUILD_DIR}"
+SPIRULA_BIN="${BUILD_PATH}/spirula"
 
-if [[ "${CLEAN}" -eq 1 && -d "${BUILD_PATH}" ]]; then
-    log "Suppression du répertoire de compilation : ${BUILD_PATH}"
-    rm -rf "${BUILD_PATH}"
+BUILD_NEEDED=0
+
+if [[ "${CLEAN}" -eq 1 ]]; then
+    BUILD_NEEDED=1
+    if [[ -d "${BUILD_PATH}" ]]; then
+        log "Suppression du répertoire de compilation : ${BUILD_PATH}"
+        rm -rf "${BUILD_PATH}"
+    fi
+elif [[ "${UPDATE}" -eq 0 ]]; then
+    log "Compilation complète (comportement par défaut)."
+    BUILD_NEEDED=1
+elif [[ -z "${REPO_STATE_BEFORE}" ]]; then
+    log "Premier clone : compilation nécessaire."
+    BUILD_NEEDED=1
+elif [[ "${REPO_STATE_BEFORE}" != "${REPO_STATE_AFTER}" ]]; then
+    log "Dépôt modifié : recompilation (artefacts conservés)."
+    BUILD_NEEDED=1
+elif [[ ! -x "${SPIRULA_BIN}" ]]; then
+    log "Exécutable absent : compilation nécessaire."
+    BUILD_NEEDED=1
+else
+    log "Dépôt inchangé et exécutable présent : compilation ignorée."
 fi
 
-# ===============================================================
-# Vérification Vulkan avant CMake
-# ===============================================================
+if [[ "${BUILD_NEEDED}" -eq 1 ]]; then
 
-if [[ "${OS}" == "Linux" ]]; then
+    # ===========================================================
+    # Vérification Vulkan avant CMake
+    # ===========================================================
 
-    log "Contrôle final des ressources Vulkan"
+    if [[ "${OS}" == "Linux" ]]; then
 
-    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
-        die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
+        log "Contrôle final des ressources Vulkan"
 
-    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
-        die "Header vulkan_core.h inaccessible."
+        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
+            die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
 
-    [[ -e "${VULKAN_LIBRARY}" ]] ||
-        die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
+        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
+            die "Header vulkan_core.h inaccessible."
 
-    log "Headers Vulkan : OK"
-    log "Bibliothèque Vulkan : OK"
+        [[ -e "${VULKAN_LIBRARY}" ]] ||
+            die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
 
-fi
+        log "Headers Vulkan : OK"
+        log "Bibliothèque Vulkan : OK"
 
-# ===============================================================
-# Compilation de Spirula
-# ===============================================================
+    fi
 
-log "Compilation de Spirula"
+    # ===========================================================
+    # Compilation de Spirula
+    # ===========================================================
 
-cd "${REPO_DIR}"
+    log "Compilation de Spirula"
 
-BUILD_CMD=(
-    bash build_develop.bash
-    -DSS_BACKEND=vulkan
-    -DSS_BUILD_SAM=ON
-    -DCMAKE_BUILD_TYPE=Release
-)
+    cd "${REPO_DIR}"
 
-if [[ "${OS}" == "Linux" ]]; then
-    BUILD_CMD+=(
-        "-DVulkan_INCLUDE_DIR:PATH=${VULKAN_INCLUDE_DIR}"
-        "-DVulkan_LIBRARY:FILEPATH=${VULKAN_LIBRARY}"
+    BUILD_CMD=(
+        bash build_develop.bash
+        -DSS_BACKEND=vulkan
+        -DSS_BUILD_SAM=ON
+        -DCMAKE_BUILD_TYPE=Release
     )
+
+    if [[ "${OS}" == "Linux" ]]; then
+        BUILD_CMD+=(
+            "-DVulkan_INCLUDE_DIR:PATH=${VULKAN_INCLUDE_DIR}"
+            "-DVulkan_LIBRARY:FILEPATH=${VULKAN_LIBRARY}"
+        )
+    fi
+
+    log "Commande de compilation :"
+    printf '  %q' "${BUILD_CMD[@]}"
+    echo
+
+    log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+    "${BUILD_CMD[@]}"
+
 fi
-
-log "Commande de compilation :"
-printf '  %q' "${BUILD_CMD[@]}"
-echo
-
-log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
-
-"${BUILD_CMD[@]}"
 
 # ===============================================================
 # Vérification de l'exécutable
 # ===============================================================
-
-SPIRULA_BIN="${BUILD_PATH}/spirula"
 
 if [[ ! -x "${SPIRULA_BIN}" ]]; then
     die "Exécutable Spirula introuvable ou non exécutable : ${SPIRULA_BIN}"
