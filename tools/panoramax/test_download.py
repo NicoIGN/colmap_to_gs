@@ -303,6 +303,21 @@ class DownloadTest(unittest.TestCase):
         self.assertFalse(download.item_matches_provider(feature, "IG"))
         self.assertFalse(download.item_matches_provider({"id": "none", "properties": {}}, "IGN"))
 
+    def test_positions_geojson_in_bbox_crs_with_attributes(self):
+        transformer = Transformer.from_crs(4326, 2154, always_xy=True)
+        feature = {"id": "abc", "collection": "c1",
+                   "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
+                   "properties": {"providers": [{"name": "Ville"}], "exif": {"Make": "X"}}}
+        record = {"id": "abc", "collection": "c1", "image": "images/a.jpg",
+                  "metadata": "metadata/a.json", "source_page": "u", "status": "downloaded"}
+        geojson = download.positions_geojson([(feature, record)], 2154, transformer)
+        point = geojson["features"][0]
+        self.assertEqual(geojson["crs"]["properties"]["name"], "urn:ogc:def:crs:EPSG::2154")
+        self.assertAlmostEqual(point["geometry"]["coordinates"][0], 652469.02, places=1)
+        self.assertEqual(point["properties"]["lon"], 2.3522)
+        self.assertEqual(point["properties"]["providers"], "Ville")
+        self.assertEqual(point["properties"]["image"], "images/a.jpg")
+
     def test_invalid_geometry(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):
