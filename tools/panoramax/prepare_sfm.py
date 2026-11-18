@@ -4,6 +4,12 @@
 Garde les images de la taille majoritaire (ou de --size), les relie par lien
 physique dans OUTPUT_DIR/images, et déduit la focale en pixels du champ de vue
 horizontal des métadonnées : f = (largeur / 2) / tan(fov / 2).
+
+Mode multi-caméras (PANORAMAX_MULTI_CAM=true ou --multi-cam) : toutes les
+tailles sont gardées, chacune dans son sous-dossier LxH/ ; Spirula
+(--camera-mode folder) crée alors une caméra par taille. Une seule focale ne
+pouvant pas couvrir plusieurs caméras, aucune focale n'est transmise et
+selection.json conserve celle de chaque taille.
 """
 
 import argparse
@@ -76,6 +82,10 @@ def focal_from_metadata(path, width):
     return (width / 2) / math.tan(math.radians(fov) / 2)
 
 
+def env_flag(name):
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def link_or_copy(source, target):
     try:
         os.link(source, target)
@@ -83,17 +93,18 @@ def link_or_copy(source, target):
         shutil.copy2(source, target)
 
 
-def sync_selection(selected, target_dir):
+def sync_selection(targets, target_dir):
+    """Lie chaque source à target_dir/relative ; targets = {source: relative}."""
     target_dir.mkdir(parents=True, exist_ok=True)
-    wanted = {path.name: path for path in selected}
-    for existing in target_dir.iterdir():
-        source = wanted.get(existing.name)
+    wanted = {target_dir / relative: source for source, relative in targets.items()}
+    for existing in target_dir.rglob("*"):
+        if existing.is_dir():
+            continue
+        source = wanted.get(existing)
         if source is None or not existing.is_file() or not os.path.samefile(existing, source):
-            if existing.is_dir() and not existing.is_symlink():
-                raise SystemExit(f"Dossier inattendu dans {target_dir} : {existing.name}")
             existing.unlink()
-    for name, source in wanted.items():
-        target = target_dir / name
+    for target, source in wanted.items():
+        target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
             link_or_copy(source, target)
 
@@ -103,6 +114,11 @@ def main(argv=None):
     parser.add_argument("--dataset", required=True, help="Dossier Panoramax (contenant images/ et metadata/)")
     parser.add_argument("--output-dir", required=True, help="Workspace SfM ; les images retenues vont dans images/")
     parser.add_argument("--size", type=parse_size, help="Taille à garder, LxH ; défaut : la plus fréquente")
+    parser.add_argument(
+        "--multi-cam",
+        action="store_true",
+        help="Garder toutes les tailles, une caméra par taille ; défaut : env PANORAMAX_MULTI_CAM",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Analyser sans créer de fichiers")
     parser.add_argument("--shell", action="store_true", help="Écrire images_dir= et focal= sur stdout")
     args = parser.parse_args(argv)
@@ -130,39 +146,69 @@ def main(argv=None):
     counts = Counter(sizes.values())
     for (width, height), count in counts.most_common():
         log(f"taille {width}x{height} : {count} image(s)")
-    keep = args.size or counts.most_common(1)[0][0]
-    selected = [path for path, size in sizes.items() if size == keep]
-    if not selected:
-        raise SystemExit(f"Aucune image de taille {keep[0]}x{keep[1]}")
-    excluded = [path.name for path, size in sizes.items() if size != keep]
-    log(f"retenues : {len(selected)} en {keep[0]}x{keep[1]} ; écartées : {len(excluded)}")
-
-    focals = []
-    if metadata_dir:
-        for path in selected:
-            focal = focal_from_metadata(metadata_dir / f"{path.stem}.json", keep[0])
-            if focal:
-                focals.append(focal)
-    focal = statistics.median(focals) if focals else None
-    if focal:
-        spread = (max(focals) - min(focals)) / focal
-        log(f"focale : {focal:.1f} px d'après le champ de vue de {len(focals)}/{len(selected)} image(s)")
-        if spread > 0.05:
-            log(f"AVERTISSEMENT : focales dispersées de {spread:.0%} ; la médiane est utilisée")
+    multi_cam = args.multi_cam or env_flag("PANORAMAX_MULTI_CAM")
+    if multi_cam and args.size:
+        raise SystemExit("--size est incompatible avec le mode multi-caméras")
+    if multi_cam:
+        keep = None
+        selected = dict.fromkeys(sizes)
+        excluded = []
+        log(f"multi-caméras : {len(counts)} caméra(s), une par taille ; toutes les images sont retenues")
     else:
-        log("focale : aucun champ de vue dans les métadonnées, Spirula l'estimera")
+        keep = args.size or counts.most_common(1)[0][0]
+        selected = {path: path.name for path, size in sizes.items() if size == keep}
+        if not selected:
+            raise SystemExit(f"Aucune image de taille {keep[0]}x{keep[1]}")
+        excluded = [path.name for path, size in sizes.items() if size != keep]
+        log(f"retenues : {len(selected)} en {keep[0]}x{keep[1]} ; écartées : {len(excluded)}")
+    targets = {
+        path: (f"{sizes[path][0]}x{sizes[path][1]}/{path.name}" if multi_cam else path.name)
+        for path in selected
+    }
+
+    groups = {}
+    for path in selected:
+        groups.setdefault(sizes[path], []).append(path)
+    focals = {}
+    samples = {}
+    for size, paths in groups.items():
+        values = []
+        if metadata_dir:
+            for path in paths:
+                focal = focal_from_metadata(metadata_dir / f"{path.stem}.json", size[0])
+                if focal:
+                    values.append(focal)
+        samples[size] = len(values)
+        if not values:
+            log(f"focale {size[0]}x{size[1]} : aucun champ de vue dans les métadonnées, Spirula l'estimera")
+            continue
+        focal = statistics.median(values)
+        focals[size] = focal
+        spread = (max(values) - min(values)) / focal
+        log(f"focale {size[0]}x{size[1]} : {focal:.1f} px d'après {len(values)}/{len(paths)} image(s)")
+        if spread > 0.05:
+            log(f"AVERTISSEMENT : focales {size[0]}x{size[1]} dispersées de {spread:.0%} ; la médiane est utilisée")
+
+    if multi_cam:
+        focal = None
+        log("focale non transmise : Spirula estime chaque caméra")
+    else:
+        focal = focals.get(keep)
 
     if not args.dry_run:
-        sync_selection(selected, target_dir)
+        sync_selection(targets, target_dir)
         (output_dir / "selection.json").write_text(
             json.dumps(
                 {
                     "source_images": str(images_dir),
-                    "size": list(keep),
+                    "multi_cam": multi_cam,
+                    "size": list(keep) if keep else None,
+                    "sizes": {f"{w}x{h}": len(paths) for (w, h), paths in groups.items()},
                     "selected": len(selected),
                     "excluded": excluded,
                     "focal_px": focal,
-                    "focal_samples": len(focals),
+                    "focals_px": {f"{w}x{h}": value for (w, h), value in focals.items()},
+                    "focal_samples": sum(samples.values()),
                 },
                 indent=2,
             )

@@ -74,6 +74,11 @@ PANORAMAX_PICTURE_TYPE="all"
 # (properties.providers[].name), insensible à la casse.
 PANORAMAX_PROVIDER=""
 
+# Defaut : false. true = SfM multi-caméras : toutes les tailles d'images sont
+# gardées et chaque taille devient une caméra (sous-dossier LxH/). La focale
+# n'est pas transmise à Spirula ; il estime chaque caméra.
+PANORAMAX_MULTI_CAM="false"
+
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # false = arret si la requete differe de celle du dataset existant.
 # true = archive panoramax/ dans panoramax.replaced-DATE, puis retelecharge.
