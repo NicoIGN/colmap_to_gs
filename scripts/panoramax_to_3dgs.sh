@@ -24,6 +24,23 @@ die() {
   exit 1
 }
 
+# Résout SPIRULA_DEVICE=auto une seule fois : premier GPU « ok » discret, puis intégré.
+# Colonnes de `spirula sam devices` : no, nom (espaces possibles), type, VRAM (2 mots), uuid, état.
+resolve_spirula_device() {
+  local requested="$1" out kind idx
+  [[ "$requested" == auto ]] || { printf '%s' "$requested"; return; }
+  out="$("$SPIRULA_BIN" sam devices 2>&1)" \
+    || die "spirula sam devices a échoué ; définir SPIRULA_DEVICE (index, nom ou uuid)"
+  for kind in discrete integrated; do
+    idx="$(awk -v k="$kind" '$1 ~ /^[0-9]+$/ && $NF == "ok" && $(NF-4) == k { print $1; exit }' <<<"$out")"
+    if [[ -n "$idx" ]]; then
+      printf '%s' "$idx"
+      return
+    fi
+  done
+  die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
+}
+
 pipeline_stage="configuration et validation des paramètres"
 pipeline_error() {
   local status="$1" line="$2"
@@ -299,6 +316,10 @@ if [[ "$phase" != merge ]]; then
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
   printf '[pipeline] Étape : %s\n' "$pipeline_stage"
+  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" ]]; then
+    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
+    printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
+  fi
   DIR="$DATASET_DIR" \
   SPIRULA_BIN="$SPIRULA_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
