@@ -490,7 +490,7 @@ export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = f
   );
 }
 
-function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
+function makeLineMesh(app, positions, color = [1, 0, 0, 1], { onTop = false } = {}) {
   const bounds = [[Infinity, -Infinity], [Infinity, -Infinity], [Infinity, -Infinity]];
   for (let i = 0; i < positions.length; i += 3) {
     for (let axis = 0; axis < 3; axis++) {
@@ -516,7 +516,7 @@ function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
     positions,
     rgba,
     pc.PRIMITIVE_LINES,
-    makeColmapMaterial(app)
+    makeColmapMaterial(app, { onTop })
   );
 }
 
@@ -1218,12 +1218,13 @@ export function createColmapLayer({
     app.root.addChild(rootEntity);
     try {
       model.pointsResource = makePointMesh(
-        app, points.positions, points.colors, Number(pointSize?.value ?? 2)
+        app, points.positions, points.colors, Number(pointSize?.value ?? 2), { onTop: true }
       );
       model.pointsEntity = new pc.Entity("COLMAP points");
       model.pointsEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.pointsResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.pointsEntity);
 
@@ -1242,11 +1243,12 @@ export function createColmapLayer({
       });
       rootEntity.addChild(model.cameraCentersEntity);
 
-      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
       model.frustumsEntity = new pc.Entity("COLMAP frustums");
       model.frustumsEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.frustumsResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
