@@ -64,6 +64,17 @@ test("hysteresis keeps the current image while it stays valid, then switches", (
   assert.deepEqual(selectNearestImages({ ...args, centers: moved, keep: 0 }), [1]);
 });
 
+test("candidates whose axis differs from the displayed camera are rejected", () => {
+  // Référence : caméra affichée regardant en diagonale (+X+Y). Cam 0 centrée mais regardant -X (à 135°) ;
+  // cam 1 centrée mais regardant -X-Y ; cam 2 un peu moins centrée, même axe que la référence.
+  const s = Math.SQRT1_2;
+  const centers = [5, 0, 0, 5, 1, 0, 5, 1.2, 0];
+  const axes = [-1, 0, 0, -s, -s, 0, s, s, 0];
+  const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35, refAxis: [s, s, 0] };
+  assert.deepEqual(selectNearestImages({ ...args, maxRefAngleDeg: 30 }), [2]);
+  assert.deepEqual(selectNearestImages({ ...args, maxRefAngleDeg: 180 }), [2]);
+});
+
 test("the displayed image is replaced when a more centred camera passes the view centre", () => {
   // Caméra 1 affichée à ~15° du centre de vue ; la caméra 0 passe au centre.
   const centers = [5, 0, 0, 5, 1.34, 0];

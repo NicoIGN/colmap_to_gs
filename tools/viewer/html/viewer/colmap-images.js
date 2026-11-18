@@ -43,8 +43,14 @@ export function selectNearestImages({
   maxDistance = Infinity,
   accept = () => true,
   keep = -1,
+  refAxis = null,
+  maxRefAngleDeg = 180,
   stats = null,
 }) {
+  // Axe de la caméra courante : les candidats doivent regarder à peu près dans la même direction.
+  const cosRef = Math.cos((maxRefAngleDeg * Math.PI) / 180);
+  const axisDot = (i) =>
+    axes[i * 3] * refAxis[0] + axes[i * 3 + 1] * refAxis[1] + axes[i * 3 + 2] * refAxis[2];
   const total = centers.length / 3;
   if (stats) {
     stats.total = total;
@@ -81,7 +87,7 @@ export function selectNearestImages({
     if (kept && keptAngleDeg <= keepAngleDeg && accept(keep, true)) {
       const others = selectNearestImages({
         centers, axes, viewer, direction, maxAlong, count: count - 1,
-        maxAngleDeg, maxDistance, accept, keep: -1,
+        maxAngleDeg, maxDistance, accept, keep: -1, refAxis, maxRefAngleDeg,
       });
       return [keep, ...others.filter((i) => i !== keep)].slice(0, count);
     }
@@ -92,10 +98,16 @@ export function selectNearestImages({
     const hit = evaluate(i, maxAngleDeg, false);
     if (!hit) continue;
     if (stats) stats.inCone += 1;
+    let axisPenalty = 0;
+    if (refAxis) {
+      const dot = axisDot(i);
+      if (dot < cosRef) continue;
+      axisPenalty = 1 - dot;
+    }
     if (!accept(i, false)) continue;
-    candidates.push({ index: i, ...hit });
+    candidates.push({ index: i, ...hit, score: hit.alignment + axisPenalty });
   }
 
-  candidates.sort((a, b) => a.alignment - b.alignment || a.dist - b.dist);
+  candidates.sort((a, b) => a.score - b.score || a.dist - b.dist);
   return candidates.slice(0, count).map((candidate) => candidate.index);
 }

@@ -16,6 +16,8 @@ const IMAGE_SHOWN = 1;
 const IMAGE_HYSTERESIS = 0.8;
 // Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
 const IMAGE_CENTER_DEG = 10;
+// Une image candidate doit regarder à moins de cet angle de l'axe de la caméra affichée.
+const IMAGE_AXIS_DEG = 30;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -978,6 +980,10 @@ export function createColmapLayer({
         const d = getViewerDirection?.() ?? [0, 0, -1];
         direction = flip ? [d[0], -d[1], -d[2]] : d;
       }
+      const shownIndex = model.slots[0]?.shown ?? -1;
+      const refAxis = shownIndex >= 0
+        ? [model.axes[shownIndex * 3], model.axes[shownIndex * 3 + 1], model.axes[shownIndex * 3 + 2]]
+        : null;
       const stats = { total: 0, inCone: 0 };
       const picked = selectNearestImages({
         centers: model.cameraCenters,
@@ -988,7 +994,9 @@ export function createColmapLayer({
         count: IMAGE_SHOWN,
         maxAngleDeg: 35,
         keepAngleDeg: IMAGE_CENTER_DEG,
-        keep: model.slots[0]?.shown ?? -1,
+        keep: shownIndex,
+        refAxis,
+        maxRefAngleDeg: IMAGE_AXIS_DEG,
         accept: (i, relaxed = false) => {
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
