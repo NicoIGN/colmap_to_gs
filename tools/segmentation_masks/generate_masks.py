@@ -53,16 +53,6 @@ def resolve_model_argument(value, backend):
 # PIL Image.Transpose values undoing exif_transpose for each EXIF orientation.
 INVERSE_ORIENTATION = {2: 0, 3: 3, 4: 1, 5: 5, 6: 2, 7: 6, 8: 4}
 
-def default_jobs():
-    """MASKS_JOBS si défini, sinon le nombre de CPU accessibles."""
-    configured = os.environ.get("MASKS_JOBS", "").strip()
-    if configured:
-        return int(configured)
-    if hasattr(os, "sched_getaffinity"):
-        return len(os.sched_getaffinity(0))
-    return os.cpu_count() or 1
-
-
 SPIRULA_IMAGE_LINE = re.compile(r"^image (\d+) : (\S+) -- ")
 
 
@@ -198,10 +188,10 @@ class SpirulaSegmenter:
         self.settings = {"backend": "spirula", "binary": self.binary,
                          "binary_fingerprint": f"{stat.st_size}:{stat.st_mtime_ns}",
                          "device": args.spirula_device}
-        self.jobs = getattr(args, "jobs", None) or default_jobs()
+        self.jobs = args.jobs
         if self.jobs < 1:
             self.close()
-            raise ValueError("--jobs / MASKS_JOBS doit être au moins 1")
+            raise ValueError("--jobs doit être au moins 1")
 
     def close(self):
         self.temporary.cleanup()
@@ -249,7 +239,7 @@ class SpirulaSegmenter:
         if self.args.accept_spirula_license:
             print("[masques] Acceptation explicite de la licence SAM 3 transmise à Spirula.", flush=True)
         print(f"[masques] Calcul SAM : {len(shards)} processus Spirula en parallèle "
-              f"(MASKS_JOBS={self.jobs}).", flush=True)
+              f"(jobs={self.jobs}).", flush=True)
         progress(0, len(names), self.args, "Calcul SAM")
         completed = 0
         running = {}
@@ -717,8 +707,8 @@ def main(argv=None):
     parser.add_argument("--max-masked-fraction", type=float, default=0.8,
                         help="Au-delà, le masque de l'image est désactivé (0.8)")
     parser.add_argument("--device", default="auto", help="auto, cuda, cuda:N, mps ou cpu")
-    parser.add_argument("--jobs", type=int, default=None,
-                        help="Processus Spirula parallèles (défaut : MASKS_JOBS ou CPU accessibles)")
+    parser.add_argument("--jobs", type=int, default=2,
+                        help="Processus Spirula SAM parallèles (défaut : 2)")
     parser.add_argument("--verbose", action="store_true", help="Afficher les étapes et la progression")
     parser.add_argument("--list-labels", action="store_true",
                         help="Afficher les labels du modèle et quitter")

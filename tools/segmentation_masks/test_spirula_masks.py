@@ -51,14 +51,14 @@ class NativeMasksTest(unittest.TestCase):
             "        mask.save(out / f'frame_{index:05d}.png')\n"
         )
         self.binary.chmod(0o755)
-        self.env = dict(os.environ, SAM_LOG=str(self.log), MASKS_JOBS="1")
+        self.env = dict(os.environ, SAM_LOG=str(self.log))
 
     def execute(self, *extra):
         return subprocess.run(
             [sys.executable, str(SCRIPT), "--backend", "spirula",
              "--spirula-bin", str(self.binary), "--spirula-device", "0",
              "--model", str(self.model), "--images", str(self.images),
-             "--output", str(self.output), *extra],
+             "--output", str(self.output), "--jobs", "1", *extra],
             env=self.env, text=True, capture_output=True, timeout=30)
 
     def test_native_arguments_raw_orientation_resume_and_label_change(self):
@@ -121,7 +121,6 @@ class NativeMasksTest(unittest.TestCase):
         self.assertEqual(len(self.log.read_text().splitlines()), 1)
 
     def test_native_progress_is_emitted_before_the_process_finishes(self):
-        self.env["MASKS_JOBS"] = "1"
         source = self.binary.read_text()
         source = source.replace("import json, os, sys", "import json, os, sys, time")
         source += (
@@ -167,8 +166,7 @@ class NativeMasksTest(unittest.TestCase):
     def test_frames_are_sharded_across_parallel_spirula_processes(self):
         for name in ("c.jpg", "d.jpg", "e.jpg"):
             Image.new("RGB", (16, 8)).save(self.images / name)
-        self.env["MASKS_JOBS"] = "3"
-        result = self.execute()
+        result = self.execute("--jobs", "3")
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertIn("3 processus Spirula en parallèle", result.stdout)
         commands = [json.loads(line) for line in self.log.read_text().splitlines()]

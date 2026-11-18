@@ -181,10 +181,6 @@ export SS_NN_LOG=1
 # conditions SAM 3 Meta : transmet --accept-license sam3=yes pour chaque
 # calcul natif SfM ou 3DGS, y compris les jobs Slurm non interactifs.
 MASKS_ACCEPT_LICENSE="false"
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Vide = nombre de CPU accessibles ; chaque processus charge le modèle sur le GPU,
-# réduire si la mémoire GPU est saturée.
-MASKS_JOBS=""
 
 # Defaut : sky. Liste non vide, separee par des virgules.
 # segmentation : noms de labels (voir labels.txt) ou IDs numeriques ;
@@ -216,6 +212,10 @@ TRAIN_MASKS_MAX_FRACTION="0.8"
 # Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
 # auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
 TRAIN_MASKS_DEVICE="auto"
+
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
+TRAIN_MASKS_NUM_JOBS="2"
 
 # --- Masques des caracteristiques SfM (avant extraction/appariement) ---
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -252,6 +252,10 @@ SFM_MASKS_MAX_FRACTION=""
 # Defaut : "" = TRAIN_MASKS_DEVICE (auto par defaut).
 # Transformers : auto|cpu|mps|cuda|cuda:N ; ignore avec Spirula.
 SFM_MASKS_DEVICE=""
+
+# Spirula (SAM) : nombre de processus parallèles sur les frames.
+# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
+SFM_MASKS_NUM_JOBS="2"
 
 # Si les deux politiques de generation sont identiques, feature_masks est
 # un lien vers train_masks : un seul calcul. Des seuils/modeles differents

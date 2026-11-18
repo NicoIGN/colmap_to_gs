@@ -36,6 +36,7 @@ def policy(prefix):
     settings = {
         "backend": backend, "model": str(path), "labels": labels,
         "confidence": float(env[f"{prefix}_CONFIDENCE"]),
+        "jobs": int(env[f"{prefix}_NUM_JOBS"]),
         "dilate": float(dilate), "max_fraction": float(env[f"{prefix}_MAX_FRACTION"]),
         "device": env[f"{prefix}_SPIRULA_DEVICE" if native else f"{prefix}_DEVICE"],
         "python": env["PYTHON_BIN"] if native else env[f"{prefix}_PYTHON"],
@@ -57,6 +58,7 @@ def generate(settings, images, output):
         "--images", str(images), "--output", str(output),
         "--labels", ",".join(settings["labels"]),
         "--confidence", str(settings["confidence"]),
+        "--jobs", str(settings["jobs"]),
         "--dilate-fraction", str(settings["dilate"]),
         "--max-masked-fraction", str(settings["max_fraction"]),
         "--spirula-bin", os.environ["SPIRULA_BIN"],

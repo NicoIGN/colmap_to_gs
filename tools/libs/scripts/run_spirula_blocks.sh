@@ -66,9 +66,10 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 SFM_MASKS="${SFM_MASKS:-off}"
 # SfM settings inherit generation settings, not the training loss mode.
-for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
   sfm_name="SFM_MASKS_$suffix"
   train_name="TRAIN_MASKS_$suffix"
   printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -427,6 +428,7 @@ prepare_blocks() {
       --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
       --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
+      --jobs "$TRAIN_MASKS_NUM_JOBS" \
       "${license_args[@]}" ||
       die "Génération des masques d’entraînement échouée."
   fi

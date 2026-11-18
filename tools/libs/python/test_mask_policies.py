@@ -16,7 +16,7 @@ class SharedMaskGenerationTest(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.settings = {
             "python": "mask-python", "backend": "spirula", "model": "/model.bin",
-            "labels": ["cloud", "sky"], "confidence": 0.3, "dilate": 0.002,
+            "labels": ["cloud", "sky"], "confidence": 0.3, "dilate": 0.002, "jobs": 2,
             "max_fraction": 0.9, "device": "gpu",
         }
         self.output = self.root / "masks"

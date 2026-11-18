@@ -81,6 +81,8 @@ TRAIN_MASKS_MAX_FRACTION="1.0"
 TRAIN_MASKS_MODEL=""
 TRAIN_MASKS_PYTHON="python3"
 TRAIN_MASKS_DEVICE="auto"
+# Spirula (SAM) : nombre de processus parallèles sur les frames (chacun charge le modèle sur le GPU).
+TRAIN_MASKS_NUM_JOBS="2"
 # Vide : heriter du TRAIN_MASKS_* correspondant, comme dans Panoramax.
 # SFM_MASKS_DILATE a son propre defaut 0.002.
 SFM_MASKS_BACKEND=""
@@ -94,13 +96,11 @@ SFM_MASKS_MAX_FRACTION=""
 SFM_MASKS_MODEL=""
 SFM_MASKS_PYTHON=""
 SFM_MASKS_DEVICE=""
+# Spirula (SAM) : nombre de processus parallèles sur les frames (chacun charge le modèle sur le GPU).
+SFM_MASKS_NUM_JOBS="2"
 # true UNIQUEMENT apres lecture et acceptation des conditions SAM 3 Meta.
 # false par defaut : aucune acceptation automatique implicite.
 MASKS_ACCEPT_LICENSE="false"
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Vide = nombre de CPU accessibles ; chaque processus charge le modèle sur le GPU,
-# réduire si la mémoire GPU est saturée.
-MASKS_JOBS=""
 # auto|empty|ignore : memes modes que Panoramax.
 # empty : apprendre le ciel comme vide ; ignore : exclure les pixels de la perte.
 TRAIN_MASKS_MODE="empty"
