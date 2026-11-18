@@ -188,9 +188,8 @@ def keep_mask(probability, confidence, radius, label_map=None, label_ids=None):
     else:
         masked = probability >= confidence
     if radius > 0 and masked.any():
-        from scipy.ndimage import binary_dilation
-        y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
-        masked = binary_dilation(masked, structure=x * x + y * y <= radius * radius)
+        from scipy.ndimage import distance_transform_edt
+        masked = distance_transform_edt(~masked) <= radius
     return np.where(masked, 0, 255).astype(np.uint8)
 
 def list_images(root):
