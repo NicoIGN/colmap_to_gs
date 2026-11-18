@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parent
 
 class ValidateConfigTest(unittest.TestCase):
     def test_invalid_geometry_rejected_local_and_slurm(self):
-        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, """
 SFM_MAX_ERROR=0
@@ -45,7 +45,7 @@ SFM_SP_BA_LOSS_PARAM=nan
         return result, root
 
     def test_typo_stops_local_and_slurm_before_side_effects(self):
-        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, 'SFM_SP_MATCHER="lightblue"\n')
                 self.assertEqual(result.returncode, 1)
@@ -159,7 +159,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
         required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
                     "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
-        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             defaults = re.findall(
                 r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
                 (ROOT / script).read_text(), re.MULTILINE)
@@ -168,10 +168,12 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
                 self.assertIn(name, values)
                 self.assertEqual(values[name], "" if "$" in default else default, name)
         self.assertFalse(required - values.keys(), required - values.keys())
-        block_defaults = dict(re.findall(
-            r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
-            (ROOT.parents[1] / "tools/libs/scripts" / "run_spirula_blocks.sh").read_text(),
-            re.MULTILINE))
+        block_defaults = {}
+        for name, default in re.findall(
+                r'^\s*([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
+                (ROOT.parents[1] / "tools/libs/scripts" / "run_spirula_blocks.sh").read_text(),
+                re.MULTILINE):
+            block_defaults.setdefault(name, default)
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
         self.assertIn('NUM_CPUS="${NUM_CPUS:-2}"',
@@ -284,7 +286,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
         for value in ("", "low", "medium", "high", "ultra"):
             result, _ = self.execute("validate_config.sh", f'TRAIN_SP_QUALITY="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_SP_QUALITY="maximum"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_QUALITY", result.stderr)
@@ -295,7 +297,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
             result, _ = self.execute("validate_config.sh",
                                     f'TRAIN_SP_DISTRACTION_ROBUSTNESS="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("../../script/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_SP_DISTRACTION_ROBUSTNESS="invalid"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
@@ -309,7 +311,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
                 ("PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_BBOX"),
                 ("GROWTH_FACTOR", "TRAIN_SP_GROWTH_FACTOR"),
                 ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
-            for script in ("validate_config.sh", "../../script/panoramax_to_3dgs.sh", "launch.sh"):
+            for script in ("validate_config.sh", "../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
                 result, root = self.execute(script, f'{old}=""\n')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"ancien paramètre {old} interdit", result.stderr)
@@ -319,9 +321,10 @@ SFM_SP_PAIR_MAX_DISTANCE=30
     def test_example_parameters_have_stage_prefixes_or_are_shared(self):
         names = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)=',
                            (ROOT / "param.default.sh").read_text(), re.MULTILINE)
-        shared = {"OUTPUT_DIR", "SPIRULA_BIN", "PYTHON_BIN", "MVK_CONFIG_LOG_LEVEL"}
+        shared = {"OUTPUT_DIR", "SPIRULA_BIN", "SPIRULA_DEVICE", "PYTHON_BIN",
+                  "MVK_CONFIG_LOG_LEVEL", "SS_NN_LOG", "NUM_CPUS", "NUM_GPUS"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
-                    "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_")
+                    "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_", "LIDAR_")
         for name in names:
             self.assertTrue(name in shared or name.startswith(prefixes), name)
 

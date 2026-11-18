@@ -76,7 +76,7 @@ class ImagesPipelineTest(unittest.TestCase):
             f'SPIRULA_BIN="{self.bin / "spirula"}"\nPYTHON_BIN="{self.bin / "python"}"\n'
             'COLMAP_METHOD="spirula"\n'
             f'TRAIN_MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
-            'NUM_GPUS=2\n'
+            'NUM_GPUS=2\nSPLIT_NUM_BLOCKS=4\n'
         )
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_EVENTS=str(self.events), TEST_JOBS=str(self.jobs),
@@ -931,7 +931,7 @@ if "--wait" in args:
         variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
                      "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM")
         flags = ("--max-error", "--min-inliers", "--min-tri-angle", "--ba-loss", "--ba-loss-param")
-        for slurm, values in ((False, ("2", "30", "3", "huber", "2")),
+        for slurm, values in ((False, ("2", "30", "6", "huber", "2")),
                               (True, ("1.5", "50", "4", "cauchy", "1"))):
             with self.subTest(slurm=slurm):
                 self.append(f'OUTPUT_DIR="{self.root / str(slurm)}"')
@@ -951,7 +951,7 @@ if "--wait" in args:
 
     def test_invalid_geometry_stops_before_submission(self):
         self.append("SFM_MAX_ERROR=nan\nSFM_MIN_INLIERS=0\nSFM_MIN_TRI_ANGLE=91\n"
-                    "SFM_SP_BA_LOSS=none\nSFM_BA_LOSS_PARAM=-1")
+                    "SFM_SP_BA_LOSS=none\nSFM_SP_BA_LOSS_PARAM=-1")
         result = self.run_pipeline(slurm=True)
         self.assertNotEqual(result.returncode, 0)
         for name in ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
