@@ -55,11 +55,21 @@ test("hysteresis keeps the current image while it stays valid, then switches", (
   const axes = [-1, 0, 0, -1, 0, 0];
   const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35 };
   assert.deepEqual(selectNearestImages({ ...args, keep: -1 }), [0]);
-  // Caméra 1 déjà affichée : elle reste choisie malgré la meilleure caméra 0.
-  assert.deepEqual(selectNearestImages({ ...args, keep: 1 }), [1]);
+  // Caméra 1 (3,4°) déjà affichée : elle reste choisie tant qu'elle est dans l'angle de centrage.
+  assert.deepEqual(selectNearestImages({ ...args, keep: 1, keepAngleDeg: 5 }), [1]);
+  // Caméra 1 hors de l'angle de centrage : la caméra 0, plus centrée, prend sa place.
+  assert.deepEqual(selectNearestImages({ ...args, keep: 1, keepAngleDeg: 2 }), [0]);
   // Caméra 0 sortie du cône : on bascule sur la meilleure valide.
   const moved = [5, 10, 0, 5, 0.3, 0];
   assert.deepEqual(selectNearestImages({ ...args, centers: moved, keep: 0 }), [1]);
+});
+
+test("the displayed image is replaced when a more centred camera passes the view centre", () => {
+  // Caméra 1 affichée à ~15° du centre de vue ; la caméra 0 passe au centre.
+  const centers = [5, 0, 0, 5, 1.34, 0];
+  const axes = [-1, 0, 0, -1, 0, 0];
+  const args = { centers, axes, viewer: [0, 0, 0], direction: [1, 0, 0], maxAlong: 10, count: 1, maxAngleDeg: 35, keepAngleDeg: 10 };
+  assert.deepEqual(selectNearestImages({ ...args, keep: 1 }), [0]);
 });
 
 test("cameras beyond the scene centre are never selected, even when kept", () => {

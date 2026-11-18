@@ -12,8 +12,10 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
-// Hystérésis : une image affichée reste choisie tant qu'elle reste dans le cône et que son cadre reste ≥ 80 % du seuil.
+// Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
+// Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
+const IMAGE_CENTER_DEG = 10;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -985,6 +987,7 @@ export function createColmapLayer({
         maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
         count: IMAGE_SHOWN,
         maxAngleDeg: 35,
+        keepAngleDeg: IMAGE_CENTER_DEG,
         keep: model.slots[0]?.shown ?? -1,
         accept: (i, relaxed = false) => {
           const size = nominalScreenSize(model, i);
