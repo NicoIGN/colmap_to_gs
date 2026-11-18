@@ -76,7 +76,7 @@ class ImagesPipelineTest(unittest.TestCase):
             f'SPIRULA_BIN="{self.bin / "spirula"}"\nPYTHON_BIN="{self.bin / "python"}"\n'
             'COLMAP_METHOD="spirula"\n'
             f'TRAIN_MASKS_SPIRULA_MODEL="{self.model}"\nMASKS_ACCEPT_LICENSE=true\n'
-            'SLURM_BLOCK_PARALLELISM=2\n'
+            'NUM_GPUS=2\n'
         )
         self.env = dict(os.environ, PATH=f"{self.bin}:{os.environ['PATH']}",
                         TEST_EVENTS=str(self.events), TEST_JOBS=str(self.jobs),
@@ -116,7 +116,7 @@ if name == "generate_masks.py":
     if get("--backend") == "spirula":
         assert "--accept-spirula-license" in args
         assert get("--model") == os.environ[prefix + "_SPIRULA_MODEL"]
-        assert get("--spirula-device") == os.environ[prefix + "_SPIRULA_DEVICE"]
+        assert get("--spirula-device") == os.environ["SPIRULA_DEVICE"]
     else:
         assert "--accept-spirula-license" not in args
         assert get("--model") == os.environ[prefix + "_MODEL"]
@@ -470,7 +470,7 @@ if "--wait" in args:
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
 
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
-        self.append("SFM_FILTER_DENSITY=true\nSFM_THREADS=8")
+        self.append("SFM_FILTER_DENSITY=true\nNUM_CPUS=8")
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
         self.assertTrue((filtered / ".density_done").is_file())
@@ -978,7 +978,7 @@ if "--wait" in args:
                 self.assertEqual((output / "train_masks").exists(), train == "on" and sfm == "off")
 
     def test_prefixed_policies_are_independent_local_and_slurm(self):
-        self.append('SFM_MASKS_LABELS="sky"\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"\n'
+        self.append('SFM_MASKS_LABELS="sky"\nSPIRULA_DEVICE="NVIDIA A40"\n'
                     'SFM_MASKS_CONFIDENCE=0.7\nSFM_MASKS_MAX_FRACTION=0.9\n'
                     'TRAIN_MASKS_LABELS="sky,cloud"')
         for slurm in (False, True):
@@ -997,8 +997,8 @@ if "--wait" in args:
                 self.assertTrue((output / "scene.splat").is_file())
 
     def test_identical_prefixed_policies_share_one_generation(self):
-        self.append('SFM_MASKS_SPIRULA_DEVICE=""\nSFM_MASKS_LABELS=""\n'
-                    'TRAIN_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+        self.append('SFM_MASKS_LABELS=""\n'
+                    'SPIRULA_DEVICE="NVIDIA A40"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
         self.assertEqual(len(generated), 1)
@@ -1035,7 +1035,7 @@ if "--wait" in args:
         self.append(
             f'OUTPUT_DIR="{new_output}"\n'
             f'SFM_MASKS_DIR="{source_masks}"\nTRAIN_MASKS_DIR="{source_masks}"\n'
-            'SFM_THREADS="8"'
+            'NUM_CPUS="8"'
         )
         before = len(self.commands())
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
@@ -1074,7 +1074,7 @@ if "--wait" in args:
     def test_sfm_only_policy_does_not_require_a_training_model(self):
         self.append(f'TRAIN_MASKS=off\nTRAIN_MASKS_SPIRULA_MODEL=""\n'
                     f'SFM_MASKS_SPIRULA_MODEL="{self.model}"\n'
-                    'SFM_MASKS_LABELS=sky\nSFM_MASKS_SPIRULA_DEVICE="NVIDIA A40"')
+                    'SFM_MASKS_LABELS=sky\nSPIRULA_DEVICE="NVIDIA A40"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
         self.assertEqual(len(generated), 1)

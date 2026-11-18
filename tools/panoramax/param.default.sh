@@ -18,6 +18,8 @@
 # 0. Chemins et environnement communs
 # ============================================================================
 
+# Moteur d'entrainement 3DGS des blocs. spirula (defaut) ou nerfstudio. Le SfM Panoramax
+# reste toujours Spirula. Avec nerfstudio, les masques passent par le backend segmentation.
 TRAIN_BACKEND="spirula" # spirula | nerfstudio ; SfM Panoramax reste Spirula
 # Nerfstudio : PyTorch + NVIDIA/CUDA requis, TRAIN_MASKS_MODE=ignore si masques.
 # Masques Nerfstudio : backend segmentation, modele local Mask2Former ou SegFormer.
@@ -74,6 +76,11 @@ PANORAMAX_PICTURE_TYPE="all"
 # (properties.providers[].name), insensible à la casse.
 PANORAMAX_PROVIDER=""
 
+# Defaut : false. true = SfM multi-caméras : toutes les tailles d'images sont
+# gardées et chaque taille devient une caméra (sous-dossier LxH/). La focale
+# n'est pas transmise à Spirula ; il estime chaque caméra.
+PANORAMAX_MULTI_CAM="false"
+
 # Defaut : false. Valeurs : true|false (alias 1|0, yes|no, on|off).
 # false = arret si la requete differe de celle du dataset existant.
 # true = archive panoramax/ dans panoramax.replaced-DATE, puis retelecharge.
@@ -112,11 +119,6 @@ SFM_SP_FEATURES="aliked-n16rot"
 # bruteforce contourne LightGlue si celui-ci plante (par exemple erreur gemm).
 SFM_SP_MATCHER="lightglue"
 
-# Defaut : "". Vide = SLURM_CPUS_PER_TASK si defini, sinon defaut Spirula.
-# Sinon entier > 0 : nombre de fils CPU du SfM. Definir explicitement en local
-# pour ne pas utiliser la valeur SLURM_CPUS_PER_TASK de ce fichier.
-SFM_THREADS=""
-
 # Defauts geometriques stricts : moins de points fragiles, couverture possible reduite.
 # Erreur maximale en pixels d'extraction [0.1,100], verification et mapping.
 SFM_MAX_ERROR="2"
@@ -143,7 +145,7 @@ SFM_SP_PAIR_MAX_DISTANCE=""
 # ============================================================================
 # 3. Calcul optionnel des masques SfM et d'entrainement
 # ============================================================================
-# TRAIN_MASKS seul ne filtre pas le SfM. Sortie : sfm-*/train_masks/<image>.png,
+# TRAIN_MASKS seul ne filtre pas le SfM. Sortie : sfm/train_masks/<image>.png,
 # 255 = garde, 0 = masque ; controle visuel conseille avant un long calcul.
 
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -169,7 +171,7 @@ TRAIN_MASKS_SPIRULA_MODEL=""
 
 # Defaut : auto. Backend spirula : auto, indice GPU Vulkan (0,1,...),
 # fragment du nom du GPU ou uuid:<hex>. Pas de noms cuda/mps ici.
-TRAIN_MASKS_SPIRULA_DEVICE="auto"
+SPIRULA_DEVICE="auto"
 
 # Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
 # avertissements/erreurs et la progression du pipeline. 0 = silencieux,
@@ -206,16 +208,12 @@ TRAIN_MASKS_CONFIDENCE="0.5"
 TRAIN_MASKS_DILATE="auto"
 
 # Defaut : 0.8. Nombre dans ]0,1] : fraction masquee maximale par image.
-# Au-dela, masque entierement blanc avec avertissement (vue conservee).
+# Au-dela, aucun masque n'est applique a l'image (vue conservee entiere) avec avertissement.
 TRAIN_MASKS_MAX_FRACTION="0.8"
 
 # Defaut : auto. Backend segmentation : auto|cpu|mps|cuda|cuda:N (N>=0).
 # auto choisit CUDA, puis MPS, puis CPU. Ignore par le backend spirula.
 TRAIN_MASKS_DEVICE="auto"
-
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
-TRAIN_MASKS_NUM_JOBS="2"
 
 # --- Masques des caracteristiques SfM (avant extraction/appariement) ---
 # Defaut : off. Valeurs : on|off (alias true|false, 1|0, yes|no).
@@ -229,10 +227,6 @@ SFM_MASKS_BACKEND=""
 SFM_MASKS_PYTHON=""
 SFM_MASKS_MODEL=""
 SFM_MASKS_SPIRULA_MODEL=""
-
-# Defaut : "" = TRAIN_MASKS_SPIRULA_DEVICE (auto par defaut).
-# Vulkan : auto, indice, fragment du nom GPU ou uuid:<hex>.
-SFM_MASKS_SPIRULA_DEVICE=""
 
 # Defaut : "" = TRAIN_MASKS_LABELS (sky par defaut).
 # Liste de labels/prompts separes par des virgules ; ordre/casse ignores.
@@ -252,10 +246,6 @@ SFM_MASKS_MAX_FRACTION=""
 # Defaut : "" = TRAIN_MASKS_DEVICE (auto par defaut).
 # Transformers : auto|cpu|mps|cuda|cuda:N ; ignore avec Spirula.
 SFM_MASKS_DEVICE=""
-
-# Spirula (SAM) : nombre de processus parallèles sur les frames.
-# Chaque processus charge le modèle sur le GPU ; réduire si la mémoire GPU est saturée.
-SFM_MASKS_NUM_JOBS="2"
 
 # Si les deux politiques de generation sont identiques, feature_masks est
 # un lien vers train_masks : un seul calcul. Des seuils/modeles differents
@@ -312,7 +302,7 @@ TRAIN_SP_BILAGRID_TYPE=""
 # --- Parametres partages ---
 # Nombre d'iterations par bloc ; utilise par Spirula et Nerfstudio.
 # Valeur initiale : 30000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
-# Iterations par bloc ; sert aussi de suffixe sfm-TRAIN_NUM_ITER et gs-TRAIN_NUM_ITER.
+# Iterations par bloc ; suffixe gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS. Le SfM (sfm/) ne dépend pas de cette valeur.
 TRAIN_NUM_ITER="30000"
 
 # Valeur initiale : 1500000 (defaut du lanceur de blocs). Entier > 0, obligatoire.
@@ -441,7 +431,7 @@ CLEANGS_SKY_CONFIDENCE="0.9"
 CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 
 # ============================================================================
-# 7. Execution Slurm (ignore en local, sauf repli de SFM_THREADS)
+# 7. Execution Slurm et CPU
 # ============================================================================
 # Un GPU pour la preparation, un par bloc, fusion sans GPU sauf si cleangs.
 # Chaque job dispose des CPU/RAM/duree ci-dessous. Chemins et config partages.
@@ -449,9 +439,9 @@ CLEANGS_MAX_REMOVAL_FRACTION="0.2"
 # Defaut : jean-zellou. Nom de partition GPU existante ; adapter au cluster.
 SLURM_PARTITION="jean-zellou"
 
-# Defaut : 16. Entier > 0 : CPU alloues par job (preparation, bloc, fusion).
-# Sert aussi de repli a SFM_THREADS, meme en local si defini dans la config.
-SLURM_CPUS_PER_TASK="16"
+# Defaut : 2. Entier > 0 : CPU par job (preparation, bloc, fusion ; threads SfM,
+# masques, entrainement). Reference unique pour le parallelisme CPU, meme en local.
+NUM_CPUS="2"
 
 # Defaut : 64G. Entier >= 0 avec suffixe optionnel K|M|G|T (casse indifferente).
 # Sans suffixe : Mo Slurm ; 0 = memoire du noeud selon le site. RAM, pas VRAM.
@@ -466,11 +456,11 @@ SLURM_TIME_LIMIT="48:00:00"
 # lettres/chiffres/"_"/"-" uniquement (ex. a100), sans ":".
 SLURM_GPU_TYPE=""
 
-# Defaut : "" (repli SPLIT_NUM_BLOCKS). Sinon entier > 0 : blocs simultanes au plus.
+# Defaut : "" (repli SPLIT_NUM_BLOCKS en Slurm, 2 en local). Entier > 0 : jobs
+# simultanes au plus (blocs Slurm, entrainement Nerfstudio local).
 # 1 = sequentiel ; une valeur > SPLIT_NUM_BLOCKS n'ajoute aucun bloc.
 # Le cluster peut reduire le parallelisme effectif.
-SLURM_BLOCK_PARALLELISM=""
-
+NUM_GPUS="1"
 # Defaut : "". Compte de facturation Slurm ; vide = defaut du site.
 SLURM_ACCOUNT=""
 

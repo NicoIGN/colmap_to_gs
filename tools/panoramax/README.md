@@ -19,7 +19,7 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
 de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
-`SFM_ALIKED_MAX_FEATURES`, `SFM_THREADS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
+`SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
 à cette étape. Pour des photos 360, mettre `SFM_CAMERA_MODEL="equirectangular"` (sans focale,
 avec `TRAIN_BACKEND=spirula`). Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
@@ -243,7 +243,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - `TRAIN_MASKS_BACKEND="spirula"` : utilise SAM 3 natif sur Vulkan.
 - `TRAIN_MASKS_SPIRULA_MODEL` : checkpoint GGML local utilisé par le backend `spirula`.
 - Génération : avant le découpage, un segmenteur local génère un masque par
-  image dans `sfm-*/train_masks/`, transmis à Spirula.
+  image dans `sfm/train_masks/`, transmis à Spirula.
 - Défaut des labels : seul le ciel (nuages compris) est masqué et appris comme vide.
 - `TRAIN_MASKS_LABELS` : permet d'ajouter d'autres labels (`person`, `car`…).
 - Installation, variables et limites :
@@ -285,8 +285,8 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.
 - Partage des masques : si les labels (ordre/casse ignorés), le backend, le
   modèle, le périphérique, le Python et les seuils de génération sont identiques,
-  le pipeline calcule une seule série dans `sfm-*/train_masks/` puis crée le
-  lien symbolique `sfm-*/feature_masks -> train_masks`. Sinon, il calcule les
+  le pipeline calcule une seule série dans `sfm/train_masks/` puis crée le
+  lien symbolique `sfm/feature_masks -> train_masks`. Sinon, il calcule les
   deux séries.
 - Des labels identiques avec des seuils différents ne doivent pas partager les
   mêmes PNG.
@@ -319,7 +319,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Le filtre final conserve son diagnostic bbox global ; chaque recadrage garde
   la sécurité de 20 % de rejets.
 - Bbox du filtre contextuel : les splats dont le **centre** sort de la bbox des
-  points 3D sparse (`sfm-*/sparse/0/points3D.bin`, même repère que les splats)
+  points 3D sparse (`sfm/sparse/0/points3D.bin`, même repère que les splats)
   sont retirés en mode `apply`.
 - La boîte est orientée sur les axes principaux des points, bornée aux
   quantiles 0,5 %/99,5 %, puis élargie de `POSTPROCESS_SPARSE_BBOX_MARGIN` ×
@@ -405,7 +405,7 @@ candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
 réduit donc pas son coût et ne corrige pas un plantage LightGlue. En cas de
 plantage connu, configurer séparément `SFM_SP_MATCHER="bruteforce"`.
 
-Le workspace `panoramax/sfm-TRAIN_NUM_ITER/` conserve `matches.bin` original,
+Le workspace `panoramax/sfm/` conserve `matches.bin` original,
 `matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
 retirées et sans GPS). Le résumé est aussi copié dans le dossier final
 `.georef/`. Les formats VKMT v2, v3 et v4 sont reconnus ; un format inconnu
@@ -414,7 +414,7 @@ Si aucune paire ne subsiste, la reconstruction ne démarre pas.
 
 Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final :
 il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
-calcul existant, déplacer le workspace `panoramax/sfm-TRAIN_NUM_ITER/` **et**
+calcul existant, déplacer le workspace `panoramax/sfm/` **et**
 les entraînements `panoramax/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/` en sauvegarde,
 puis relancer la préparation et les blocs ; garder `images/` et `metadata/`
 pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
@@ -449,8 +449,8 @@ conditions sont satisfaites, il poursuit avec un avertissement explicite.
 Des fichiers préexistants, absents, vides ou tronqués restent bloquants.
 Cette récupération ne corrige pas le crash et ne certifie pas la qualité du
 modèle ; les codes d'erreur de qualité ou de géoréférencement restent propagés.
-`SFM_THREADS` permet de limiter les fils SfM ; sous Slurm, son défaut suit
-`SLURM_CPUS_PER_TASK` au lieu du nombre de CPU physiques du nœud.
+`NUM_CPUS` (défaut `2`) limite les CPU utilisés par SfM, les masques et les
+processus parallèles ; sous Slurm, il sert aussi à `--cpus-per-task`.
 
 Les étapes sont également accessibles individuellement, avec la même config :
 

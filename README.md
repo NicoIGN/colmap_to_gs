@@ -112,7 +112,7 @@ bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 depuis le nœud de connexion. Ils lisent les ressources `SLURM_*` de la
 configuration et appellent eux-mêmes `sbatch` : les calculs s'exécutent sur les
 nœuds alloués, avec un GPU par bloc actif et au plus
-`SLURM_BLOCK_PARALLELISM` blocs simultanés. Les lanceurs se démarrent avec
+`NUM_GPUS` blocs simultanés. Les lanceurs se démarrent avec
 `bash`, pas avec `sbatch` ; c'est le choix du script `launch_*` qui déclenche
 la soumission Slurm.
 

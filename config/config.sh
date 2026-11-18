@@ -90,8 +90,8 @@ if [ -z "${TRAIN_NS_MAX_ITER+x}" ]; then
   TRAIN_NS_MAX_ITER=3000
 fi
 
-if [ -z "${TRAIN_NS_MAX_JOBS+x}" ]; then
-  TRAIN_NS_MAX_JOBS=2
+if [ -z "${NUM_GPUS+x}" ]; then
+  NUM_GPUS=1
 fi
 
 ############################

@@ -24,6 +24,23 @@ die() {
   exit 1
 }
 
+# Résout SPIRULA_DEVICE=auto une seule fois : premier GPU « ok » discret, puis intégré.
+# Colonnes de `spirula sam devices` : no, nom (espaces possibles), type, VRAM (2 mots), uuid, état.
+resolve_spirula_device() {
+  local requested="$1" out kind idx
+  [[ "$requested" == auto ]] || { printf '%s' "$requested"; return; }
+  out="$("$SPIRULA_BIN" sam devices 2>&1)" \
+    || die "spirula sam devices a échoué ; définir SPIRULA_DEVICE (index, nom ou uuid)"
+  for kind in discrete integrated; do
+    idx="$(awk -v k="$kind" '$1 ~ /^[0-9]+$/ && $NF == "ok" && $(NF-4) == k { print $1; exit }' <<<"$out")"
+    if [[ -n "$idx" ]]; then
+      printf '%s' "$idx"
+      return
+    fi
+  done
+  die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
+}
+
 pipeline_stage="configuration et validation des paramètres"
 pipeline_error() {
   local status="$1" line="$2"
@@ -76,6 +93,7 @@ PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
 PANORAMAX_PICTURE_TYPE="${PANORAMAX_PICTURE_TYPE:-all}"
 PANORAMAX_PROVIDER="${PANORAMAX_PROVIDER:-}"
+export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
@@ -110,7 +128,7 @@ SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
-SFM_THREADS="${SFM_THREADS:-${SLURM_CPUS_PER_TASK:-}}"
+NUM_CPUS="${NUM_CPUS:-2}"
 init_sfm_geometry_config
 SFM_SP_PAIR_MAX_DISTANCE="${SFM_SP_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
@@ -144,7 +162,7 @@ SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
-TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
+SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
 MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
@@ -154,7 +172,6 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
-TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 
 [[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
 [[ "$TRAIN_NUM_ITER" =~ ^[1-9][0-9]*$ ]] || die "TRAIN_NUM_ITER doit être un entier positif."
@@ -180,7 +197,7 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BI
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 DATASET_DIR="$OUTPUT_DIR/panoramax"
-SFM_DIR="$DATASET_DIR/sfm-$TRAIN_NUM_ITER"
+SFM_DIR="$DATASET_DIR/sfm"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 GS_ROOT="$DATASET_DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 [[ "$TRAIN_BACKEND" != nerfstudio ]] || GS_ROOT="$GS_ROOT-nerfstudio"
@@ -299,6 +316,10 @@ if [[ "$phase" != merge ]]; then
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
   printf '[pipeline] Étape : %s\n' "$pipeline_stage"
+  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" ]]; then
+    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
+    printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
+  fi
   DIR="$DATASET_DIR" \
   SPIRULA_BIN="$SPIRULA_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
@@ -324,7 +345,7 @@ if [[ "$phase" != merge ]]; then
   SFM_SP_PAIRS="$SFM_SP_PAIRS" \
   SFM_SP_FEATURES="$SFM_SP_FEATURES" \
   SFM_SP_MATCHER="$SFM_SP_MATCHER" \
-  SFM_THREADS="$SFM_THREADS" \
+  NUM_CPUS="$NUM_CPUS" \
   SFM_MAX_ERROR="$SFM_MAX_ERROR" \
   SFM_MIN_INLIERS="$SFM_MIN_INLIERS" \
   SFM_MIN_TRI_ANGLE="$SFM_MIN_TRI_ANGLE" \
@@ -333,22 +354,20 @@ if [[ "$phase" != merge ]]; then
   SFM_SP_PAIR_MAX_DISTANCE="$SFM_SP_PAIR_MAX_DISTANCE" \
   SPLIT_OVERLAP_MAX_FRACTION="$SPLIT_OVERLAP_MAX_FRACTION" \
   TRAIN_CLEAN="$TRAIN_CLEAN" \
+  SPIRULA_DEVICE="$SPIRULA_DEVICE" \
   SFM_MASKS="${SFM_MASKS:-off}" \
   SFM_MASKS_BACKEND="${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" \
   SFM_MASKS_PYTHON="${SFM_MASKS_PYTHON:-$TRAIN_MASKS_PYTHON}" \
   SFM_MASKS_MODEL="${SFM_MASKS_MODEL:-$TRAIN_MASKS_MODEL}" \
   SFM_MASKS_SPIRULA_MODEL="${SFM_MASKS_SPIRULA_MODEL:-$TRAIN_MASKS_SPIRULA_MODEL}" \
-  SFM_MASKS_SPIRULA_DEVICE="${SFM_MASKS_SPIRULA_DEVICE:-$TRAIN_MASKS_SPIRULA_DEVICE}" \
   SFM_MASKS_LABELS="${SFM_MASKS_LABELS:-$TRAIN_MASKS_LABELS}" \
   SFM_MASKS_CONFIDENCE="${SFM_MASKS_CONFIDENCE:-$TRAIN_MASKS_CONFIDENCE}" \
   SFM_MASKS_DILATE="${SFM_MASKS_DILATE:-0.002}" \
   SFM_MASKS_MAX_FRACTION="${SFM_MASKS_MAX_FRACTION:-$TRAIN_MASKS_MAX_FRACTION}" \
   SFM_MASKS_DEVICE="${SFM_MASKS_DEVICE:-$TRAIN_MASKS_DEVICE}" \
-  SFM_MASKS_NUM_JOBS="${SFM_MASKS_NUM_JOBS:-$TRAIN_MASKS_NUM_JOBS}" \
   TRAIN_MASKS="$TRAIN_MASKS" \
   TRAIN_MASKS_BACKEND="$TRAIN_MASKS_BACKEND" \
   TRAIN_MASKS_SPIRULA_MODEL="$TRAIN_MASKS_SPIRULA_MODEL" \
-  TRAIN_MASKS_SPIRULA_DEVICE="$TRAIN_MASKS_SPIRULA_DEVICE" \
   MASKS_ACCEPT_LICENSE="$MASKS_ACCEPT_LICENSE" \
   TRAIN_MASKS_PYTHON="$TRAIN_MASKS_PYTHON" \
   TRAIN_MASKS_MODEL="$TRAIN_MASKS_MODEL" \
@@ -358,7 +377,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_MASKS_DILATE="$TRAIN_MASKS_DILATE" \
   TRAIN_MASKS_MAX_FRACTION="$TRAIN_MASKS_MAX_FRACTION" \
   TRAIN_MASKS_DEVICE="$TRAIN_MASKS_DEVICE" \
-  TRAIN_MASKS_NUM_JOBS="$TRAIN_MASKS_NUM_JOBS" \
+  NUM_CPUS="$NUM_CPUS" \
   bash "$repo_root/tools/libs/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
 fi
 if [[ "$phase" == prepare || "$phase" == train-block ]]; then
@@ -370,6 +389,7 @@ LIDAR_SPARSE="$SFM_DIR/sparse/0"
 lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
 
 set_pipeline_stage "vérification des splats avant fusion"
+rm -f -- "$OUTPUT_DIR/.merge_done"
 MERGE_INPUTS=()
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
@@ -414,6 +434,7 @@ else
     --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
 fi
 [[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
+touch -- "$OUTPUT_DIR/.merge_done"
 
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
 GEOREF_DIR="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.georef"

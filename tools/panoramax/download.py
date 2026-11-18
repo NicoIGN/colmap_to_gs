@@ -2,6 +2,7 @@
 """Télécharger les photos Panoramax prises dans une bbox en coordonnées EPSG."""
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -200,6 +201,52 @@ def item_in_bbox(feature, bbox, to_bbox_crs):
     return bbox[0] <= x <= bbox[2] and bbox[1] <= y <= bbox[3]
 
 
+def scalar_properties(feature):
+    """Propriétés STAC aplaties : scalaires telles quelles, structures en JSON."""
+    attributes = {}
+    for key, value in (feature.get("properties") or {}).items():
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            attributes[key] = value
+        else:
+            attributes[key] = json.dumps(value, ensure_ascii=False, sort_keys=True)
+    providers = feature.get("properties", {}).get("providers")
+    if isinstance(providers, list):
+        attributes["providers"] = ", ".join(
+            str(entry.get("name")) for entry in providers if isinstance(entry, dict)
+        )
+    return attributes
+
+
+def positions_geojson(located, bbox_epsg, to_bbox_crs):
+    features = []
+    for feature, record in located:
+        lon, lat = feature["geometry"]["coordinates"][:2]
+        x, y = to_bbox_crs.transform(lon, lat, errcheck=True)
+        properties = scalar_properties(feature)
+        properties.update({
+            "id": record["id"],
+            "collection": record["collection"],
+            "status": record.get("status"),
+            "error": record.get("error"),
+            "image": record["image"],
+            "metadata": record["metadata"],
+            "source_page": record["source_page"],
+            "lon": lon, "lat": lat,
+            "x": x, "y": y,
+            "crs": f"EPSG:{bbox_epsg}",
+        })
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [x, y]},
+            "properties": properties,
+        })
+    return {
+        "type": "FeatureCollection",
+        "crs": {"type": "name", "properties": {"name": f"urn:ogc:def:crs:EPSG::{bbox_epsg}"}},
+        "features": features,
+    }
+
+
 def run(args):
     image_max = getattr(args, "image_max", None)
     if image_max is not None and image_max < 1:
@@ -224,8 +271,11 @@ def run(args):
             f"La bbox EPSG:{bbox_epsg} ne produit pas une bbox WGS84 exploitable."
         )
     output = args.output_dir.expanduser().resolve()
-    for folder in ("images", "metadata", "pages"):
-        (output / folder).mkdir(parents=True, exist_ok=True)
+    dry_run = bool(getattr(args, "dry_run", False))
+    output.mkdir(parents=True, exist_ok=True)
+    if not dry_run:
+        for folder in ("images", "metadata", "pages"):
+            (output / folder).mkdir(parents=True, exist_ok=True)
     picture_type = getattr(args, "picture_type", "all")
     if picture_type not in PICTURE_TYPES:
         raise ValueError("Le type d'image doit être all, normal ou 360.")
@@ -245,6 +295,7 @@ def run(args):
         "picture_type": stac_type,
         "provider": provider,
         "api_limit": api_limit,
+        "dry_run": dry_run,
     })
     counts = {
         "pages": 0, "available": 0, "selected": 0,
@@ -269,7 +320,8 @@ def run(args):
         counts["pages"] += 1
         last_page_count = len(page["features"])
         api_features += last_page_count
-        atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
+        if not dry_run:
+            atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
         for feature in page["features"]:
             if not isinstance(feature, dict) or not feature.get("id"):
                 raise ValueError("Photo STAC sans identifiant.")
@@ -320,7 +372,9 @@ def run(args):
             file=sys.stderr,
         )
 
-    with (output / "manifest.jsonl").open("w", encoding="utf-8") as manifest:
+    located = []
+    manifest_path = output / "manifest.jsonl"
+    with (contextlib.nullcontext() if dry_run else manifest_path.open("w", encoding="utf-8")) as manifest:
         for feature, source_url, key in selected:
             counts["selected"] += 1
             name = hashlib.sha256(key.encode("utf-8")).hexdigest()
@@ -332,6 +386,10 @@ def run(args):
                 "metadata": str(metadata.relative_to(output)),
                 "source_page": source_url,
             }
+            located.append((feature, record))
+            if dry_run:
+                record["status"] = "planned"
+                continue
             temporary = None
             try:
                 asset = feature.get("assets", {}).get(args.quality)
@@ -374,6 +432,11 @@ def run(args):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
             manifest.flush()
     progress.finish(counts)
+    if getattr(args, "geojson", True):
+        atomic_json(
+            output / "positions.geojson",
+            positions_geojson(located, bbox_epsg, to_bbox_crs),
+        )
     atomic_json(output / "summary.json", counts)
     print(f"Résultats : {output}", flush=True)
     usable = counts["downloaded"] + counts["reused"]
@@ -383,7 +446,7 @@ def run(args):
             f"{usable} utilisable(s). Détails : {output / 'manifest.jsonl'}",
             file=sys.stderr,
         )
-    if not usable:
+    if not dry_run and not usable:
         print(
             f"[ERREUR] Aucune photo utilisable après la recherche et le téléchargement "
             f"({counts['selected']} sélectionnée(s), {counts['failed']} en échec). "
@@ -420,6 +483,14 @@ def main():
     parser.add_argument(
         "--provider",
         help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Chercher et sélectionner seulement : écrit request.json, summary.json et positions.geojson",
+    )
+    parser.add_argument(
+        "--geojson", action=argparse.BooleanOptionalAction, default=True,
+        help="Écrire positions.geojson (sommets des photos dans --bbox-epsg, attributs STAC) (défaut : oui)",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

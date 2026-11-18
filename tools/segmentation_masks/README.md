@@ -37,8 +37,8 @@ pas cette prise en charge des masques d'entraînement.
 
 ## 2. Entrées et sorties
 
-- **Entrée** : `sfm-*/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
-- **Sortie** : `sfm-*/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
+- Entrée : `sfm/images` (images utilisées par l'entraînement), ou tout autre dossier fourni par `--images`.
+- **Sortie** : `sfm/train_masks/<chemin relatif de l'image>.png`, PNG 8 bits, **255 = gardé, 0 = masqué**, à la résolution de l'image et dans l'orientation brute du fichier. Pour la segmentation Transformers, l'image est redressée selon l'EXIF avant inférence, puis le masque et les diagnostics sont remis dans le repère du fichier.
 - **`masks.json`** : paramètres de génération, fraction masquée et statut pour chaque image, ainsi qu'un résumé global.
 - **Reprise** : si les paramètres enregistrés sont identiques, les masques existants présents dans le rapport sont réutilisés lorsque `--verbose` n'est pas activé. Si les paramètres changent, les masques sont régénérés dans un dossier temporaire puis remplacent l'ancien dossier à la fin du traitement.
 - **Mode verbose** : `tmp_labels/` est recréé et les images sont recalculées pour produire les diagnostics, même si des masques existaient déjà.
@@ -114,7 +114,7 @@ Exemple de configuration du pipeline :
 TRAIN_MASKS="on"
 TRAIN_MASKS_BACKEND="spirula"
 TRAIN_MASKS_SPIRULA_MODEL="/chemin/sam3-q4_0.ggml"
-TRAIN_MASKS_SPIRULA_DEVICE="auto"
+SPIRULA_DEVICE="auto"
 TRAIN_MASKS_LABELS="sky"
 TRAIN_MASKS_MODE="auto"
 ```
@@ -140,7 +140,7 @@ adaptation et leur export. Chaque mise à jour est une ligne lisible dans
 les logs Slurm. `--verbose` reste réservé aux diagnostics détaillés et
 force la régénération : il n'est pas nécessaire pour suivre l'avancement.
 
-`TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `TRAIN_MASKS_SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps`.
+`TRAIN_MASKS_MODEL` et `TRAIN_MASKS_PYTHON` ne sont pas utilisés dans ce mode : le calcul est natif, et l'adaptation des PNG utilise `PYTHON_BIN` avec NumPy, Pillow et SciPy (SciPy seulement si une dilatation est demandée). `SPIRULA_DEVICE` utilise les noms Vulkan, pas `cuda` ou `mps` ; cette variable unique (défaut `auto`) s'applique aux masques du train, aux masques du SfM et au SfM lui-même. Avec `auto`, Spirula choisit le premier GPU `discrete` (ex. NVIDIA), sinon le premier `integrated` (ex. Apple M2 Pro via MoltenVK), sinon laisse Spirula décider (CPU).
 
 Les labels deviennent des **prompts anglais libres**, unis par SAM : `"sky,person,car"` devient `"sky; person; car"`. SAM 2 seul n'accepte pas de texte ; cette intégration attend donc SAM 3. Chaque image est segmentée indépendamment (`spirula sam track --mask-mode image --remove-prompted`), sans suivi vidéo, car les photos Panoramax ne constituent pas une séquence ordonnée. Les sorties `frame_XXXXX.png` sont renommées pour l'entraînement, y compris pour des images dans des sous-dossiers. Formats pris en charge par ce backend : JPEG, PNG, BMP et TIFF ; un autre format provoque une erreur explicite.
 
@@ -204,8 +204,8 @@ export TRAIN_MASKS_PYTHON="$TRAIN_MASKS_INSTALL_DIR/venv/bin/python"
 
 "$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
   --backend segmentation \
-  --images DATASET/sfm-12000/images \
-  --output DATASET/sfm-12000/train_masks \
+  --images DATASET/sfm/images \
+  --output DATASET/sfm/train_masks \
   --model mapillary \
   --labels "sky" \
   --confidence 0 \

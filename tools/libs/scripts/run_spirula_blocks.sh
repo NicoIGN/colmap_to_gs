@@ -49,7 +49,8 @@ SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
 SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
-SFM_THREADS="${SFM_THREADS:-}"
+NUM_CPUS="${NUM_CPUS:-2}"
+export NUM_CPUS
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
 SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
 init_sfm_geometry_config
@@ -59,7 +60,7 @@ TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
-TRAIN_MASKS_SPIRULA_DEVICE="${TRAIN_MASKS_SPIRULA_DEVICE:-auto}"
+SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
 MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
@@ -69,10 +70,9 @@ TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
 TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
 TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
-TRAIN_MASKS_NUM_JOBS="${TRAIN_MASKS_NUM_JOBS:-2}"
 SFM_MASKS="${SFM_MASKS:-off}"
 # SfM settings inherit generation settings, not the training loss mode.
-for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE; do
   sfm_name="SFM_MASKS_$suffix"
   train_name="TRAIN_MASKS_$suffix"
   printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
@@ -94,7 +94,7 @@ Variables:
   DIR                       Panoramax dataset; contains images/ and metadata/
   SPIRULA_BIN               Spirula executable (default: shared launcher logic)
   PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
-  TRAIN_NUM_ITER                  SfM workspace suffix and training iterations (30000)
+  TRAIN_NUM_ITER                  Training iterations (30000); the SfM workspace does not depend on it
   SPLIT_NUM_BLOCKS                Number of COLMAP blocks (1)
   TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
   TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
@@ -115,7 +115,7 @@ Variables:
   SFM_SP_PAIRS                 Spirula pair selection (prefilter)
   SFM_SP_FEATURES              Feature extractor (aliked-n16rot)
   SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
-  SFM_THREADS               SfM CPU threads (empty: Spirula default)
+  NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 2)
   SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
@@ -128,7 +128,7 @@ Variables:
   TRAIN_MASKS               off (default) or on: segmentation masks for training
   TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
   TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
-  TRAIN_MASKS_SPIRULA_DEVICE Vulkan device: auto, index, name or uuid
+  SPIRULA_DEVICE            Vulkan device: auto, index, name or uuid
   MASKS_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
   TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
@@ -225,8 +225,8 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
 fi
 [[ -z "$block_index" || "$block_index" -lt "$SPLIT_NUM_BLOCKS" ]] ||
   die "Indice de bloc $block_index hors de [0,$((SPLIT_NUM_BLOCKS - 1))]."
-[[ -z "$SFM_THREADS" || "$SFM_THREADS" =~ ^[1-9][0-9]*$ ]] ||
-  die "SFM_THREADS doit être vide ou un entier positif."
+[[ "$NUM_CPUS" =~ ^[1-9][0-9]*$ ]] ||
+  die "NUM_CPUS doit être un entier positif."
 if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
   [[ "$SFM_SP_PAIR_MAX_DISTANCE" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v radius="$SFM_SP_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
@@ -298,7 +298,7 @@ else
 fi
 
 DIR="$(cd -- "$DIR" && pwd)"
-SFM_DIR="$DIR/sfm-$TRAIN_NUM_ITER"
+SFM_DIR="$DIR/sfm"
 SPARSE_DIR="$SFM_DIR/sparse/0"
 RAW_SPARSE_DIR="$SPARSE_DIR"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
@@ -336,8 +336,8 @@ SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
-  export PYTHON_BIN SPIRULA_BIN TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE NUM_JOBS; do
+  export PYTHON_BIN SPIRULA_BIN SPIRULA_DEVICE TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
     export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
   done
 fi
@@ -371,7 +371,7 @@ prepare_blocks() {
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
       --camera-model "$SFM_CAMERA_MODEL"
     )
-    [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
+    sfm_args+=(--threads "$NUM_CPUS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
     "$PYTHON_BIN" "${sfm_args[@]}"
   elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
@@ -400,7 +400,7 @@ prepare_blocks() {
     )
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
-    [[ -z "$SFM_THREADS" ]] || sfm_args+=(--threads "$SFM_THREADS")
+    sfm_args+=(--threads "$NUM_CPUS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi
@@ -429,11 +429,11 @@ prepare_blocks() {
     "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
       --images "$SFM_DIR/images" --output "$MASKS_DIR" \
       --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
-      --spirula-device "$TRAIN_MASKS_SPIRULA_DEVICE" \
+      --spirula-device "$SPIRULA_DEVICE" \
       --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
       --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
       --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
-      --jobs "$TRAIN_MASKS_NUM_JOBS" \
+      --jobs "$NUM_CPUS" \
       "${license_args[@]}" ||
       die "Génération des masques d’entraînement échouée."
   fi

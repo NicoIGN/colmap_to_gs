@@ -47,18 +47,18 @@ if [[ "${TRAIN_BACKEND:-spirula}" == spirula ]]; then
   : "${TRAIN_SP_PRESET:?TRAIN_SP_PRESET doit être défini pour TRAIN_BACKEND=spirula}"
 fi
 SLURM_PARTITION="${SLURM_PARTITION:-jean-zellou}"
-SLURM_CPUS_PER_TASK="${SLURM_CPUS_PER_TASK:-16}"
+NUM_CPUS="${NUM_CPUS:-2}"
 SLURM_MEMORY="${SLURM_MEMORY:-64G}"
 SLURM_TIME_LIMIT="${SLURM_TIME_LIMIT:-48:00:00}"
 SLURM_GPU_TYPE="${SLURM_GPU_TYPE:-}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-}"
 SLURM_QOS="${SLURM_QOS:-}"
-SLURM_BLOCK_PARALLELISM="${SLURM_BLOCK_PARALLELISM:-$SPLIT_NUM_BLOCKS}"
+NUM_GPUS="${NUM_GPUS:-1}"
 [[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
-[[ "$SLURM_BLOCK_PARALLELISM" =~ ^[1-9][0-9]*$ ]] ||
-  die "SLURM_BLOCK_PARALLELISM doit être un entier positif."
-[[ "$SLURM_CPUS_PER_TASK" =~ ^[1-9][0-9]*$ ]] ||
-  die "SLURM_CPUS_PER_TASK doit être un entier positif."
+[[ "$NUM_GPUS" =~ ^[1-9][0-9]*$ ]] ||
+  die "NUM_GPUS doit être un entier positif."
+[[ "$NUM_CPUS" =~ ^[1-9][0-9]*$ ]] ||
+  die "NUM_CPUS doit être un entier positif."
 [[ -z "$SLURM_GPU_TYPE" || "$SLURM_GPU_TYPE" =~ ^[a-zA-Z0-9_-]+$ ]] ||
   die "SLURM_GPU_TYPE doit être un type GPU Slurm, sans séparateur ':'."
 command -v sbatch >/dev/null 2>&1 || die "sbatch introuvable ; lancer depuis le cluster."
@@ -85,7 +85,7 @@ sbatch_args=(
   --nodes=1
   --ntasks=1
   "--partition=$SLURM_PARTITION"
-  "--cpus-per-task=$SLURM_CPUS_PER_TASK"
+  "--cpus-per-task=$NUM_CPUS"
   "--mem=$SLURM_MEMORY"
   "--time=$SLURM_TIME_LIMIT"
   "--chdir=$submit_dir"
@@ -96,8 +96,8 @@ sbatch_args=(
 
 printf '[slurm] Configuration : %s\n' "$config_path"
 printf '[slurm] Partition=%s CPU/job=%s RAM/job=%s GPU/bloc=%s durée/job=%s parallélisme=%s\n' \
-  "$SLURM_PARTITION" "$SLURM_CPUS_PER_TASK" "$SLURM_MEMORY" "$gres" \
-  "$SLURM_TIME_LIMIT" "$SLURM_BLOCK_PARALLELISM"
+  "$SLURM_PARTITION" "$NUM_CPUS" "$SLURM_MEMORY" "$gres" \
+  "$SLURM_TIME_LIMIT" "$NUM_GPUS"
 PIPELINE_SUBMITTED_JOBS=()
 submit_job() {
   local stage="$1"
@@ -113,7 +113,7 @@ submit_job prepare --job-name=panoramax-prepare "--gres=$gres" \
   "--error=$log_dir/panoramax-prepare-%j.err"
 prepare_job="$job_id"
 submit_job train-block --job-name=panoramax-block "--gres=$gres" \
-  "--array=0-$((SPLIT_NUM_BLOCKS - 1))%$SLURM_BLOCK_PARALLELISM" \
+  "--array=0-$((SPLIT_NUM_BLOCKS - 1))%$NUM_GPUS" \
   "--dependency=afterok:$prepare_job" --kill-on-invalid-dep=yes \
   "--output=$log_dir/panoramax-block-%A_%a.out" \
   "--error=$log_dir/panoramax-block-%A_%a.err"

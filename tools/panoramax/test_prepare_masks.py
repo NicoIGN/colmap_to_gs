@@ -29,11 +29,13 @@ class PrepareMasksTest(unittest.TestCase):
         for prefix in ("TRAIN_MASKS", "SFM_MASKS"):
             for key, value in {
                 "LABELS": "sky,person,car", "BACKEND": "spirula",
-                "MODEL": "", "SPIRULA_MODEL": str(model), "SPIRULA_DEVICE": "auto",
+                "MODEL": "", "SPIRULA_MODEL": str(model),
                 "PYTHON": sys.executable, "DEVICE": "auto",
                 "CONFIDENCE": "0.5", "DILATE": "0.002", "MAX_FRACTION": "0.95",
             }.items():
                 env[f"{prefix}_{key}"] = value
+        env["SPIRULA_DEVICE"] = "auto"
+        env["NUM_CPUS"] = "2"
         self.addCleanup(patch.stopall)
         patch.dict(os.environ, env).start()
         self.prepare_images = patch.object(masks, "prepare_images").start()
@@ -154,7 +156,7 @@ class PrepareMasksTest(unittest.TestCase):
         model = Path(os.environ["SFM_MASKS_SPIRULA_MODEL"])
         binary = Path(os.environ["SPIRULA_BIN"]).resolve()
         payload = [masks.policy("SFM_MASKS"),
-                   [("images/a.jpg", image.stat().st_size, image.stat().st_mtime_ns)],
+                   [("images/a.jpg", hashlib.sha256(image.read_bytes()).hexdigest())],
                    [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
                    (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
                    "5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379"]
@@ -167,6 +169,43 @@ class PrepareMasksTest(unittest.TestCase):
             marker.write_text(json.dumps(report))
             self.run_prepare()
             self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
+
+    def test_sfm_is_reused_when_only_spirula_device_changed(self):
+        os.environ["SPIRULA_DEVICE"] = "NVIDIA A40"
+        self.run_prepare()
+        marker = self.workspace / "sfm_mask_policy.json"
+        report = json.loads(marker.read_text())
+        image = self.data / "images/a.jpg"
+        model = Path(os.environ["SFM_MASKS_SPIRULA_MODEL"])
+        binary = Path(os.environ["SPIRULA_BIN"]).resolve()
+        generator = hashlib.sha256((Path(masks.__file__).parents[1] /
+                                    "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
+        # Marker written before the device was excluded from the signature.
+        payload = [report["settings"],
+                   [("images/a.jpg", hashlib.sha256(image.read_bytes()).hexdigest())],
+                   [], [(str(model), model.stat().st_size, model.stat().st_mtime_ns)],
+                   (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns),
+                   generator]
+        report["signature"] = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        marker.write_text(json.dumps(report))
+        (self.workspace / "sparse").mkdir()
+        os.environ["SPIRULA_DEVICE"] = "auto"
+        self.run_prepare()
+        self.assertNotEqual(json.loads(marker.read_text())["signature"], report["signature"])
+
+
+    def test_legacy_completed_marker_is_migrated_once(self):
+        os.environ["SPIRULA_DEVICE"] = "auto"
+        self.run_prepare()
+        marker = self.workspace / "sfm_mask_policy.json"
+        report = json.loads(marker.read_text())
+        report.pop("input_digest")
+        report["signature"] = "legacy-stat-digest"
+        marker.write_text(json.dumps(report))
+        self.run_prepare()
+        migrated = json.loads(marker.read_text())
+        self.assertEqual(migrated["input_digest"], "sha256")
+        self.assertNotEqual(migrated["signature"], "legacy-stat-digest")
 
 
 if __name__ == "__main__":

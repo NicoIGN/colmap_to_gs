@@ -5,6 +5,7 @@ Mask convention (Spirula and COLMAP): single-channel PNG, 255 = pixel kept,
 Masks are written in the file's raw pixel orientation, like the images.
 """
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import difflib
 import hashlib
 import json
@@ -99,6 +100,24 @@ def progress(current, total, args, label="Traitement", *, force=False):
         flush=True,
     )
 
+def resolve_spirula_device(binary, requested):
+    """Return the index of the first ok discrete GPU, then integrated, else requested."""
+    if requested != "auto":
+        return requested
+    try:
+        result = subprocess.run([binary, "sam", "devices"], capture_output=True,
+                                text=True, timeout=120)
+    except (OSError, subprocess.SubprocessError):
+        return requested
+    rows = [line.split() for line in (result.stdout + "\n" + result.stderr).splitlines()]
+    for kind in ("discrete", "integrated"):
+        for tokens in rows:
+            # Columns: no, name (may contain spaces), type, VRAM (2 tokens), uuid, état.
+            if len(tokens) >= 5 and tokens[0].isdigit() and tokens[-1] == "ok" and tokens[-5] == kind:
+                return tokens[0]
+    return requested
+
+
 def parse_labels(text):
     labels = []
     for item in text.split(","):
@@ -169,9 +188,8 @@ def keep_mask(probability, confidence, radius, label_map=None, label_ids=None):
     else:
         masked = probability >= confidence
     if radius > 0 and masked.any():
-        from scipy.ndimage import binary_dilation
-        y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
-        masked = binary_dilation(masked, structure=x * x + y * y <= radius * radius)
+        from scipy.ndimage import distance_transform_edt
+        masked = distance_transform_edt(~masked) <= radius
     return np.where(masked, 0, 255).astype(np.uint8)
 
 def list_images(root):
@@ -208,10 +226,11 @@ class SpirulaSegmenter:
             self.close()
             raise ValueError(f"Spirula introuvable : {args.spirula_bin}")
         self.binary = str(Path(binary).resolve())
+        self.device = resolve_spirula_device(self.binary, args.spirula_device)
         stat = Path(self.binary).stat()
         self.settings = {"backend": "spirula", "binary": self.binary,
                          "binary_fingerprint": f"{stat.st_size}:{stat.st_mtime_ns}",
-                         "device": args.spirula_device}
+                         "device": self.device}
         self.jobs = args.jobs
         if self.jobs < 1:
             self.close()
@@ -226,7 +245,7 @@ class SpirulaSegmenter:
              "--text", "; ".join(self.id2label.values()),
              "--mask-mode", "image", "--remove-prompted", "--dilate-ratio", "0",
              "--threshold", str(self.args.confidence),
-             "--device", self.args.spirula_device]
+             "--device", self.device]
         if self.args.accept_spirula_license:
             command += ["--accept-license", "sam3=yes"]
         return command
@@ -307,13 +326,6 @@ class SpirulaSegmenter:
                 if mask.mode != "L" or mask.size != image.size:
                     raise ValueError(f"Masque Spirula invalide (mode ou dimensions) : {path}")
 
-    def raw_mask(self, source, args):
-        from PIL import Image
-        with Image.open(source) as image, Image.open(self.paths[str(source)]) as mask:
-            orientation = int(image.getexif().get(0x0112, 1) or 1)
-            probability = np.asarray(mask) < 128
-            radius = dilation_radius(image.width, image.height, args.dilate_fraction)
-        return keep_mask(probability, 0.5, radius), orientation
 
 class Segmenter:
     """transformers semantic (SegFormer, UPerNet...) or universal (Mask2Former) model."""
@@ -506,19 +518,48 @@ def write_json(data, path):
         stream.write("\n")
     os.replace(temporary, path)
 
+def spirula_keep(source, mask_path, dilate_fraction, max_masked_fraction):
+    """Final keep mask for one Spirula frame, in the raw (non-rotated) orientation.
+
+    Pure per-image work, so it can run in a worker process.
+    """
+    from PIL import Image
+    with Image.open(source) as image, Image.open(mask_path) as mask:
+        orientation = int(image.getexif().get(0x0112, 1) or 1)
+        probability = np.asarray(mask) < 128
+        radius = dilation_radius(image.width, image.height, dilate_fraction)
+        frame = image.convert("RGB") if is_equirectangular(source) else None
+    keep = keep_mask(probability, 0.5, radius)
+    masked_fraction = float(np.count_nonzero(keep == 0)) / keep.size
+    status = "masked"
+    if masked_fraction > max_masked_fraction:
+        keep[:] = 255
+        status = "overmasked_kept"
+    if frame is not None:
+        keep[black_border_mask(frame)] = 0
+    return keep, {"masked_fraction": round(masked_fraction, 6), "status": status,
+                  "exif_orientation": orientation}
+
+
+def spirula_keep_task(task):
+    return spirula_keep(*task)
+
+
 def mask_one(segmenter, source, label_ids, args):
     from PIL import Image, ImageOps
     label_map = None
     probability = None
     debug_rgb = None
     if isinstance(segmenter, SpirulaSegmenter):
-        keep, orientation = segmenter.raw_mask(source, args)
+        keep, stats = spirula_keep(source, segmenter.paths[str(source)],
+                                   args.dilate_fraction, args.max_masked_fraction)
         if args.verbose:
             # Spirula SAM returns one union mask for all text prompts, not class IDs.
             label_map = np.where(keep == 0, 1, 0).astype(np.uint16)
             probability = (keep == 0).astype(np.float32)
             with Image.open(source) as raw:
                 debug_rgb = np.asarray(raw.convert("RGB"))
+        return keep, stats, label_map, probability, debug_rgb
     else:
         with Image.open(source) as raw:
             orientation = int(raw.getexif().get(0x0112, 1) or 1)
@@ -534,10 +575,7 @@ def mask_one(segmenter, source, label_ids, args):
         status = "overmasked_kept"
     if is_equirectangular(source):
         with Image.open(source) as raw:
-            if isinstance(segmenter, SpirulaSegmenter):
-                frame = raw.convert("RGB")
-            else:
-                frame = ImageOps.exif_transpose(raw).convert("RGB")
+            frame = ImageOps.exif_transpose(raw).convert("RGB")
         keep[black_border_mask(frame)] = 0
     if orientation in INVERSE_ORIENTATION and not isinstance(segmenter, SpirulaSegmenter):
         transpose = Image.Transpose(INVERSE_ORIENTATION[orientation])
@@ -610,6 +648,7 @@ def run(args, segmenter=None):
     target.mkdir(parents=True, exist_ok=True)
     stats = {}
     done = skipped = 0
+    pool = None
     try:
         write_json({"status": "partial", "settings": settings, "images": previous},
                    target / REPORT_NAME)
@@ -638,6 +677,15 @@ def run(args, segmenter=None):
             segmenter.prepare(images_dir, pending)
             log("Préparation Spirula terminée.", args)
         progress(0, len(images), args, "Génération des masques")
+        parallel = isinstance(segmenter, SpirulaSegmenter) and not args.verbose
+        todo = [name for name in images if not (
+            target == output and (target / (name + ".png")).is_file() and name in previous
+            and not args.verbose)]
+        if parallel:
+            pool = ProcessPoolExecutor(max_workers=segmenter.jobs)
+            computed = pool.map(spirula_keep_task, [
+                (images_dir / name, segmenter.paths[str(images_dir / name)],
+                 args.dilate_fraction, args.max_masked_fraction) for name in todo], chunksize=4)
         for index, name in enumerate(images, 1):
             path = target / (name + ".png")
             if target == output and path.is_file() and name in previous and not args.verbose:
@@ -645,8 +693,12 @@ def run(args, segmenter=None):
                 skipped += 1
                 progress(index, len(images), args, "Génération des masques")
                 continue
-            keep, stats[name], label_map, probability, debug_rgb = mask_one(
-                segmenter, images_dir / name, label_ids, args)
+            if parallel:
+                keep, stats[name] = next(computed)
+                label_map = probability = debug_rgb = None
+            else:
+                keep, stats[name], label_map, probability, debug_rgb = mask_one(
+                    segmenter, images_dir / name, label_ids, args)
             write_png(keep, path)
             if args.verbose and label_map is not None:
                 write_label_diagnostics(
@@ -667,6 +719,8 @@ def run(args, segmenter=None):
             if done % 50 == 0:
                 write_json({"status": "partial", "settings": settings, "images": stats},
                            target / REPORT_NAME)
+        if pool is not None:
+            pool.shutdown()
         fractions = [s["masked_fraction"] for s in stats.values()]
         overmasked = sorted(n for n, s in stats.items() if s["status"] == "overmasked_kept")
         oriented = sorted(n for n, s in stats.items() if s["exif_orientation"] != 1)
@@ -680,6 +734,8 @@ def run(args, segmenter=None):
         write_json({"status": "complete", "settings": settings, "summary": summary,
                     "images": stats}, target / REPORT_NAME)
     except BaseException:
+        if pool is not None:
+            pool.shutdown(cancel_futures=True)
         if target != output:
             shutil.rmtree(target, ignore_errors=True)
         raise

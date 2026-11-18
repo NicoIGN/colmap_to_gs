@@ -41,7 +41,7 @@ validate_config() {
   if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula ]]; then
     config_error "SFM_CAMERA_MODEL=equirectangular exige TRAIN_BACKEND=spirula."
   fi
-  for name in PANORAMAX_IMAGE_MAX SFM_THREADS; do
+  for name in PANORAMAX_IMAGE_MAX NUM_CPUS; do
     value="${!name:-}"
     [[ -z "$value" ]] || config_positive_integer "$name" "$value"
   done
@@ -61,6 +61,12 @@ validate_config() {
   fi
   config_choice PANORAMAX_QUALITY "${PANORAMAX_QUALITY:-hd}" 'hd|sd|thumb'
   config_choice PANORAMAX_PICTURE_TYPE "${PANORAMAX_PICTURE_TYPE:-all}" 'all|normal|360'
+  config_choice PANORAMAX_MULTI_CAM "${PANORAMAX_MULTI_CAM:-false}" 'true|false|1|0|yes|no|on|off'
+  case "${PANORAMAX_MULTI_CAM:-false}" in
+    true|1|yes|on)
+      [[ -z "${SFM_CAMERA_MODE:-}" || "$SFM_CAMERA_MODE" == folder ]] ||
+        config_error "PANORAMAX_MULTI_CAM=true est incompatible avec SFM_CAMERA_MODE='$SFM_CAMERA_MODE' : chaque taille d'image devient une caméra (mode folder). Mettre SFM_CAMERA_MODE=folder ou le retirer de la configuration." ;;
+  esac
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice POSTPROCESS_FILTER_MODE "${POSTPROCESS_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
@@ -70,7 +76,7 @@ validate_config() {
   config_choice MASKS_ACCEPT_LICENSE "${MASKS_ACCEPT_LICENSE:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice SFM_MASKS "${SFM_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   local suffix sfm_name train_name backend
-  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL SPIRULA_DEVICE LABELS CONFIDENCE MAX_FRACTION DEVICE NUM_JOBS; do
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE; do
     sfm_name="SFM_MASKS_$suffix"
     train_name="TRAIN_MASKS_$suffix"
     value="${!sfm_name:-${!train_name:-}}"
@@ -192,8 +198,8 @@ validate_config() {
     config_error "PANORAMAX_API_URL='$value' doit être une URL HTTP(S)."
 
   if [[ "${1:-local}" == slurm ]]; then
-    config_positive_integer SLURM_CPUS_PER_TASK "${SLURM_CPUS_PER_TASK:-16}"
-    config_positive_integer SLURM_BLOCK_PARALLELISM "${SLURM_BLOCK_PARALLELISM:-${SPLIT_NUM_BLOCKS:-}}"
+    config_positive_integer NUM_CPUS "${NUM_CPUS:-2}"
+    config_positive_integer NUM_GPUS "${NUM_GPUS:-1}"
     value="${SLURM_MEMORY:-64G}"
     [[ "$value" =~ ^[0-9]+[KkMmGgTt]?$ ]] ||
       config_error "SLURM_MEMORY='$value' attend un entier et une unité K, M, G ou T facultative."

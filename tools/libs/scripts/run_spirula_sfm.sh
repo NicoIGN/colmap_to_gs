@@ -328,6 +328,15 @@ case "$prepare" in
   *) die "PREPARE invalide : $prepare" ;;
 esac
 
+# Le device n'est pas un argument positionnel de `sfm auto` : il passe par
+# --device. Un --device explicite prime sur SPIRULA_DEVICE.
+spirula_device="$(resolve_spirula_device "$spirula_bin" "${SPIRULA_DEVICE:-auto}")"
+for ((i = 0; i < ${#option_names[@]}; i++)); do
+  if [[ "${option_names[$i]}" == device && -z "${option_values[$i]}" && "$spirula_device" != auto ]]; then
+    option_values[$i]="$spirula_device"
+  fi
+done
+
 # Spirula valide les types numériques, les valeurs autorisées et les
 # compatibilités entre options. Le wrapper ne duplique pas son parseur.
 cmd=(
@@ -361,6 +370,8 @@ if [[ "$dry_run" == true ]]; then
 fi
 
 mkdir -p -- "$output_dir"
+# A stale marker must not vouch for a reconstruction that is about to change.
+rm -f -- "$output_dir/.sfm_done"
 
 # Do not mistake files from a previous reconstruction for recovered output.
 existing_sparse=false
@@ -369,6 +380,7 @@ for name in cameras images points3D; do
 done
 
 if "${cmd[@]}"; then
+  touch -- "$output_dir/.sfm_done"
   printf '[SFM] Reconstruction terminée : %s\n' "$output_dir"
 else
   status=$?
@@ -415,6 +427,7 @@ print(f"[SFM] sparse/0 lisible : {counts[0]} caméras, {counts[1]} images, {coun
 PY
     then
       printf '[AVERTISSEMENT] Spirula a terminé avec SIGSEGV (code 139), mais sparse/0 vient d’être écrit et se lit entièrement. Poursuite avec ce modèle ; la cause du crash reste à diagnostiquer.\n' >&2
+      touch -- "$output_dir/.sfm_done"
       exit 0
     fi
     if [[ "$existing_sparse" == true ]]; then

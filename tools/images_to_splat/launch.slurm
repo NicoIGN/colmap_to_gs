@@ -9,7 +9,7 @@ if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
   [[ -f "$SLURM_ENV_SETUP" ]] || { echo "[ERREUR] SLURM_ENV_SETUP absent" >&2; exit 1; }
   source "$SLURM_ENV_SETUP"
 fi
-export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-16}"
+export OMP_NUM_THREADS="${NUM_CPUS:-2}"
 export PYTHONUNBUFFERED=1
 runtime="$(mktemp -d "${SLURM_TMPDIR:-${TMPDIR:-/tmp}}/images-${SLURM_JOB_ID}-XXXXXXXX")"
 export XDG_RUNTIME_DIR="$runtime"

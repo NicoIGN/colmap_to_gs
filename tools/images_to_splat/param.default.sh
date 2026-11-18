@@ -64,7 +64,7 @@ TRAIN_MASKS_DIR=""
 TRAIN_MASKS_BACKEND="spirula" # spirula|segmentation ; defaut local : spirula
 TRAIN_MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
 # auto, indice Vulkan, nom du GPU (ex. NVIDIA A40), uuid:...
-TRAIN_MASKS_SPIRULA_DEVICE="auto"
+SPIRULA_DEVICE="auto"
 # Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
 # avertissements/erreurs et la progression du pipeline. 0 = silencieux,
 # 2 = informations et temps (defaut Spirula), 3 = detaille.
@@ -81,14 +81,11 @@ TRAIN_MASKS_MAX_FRACTION="1.0"
 TRAIN_MASKS_MODEL=""
 TRAIN_MASKS_PYTHON="python3"
 TRAIN_MASKS_DEVICE="auto"
-# Spirula (SAM) : nombre de processus parallèles sur les frames (chacun charge le modèle sur le GPU).
-TRAIN_MASKS_NUM_JOBS="2"
 # Vide : heriter du TRAIN_MASKS_* correspondant, comme dans Panoramax.
 # SFM_MASKS_DILATE a son propre defaut 0.002.
 SFM_MASKS_BACKEND=""
 SFM_MASKS_DIR=""
 SFM_MASKS_SPIRULA_MODEL=""
-SFM_MASKS_SPIRULA_DEVICE=""
 SFM_MASKS_LABELS=""
 SFM_MASKS_CONFIDENCE=""
 SFM_MASKS_DILATE="0.002"
@@ -96,8 +93,6 @@ SFM_MASKS_MAX_FRACTION=""
 SFM_MASKS_MODEL=""
 SFM_MASKS_PYTHON=""
 SFM_MASKS_DEVICE=""
-# Spirula (SAM) : nombre de processus parallèles sur les frames (chacun charge le modèle sur le GPU).
-SFM_MASKS_NUM_JOBS="2"
 # true UNIQUEMENT apres lecture et acceptation des conditions SAM 3 Meta.
 # false par defaut : aucune acceptation automatique implicite.
 MASKS_ACCEPT_LICENSE="false"
@@ -113,7 +108,7 @@ TRAIN_MASKS_MODE="empty"
 # SFM_SP_*, SFM_COLMAP_* et SFM_NS_*.
 SFM_MAX_IMAGE_SIZE="4096"
 SFM_ALIKED_MAX_FEATURES="8192"
-SFM_THREADS="16"
+NUM_CPUS="2"
 # Seuils geometriques partages avec COLMAP direct ; le SfM Nerfstudio garde
 # ses propres seuils. Plus strict = moins de parasites, mais couverture reduite.
 SFM_MAX_ERROR="2"         # [0.1,100], pixels d'extraction : verification + mapping
@@ -275,12 +270,11 @@ EXPORT_SPLAT_NAME="Paris9-20000-8M.splat"
 # 7. Slurm uniquement (ignores pour l'execution locale)
 # ============================================================================
 SLURM_PARTITION="jz"
-SLURM_CPUS_PER_TASK="16"
 SLURM_MEMORY="64G"
 SLURM_TIME_LIMIT="48:00:00"   # limite PAR job, pas duree garantie
 SLURM_GPU_TYPE=""           # vide : gpu:1 ; sinon type Slurm, ex. a40
 # Un GPU PAR bloc actif. 1 : successifs ; 4 : jusqu'a 4 GPU sur 4 taches.
-SLURM_BLOCK_PARALLELISM="1"
+NUM_GPUS="1"
 # Si SFM_MASKS et TRAIN_MASKS sont actives avec des politiques differentes,
 # Slurm soumet un job par politique (un GPU chacun) ; ils tournent en parallele
 # si deux GPU sont disponibles. La preparation SfM attend les deux resultats.

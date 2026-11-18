@@ -3,9 +3,11 @@ import importlib.util
 import io
 import json
 import math
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("panoramax_prepare", Path(__file__).with_name("prepare_sfm.py"))
 prepare = importlib.util.module_from_spec(spec)
@@ -56,6 +58,26 @@ class PrepareTest(unittest.TestCase):
             (root / "images" / "a1.jpg").write_bytes(fake_jpeg(4096, 2160))
             self.run_main("--dataset", str(root), "--output-dir", str(work), "--size", "5760x2880")
             self.assertEqual([p.name for p in (work / "images").iterdir()], ["pano.jpg"])
+
+    def test_multi_cam_keeps_every_size_in_its_own_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.make_dataset(root)
+            work = root / "w"
+            with mock.patch.dict(os.environ, {"PANORAMAX_MULTI_CAM": "true"}):
+                out, _ = self.run_main("--dataset", str(root), "--output-dir", str(work), "--shell")
+            self.assertIn("focal=", out)
+            self.assertNotIn("focal=0", out)
+            self.assertEqual(
+                sorted(p.relative_to(work / "images").as_posix() for p in (work / "images").rglob("*") if p.is_file()),
+                ["3072x4080/phone.JPG", "4096x2160/a0.jpg", "4096x2160/a1.jpg", "4096x2160/a2.jpg", "5760x2880/pano.jpg"],
+            )
+            summary = json.loads((work / "selection.json").read_text())
+            self.assertTrue(summary["multi_cam"])
+            self.assertEqual(summary["excluded"], [])
+            self.assertEqual(summary["sizes"], {"4096x2160": 3, "5760x2880": 1, "3072x4080": 1})
+            self.assertIsNone(summary["focal_px"])
+            self.assertAlmostEqual(summary["focals_px"]["4096x2160"], 2048 / math.tan(math.radians(47.5)), places=1)
 
     def test_dry_run_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:

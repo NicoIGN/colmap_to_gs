@@ -29,7 +29,7 @@ mkdir -p "$OUTPUT_DIR/logs"
 source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
 PIPELINE_SUBMITTED_JOBS=()
 args=(--parsable --wait --nodes=1 --ntasks=1 --gres=none --export=ALL
-      "--partition=$SLURM_PARTITION" "--cpus-per-task=$SLURM_CPUS_PER_TASK"
+      "--partition=$SLURM_PARTITION" "--cpus-per-task=$NUM_CPUS"
       "--mem=$SLURM_MEMORY" "--time=$SLURM_TIME_LIMIT" "--chdir=$PWD"
       --job-name=video-frames "--output=$OUTPUT_DIR/logs/video-frames-%j.out"
       "--error=$OUTPUT_DIR/logs/video-frames-%j.err")

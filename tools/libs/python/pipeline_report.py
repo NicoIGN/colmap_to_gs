@@ -26,7 +26,7 @@ def counters(workspace):
         if isinstance(data.get("images"), list):
             stats["selected_images"] = len(data["images"])
     manifests = [workspace/"blocks/manifest.json"]
-    manifests.extend(sorted(workspace.glob("panoramax/sfm-*/blocks-*/manifest.json")))
+    manifests.extend(sorted(workspace.glob("panoramax/sfm/blocks-*/manifest.json")))
     for manifest in manifests:
         if manifest.is_file():
             try:
@@ -53,7 +53,7 @@ def counters(workspace):
             if "points" in data:
                 stats["lidar_points"] = data["points"]
     models = [workspace/"colmap_lidar", workspace/"sfm/sparse/0"]
-    models.extend(sorted(workspace.glob("panoramax/sfm-*/sparse/0")))
+    models.extend(sorted(workspace.glob("panoramax/sfm/sparse/0")))
     for model in models:
         points = model/"points3D.bin"
         if points.is_file():
