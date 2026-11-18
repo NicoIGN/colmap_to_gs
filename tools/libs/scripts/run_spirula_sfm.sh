@@ -331,7 +331,7 @@ esac
 # Spirula valide les types numériques, les valeurs autorisées et les
 # compatibilités entre options. Le wrapper ne duplique pas son parseur.
 cmd=(
-  "$spirula_bin" sfm auto "$dataset"
+  "$spirula_bin" sfm "${SFM_SPIRULA_DEVICE:-auto}" "$dataset"
   --output "$output_dir"
 )
 
