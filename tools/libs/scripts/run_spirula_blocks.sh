@@ -49,7 +49,7 @@ SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
 SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
-NUM_CPUS="${NUM_CPUS:-16}"
+NUM_CPUS="${NUM_CPUS:-2}"
 export NUM_CPUS
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
 SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
@@ -115,7 +115,7 @@ Variables:
   SFM_SP_PAIRS                 Spirula pair selection (prefilter)
   SFM_SP_FEATURES              Feature extractor (aliked-n16rot)
   SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
-  NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 16)
+  NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 2)
   SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)

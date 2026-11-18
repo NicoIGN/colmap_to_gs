@@ -192,8 +192,8 @@ validate_config() {
     config_error "PANORAMAX_API_URL='$value' doit être une URL HTTP(S)."
 
   if [[ "${1:-local}" == slurm ]]; then
-    config_positive_integer NUM_CPUS "${NUM_CPUS:-16}"
-    config_positive_integer NUM_GPUS "${NUM_GPUS:-${SPLIT_NUM_BLOCKS:-}}"
+    config_positive_integer NUM_CPUS "${NUM_CPUS:-2}"
+    config_positive_integer NUM_GPUS "${NUM_GPUS:-1}"
     value="${SLURM_MEMORY:-64G}"
     [[ "$value" =~ ^[0-9]+[KkMmGgTt]?$ ]] ||
       config_error "SLURM_MEMORY='$value' attend un entier et une unité K, M, G ou T facultative."

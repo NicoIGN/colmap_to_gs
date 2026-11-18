@@ -174,9 +174,9 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             re.MULTILINE))
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
-        self.assertIn('NUM_CPUS="${NUM_CPUS:-16}"',
+        self.assertIn('NUM_CPUS="${NUM_CPUS:-2}"',
                       (ROOT.parents[1] / "scripts/panoramax_to_3dgs.sh").read_text())
-        self.assertEqual(values["NUM_CPUS"], "16")
+        self.assertEqual(values["NUM_CPUS"], "2")
 
     def test_training_masks_require_model_and_labels(self):
         result, _ = self.execute("validate_config.sh", 'TRAIN_MASKS=on\nTRAIN_MASKS_LABELS=" , "\n')

@@ -434,7 +434,7 @@ SLURM_PARTITION="jean-zellou"
 
 # Defaut : 16. Entier > 0 : CPU par job (preparation, bloc, fusion ; threads SfM,
 # masques, entrainement). Reference unique pour le parallelisme CPU, meme en local.
-NUM_CPUS="16"
+NUM_CPUS="2"
 
 # Defaut : 64G. Entier >= 0 avec suffixe optionnel K|M|G|T (casse indifferente).
 # Sans suffixe : Mo Slurm ; 0 = memoire du noeud selon le site. RAM, pas VRAM.
@@ -453,7 +453,7 @@ SLURM_GPU_TYPE=""
 # simultanes au plus (blocs Slurm, entrainement Nerfstudio local).
 # 1 = sequentiel ; une valeur > SPLIT_NUM_BLOCKS n'ajoute aucun bloc.
 # Le cluster peut reduire le parallelisme effectif.
-NUM_GPUS=""
+NUM_GPUS="1"
 # Defaut : "". Compte de facturation Slurm ; vide = defaut du site.
 SLURM_ACCOUNT=""
 

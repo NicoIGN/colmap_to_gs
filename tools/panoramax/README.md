@@ -449,7 +449,7 @@ conditions sont satisfaites, il poursuit avec un avertissement explicite.
 Des fichiers préexistants, absents, vides ou tronqués restent bloquants.
 Cette récupération ne corrige pas le crash et ne certifie pas la qualité du
 modèle ; les codes d'erreur de qualité ou de géoréférencement restent propagés.
-`NUM_CPUS` (défaut `16`) limite les CPU utilisés par SfM, les masques et les
+`NUM_CPUS` (défaut `2`) limite les CPU utilisés par SfM, les masques et les
 processus parallèles ; sous Slurm, il sert aussi à `--cpus-per-task`.
 
 Les étapes sont également accessibles individuellement, avec la même config :

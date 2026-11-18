@@ -85,7 +85,7 @@ La RAM est la mémoire du nœud, pas la mémoire vidéo du GPU (VRAM).
 
 - `SLURM_PARTITION` : partition du cluster ; défaut `jz` pour les images locales,
   `jean-zellou` pour Panoramax. Adapter au site.
-- `NUM_CPUS` : CPU parallélisables (SfM, masques, `--cpus-per-task` sous Slurm) ; défaut `16`.
+- `NUM_CPUS` : CPU parallélisables (SfM, masques, `--cpus-per-task` sous Slurm) ; défaut `2`.
 - `SLURM_MEMORY` : RAM par tâche ; défaut `64G`.
 - `SLURM_TIME_LIMIT` : durée maximale de chaque job ; défaut `48:00:00`,
   sous réserve des limites de la partition.

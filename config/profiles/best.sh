@@ -18,7 +18,7 @@ TRAIN_NS_MAX_RES=1536
 
 TRAIN_NS_NUM_DOWNSCALES=0
 SKIP_IMAGE_PROCESSING=true
-NUM_GPUS=2
+NUM_GPUS=1
 
 ########################################
 # TRAINING

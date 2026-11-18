@@ -47,13 +47,13 @@ if [[ "${TRAIN_BACKEND:-spirula}" == spirula ]]; then
   : "${TRAIN_SP_PRESET:?TRAIN_SP_PRESET doit être défini pour TRAIN_BACKEND=spirula}"
 fi
 SLURM_PARTITION="${SLURM_PARTITION:-jean-zellou}"
-NUM_CPUS="${NUM_CPUS:-16}"
+NUM_CPUS="${NUM_CPUS:-2}"
 SLURM_MEMORY="${SLURM_MEMORY:-64G}"
 SLURM_TIME_LIMIT="${SLURM_TIME_LIMIT:-48:00:00}"
 SLURM_GPU_TYPE="${SLURM_GPU_TYPE:-}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-}"
 SLURM_QOS="${SLURM_QOS:-}"
-NUM_GPUS="${NUM_GPUS:-$SPLIT_NUM_BLOCKS}"
+NUM_GPUS="${NUM_GPUS:-1}"
 [[ "$SPLIT_NUM_BLOCKS" =~ ^[1-9][0-9]*$ ]] || die "SPLIT_NUM_BLOCKS doit être un entier positif."
 [[ "$NUM_GPUS" =~ ^[1-9][0-9]*$ ]] ||
   die "NUM_GPUS doit être un entier positif."

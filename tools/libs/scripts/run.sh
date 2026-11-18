@@ -12,7 +12,7 @@ MODEL="splatfacto"
 # =========================================
 DATASET_DIR=""
 GSPLAT_PROFILE=""
-NUM_GPUS=2
+NUM_GPUS=1
 SKIP_CONDA=false
 SKIP_TRAINING=false
 SKIP_EXPORT=false

@@ -108,7 +108,7 @@ TRAIN_MASKS_MODE="empty"
 # SFM_SP_*, SFM_COLMAP_* et SFM_NS_*.
 SFM_MAX_IMAGE_SIZE="4096"
 SFM_ALIKED_MAX_FEATURES="8192"
-NUM_CPUS="16"
+NUM_CPUS="2"
 # Seuils geometriques partages avec COLMAP direct ; le SfM Nerfstudio garde
 # ses propres seuils. Plus strict = moins de parasites, mais couverture reduite.
 SFM_MAX_ERROR="2"         # [0.1,100], pixels d'extraction : verification + mapping

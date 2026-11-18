@@ -91,7 +91,7 @@ if [ -z "${TRAIN_NS_MAX_ITER+x}" ]; then
 fi
 
 if [ -z "${NUM_GPUS+x}" ]; then
-  NUM_GPUS=2
+  NUM_GPUS=1
 fi
 
 ############################
