@@ -240,6 +240,7 @@ def run(args):
     body, method = None, "GET"
     candidates = []
     api_features = 0
+    after_filters = 0
     last_page_count = 0
     while url:
         page_key = (url, method, json.dumps(body, sort_keys=True))
@@ -264,6 +265,7 @@ def run(args):
                 continue
             if provider is not None and not item_matches_provider(feature, provider):
                 continue
+            after_filters += 1
             if item_in_bbox(feature, args.bbox, to_bbox_crs):
                 candidates.append((feature, url, key))
         next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
@@ -284,6 +286,10 @@ def run(args):
     counts["available_is_exact"] = total_is_exact
     selected = candidates[:image_max] if image_max is not None else candidates
     progress = Progress(len(selected))
+    print(
+        f"Photos renvoyées par l'API : {api_features} ; "
+        f"après filtres type/provider : {after_filters}"
+    )
     print(
         f"Photos dans la bbox EPSG:{bbox_epsg} : "
         f"{counts['available']}{'' if total_is_exact else '+'}"
