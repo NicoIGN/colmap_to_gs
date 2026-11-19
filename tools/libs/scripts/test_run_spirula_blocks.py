@@ -591,6 +591,7 @@ class BlockPipelineTest(unittest.TestCase):
                     self.assertEqual(cmd[cmd.index("--distraction-robustness") + 1], "strong")
                     self.assertEqual(cmd[cmd.index("--cap-max") + 1], "1000")
                     self.assertEqual(cmd[cmd.index("--num-iterations") + 1], "3")
+                    self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "0")
             env["TRAIN_SP_QUALITY"] = "invalid"
             result = execute("--prepare-only")
             self.assertNotEqual(result.returncode, 0)

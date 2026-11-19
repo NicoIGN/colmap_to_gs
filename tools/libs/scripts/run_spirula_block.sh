@@ -538,6 +538,7 @@ cmd=(
   --disable-viewer 1
   --keep-viewer-alive 0
   --save-full-checkpoint 1
+  --save-only-latest-checkpoint 0
 )
 
 [[ -z "$quality" ]] || cmd+=(--quality "$quality")

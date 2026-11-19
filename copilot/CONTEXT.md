@@ -22,7 +22,36 @@ Paquets utilisés par les tests et le pipeline :
 - Lidar / panoramax : `pyproj laspy lazrs` (`tools/lidar/requirements.txt`, `tools/panoramax/requirements.txt`)
 - HLOC / COLMAP : `pycolmap>=4.2` (`tools/lidar/requirements-colmap.txt`)
 
-Sans `scipy`, `plyfile`, `cv2`, `PIL` : les suites échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code.
+Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
+- Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
+- Sur la machine de session, `numpy` n'est pas installé par défaut ; `pycolmap` et `torch` non plus.
+
+## Viewer (`tools/viewer`)
+- Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
+- Syntaxe seule : `node --check html/viewer/colmap.js`.
+- Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/preprocess/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
+- Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
+
+## macOS : HLOC et OpenMP
+- HLOC s'installe avec `tools/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
+- macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
+- HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
+- Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
+
+## Bash : `set -u` et tableaux vides
+Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/images_to_colmap/reconstruct.sh`.
+
+## Densification MVS (`COLMAP_USE_MVS`, défaut `false`)
+- Clés : `COLMAP_USE_MVS`, `MVS_MAX_IMAGE_SIZE` (2000), `MVS_GPU_INDEX` (0) dans `config/defaults/sfm.default.sh`.
+- Script : `tools/images_to_colmap/mvs_densify.py` (image_undistorter, patch_match_stereo, stereo_fusion). Nécessite un COLMAP compilé avec CUDA : à lancer sur Slurm, pas sur Mac.
+- Le sparse dense est `sfm/mvs/sparse/0` ; `run.sh` et `scripts/images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
+- Les points denses reprennent le track du point sparse le plus proche (scipy `cKDTree`), pour que le découpage par tracks fonctionne. Approximatif si `SPLIT_NUM_BLOCKS > 1`.
+- Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
+
+## Pièges généraux
+- `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
+- `colmap_split_blocks.py` ignore ou refuse les points sans track.
+- `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
 
 ## Lancer les tests
 Depuis la racine du dépôt, venv activé :
@@ -52,4 +81,9 @@ Les tests écrivent des `__pycache__` suivis par git : avant commit, faire `git 
 - Une correction = tests ciblés qui échouent sans le correctif.
 
 ## Historique récent
-- `c808dfd` : ignorer les défauts `SFM_SP_*` quand `COLMAP_METHOD` n'est pas `spirula` (erreur « ne s'appliquent qu'à COLMAP_METHOD=spirula » avec hloc).
+- `c808dfd` : ignorer les défauts `SFM_SP_*` quand `COLMAP_METHOD` n'est pas `spirula`.
+- `3189c77` : création de `copilot/` (cette note et `setup_env.sh`).
+- `d211ae8` : h5py ajouté aux deux `conda_env.yml` (conda-forge recommandé plutôt que pip).
+- `1256a17` : dédoublonnage de libomp sur macOS dans `install-hloc.sh` (confirmé fonctionnel).
+- `4ff510e`, `f1f12ae` : correctifs `set -u` sur tableaux vides (bash 3.2).
+- `1399b67` : densification MVS optionnelle (`COLMAP_USE_MVS`, défaut `false`), non testée sur Slurm.

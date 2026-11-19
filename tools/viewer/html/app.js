@@ -235,7 +235,7 @@ function refreshUI() {
   const blocked = uiIsBlocked();
 
     document.querySelectorAll(
-      "#panel button, #panel input, #panel select, #panel textarea"
+      "#panel button, #panel input, #panel select, #panel textarea, #optionsPanel button, #optionsPanel input, #optionsPanel select"
     ).forEach((element) => {
       // Ces éléments sont gérés par colmapLayer.refreshUI()
       if (

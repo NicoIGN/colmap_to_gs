@@ -12,15 +12,29 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
+// Candidats classés par distance, parmi lesquels on cherche celui dont le cadre agrandi couvre le centre.
+const IMAGE_CANDIDATES = 16;
 // Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
-// Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
-const IMAGE_CENTER_DEG = 10;
-// Une image candidate doit regarder à moins de cet angle de l'axe de la caméra affichée.
-const IMAGE_AXIS_DEG = 30;
+// Une image candidate doit regarder à moins de cet angle de la direction de vue.
+const IMAGE_AXIS_DEG = 35;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
+const PANORAMA_SEGMENTS = 96;
+const PANORAMA_RINGS = 48;
+const PANORAMA_CUBE_FACE = 512;
+const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
+
+// Faces d'un cube dans le repère caméra : centre, axe droit et axe bas de chaque face à 90°.
+const CUBE_FACES = [
+  { center: [0, 0, 1], right: [1, 0, 0], down: [0, 1, 0] },
+  { center: [1, 0, 0], right: [0, 0, -1], down: [0, 1, 0] },
+  { center: [0, 0, -1], right: [-1, 0, 0], down: [0, 1, 0] },
+  { center: [-1, 0, 0], right: [0, 0, 1], down: [0, 1, 0] },
+  { center: [0, -1, 0], right: [1, 0, 0], down: [0, 0, 1] },
+  { center: [0, 1, 0], right: [1, 0, 0], down: [0, 0, -1] },
+];
 
 /**
  * Couche COLMAP sparse (PlayCanvas)
@@ -41,6 +55,7 @@ const MODEL_NAMES = {
   8: "SIMPLE_RADIAL_FISHEYE",
   9: "RADIAL_FISHEYE",
   10: "THIN_PRISM_FISHEYE",
+  17: "EQUIRECTANGULAR",
 };
 
 export function colmapBounds(positionSets, flip = false) {
@@ -91,6 +106,7 @@ const MODEL_PARAM_COUNT = {
   SIMPLE_RADIAL_FISHEYE: 4,
   RADIAL_FISHEYE: 5,
   THIN_PRISM_FISHEYE: 12,
+  EQUIRECTANGULAR: 2,
 };
 
 function readU64(view, state) {
@@ -331,6 +347,10 @@ function getFxFy(camera) {
     case "FOV":
       return { fx: p[0], fy: p[0] };
 
+    // Cadre nominal de 90° horizontal, utilisé pour la sélection et les frustums.
+    case "EQUIRECTANGULAR":
+      return { fx: camera.width / 2, fy: camera.width / 2 };
+
     default:
       return { fx: camera.width, fy: camera.height };
   }
@@ -540,6 +560,122 @@ function frustumCorners(image, camera, near) {
   });
 }
 
+function isPanorama(camera) {
+  return camera.modelName === "EQUIRECTANGULAR";
+}
+
+// Le panorama COLMAP est tourné de 180° autour de l'axe vertical par rapport à la géométrie : on inverse x et z.
+function applyPanoramaYawFix(local) {
+  local[0] = -local[0];
+  local[2] = -local[2];
+}
+
+// Sphère 360° vue de l'intérieur. Repère caméra : x à droite, y vers le bas, z dans le sens du regard.
+// Longitude 0 au centre de l'image ; latitude +90° en haut de l'image (v = 0).
+function panoramaSphere(image, radius) {
+  const rwc = transpose3(qvecToMat3(image.qvec));
+  const center = getCameraCenter(image);
+  const positions = [];
+  const uvs = [];
+  for (let r = 0; r <= PANORAMA_RINGS; r++) {
+    const lat = Math.PI / 2 - (r / PANORAMA_RINGS) * Math.PI;
+    for (let s = 0; s <= PANORAMA_SEGMENTS; s++) {
+      const lon = -Math.PI + (s / PANORAMA_SEGMENTS) * 2 * Math.PI;
+      const local = [
+        Math.cos(lat) * Math.sin(lon) * radius,
+        -Math.sin(lat) * radius,
+        Math.cos(lat) * Math.cos(lon) * radius,
+      ];
+      applyPanoramaYawFix(local);
+      const rotated = mulMat3Vec3(rwc, local);
+      positions.push(rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]);
+      uvs.push(s / PANORAMA_SEGMENTS, r / PANORAMA_RINGS);
+    }
+  }
+  const row = PANORAMA_SEGMENTS + 1;
+  const indices = [];
+  for (let r = 0; r < PANORAMA_RINGS; r++) {
+    for (let s = 0; s < PANORAMA_SEGMENTS; s++) {
+      const a = r * row + s;
+      const b = a + row;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    uvs: new Float32Array(uvs),
+    indices: new Uint16Array(indices),
+  };
+}
+
+// Atlas 3×2 des six faces du cube (RGBA, faces de faceSize px) échantillonné depuis une équirectangulaire.
+// Les faces suivent CUBE_FACES dans l'ordre, rangées ligne par ligne.
+export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUBE_FACE) {
+  const atlasWidth = faceSize * 3;
+  const atlas = new Uint8ClampedArray(atlasWidth * faceSize * 2 * 4);
+  CUBE_FACES.forEach((face, index) => {
+    const offsetX = (index % 3) * faceSize;
+    const offsetY = Math.floor(index / 3) * faceSize;
+    for (let v = 0; v < faceSize; v++) {
+      const b = (2 * (v + 0.5)) / faceSize - 1;
+      for (let u = 0; u < faceSize; u++) {
+        const a = (2 * (u + 0.5)) / faceSize - 1;
+        const x = face.center[0] + a * face.right[0] + b * face.down[0];
+        const y = face.center[1] + a * face.right[1] + b * face.down[1];
+        const z = face.center[2] + a * face.right[2] + b * face.down[2];
+        const theta = Math.atan2(x, z);
+        const phi = Math.atan2(-y, Math.hypot(x, z));
+        const sx = Math.min(width - 1, Math.floor((theta / (2 * Math.PI) + 0.5) * width));
+        const sy = Math.min(height - 1, Math.floor((0.5 - phi / Math.PI) * height));
+        const src = (sy * width + sx) * 4;
+        const dst = ((offsetY + v) * atlasWidth + offsetX + u) * 4;
+        atlas[dst] = rgba[src];
+        atlas[dst + 1] = rgba[src + 1];
+        atlas[dst + 2] = rgba[src + 2];
+        atlas[dst + 3] = 255;
+      }
+    }
+  });
+  return { data: atlas, width: atlasWidth, height: faceSize * 2 };
+}
+
+// Six quads (un par face) posés sur les faces du cube centré sur la caméra, UV dans l'atlas.
+function panoramaCube(image, radius) {
+  const rwc = transpose3(qvecToMat3(image.qvec));
+  const center = getCameraCenter(image);
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  CUBE_FACES.forEach((face, index) => {
+    const col = index % 3;
+    const row = Math.floor(index / 3);
+    const u0 = col / 3;
+    const u1 = (col + 1) / 3;
+    const v0 = row / 2;
+    const v1 = (row + 1) / 2;
+    const corners = [
+      [-1, -1, u0, v0],
+      [1, -1, u1, v0],
+      [1, 1, u1, v1],
+      [-1, 1, u0, v1],
+    ];
+    for (const [a, b, u, v] of corners) {
+      const local = [0, 1, 2].map((k) => (face.center[k] + a * face.right[k] + b * face.down[k]) * radius);
+      applyPanoramaYawFix(local);
+      const world = mulMat3Vec3(rwc, local);
+      positions.push(world[0] + center[0], world[1] + center[1], world[2] + center[2]);
+      uvs.push(u, v);
+    }
+    const base = index * 4;
+    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  });
+  return {
+    positions: new Float32Array(positions),
+    uvs: new Float32Array(uvs),
+    indices: new Uint16Array(indices),
+  };
+}
+
 // Vrai si les quatre coins du cadre affiché sont tous devant le point de vue, dans le sens du regard.
 function imageInFrontOfViewer(model, index, viewer, forward) {
   const image = model.colmapImages[index];
@@ -548,6 +684,30 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
   return frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)
     .slice(1)
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
+}
+
+// Vrai si le point de vue est du côté du sommet caméra par rapport au plan du cadre à la profondeur `near` ;
+// faux s'il est au-delà, c.-à-d. qu'il regarde l'image par derrière.
+function viewerOnApexSide(image, near, viewer) {
+  const center = getCameraCenter(image);
+  const p = mulMat3Vec3(qvecToMat3(image.qvec), [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
+  return p[2] < near;
+}
+
+// Vrai si le rayon de vue (depuis le point de vue, vers l'avant) traverse le cadre agrandi à la profondeur `near`.
+export function coversViewCenter(image, camera, near, viewer, forward) {
+  const { fx, fy } = getFxFy(camera);
+  const halfW = (camera.width * near) / (2 * fx);
+  const halfH = (camera.height * near) / (2 * fy);
+  if (!viewerOnApexSide(image, near, viewer)) return false;
+  const rcw = qvecToMat3(image.qvec);
+  const center = getCameraCenter(image);
+  const p = mulMat3Vec3(rcw, [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
+  const d = mulMat3Vec3(rcw, forward);
+  if (Math.abs(d[2]) < 1e-9) return false;
+  const s = (near - p[2]) / d[2];
+  if (s <= 0) return false;
+  return Math.abs(p[0] + s * d[0]) <= halfW && Math.abs(p[1] + s * d[1]) <= halfH;
 }
 
 function buildCameraAxes(images) {
@@ -579,6 +739,9 @@ export function createColmapLayer({
   const input = document.getElementById("colmapFolderInput");
   const pointSize = document.getElementById("colmapPointSize");
   const cameraSize = document.getElementById("colmapCameraSize");
+  const panoramaModeRow = document.getElementById("colmapPanoramaModeRow");
+  const panoramaModeSelect = document.getElementById("colmapPanoramaMode");
+  let panoramaMode = panoramaModeSelect?.value ?? "cube";
 
   let disposed = false;
   let nextModelId = 1;
@@ -654,6 +817,20 @@ export function createColmapLayer({
 
     if (pointSize) pointSize.disabled = !ready;
     if (cameraSize) cameraSize.disabled = !ready;
+    if (panoramaModeRow) {
+      const hasPanorama = [...models.values()].some((model) =>
+        [...model.cameras.values()].some(isPanorama)
+      );
+      panoramaModeRow.hidden = !hasPanorama;
+    }
+  }
+
+  function setPanoramaMode(mode) {
+    if (panoramaMode === mode) return;
+    panoramaMode = mode;
+    for (const model of models.values()) {
+      model.slots?.forEach(resetSlot);
+    }
   }
 
   function destroyMeshEntity(entity, resource) {
@@ -886,6 +1063,49 @@ export function createColmapLayer({
     return texture;
   }
 
+  async function getCubeTexture(name) {
+    const key = `${name}|cube`;
+    const cached = textureCache.get(key);
+    if (cached) {
+      textureCache.delete(key);
+      textureCache.set(key, cached);
+      return cached;
+    }
+    const file = imageIndex && findImageFile(imageIndex, name);
+    if (!file) {
+      console.warn("[images] fichier introuvable dans le dossier déposé :", name);
+      return null;
+    }
+    const bitmap = await createImageBitmap(file.blob ?? file, {
+      resizeWidth: PANORAMA_CUBE_SOURCE_WIDTH,
+      resizeQuality: "medium",
+    });
+    const source = document.createElement("canvas");
+    source.width = bitmap.width;
+    source.height = bitmap.height;
+    const sourceContext = source.getContext("2d", { willReadFrequently: true });
+    sourceContext.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
+    const atlas = equirectToCubeAtlas(pixels, source.width, source.height);
+    const atlasCanvas = document.createElement("canvas");
+    atlasCanvas.width = atlas.width;
+    atlasCanvas.height = atlas.height;
+    atlasCanvas.getContext("2d").putImageData(new ImageData(atlas.data, atlas.width, atlas.height), 0, 0);
+    const texture = new pc.Texture(app.graphicsDevice, {
+      width: atlas.width,
+      height: atlas.height,
+      format: pc.PIXELFORMAT_RGBA8,
+      mipmaps: false,
+      addressU: pc.ADDRESS_CLAMP_TO_EDGE,
+      addressV: pc.ADDRESS_CLAMP_TO_EDGE,
+    });
+    texture.setSource(atlasCanvas);
+    textureCache.set(key, texture);
+    trimTextureCache(TEXTURE_CACHE_SIZE);
+    return texture;
+  }
+
   async function showSlotImage(model, slot, index) {
     const token = {};
     slot.token = token;
@@ -896,9 +1116,10 @@ export function createColmapLayer({
       return;
     }
 
+    const cube = isPanorama(camera) && panoramaMode === "cube";
     let texture = null;
     try {
-      texture = await getTexture(image.name);
+      texture = cube ? await getCubeTexture(image.name) : await getTexture(image.name);
     } catch (error) {
       console.warn("[COLMAP] Image non chargée :", image.name, error);
       return;
@@ -906,12 +1127,25 @@ export function createColmapLayer({
     if (!texture || disposed || slot.token !== token) return;
     console.log("[images] image affichée", { name: image.name, texture: texture.width + "x" + texture.height });
 
-    // Quad posé sur le plan lointain du frustum, texturé avec l'image.
-    const quad = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE).slice(1);
+    // Quad posé sur le plan lointain du frustum, sphère ou cube pour un panorama 360°, texturé avec l'image.
     const mesh = new pc.Mesh(app.graphicsDevice);
-    mesh.setPositions(new Float32Array(quad.flat()));
-    mesh.setUvs(0, new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]));
-    mesh.setIndices(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    const radius = model.depth * IMAGE_FRUSTUM_SCALE;
+    let geometry;
+    if (cube) {
+      geometry = panoramaCube(image, radius);
+    } else if (isPanorama(camera)) {
+      geometry = panoramaSphere(image, radius);
+    } else {
+      const quad = frustumCorners(image, camera, radius).slice(1);
+      geometry = {
+        positions: new Float32Array(quad.flat()),
+        uvs: new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]),
+        indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+      };
+    }
+    mesh.setPositions(geometry.positions);
+    mesh.setUvs(0, geometry.uvs);
+    mesh.setIndices(geometry.indices);
     mesh.update(pc.PRIMITIVE_TRIANGLES, true);
 
     if (!slot.material) {
@@ -980,7 +1214,6 @@ export function createColmapLayer({
       const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
-      const shownIndex = model.slots[0]?.shown ?? -1;
       const stats = { total: 0, inCone: 0 };
       // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
@@ -989,10 +1222,10 @@ export function createColmapLayer({
         viewer,
         direction: forward,
         maxAlong: Infinity,
-        count: IMAGE_SHOWN,
-        maxAngleDeg: 35,
-        keepAngleDeg: IMAGE_CENTER_DEG,
-        keep: shownIndex,
+        count: IMAGE_CANDIDATES,
+        maxAngleDeg: 180,
+        refAxis: forward,
+        maxRefAngleDeg: IMAGE_AXIS_DEG,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
           if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
@@ -1010,11 +1243,28 @@ export function createColmapLayer({
         },
         stats,
       });
-      const key = picked.join(",");
+      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule sur la
+      // meilleure candidate qui le couvre. Sans candidate couvrante, garde l'image courante si elle est encore devant.
+      const current = model.slots[0]?.shown ?? null;
+      const covers = (index) => {
+        const image = model.colmapImages[index];
+        const camera = model.cameras.get(image.cameraId);
+        return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
+      };
+      const coveringBest = picked.find(covers) ?? null;
+      let chosen = picked.slice(0, IMAGE_SHOWN);
+      if (current !== null && covers(current)) chosen = [current];
+      else if (coveringBest !== null) chosen = [coveringBest];
+      else if (
+        current !== null &&
+        imageInFrontOfViewer(model, current, viewer, forward) &&
+        viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
+      ) chosen = [current];
+      const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
         console.log(
-          "[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS,
+          "[images] caméras retenues :", chosen.length, "/", IMAGE_SLOTS,
           `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, taille max ${(stats.maxSize ?? 0).toFixed(1)} px, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
           "| point de vue", viewer.map((v) => v.toFixed(2))
         );
@@ -1029,7 +1279,7 @@ export function createColmapLayer({
           );
         }
       }
-      assignSlots(model, picked);
+      assignSlots(model, chosen);
       refreshEnlarged(model);
       updateSlotLabels(model);
     }
@@ -1045,11 +1295,13 @@ export function createColmapLayer({
     const children = [
       {
         name: "Points",
+        visible: false,
         setVisible(visible) { model.pointsEntity.enabled = visible; },
         setHighlight(on) { setMeshHighlight(model.pointsResource, on); },
       },
       {
         name: "Caméras",
+        visible: false,
         setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
         setHighlight(on) { setMeshHighlight(model.cameraCentersResource, on); },
       },
@@ -1101,6 +1353,7 @@ export function createColmapLayer({
       model.slots.forEach(resetSlot);
       refreshEnlarged(model);
       model.imagesMatched = model.colmapImages.filter((image) => findImageFile(index, image.name)).length;
+      if (model.imagesMatched) setImagesMode(model, true);
     }
     trimTextureCache(0);
     for (const model of models.values()) registerModel(model);
@@ -1251,6 +1504,7 @@ export function createColmapLayer({
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
 
+      if (model.imagesMatched) setImagesMode(model, true);
       registerModel(model);
       models.set(id, model);
       return model;
@@ -1341,6 +1595,12 @@ export function createColmapLayer({
 
   refreshUI();
   refreshInfo();
+
+  if (panoramaModeSelect) {
+    const onChange = () => setPanoramaMode(panoramaModeSelect.value);
+    panoramaModeSelect.addEventListener("change", onChange);
+    removers.push(() => panoramaModeSelect.removeEventListener("change", onChange));
+  }
 
   return {
     loadFromFileList,

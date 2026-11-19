@@ -76,8 +76,9 @@
       opacity: 1;
     }
 
-    /* Encart d’informations repliable, en bas à droite. */
-    #sceneInfo {
+    /* Encarts repliables : informations en bas à droite, options en bas à gauche. */
+    #sceneInfo,
+    #optionsPanel {
       position: fixed;
       right: 12px;
       bottom: 12px;
@@ -104,7 +105,14 @@
       user-select: text;
     }
 
-    #sceneInfoHeader {
+    #optionsPanel {
+      left: 12px;
+      right: auto;
+      width: 300px;
+    }
+
+    #sceneInfoHeader,
+    #optionsHeader {
       display: flex;
       flex-shrink: 0;
       align-items: center;
@@ -114,13 +122,15 @@
       border-bottom: 1px solid rgba(255, 255, 255, 0.14);
     }
 
-    #sceneInfoTitle {
+    #sceneInfoTitle,
+    #optionsTitle {
       margin: 0;
       font-size: 14px;
       font-weight: 700;
     }
 
-    #toggleSceneInfo {
+    #toggleSceneInfo,
+    #toggleOptions {
       appearance: none;
       display: inline-grid;
       flex-shrink: 0;
@@ -138,16 +148,19 @@
       cursor: pointer;
     }
 
-    #toggleSceneInfo:hover {
+    #toggleSceneInfo:hover,
+    #toggleOptions:hover {
       background: rgba(255, 255, 255, 0.12);
     }
 
-    #toggleSceneInfo:focus-visible {
+    #toggleSceneInfo:focus-visible,
+    #toggleOptions:focus-visible {
       outline: 2px solid #90caf9;
       outline-offset: 3px;
     }
 
-    #sceneInfoBody {
+    #sceneInfoBody,
+    #optionsBody {
       min-height: 0;
       padding: 12px;
       overflow-y: auto;
@@ -155,12 +168,29 @@
       overscroll-behavior: contain;
     }
 
+    #optionsBody {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    #optionsBody select {
+      background: rgba(255, 255, 255, 0.06);
+      color: #edf2f7;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      padding: 3px 6px;
+    }
+
     #sceneInfoBody[hidden],
-    #sceneInfo[aria-expanded="false"] #sceneInfoBody {
+    #sceneInfo[aria-expanded="false"] #sceneInfoBody,
+    #optionsBody[hidden],
+    #optionsPanel[aria-expanded="false"] #optionsBody {
       display: none;
     }
 
-    #sceneInfo[aria-expanded="false"] #sceneInfoHeader {
+    #sceneInfo[aria-expanded="false"] #sceneInfoHeader,
+    #optionsPanel[aria-expanded="false"] #optionsHeader {
       border-bottom: 0;
     }
 
@@ -307,6 +337,63 @@
     un nuage LiDAR .laz / .las ou un dossier COLMAP.
   </div>
 
+  <!-- Options d'affichage : haut droite, repliable via scene-tools.js. -->
+  <aside
+    id="optionsPanel"
+    aria-labelledby="optionsTitle"
+    aria-expanded="false"
+  >
+    <div id="optionsHeader">
+      <h2 id="optionsTitle">Options</h2>
+
+      <button
+        type="button"
+        id="toggleOptions"
+        aria-label="Déplier le panneau d’options"
+        aria-controls="optionsBody"
+        aria-expanded="false"
+      >+</button>
+    </div>
+
+    <div id="optionsBody">
+      <div class="section row">
+        <label for="backgroundColor" class="hint inline-hint">
+          Couleur du fond
+        </label>
+
+        <input type="color" id="backgroundColor" value="#10131b" />
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="flipUp" />
+        Axe Y vers le bas — COLMAP
+      </label>
+
+      <label class="slider" for="colmapPointSize">
+        Taille des points sparse
+        <input type="range" id="colmapPointSize" min="1" max="10" step="0.5" value="2" />
+        <output id="colmapPointSizeValue" for="colmapPointSize">2 px</output>
+      </label>
+
+      <label class="slider" for="colmapCameraSize">
+        Taille des centres caméra
+        <input type="range" id="colmapCameraSize" min="1" max="16" step="0.5" value="4" />
+        <output id="colmapCameraSizeValue" for="colmapCameraSize">4 px</output>
+      </label>
+
+      <div id="colmapPanoramaModeRow" class="section row" hidden>
+        <label for="colmapPanoramaMode" class="hint inline-hint">
+          Panoramas 360° (COLMAP)
+        </label>
+
+        <select id="colmapPanoramaMode">
+          <option value="sphere">Sphère</option>
+          <option value="cube" selected>Cube map</option>
+        </select>
+      </div>
+    </div>
+  </aside>
+
   <!-- Informations : bas droite, repliable via scene-tools.js. -->
   <aside
     id="sceneInfo"
@@ -423,23 +510,10 @@
         />
       </label>
 
-      <label class="check">
-        <input type="checkbox" id="flipUp" />
-        Axe Y vers le bas — COLMAP
-      </label>
-
       <div class="section">
         <button type="button" id="fit" class="wide primary">
           ⛶ Cadrer toute la scène · R
         </button>
-      </div>
-
-      <div class="section row">
-        <label for="backgroundColor" class="hint inline-hint">
-          Couleur du fond
-        </label>
-
-        <input type="color" id="backgroundColor" value="#10131b" />
       </div>
 
       <!-- Axe principal -->
@@ -537,17 +611,6 @@
         </div>
 
 
-        <label class="slider" for="colmapPointSize">
-          Taille des points sparse
-          <input type="range" id="colmapPointSize" min="1" max="10" step="0.5" value="2" />
-          <output id="colmapPointSizeValue" for="colmapPointSize">2 px</output>
-        </label>
-
-        <label class="slider" for="colmapCameraSize">
-          Taille des centres caméra
-          <input type="range" id="colmapCameraSize" min="1" max="16" step="0.5" value="4" />
-          <output id="colmapCameraSizeValue" for="colmapCameraSize">4 px</output>
-        </label>
       </details>
 
       <!-- GPS -->
