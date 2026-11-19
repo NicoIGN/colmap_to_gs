@@ -79,8 +79,8 @@ dependencies:
   # SCIENTIFIC STACK
   ########################################
 
-  - "numpy<2"
-  - scipy
+  - numpy=1.26.4
+  - scipy=1.15.2
 
   ########################################
   # UTILITIES
@@ -96,7 +96,7 @@ dependencies:
   - imageio-ffmpeg
   - exiftool
   - rasterio
-  - plyfile
+  - plyfile=1.1
   - openh264
 
   ########################################
@@ -105,7 +105,9 @@ dependencies:
 
   - colmap=3.8
   - faiss-cpu
-  - pycolmap
+  - h5py=3.16.0
+  # Une seule libomp partagée (pycolmap/torch conda) : évite « OMP: Error #15 » sur macOS.
+  - llvm-openmp=15.0.7
 
   ########################################
   # OPTIONAL UTILS
@@ -119,6 +121,7 @@ dependencies:
   ########################################
 
   - pip:
+      - pycolmap==4.2.1
       - opencv-python-headless
       - nerfstudio==1.1.5
       - fpsample

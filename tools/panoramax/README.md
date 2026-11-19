@@ -20,11 +20,12 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
 `SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
-à cette étape. Pour des photos 360, mettre `SFM_CAMERA_MODEL="equirectangular"` (sans focale,
-avec `TRAIN_BACKEND=spirula`). Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+à cette étape. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle est détecté (360° -> `equirectangular`,
+sans focale ; sinon `opencv`). Le définir force le modèle. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
-[`param.default.sh`](param.default.sh) regroupent ces paramètres par backend.
+[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh) et [`config.default.sh`](config.default.sh) regroupent ces paramètres par backend.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
@@ -33,7 +34,7 @@ vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
 si ces métadonnées sont présentes. Ces options ne sont pas transmises à
 Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
 `SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
-[`param.default.sh`](param.default.sh).
+[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh).
 
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
@@ -173,8 +174,9 @@ Fusion voxelisée → filtre contextuel (diagnostic par défaut)
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
-  [`tools/panoramax/param.default.sh`](param.default.sh), organisé par étape du pipeline.
-- Défauts : `param.default.sh` est chargé en premier par le pipeline ; la configuration
+  [`tools/panoramax/config.default.sh`](config.default.sh) (propres à Panoramax) et
+  [`config/defaults/`](../../config/defaults/) (communs par phase).
+- Défauts : `config/defaults/*.default.sh` puis `config.default.sh` sont chargés en premier par le pipeline ; la configuration
   utilisateur ne contient que ses surcharges. Il n'y a pas de préréglage de croissance sobre.
 - Valeurs à définir dans la configuration utilisateur (sans défaut) : `OUTPUT_DIR` et `PANORAMAX_BBOX`.
 
@@ -185,7 +187,7 @@ acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 ```bash
-# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de param.default.sh.
+# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de config/defaults/ et de config.default.sh.
 OUTPUT_DIR="/chemin/vers/resultats/paris"
 PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
 bash scripts/panoramax_to_3dgs.sh /chemin/vers/paris.sh
@@ -279,7 +281,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   le filtre GPS) et force la réextraction lorsqu'un nouveau SfM est nécessaire.
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour le SfM / l'entraînement ;
   réglages, héritage et défauts dans
-  [`param.default.sh`, section « 3. Calcul optionnel des masques SfM et d'entrainement »](param.default.sh).
+  [`config/defaults/masques.default.sh`](../../config/defaults/masques.default.sh).
 - `MASKS_ACCEPT_LICENSE="true"` : transmet explicitement
   `--accept-license sam3=yes` pour les deux calculs SAM 3 non interactifs.
   Défaut `false` ; ne l'activer qu'après lecture et acceptation des conditions Meta.
@@ -474,6 +476,10 @@ Le préréglage lance d'abord `prepare_sfm.py` :
   `f = (largeur / 2) / tan(fov / 2)`, soit environ 1877 px pour une imajbox
   4096×2160 à 95° ; l'EXIF HD n'ayant pas de focale, Spirula la devinerait
   sinon très loin ; `--focal` reste prioritaire ;
+- si toutes les images retenues sont à 360° (`type` équirectangulaire,
+  GPano ou champ de vue 360 dans les métadonnées), `--camera-model` passe à
+  `equirectangular` et aucune focale n'est transmise ; un `--camera-model` ou
+  `CAMERA_MODEL` explicite reste prioritaire ;
 - le choix est résumé dans `OUTPUT_DIR/sfm/selection.json`.
 
 `--no-prepare` lance Spirula sur le dataset tel quel. Le script se lance

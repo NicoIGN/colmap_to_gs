@@ -28,7 +28,8 @@ export function findImageFile(index, name) {
 
 // Retient les caméras les plus alignées sur la direction point de vue -> centre de scène,
 // dans un cône de maxAngleDeg, entre le point de vue et le centre (maxAlong).
-// Hystérésis : la caméra `keep` reste choisie tant qu'elle reste dans le même cône et accept(i, true).
+// Hystérésis : la caméra `keep` reste choisie tant qu'elle reste à moins de keepAngleDeg de la direction
+// et que accept(i, true) est vrai ; sinon la plus centrée du cône est retenue.
 // Sans direction, les plus proches d'abord.
 export function selectNearestImages({
   centers,
@@ -38,11 +39,19 @@ export function selectNearestImages({
   maxAlong = Infinity,
   count = 5,
   maxAngleDeg = 90,
+  keepAngleDeg = maxAngleDeg,
   maxDistance = Infinity,
   accept = () => true,
   keep = -1,
+  refAxis = null,
+  maxRefAngleDeg = 180,
+  rankByDistance = false,
   stats = null,
 }) {
+  // Axe de la caméra courante : les candidats doivent regarder à peu près dans la même direction.
+  const cosRef = Math.cos((maxRefAngleDeg * Math.PI) / 180);
+  const axisDot = (i, v) =>
+    axes[i * 3] * v[0] + axes[i * 3 + 1] * v[1] + axes[i * 3 + 2] * v[2];
   const total = centers.length / 3;
   if (stats) {
     stats.total = total;
@@ -65,6 +74,8 @@ export function selectNearestImages({
       const cosView = direction[0] * (-dx / dist) + direction[1] * (-dy / dist) + direction[2] * (-dz / dist);
       if (cosView < cosMin) return null;
       if (dist * cosView > maxAlong) return null;
+      // La photo doit regarder dans le sens de la vue : sinon l'image montre l'arrière (180°).
+      if (axisDot(i, direction) <= 0) return null;
       alignment = 1 - cosView;
     } else {
       const dot = axes[i * 3] * dx + axes[i * 3 + 1] * dy + axes[i * 3 + 2] * dz;
@@ -75,10 +86,11 @@ export function selectNearestImages({
 
   if (keep >= 0 && keep < total && direction) {
     const kept = evaluate(keep, maxAngleDeg, true);
-    if (kept && accept(keep, true)) {
+    const keptAngleDeg = kept ? (Math.acos(Math.min(1, Math.max(-1, 1 - kept.alignment))) * 180) / Math.PI : Infinity;
+    if (kept && keptAngleDeg <= keepAngleDeg && accept(keep, true)) {
       const others = selectNearestImages({
         centers, axes, viewer, direction, maxAlong, count: count - 1,
-        maxAngleDeg, maxDistance, accept, keep: -1,
+        maxAngleDeg, maxDistance, accept, keep: -1, refAxis, maxRefAngleDeg, rankByDistance,
       });
       return [keep, ...others.filter((i) => i !== keep)].slice(0, count);
     }
@@ -89,10 +101,17 @@ export function selectNearestImages({
     const hit = evaluate(i, maxAngleDeg, false);
     if (!hit) continue;
     if (stats) stats.inCone += 1;
+    let axisPenalty = 0;
+    if (refAxis) {
+      const dot = axisDot(i, refAxis);
+      if (dot < cosRef) continue;
+      axisPenalty = 1 - dot;
+    }
     if (!accept(i, false)) continue;
-    candidates.push({ index: i, ...hit });
+    const score = rankByDistance ? hit.dist : hit.alignment + axisPenalty;
+    candidates.push({ index: i, ...hit, score });
   }
 
-  candidates.sort((a, b) => a.alignment - b.alignment || a.dist - b.dist);
+  candidates.sort((a, b) => a.score - b.score || a.dist - b.dist);
   return candidates.slice(0, count).map((candidate) => candidate.index);
 }

@@ -12,8 +12,12 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
-// Hystérésis : une image affichée reste choisie tant qu'elle reste dans le cône et que son cadre reste ≥ 80 % du seuil.
+// Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
+// Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
+const IMAGE_CENTER_DEG = 10;
+// Une image candidate doit regarder à moins de cet angle de l'axe de la caméra affichée.
+const IMAGE_AXIS_DEG = 30;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -486,7 +490,7 @@ export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = f
   );
 }
 
-function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
+function makeLineMesh(app, positions, color = [1, 0, 0, 1], { onTop = false } = {}) {
   const bounds = [[Infinity, -Infinity], [Infinity, -Infinity], [Infinity, -Infinity]];
   for (let i = 0; i < positions.length; i += 3) {
     for (let axis = 0; axis < 3; axis++) {
@@ -512,7 +516,7 @@ function makeLineMesh(app, positions, color = [1, 0, 0, 1]) {
     positions,
     rgba,
     pc.PRIMITIVE_LINES,
-    makeColmapMaterial(app)
+    makeColmapMaterial(app, { onTop })
   );
 }
 
@@ -534,6 +538,16 @@ function frustumCorners(image, camera, near) {
     const rotated = mulMat3Vec3(rwc, point);
     return [rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]];
   });
+}
+
+// Vrai si les quatre coins du cadre affiché sont tous devant le point de vue, dans le sens du regard.
+function imageInFrontOfViewer(model, index, viewer, forward) {
+  const image = model.colmapImages[index];
+  const camera = model.cameras.get(image.cameraId);
+  if (!camera) return false;
+  return frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE)
+    .slice(1)
+    .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
 function buildCameraAxes(images) {
@@ -710,11 +724,12 @@ export function createColmapLayer({
     model.enlarged = enlarged;
     const depthOf = (i) => model.depth * (enlarged.has(i) ? IMAGE_FRUSTUM_SCALE : 1);
     const frustums = buildFrustumLines(model.colmapImages, model.cameras, depthOf, enlarged);
-    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
     const entity = new pc.Entity("COLMAP frustums");
     entity.addComponent("render", {
       type: "asset",
       meshInstances: [resource.meshInstance],
+      layers: [getOverlayLayer(app).id],
     });
     entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
     model.rootEntity.addChild(entity);
@@ -961,32 +976,26 @@ export function createColmapLayer({
       }
       const p = getViewerPosition();
       // Le modèle est tourné de 180° autour de X quand « flipUp » est actif.
-      const viewer = getFlipUp?.() ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
-      // Direction point de vue -> centre de scène (repli : axe de la caméra).
-      const t = getViewerTarget?.() ?? null;
       const flip = getFlipUp?.();
-      const target = t ? (flip ? [t[0], -t[1], -t[2]] : t) : null;
-      let direction = target
-        ? [target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]]
-        : null;
-      const len = direction ? Math.hypot(...direction) : 0;
-      if (len > 1e-9) {
-        direction = direction.map((v) => v / len);
-      } else {
-        const d = getViewerDirection?.() ?? [0, 0, -1];
-        direction = flip ? [d[0], -d[1], -d[2]] : d;
-      }
+      const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
+      const look = getViewerDirection?.() ?? [0, 0, -1];
+      const forward = flip ? [look[0], -look[1], -look[2]] : look;
+      const shownIndex = model.slots[0]?.shown ?? -1;
       const stats = { total: 0, inCone: 0 };
+      // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
         centers: model.cameraCenters,
         axes: model.axes,
         viewer,
-        direction,
-        maxAlong: target ? Math.hypot(target[0] - viewer[0], target[1] - viewer[1], target[2] - viewer[2]) : Infinity,
+        direction: forward,
+        maxAlong: Infinity,
         count: IMAGE_SHOWN,
         maxAngleDeg: 35,
-        keep: model.slots[0]?.shown ?? -1,
+        keepAngleDeg: IMAGE_CENTER_DEG,
+        keep: shownIndex,
+        rankByDistance: true,
         accept: (i, relaxed = false) => {
+          if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(
@@ -1207,12 +1216,13 @@ export function createColmapLayer({
     app.root.addChild(rootEntity);
     try {
       model.pointsResource = makePointMesh(
-        app, points.positions, points.colors, Number(pointSize?.value ?? 2)
+        app, points.positions, points.colors, Number(pointSize?.value ?? 2), { onTop: true }
       );
       model.pointsEntity = new pc.Entity("COLMAP points");
       model.pointsEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.pointsResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.pointsEntity);
 
@@ -1231,11 +1241,12 @@ export function createColmapLayer({
       });
       rootEntity.addChild(model.cameraCentersEntity);
 
-      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1]);
+      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
       model.frustumsEntity = new pc.Entity("COLMAP frustums");
       model.frustumsEntity.addComponent("render", {
         type: "asset",
         meshInstances: [model.frustumsResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
       });
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);

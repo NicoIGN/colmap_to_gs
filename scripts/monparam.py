@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Décrit les paramètres du pipeline Panoramax à partir de param.default.sh."""
+"""Décrit les paramètres des pipelines à partir de config/defaults et des config.default.sh."""
 
 import argparse
 import difflib
@@ -7,7 +7,12 @@ import re
 import sys
 from pathlib import Path
 
-PARAM_FILE = Path(__file__).resolve().parents[1] / "tools" / "panoramax" / "param.default.sh"
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULTS_DIR = ROOT / "config" / "defaults"
+PIPELINE_OVERRIDES = {
+    "panoramax": ROOT / "tools" / "panoramax" / "config.default.sh",
+    "images_to_splat": ROOT / "tools" / "images_to_splat" / "config.default.sh",
+}
 
 PHASES = {
     "commun": "utilisé par plusieurs phases",
@@ -41,6 +46,13 @@ class Param:
         self.key = key
         self.default = default
         self.comment = comment
+        self.defaults = {}
+
+    def default_text(self):
+        values = set(self.defaults.values()) or {self.default}
+        if len(values) == 1:
+            return next(iter(values)) or "(vide)"
+        return " ; ".join(f"{src}={val or '(vide)'}" for src, val in self.defaults.items())
 
 
 def parse_value(raw):
@@ -71,9 +83,31 @@ def load_params(path):
     return params
 
 
+def load_all():
+    base = {}
+    for path in sorted(DEFAULTS_DIR.glob("*.default.sh")):
+        base.update(load_params(path))
+    merged = {key: Param(key, param.default, param.comment) for key, param in base.items()}
+    for source, path in PIPELINE_OVERRIDES.items():
+        overrides = load_params(path)
+        for key, param in overrides.items():
+            if key not in merged:
+                merged[key] = Param(key, param.default, param.comment)
+            elif not merged[key].comment:
+                merged[key].comment = param.comment
+        for key in set(base) | set(overrides):
+            if key in overrides:
+                merged[key].defaults[source] = overrides[key].default
+            else:
+                merged[key].defaults[source] = base[key].default
+    return merged
+
+
 def phases_of(key):
     if key in COMMON_KEYS:
         return ["commun"]
+    if key == "COLMAP_METHOD" or key.startswith("HLOC_"):
+        return ["sfm"]
     if key == "PANORAMAX_MULTI_CAM":
         return ["download", "sfm"]
     if key.startswith("PANORAMAX_"):
@@ -100,6 +134,12 @@ def phases_of(key):
 
 
 def backends_of(key):
+    if key == "COLMAP_METHOD":
+        return ["tous"]
+    if key.startswith("HLOC_"):
+        return ["hloc"]
+    if key in {"SFM_MASKS", "SFM_CAMERA_MODE", "SFM_CAMERA_MODEL"}:
+        return ["spirula", "hloc"]
     if key == "TRAIN_BACKEND":
         return ["spirula", "nerfstudio"]
     if key.startswith("TRAIN_NS_"):
@@ -122,18 +162,18 @@ def backends_of(key):
 def summary(param):
     text = " ".join(param.comment)
     if not text:
-        return "(pas de commentaire dans param.default.sh)"
+        return "(pas de commentaire dans config/defaults ou config.default.sh)"
     first = re.split(r"(?<=\.)\s", text, maxsplit=1)[0]
     return first if len(first) <= 110 else first[:107] + "..."
 
 
 def show_param(param):
-    text = " ".join(param.comment) or "(pas de commentaire dans param.default.sh)"
+    text = " ".join(param.comment) or "(pas de commentaire dans config/defaults ou config.default.sh)"
     intervals = INTERVAL.findall(text)
     print(param.key)
     print(f"  Phases    : {', '.join(phases_of(param.key))}")
     print(f"  Backends  : {', '.join(backends_of(param.key))}")
-    print(f"  Défaut    : {param.default or '(vide)'}")
+    print(f"  Défaut    : {param.default_text()}")
     print(f"  Intervalle: {', '.join(intervals) if intervals else 'aucun intervalle explicite'}")
     print("  Rôle et valeurs :")
     for line in text.split(". "):
@@ -161,7 +201,7 @@ def show_phase(params, phase):
         phases = phases_of(key)
         if phase in phases or "commun" in phases:
             scope = "toutes phases" if "commun" in phases else ", ".join(phases)
-            print(f"  {key} = {param.default or '(vide)'}  [{scope}]")
+            print(f"  {key} = {param.default_text()}  [{scope}]")
             print(f"      {summary(param)}")
     return 0
 
@@ -173,18 +213,18 @@ def list_phases():
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Décrit les paramètres Panoramax.")
+    parser = argparse.ArgumentParser(description="Décrit les paramètres Panoramax et images_to_splat.")
     parser.add_argument("params", nargs="*", help="nom(s) de paramètre, ex. TRAIN_MASKS_MAX_FRACTION")
     parser.add_argument("--phase", help="liste les paramètres applicables à une phase")
     args = parser.parse_args(argv)
 
     if args.phase:
-        return show_phase(load_params(PARAM_FILE), args.phase.lower())
+        return show_phase(load_all(), args.phase.lower())
     if not args.params:
         list_phases()
         return 0
 
-    params = load_params(PARAM_FILE)
+    params = load_all()
     status = 0
     for name in args.params:
         key = name.upper()

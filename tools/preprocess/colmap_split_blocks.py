@@ -55,6 +55,7 @@ CAMERA_MODELS = {
     8: ("SIMPLE_RADIAL_FISHEYE", 4),
     9: ("RADIAL_FISHEYE", 5),
     10: ("THIN_PRISM_FISHEYE", 12),
+    17: ("EQUIRECTANGULAR", 2),
 }
 CAMERA_MODEL_NAME_TO_ID = {
     name: model_id

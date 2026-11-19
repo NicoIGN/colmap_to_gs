@@ -10,8 +10,8 @@ usage() {
 Usage:
   bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
-The config is a trusted Bash file. It overrides tools/panoramax/param.default.sh,
-which is always sourced first; only set the variables you want to change.
+The config is a trusted Bash file. It overrides config/defaults/*.default.sh and
+tools/panoramax/config.default.sh, which are always loaded first; only set the variables you want to change.
 It defines the Panoramax bbox and its EPSG code, output directory, SfM/block/training parameters,
 and final .splat name.
 Default: all. prepare downloads, reconstructs and partitions; train-block trains
@@ -75,7 +75,8 @@ case "$phase" in
   *) die "Étape inconnue : $phase" ;;
 esac
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
-source "$script_dir/param.default.sh"
+source "$repo_root/tools/libs/scripts/pipeline_config.sh"
+load_pipeline_defaults "$repo_root" panoramax
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config || exit 1
@@ -166,7 +167,7 @@ SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
 MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
 TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
 TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
-TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS:-sky}"
+TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS-sky}"
 TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-auto}"
 TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
 TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
@@ -186,6 +187,11 @@ fi
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
 [[ "$PANORAMAX_PICTURE_TYPE" == all || "$PANORAMAX_PICTURE_TYPE" == normal || "$PANORAMAX_PICTURE_TYPE" == 360 ]] ||
   die "PANORAMAX_PICTURE_TYPE doit être all, normal ou 360."
+if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
+  echo "[config] PANORAMAX_PICTURE_TYPE=360 : SFM_CAMERA_MODEL=equirectangular (au lieu de ${SFM_CAMERA_MODEL:-opencv})." >&2
+  SFM_CAMERA_MODEL=equirectangular
+  export SFM_CAMERA_MODEL
+fi
 [[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* && "$EXPORT_SPLAT_NAME" != .splat ]] ||
   die "EXPORT_SPLAT_NAME doit être un nom de fichier terminé par .splat."
 [[ "$MERGE_STRENGTH" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
@@ -201,8 +207,11 @@ SFM_DIR="$DATASET_DIR/sfm"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 GS_ROOT="$DATASET_DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 [[ "$TRAIN_BACKEND" != nerfstudio ]] || GS_ROOT="$GS_ROOT-nerfstudio"
+download_done="$DATASET_DIR/.download_done"
+download_lock="$DATASET_DIR/.download.lock"
+download_lock_helper="$repo_root/tools/libs/python/pipeline_lock.py"
 prepare_images() {
-  local bbox_args request_status=0 archive
+  local bbox_args request_status=0 archive download_status=0
   if [[ -e "$DATASET_DIR/request.json" ]]; then
     "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
@@ -264,9 +273,22 @@ PY
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
   bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
   [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
-  printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
-  set_pipeline_stage "téléchargement des photos Panoramax"
-  "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}"
+  if [[ "${PIPELINE_RESUME:-false}" == true && -f "$download_done" ]]; then
+    printf '[pipeline] Téléchargement déjà terminé (%s) : étape ignorée.\n' "$download_done"
+  else
+    rm -f -- "$download_done"
+    mkdir -p -- "$DATASET_DIR"
+    "$PYTHON_BIN" "$download_lock_helper" "$download_lock" --pid "$$" \
+      --resume "${PIPELINE_RESUME:-false}" --ignore "${REMOVE_LOCKS:-false}" --workspace "$OUTPUT_DIR" \
+      || die "Téléchargement Panoramax verrouillé : $download_lock"
+    printf '[pipeline] Téléchargement Panoramax dans %s\n' "$DATASET_DIR"
+    set_pipeline_stage "téléchargement des photos Panoramax"
+    download_status=0
+    "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}" || download_status=$?
+    "$PYTHON_BIN" "$download_lock_helper" "$download_lock" --pid "$$" --release
+    ((download_status == 0)) || die "Téléchargement Panoramax en échec (code $download_status)."
+    touch -- "$download_done"
+  fi
 
   # The downloader retains old files for manual resume. The dedicated pipeline
   # directory must contain exactly this run's successful/reused manifest images.

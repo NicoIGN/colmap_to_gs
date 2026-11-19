@@ -62,10 +62,11 @@ usage() {
     cat <<EOF
 Usage : $0 [OPTIONS]
 
+Sans option : ne fait rien si l'exécutable spirula existe, sinon compile.
+
 Options :
-  --update   Recompile seulement si le dépôt a changé ou si l'exécutable
-             est absent (artefacts de compilation conservés)
-  --clean    Supprime le répertoire de compilation avant le build
+  --update   Met à jour le dépôt et recompile en conservant les artefacts existants
+  --clean    Supprime la compilation existante, puis met à jour le dépôt et recompile tout
   --help     Affiche cette aide
 
 Variables :
@@ -129,6 +130,12 @@ esac
 
 log "Système : ${OS}"
 log "Répertoire de compilation : ${BUILD_DIR}"
+
+if [[ "${CLEAN}" -eq 0 && "${UPDATE}" -eq 0 && -x "${REPO_DIR}/${BUILD_DIR}/spirula" ]]; then
+    log "Exécutable Spirula déjà présent : ${REPO_DIR}/${BUILD_DIR}/spirula"
+    log "Rien à faire. Utiliser --update (recompiler en gardant les artefacts) ou --clean (tout recompiler)."
+    exit 0
+fi
 
 # ===============================================================
 # Parallélisme
@@ -393,12 +400,6 @@ fi
 # Mise à jour du dépôt Spirula
 # ===============================================================
 
-repo_state() {
-    git -C "${REPO_DIR}" rev-parse HEAD
-    git -C "${REPO_DIR}" submodule status --recursive
-    git -C "${REPO_DIR}" diff --stat HEAD
-}
-
 # ===============================================================
 # Correctifs locaux (tools/spirula/patch/*.patch)
 # ===============================================================
@@ -440,15 +441,21 @@ patches_revert() {
     done
 }
 
-REPO_STATE_BEFORE=""
 REPO_HEAD_BEFORE_PULL=""
 
 if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
+    # Sauvegarde des modifications locales avant la mise à jour
+    if [[ -n "$(git -C "${REPO_DIR}" status --porcelain)" ]]; then
+        log "Modifications locales détectées : mise en stash"
+        git -C "${REPO_DIR}" stash push -u -m "avant mise à jour Spirula ${TIMESTAMP}"
+    else
+        log "Branche propre : aucun stash nécessaire"
+    fi
+
     patches_revert
-    REPO_STATE_BEFORE="$(repo_state)"
     REPO_HEAD_BEFORE_PULL="$(git -C "${REPO_DIR}" rev-parse HEAD)"
     git -C "${REPO_DIR}" pull --ff-only
 
@@ -474,8 +481,6 @@ git -C "${REPO_DIR}" submodule sync --recursive
 git -C "${REPO_DIR}" submodule update --init --recursive
 
 patches_apply
-
-REPO_STATE_AFTER="$(repo_state)"
 
 # ===============================================================
 # Vérification du script de compilation
@@ -514,72 +519,55 @@ print_build_command() {
     echo
 }
 
-BUILD_NEEDED=0
+if [[ "${CLEAN}" -eq 1 && -d "${BUILD_PATH}" ]]; then
+    log "Suppression du répertoire de compilation : ${BUILD_PATH}"
+    rm -rf "${BUILD_PATH}"
+fi
 
 if [[ "${CLEAN}" -eq 1 ]]; then
-    BUILD_NEEDED=1
-    if [[ -d "${BUILD_PATH}" ]]; then
-        log "Suppression du répertoire de compilation : ${BUILD_PATH}"
-        rm -rf "${BUILD_PATH}"
-    fi
-elif [[ "${UPDATE}" -eq 0 ]]; then
-    log "Compilation complète (comportement par défaut)."
-    BUILD_NEEDED=1
-elif [[ -z "${REPO_STATE_BEFORE}" ]]; then
-    log "Premier clone : compilation nécessaire."
-    BUILD_NEEDED=1
-elif [[ "${REPO_STATE_BEFORE}" != "${REPO_STATE_AFTER}" ]]; then
-    log "Dépôt modifié : recompilation (artefacts conservés)."
-    BUILD_NEEDED=1
-elif [[ ! -x "${SPIRULA_BIN}" ]]; then
-    log "Exécutable absent : compilation nécessaire."
-    BUILD_NEEDED=1
+    log "Compilation complète (--clean)."
+elif [[ "${UPDATE}" -eq 1 ]]; then
+    log "Recompilation avec conservation des artefacts (--update)."
 else
-    log "Dépôt inchangé et exécutable présent : compilation ignorée."
-    log "Commande pour recompiler manuellement :"
-    print_build_command
+    log "Compilation (exécutable absent)."
 fi
 
-if [[ "${BUILD_NEEDED}" -eq 1 ]]; then
+# ===============================================================
+# Vérification Vulkan avant CMake
+# ===============================================================
 
-    # ===========================================================
-    # Vérification Vulkan avant CMake
-    # ===========================================================
+if [[ "${OS}" == "Linux" ]]; then
 
-    if [[ "${OS}" == "Linux" ]]; then
+    log "Contrôle final des ressources Vulkan"
 
-        log "Contrôle final des ressources Vulkan"
+    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
+        die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
 
-        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h" ]] ||
-            die "Header Vulkan inaccessible : ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h"
+    [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
+        die "Header vulkan_core.h inaccessible."
 
-        [[ -r "${VULKAN_INCLUDE_DIR}/vulkan/vulkan_core.h" ]] ||
-            die "Header vulkan_core.h inaccessible."
+    [[ -e "${VULKAN_LIBRARY}" ]] ||
+        die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
 
-        [[ -e "${VULKAN_LIBRARY}" ]] ||
-            die "Bibliothèque Vulkan inaccessible : ${VULKAN_LIBRARY}"
-
-        log "Headers Vulkan : OK"
-        log "Bibliothèque Vulkan : OK"
-
-    fi
-
-    # ===========================================================
-    # Compilation de Spirula
-    # ===========================================================
-
-    log "Compilation de Spirula"
-
-    cd "${REPO_DIR}"
-
-    log "Commande de compilation :"
-    print_build_command
-
-    log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
-
-    "${BUILD_CMD[@]}"
+    log "Headers Vulkan : OK"
+    log "Bibliothèque Vulkan : OK"
 
 fi
+
+# ===============================================================
+# Compilation de Spirula
+# ===============================================================
+
+log "Compilation de Spirula"
+
+cd "${REPO_DIR}"
+
+log "Commande de compilation :"
+print_build_command
+
+log "Parallélisme CMake : ${CMAKE_BUILD_PARALLEL_LEVEL}"
+
+"${BUILD_CMD[@]}"
 
 # ===============================================================
 # Vérification de l'exécutable

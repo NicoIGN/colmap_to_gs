@@ -13,6 +13,7 @@ preset="${PRESET:-}"
 sensor_pairs="${SENSOR_PAIRS:-false}"
 prepare="${PREPARE:-}"
 keep_size="${KEEP_SIZE:-}"
+camera_model_explicit="${CAMERA_MODEL+true}"
 
 # Compatible avec le Bash 3.2 fourni par macOS.
 # Chaque option correspond à une variable d'environnement :
@@ -97,6 +98,8 @@ Caméras :
   --camera-mode MODE         folder [défaut] | single | image
   --camera-model MODEL       opencv [défaut] ; autres modèles selon Spirula
                              Exemple 360 : equirectangular
+                             Avec --prepare, equirectangular est déduit si toutes
+                             les images retenues sont à 360° (sauf option explicite)
   --focal X                  Focale initiale en pixels ; omission = Spirula
   --metric-gps MODE          auto [défaut] | none | horizontal | full
                              Repère ENU en mètres à partir du GPS EXIF
@@ -174,6 +177,7 @@ done
 
 set_option() {
   local name="$1" value="$2" i
+  [[ "$name" != camera-model ]] || camera_model_explicit=true
   for ((i = 0; i < ${#option_names[@]}; i++)); do
     if [[ "${option_names[$i]}" == "$name" ]]; then
       option_values[$i]="$value"
@@ -310,10 +314,12 @@ case "$prepare" in
     prepare_output="$("${prepare_cmd[@]}")" || die "Préparation des images échouée"
     prepared_images=""
     prepared_focal=""
+    prepared_camera_model=""
     while IFS='=' read -r key value; do
       case "$key" in
         images_dir) prepared_images="$value" ;;
         focal) prepared_focal="$value" ;;
+        camera_model) prepared_camera_model="$value" ;;
       esac
     done <<< "$prepare_output"
     [[ -n "$prepared_images" ]] || die "La préparation n'a pas indiqué de dossier d'images"
@@ -321,6 +327,10 @@ case "$prepare" in
     for ((i = 0; i < ${#option_names[@]}; i++)); do
       if [[ "${option_names[$i]}" == focal && -z "${option_values[$i]}" ]]; then
         option_values[$i]="$prepared_focal"
+      fi
+      if [[ "${option_names[$i]}" == camera-model && -n "$prepared_camera_model" && "$camera_model_explicit" != true ]]; then
+        option_values[$i]="$prepared_camera_model"
+        printf '[SFM] Images 360 détectées : --camera-model %s\n' "$prepared_camera_model" >&2
       fi
     done
     ;;

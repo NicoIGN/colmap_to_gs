@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Copier en conservant/adaptant ce chemin vers l'exemple commun du depot.
-source "/chemin/colmap_to_gs/tools/images_to_splat/param.default.sh"
+# Exemple de configuration Nerfstudio : les défauts sont chargés automatiquement
+# (config/defaults/*.default.sh puis tools/images_to_splat/config.default.sh) avant ce fichier.
 
 SFM_IMAGES_DIR="/chemin/images"
 OUTPUT_DIR="/chemin/resultats-nerfstudio"

@@ -5,10 +5,10 @@ Garde les images de la taille majoritaire (ou de --size), les relie par lien
 physique dans OUTPUT_DIR/images, et déduit la focale en pixels du champ de vue
 horizontal des métadonnées : f = (largeur / 2) / tan(fov / 2).
 
-Mode multi-caméras (PANORAMAX_MULTI_CAM=true ou --multi-cam) : toutes les
-tailles sont gardées, chacune dans son sous-dossier LxH/ ; Spirula
-(--camera-mode folder) crée alors une caméra par taille. Une seule focale ne
-pouvant pas couvrir plusieurs caméras, aucune focale n'est transmise et
+Mode multi-caméras (PANORAMAX_MULTI_CAM=true ou --multi-cam) : les tailles
+représentant au moins 1 % des images sont gardées, chacune dans son sous-dossier
+LxH/ ; Spirula (--camera-mode folder) crée alors une caméra par taille. Une seule
+focale ne pouvant pas couvrir plusieurs caméras, aucune focale n'est transmise et
 selection.json conserve celle de chaque taille.
 """
 
@@ -82,6 +82,22 @@ def focal_from_metadata(path, width):
     return (width / 2) / math.tan(math.radians(fov) / 2)
 
 
+def is_equirectangular(path):
+    """Même règle que tools/panoramax/download.py:picture_type_of."""
+    try:
+        properties = json.loads(path.read_text(encoding="utf-8"))["feature"]["properties"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if properties.get("type") is not None:
+        return properties["type"] == "equirectangular"
+    exif = properties.get("exif") or {}
+    orientation = properties.get("pers:interior_orientation") or {}
+    return (
+        exif.get("Xmp.GPano.ProjectionType") == "equirectangular"
+        or str(orientation.get("field_of_view")) == "360"
+    )
+
+
 def env_flag(name):
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -151,9 +167,16 @@ def main(argv=None):
         raise SystemExit("--size est incompatible avec le mode multi-caméras")
     if multi_cam:
         keep = None
-        selected = dict.fromkeys(sizes)
-        excluded = []
-        log(f"multi-caméras : {len(counts)} caméra(s), une par taille ; toutes les images sont retenues")
+        total = len(sizes)
+        kept_sizes = {size for size, count in counts.items() if count * 100 >= total}
+        if not kept_sizes:
+            raise SystemExit("Aucune taille n'atteint 1 % des images")
+        selected = {path: None for path in sizes if sizes[path] in kept_sizes}
+        excluded = [path.name for path in sizes if sizes[path] not in kept_sizes]
+        log(
+            f"multi-caméras : {len(kept_sizes)} caméra(s) de {len(counts)} taille(s), "
+            f"une par taille ; tailles sous 1 % écartées : {len(excluded)} image(s)"
+        )
     else:
         keep = args.size or counts.most_common(1)[0][0]
         selected = {path: path.name for path, size in sizes.items() if size == keep}
@@ -166,12 +189,24 @@ def main(argv=None):
         for path in selected
     }
 
+    equirectangular = [
+        bool(metadata_dir) and is_equirectangular(metadata_dir / f"{path.stem}.json") for path in selected
+    ]
+    camera_model = None
+    if equirectangular and all(equirectangular):
+        camera_model = "equirectangular"
+        log("images 360 : modèle de caméra equirectangular, focale non transmise")
+    elif any(equirectangular):
+        log("AVERTISSEMENT : images 360 et perspectives mélangées ; modèle de caméra non modifié")
+
     groups = {}
     for path in selected:
         groups.setdefault(sizes[path], []).append(path)
     focals = {}
     samples = {}
     for size, paths in groups.items():
+        if camera_model:
+            break
         values = []
         if metadata_dir:
             for path in paths:
@@ -191,7 +226,8 @@ def main(argv=None):
 
     if multi_cam:
         focal = None
-        log("focale non transmise : Spirula estime chaque caméra")
+        if not camera_model:
+            log("focale non transmise : Spirula estime chaque caméra")
     else:
         focal = focals.get(keep)
 
@@ -209,6 +245,7 @@ def main(argv=None):
                     "focal_px": focal,
                     "focals_px": {f"{w}x{h}": value for (w, h), value in focals.items()},
                     "focal_samples": sum(samples.values()),
+                    "camera_model": camera_model,
                 },
                 indent=2,
             )
@@ -220,6 +257,7 @@ def main(argv=None):
     if args.shell:
         print(f"images_dir={target_dir}")
         print(f"focal={focal:.2f}" if focal else "focal=")
+        print(f"camera_model={camera_model or ''}")
 
 
 if __name__ == "__main__":

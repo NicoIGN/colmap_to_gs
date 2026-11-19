@@ -79,6 +79,23 @@ class PrepareTest(unittest.TestCase):
             self.assertIsNone(summary["focal_px"])
             self.assertAlmostEqual(summary["focals_px"]["4096x2160"], 2048 / math.tan(math.radians(47.5)), places=1)
 
+    def test_multi_cam_drops_sizes_under_one_percent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            for index in range(200):
+                (root / "images" / f"a{index}.jpg").write_bytes(fake_jpeg(4096, 2160))
+            (root / "images" / "rare.jpg").write_bytes(fake_jpeg(3072, 4080))
+            for index in range(3):
+                (root / "images" / f"c{index}.jpg").write_bytes(fake_jpeg(5760, 2880))
+            work = root / "w"
+            with mock.patch.dict(os.environ, {"PANORAMAX_MULTI_CAM": "true"}):
+                self.run_main("--dataset", str(root), "--output-dir", str(work))
+            summary = json.loads((work / "selection.json").read_text())
+            self.assertEqual(summary["excluded"], ["rare.jpg"])
+            self.assertEqual(summary["sizes"], {"4096x2160": 200, "5760x2880": 3})
+            self.assertFalse((work / "images" / "3072x4080").exists())
+
     def test_dry_run_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -86,6 +103,37 @@ class PrepareTest(unittest.TestCase):
             out, _ = self.run_main("--dataset", str(root / "images"), "--output-dir", str(root / "w"), "--shell", "--dry-run")
             self.assertIn("focal=1876.", out)
             self.assertFalse((root / "w").exists())
+
+    def test_equirectangular_selection_sets_camera_model_without_focal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            (root / "metadata").mkdir()
+            for index in range(2):
+                (root / "images" / f"p{index}.jpg").write_bytes(fake_jpeg(4096, 2048))
+                feature = {"feature": {"properties": {"type": "equirectangular", "pers:interior_orientation": {"field_of_view": 95}}}}
+                (root / "metadata" / f"p{index}.json").write_text(json.dumps(feature))
+            out, _ = self.run_main("--dataset", str(root), "--output-dir", str(root / "w"), "--shell")
+            values = dict(line.split("=", 1) for line in out.splitlines())
+            self.assertEqual(values["camera_model"], "equirectangular")
+            self.assertEqual(values["focal"], "")
+            self.assertEqual(json.loads((root / "w" / "selection.json").read_text())["camera_model"], "equirectangular")
+
+    def test_multi_size_360_does_not_announce_focal_estimation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            (root / "metadata").mkdir()
+            sizes = [(4096, 2048)] * 6 + [(5760, 2880)] * 6
+            for index, (width, height) in enumerate(sizes):
+                (root / "images" / f"p{index}.jpg").write_bytes(fake_jpeg(width, height))
+                feature = {"feature": {"properties": {"type": "equirectangular"}}}
+                (root / "metadata" / f"p{index}.json").write_text(json.dumps(feature))
+            out, err = self.run_main("--dataset", str(root), "--output-dir", str(root / "w"), "--multi-cam", "--shell")
+            values = dict(line.split("=", 1) for line in out.splitlines())
+            self.assertEqual(values["camera_model"], "equirectangular")
+            self.assertEqual(values["focal"], "")
+            self.assertNotIn("Spirula estime", err)
 
 
 if __name__ == "__main__":

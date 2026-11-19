@@ -85,11 +85,15 @@ Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
 
 ### Démarrer
 
-Depuis la racine du dépôt, copier puis adapter les configurations :
+Les défauts sont chargés automatiquement depuis `config/defaults/*.default.sh`, puis
+`tools/<pipeline>/config.default.sh`. Un fichier de configuration ne contient que les surcharges :
 
 ```bash
-cp tools/images_to_splat/param.default.sh /chemin/config_image.sh
-cp tools/panoramax/param.default.sh /chemin/config_panoramax.sh
+cat > /chemin/config_image.sh <<'EOF'
+#!/usr/bin/env bash
+SFM_IMAGES_DIR="/chemin/images"
+OUTPUT_DIR="/chemin/sortie"
+EOF
 ```
 
 Slurm (*Simple Linux Utility for Resource Management*) est un gestionnaire
