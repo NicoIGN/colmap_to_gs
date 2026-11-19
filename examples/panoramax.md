@@ -26,6 +26,8 @@ Après avoir préparé un fichier `config-panoramax.sh` contenant au minimum
 bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" config-panoramax.sh
 ```
 
+Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](pipelines.md).
+
 Pour les panoramas 360 avec HLOC, ajouter à la configuration
 `PANORAMAX_PICTURE_TYPE=360`, `COLMAP_METHOD=hloc` et
 `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les prérequis de reconstruction et

@@ -28,6 +28,8 @@ un splat avec une configuration compatible :
 bash "$GIT_ROOT/scripts/images_to_3dgs.sh" config-images.sh
 ```
 
+Voir les [exemples des pipelines images et vidéo, en direct ou sur Slurm](pipelines.md).
+
 Pour des images 360 équirectangulaires avec HLOC, définir
 `COLMAP_METHOD=hloc` et `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les vues
 perspectives sont reconstruites en `PINHOLE`. Voir les prérequis et les
