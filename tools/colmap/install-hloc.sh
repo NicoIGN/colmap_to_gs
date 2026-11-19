@@ -33,7 +33,13 @@ done
 command -v git >/dev/null || die "git introuvable."
 command -v "$python_bin" >/dev/null || die "Python introuvable : $python_bin"
 
-"$python_bin" -m pip install --upgrade \
+# Garde torch/torchvision/numpy déjà installés : pip ne doit pas les remplacer.
+constraints="$(mktemp)"
+trap 'rm -f "$constraints"' EXIT
+"$python_bin" -m pip freeze 2>/dev/null | grep -E '^(torch|torchvision|numpy)==' > "$constraints" || true
+echo "numpy<2" >> "$constraints"
+
+"$python_bin" -m pip install --upgrade -c "$constraints" \
   "git+https://github.com/cvg/Hierarchical-Localization.git"
 
 site_packages="$("$python_bin" -c 'import site; print(site.getsitepackages()[0])')"
