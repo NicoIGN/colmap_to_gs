@@ -32,6 +32,9 @@ TRAIN_SP_REFINE_STOP_ITER="14000"
 # Ici : max(14000, 20000-4000) = 16000, puis 4000 itérations de stabilisation.
 # Si REFINE_STOP_ITER >= TRAIN_NUM_ITER, aucune phase finale sans densification.
 TRAIN_SP_REFINE_STOP_NUM_ITER="4000"
+# Sauvegarde du checkpoint toutes les N itérations (Spirula --steps-per-save).
+# Seul le dernier checkpoint est conservé (--save-only-latest-checkpoint 1).
+TRAIN_SP_STEPS_PER_SAVE="2000"
 TRAIN_SP_FLOATER_SUPPRESSION="mild"       # off|mild|strong
 TRAIN_SP_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
 # Corrections photométriques Spirula uniquement ; vide = défauts Spirula observés :

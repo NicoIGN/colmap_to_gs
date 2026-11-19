@@ -604,6 +604,23 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertIn("--quality doit", result.stderr)
             self.assertFalse((root / "unused").exists())
 
+    def test_steps_per_save_is_forwarded_and_keeps_only_latest_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env["TRAIN_SP_STEPS_PER_SAVE"] = "500"
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            trains = [cmd for cmd in commands if cmd[:2] == ["spirula", "train"]]
+            self.assertTrue(trains)
+            for cmd in trains:
+                self.assertEqual(cmd[cmd.index("--steps-per-save") + 1], "500")
+                self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "1")
+            env["TRAIN_SP_STEPS_PER_SAVE"] = "abc"
+            result = execute("--prepare-only")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_SP_STEPS_PER_SAVE", result.stderr)
+
     def test_invalid_distraction_robustness_is_rejected_by_workers(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)

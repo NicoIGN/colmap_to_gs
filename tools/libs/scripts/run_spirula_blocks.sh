@@ -22,6 +22,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
   TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
   TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-2000}"
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
@@ -33,6 +34,7 @@ else
   TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
   TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
   TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-}"
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
@@ -102,6 +104,7 @@ Variables:
   TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
   TRAIN_SP_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
   TRAIN_SP_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+  TRAIN_SP_STEPS_PER_SAVE            Sauvegarde du checkpoint toutes les N itérations (Spirula steps_per_save, défaut 2000 ; seul le dernier est conservé)
                             Growth stops at max(TRAIN_SP_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER)
   TRAIN_SP_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_SP_PRESET              Spirula training preset (3dgs)
@@ -200,7 +203,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
     [[ "$TRAIN_SP_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
       awk -v x="$TRAIN_SP_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
   } || die "TRAIN_SP_GROWTH_FACTOR doit être vide ou un nombre > 1."
-  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER; do
+  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER TRAIN_SP_STEPS_PER_SAVE; do
     value="${!value_name}"
     [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
       die "$value_name doit être vide ou un entier >= 0 : $value"
@@ -553,6 +556,7 @@ for ((index = first_index; index < last_index; index++)); do
     [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
     [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
     [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")
+    [[ -z "$TRAIN_SP_STEPS_PER_SAVE" ]] || block_args+=(--steps-per-save "$TRAIN_SP_STEPS_PER_SAVE")
     printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
   fi
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")

@@ -37,6 +37,7 @@ train_resolution_divisor="${TRAIN_RESOLUTION_DIVISOR:-}"
 growth_factor="${TRAIN_SP_GROWTH_FACTOR:-}"
 refine_stop_iter="${TRAIN_SP_REFINE_STOP_ITER:-}"
 refine_stop_num_iter="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+steps_per_save="${TRAIN_SP_STEPS_PER_SAVE:-}"
 floater_suppression="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
 warp_spherical="${TRAIN_SP_WARP_SPHERICAL:-}"
 masks_dir="${MASKS_DIR:-}"
@@ -82,6 +83,7 @@ Options:
   --growth-factor X         Croissance explicite (> 1); sinon estimation [1.001, 1.05]
   --refine-stop-iter N      Pas minimal d'arrêt de la croissance
   --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
+  --steps-per-save N        Sauvegarde toutes les N itérations (défaut Spirula 2000) ; seul le dernier checkpoint est conservé
   --floater-suppression M   off, mild ou strong
   --warp-spherical-to-pinhole B  true (défaut Spirula) : 360 découpée en vues pinhole ; false : équirectangulaire direct
   --masks-dir PATH          Masques d'entraînement (<image>.png, 255 gardé, 0 masqué)
@@ -146,6 +148,7 @@ while [[ $# -gt 0 ]]; do
     --growth-factor) need_arg "$@"; growth_factor="$2"; shift 2 ;;
     --refine-stop-iter) need_arg "$@"; refine_stop_iter="$2"; shift 2 ;;
     --refine-stop-num-iter) need_arg "$@"; refine_stop_num_iter="$2"; shift 2 ;;
+    --steps-per-save) need_arg "$@"; steps_per_save="$2"; shift 2 ;;
     --floater-suppression) need_arg "$@"; floater_suppression="$2"; shift 2 ;;
     --warp-spherical-to-pinhole) need_arg "$@"; warp_spherical="$2"; shift 2 ;;
     --masks-dir) need_arg "$@"; masks_dir="$2"; shift 2 ;;
@@ -225,6 +228,8 @@ for value in "$refine_stop_iter" "$refine_stop_num_iter"; do
   [[ -z "$value" ]] || is_nonnegative_integer "$value" ||
     die "--refine-stop-iter et --refine-stop-num-iter attendent un entier >= 0"
 done
+[[ -z "$steps_per_save" ]] || [[ "$steps_per_save" =~ ^[1-9][0-9]*$ ]] ||
+  die "--steps-per-save attend un entier > 0"
 case "$floater_suppression" in
   ""|off|mild|strong) ;;
   *) die "--floater-suppression attend off, mild ou strong" ;;
@@ -552,6 +557,8 @@ cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$growth_factor" ]] || cmd+=(--growth-factor "$growth_factor")
 [[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
+[[ -z "$steps_per_save" ]] || cmd+=(--steps-per-save "$steps_per_save")
+cmd+=(--save-only-latest-checkpoint 1)
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
 [[ -z "$warp_spherical" ]] || cmd+=(--warp-spherical-to-pinhole "$warp_spherical")
 for pair in \
