@@ -162,6 +162,15 @@ class SoftBalanceTest(unittest.TestCase):
                 memberships.extend(json.loads((folder / "image_membership.json").read_text())["primary_image_ids"])
             self.assertEqual(sorted(memberships), list(range(1, 11)))
 
+    def test_binary_equirectangular_camera_model_is_read_without_params(self):
+        import struct
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "cameras.bin"
+            path.write_bytes(struct.pack("<Q", 1) + struct.pack("<IiQQ", 1, 17, 4096, 2048))
+            cameras = splitter.read_cameras_binary(path)
+        self.assertEqual(cameras[1].model_id, 17)
+        self.assertEqual(cameras[1].params.size, 0)
+
     def test_single_block_skips_covisibility_graph_and_keeps_whole_model(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
