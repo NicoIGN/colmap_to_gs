@@ -12,6 +12,7 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
+const IMAGE_AXIS_DEG = 35;
 // Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
 // Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
@@ -1199,6 +1200,8 @@ export function createColmapLayer({
         maxAlong: Infinity,
         count: IMAGE_SHOWN,
         maxAngleDeg: 180,
+        refAxis: forward,
+        maxRefAngleDeg: IMAGE_AXIS_DEG,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
           if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
