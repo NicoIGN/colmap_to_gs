@@ -44,9 +44,9 @@ case "$COLMAP_METHOD" in
       --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
       --camera-mode "$camera_mode" --camera-model "$SFM_CAMERA_MODEL" \
-      --metric-gps "$metric_gps" "${sensor_args[@]}" \
-      --threads "$NUM_CPUS" "${mask_args[@]}" \
-      "${exposure_args[@]}"
+      --metric-gps "$metric_gps" ${sensor_args[@]+"${sensor_args[@]}"} \
+      --threads "$NUM_CPUS" ${mask_args[@]+"${mask_args[@]}"} \
+      ${exposure_args[@]+"${exposure_args[@]}"}
     ;;
   colmap|nerfstudio)
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/reconstruct.py"
@@ -57,7 +57,7 @@ case "$COLMAP_METHOD" in
       --features "$HLOC_FEATURES" --matcher "$HLOC_MATCHER" --pairs "$HLOC_PAIRS" \
       --retrieval "$HLOC_RETRIEVAL" --num-neighbors "$HLOC_NUM_NEIGHBORS" \
       --camera-model "$HLOC_CAMERA_MODEL" --camera-mode "$camera_mode" \
-      "${mask_args[@]}"
+      ${mask_args[@]+"${mask_args[@]}"}
     ;;
   orientations)
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/orientations_to_colmap.py" \
