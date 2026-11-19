@@ -52,8 +52,26 @@ if [[ ! -f "$target/__init__.py" ]]; then
   touch "$target/__init__.py"
 fi
 
+# Sur macOS, torch et pycolmap (wheels pip) embarquent chacun leur libomp : deux runtimes
+# OpenMP dans le même processus provoquent un SIGSEGV. On pointe les copies pip vers la libomp conda.
+if [[ "$(uname -s)" == Darwin ]]; then
+  conda_omp="$("$python_bin" -c 'import sys; print(sys.prefix)')/lib/libomp.dylib"
+  purelib="$("$python_bin" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+  if [[ -f "$conda_omp" ]]; then
+    while IFS= read -r lib; do
+      [[ -L "$lib" ]] && continue
+      rm -f "$lib"
+      ln -s "$conda_omp" "$lib"
+      echo "[HLOC] libomp pip remplacée par un lien vers $conda_omp : $lib"
+    done < <(find "$purelib" -path '*/.dylibs/libomp*.dylib' 2>/dev/null)
+  else
+    echo "[HLOC] attention : $conda_omp introuvable, libomp pip non dédupliquée."
+  fi
+fi
+
 "$python_bin" - <<'PY' || die "Imports HLOC incomplets (voir erreur ci-dessus). Pour h5py : mamba install -c conda-forge h5py"
 import hloc, lightglue, h5py
 from SuperGluePretrainedNetwork.models import superpoint
-print("HLOC, LightGlue, h5py et SuperGlue : OK")
+import torch, pycolmap  # même processus : vérifie l'absence de conflit OpenMP
+print("HLOC, LightGlue, h5py, SuperGlue, torch et pycolmap : OK")
 PY
