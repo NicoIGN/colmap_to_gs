@@ -78,7 +78,8 @@ def main():
     else:
         pairs_from_exhaustive.main(pairs, features=features)
 
-    matches = match_features.main(matcher_conf, pairs, features, export_dir=work)
+    matches = match_features.main(
+        matcher_conf, pairs, features, export_dir=work, matches=work / "matches.h5")
 
     camera_mode = pycolmap.CameraMode.__members__[CAMERA_MODES[args.camera_mode]]
     sfm = work / "sfm"
