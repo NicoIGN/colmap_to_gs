@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Défauts de images_to_3dgs : valeurs propres à ce pipeline, chargées après config/defaults/*.
-# Les chemins Paris9 sont ici pour référence ; remplacer-les dans la configuration utilisateur.
-
-SFM_IMAGES_DIR="/shared/home/NBellaiche/data/Paris9/images"
-OUTPUT_DIR="/shared/home/NBellaiche/data/Paris9/reconstruction-20k-8M-4blocs"
-SPIRULA_BIN="/shared/home/NBellaiche/sources/spirula-studio/build_vulkan/spirula"
-TRAIN_MASKS_SPIRULA_MODEL="/shared/home/NBellaiche/sources/spirula-studio/models/sam3-q4_0.ggml"
-EXPORT_SPLAT_NAME="Paris9-20000-8M.splat"
-SLURM_PARTITION="jz"
+# Défauts de images_to_3dgs : différences par rapport à config/defaults/*.default.sh.
+# Aucune différence à ce jour. Chemins et binaires propres au site (SFM_IMAGES_DIR,
+# OUTPUT_DIR, SPIRULA_BIN, TRAIN_MASKS_SPIRULA_MODEL, EXPORT_SPLAT_NAME, SLURM_PARTITION)
+# sont à définir dans la configuration utilisateur.
