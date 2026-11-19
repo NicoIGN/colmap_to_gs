@@ -78,6 +78,12 @@ SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
 # Seuils du filtre : augmenter far-support-rate ou baisser vote-fraction = plus strict.
 SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"   # ]0,1[
 SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"  # ]0,1]
+# Densification MVS COLMAP (patch_match_stereo + stereo_fusion), optionnelle.
+# Nécessite un COLMAP compilé avec CUDA (usage prévu : Slurm). Les points denses
+# remplacent le sparse en entrée du 3DGS ; incompatible avec GEOREF_GPX_FILE.
+COLMAP_USE_MVS="${COLMAP_USE_MVS:-false}"
+MVS_MAX_IMAGE_SIZE="${MVS_MAX_IMAGE_SIZE:-2000}"
+MVS_GPU_INDEX="${MVS_GPU_INDEX:-0}"
 # Photos individuelles, sans séquence.
 # Sans GPX, les GPS EXIF de plusieurs images géoréférencent automatiquement le SfM.
 # Un GPX configuré ci-dessous reste prioritaire sur les coordonnées EXIF.

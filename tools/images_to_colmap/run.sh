@@ -44,6 +44,11 @@ train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 sparse="$sfm/sparse/0"
 [[ -z "$GEOREF_GPX_FILE" ]] || sparse="$OUTPUT_DIR/georef/0"
+if [[ "$COLMAP_USE_MVS" == true ]]; then
+  [[ -z "$GEOREF_GPX_FILE" ]] ||
+    die "COLMAP_USE_MVS=true est incompatible avec GEOREF_GPX_FILE (le recalage lit le sparse, pas le dense)."
+  sparse="$sfm/mvs/sparse/0"
+fi
 filter_input="$sparse"
 [[ "$SFM_FILTER_DENSITY" != true ]] || sparse="$OUTPUT_DIR/sparse_clean"
 check_filtered_sparse() {
@@ -120,6 +125,18 @@ prepare() {
   fi
   if [[ "$COLMAP_METHOD" != spirula ]]; then
     "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
+  fi
+  if [[ "$COLMAP_USE_MVS" == true ]]; then
+    begin_stage "densification MVS"
+    if [[ ! -s "$sfm/mvs/sparse/0/points3D.bin" ]]; then
+      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/mvs_densify.py" \
+        --colmap "$SFM_COLMAP_BIN" --images "$selected" \
+        --sparse "$sfm/sparse/0" --output "$sfm/mvs" \
+        --max-image-size "$MVS_MAX_IMAGE_SIZE" --gpu-index "$MVS_GPU_INDEX"
+    fi
+    for name in cameras images points3D; do
+      [[ -s "$sfm/mvs/sparse/0/$name.bin" ]] || die "MVS incomplet : $name.bin"
+    done
   fi
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     begin_stage "recalage du SfM sur le GPX"

@@ -129,6 +129,9 @@ sparse="$sfm/sparse/0"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/georef/0"
 fi
+if [[ "$COLMAP_USE_MVS" == true ]]; then
+  sparse="$sfm/mvs/sparse/0"
+fi
 filter_input="$sparse"
 if [[ "$SFM_FILTER_DENSITY" == true ]]; then
   sparse="$OUTPUT_DIR/sparse_clean"
