@@ -103,7 +103,8 @@ def run(args):
         "--max-error", str(args.max_error), "--min-inliers", str(args.min_inliers),
         *common,
     ]
-    if selection["focal_px"]:
+    # Une focale déduite du champ de vue n'a pas de sens pour une équirectangulaire.
+    if selection["focal_px"] and args.camera_model != "equirectangular":
         match += ["--focal", str(selection["focal_px"])]
     mapping = [
         args.spirula_bin, "sfm", "map", str(filtered), str(features),

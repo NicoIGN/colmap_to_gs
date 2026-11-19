@@ -187,6 +187,11 @@ fi
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
 [[ "$PANORAMAX_PICTURE_TYPE" == all || "$PANORAMAX_PICTURE_TYPE" == normal || "$PANORAMAX_PICTURE_TYPE" == 360 ]] ||
   die "PANORAMAX_PICTURE_TYPE doit être all, normal ou 360."
+if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
+  echo "[config] PANORAMAX_PICTURE_TYPE=360 : SFM_CAMERA_MODEL=equirectangular (au lieu de ${SFM_CAMERA_MODEL:-opencv})." >&2
+  SFM_CAMERA_MODEL=equirectangular
+  export SFM_CAMERA_MODEL
+fi
 [[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* && "$EXPORT_SPLAT_NAME" != .splat ]] ||
   die "EXPORT_SPLAT_NAME doit être un nom de fichier terminé par .splat."
 [[ "$MERGE_STRENGTH" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
