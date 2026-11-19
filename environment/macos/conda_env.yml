@@ -10,9 +10,10 @@ dependencies:
 
   ########################################
   # PYTORCH (macOS, CPU / MPS)
+  # Pas de pin : pytorch 2.3.1 exige llvm-openmp<16, incompatible avec pycolmap 4.2.1 (libfaiss -> llvm-openmp>=22.1.7)
   ########################################
-  - pytorch=2.3.1
-  - torchvision=0.18.1
+  - pytorch
+  - torchvision
 
   ########################################
   # SCIENTIFIC STACK
@@ -28,7 +29,7 @@ dependencies:
   ########################################
   - pycolmap=4.2.1
   # Une seule libomp partagée (pycolmap/torch conda) : évite « OMP: Error #15 » sur macOS.
-  - llvm-openmp
+  - llvm-openmp=22.1.7
 
   ########################################
   # PIP (hloc / SuperGlue : voir tools/colmap/install-hloc.sh)
