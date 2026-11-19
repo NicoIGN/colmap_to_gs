@@ -18,6 +18,10 @@ const IMAGE_CANDIDATES = 16;
 const IMAGE_HYSTERESIS = 0.8;
 // Une image candidate doit regarder à moins de cet angle de la direction de vue.
 const IMAGE_AXIS_DEG = 35;
+// Panorama vu de l'intérieur de sa sphère : il est affiché si son centre est à moins de cet angle du sens de la vue.
+const PANORAMA_VIEW_DEG = 30;
+// Un panorama courant n'est remplacé que si un autre est nettement plus centré.
+const PANORAMA_HYSTERESIS_DEG = 5;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -739,29 +743,22 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
-// Vrai si le point de vue est dans la sphère du panorama ou si la sphère est devant le point de vue.
-function panoramaInFront(model, index, viewer, forward) {
+// Panorama : angle entre le sens de la vue et le centre de la sphère, et vrai si la sphère affichée (rayon agrandi)
+// couvre le centre de la vue. Depuis l'intérieur, on compare l'angle à PANORAMA_VIEW_DEG.
+function panoramaView(model, index, viewer, forward) {
   const cx = model.cameraCenters[index * 3];
   const cy = model.cameraCenters[index * 3 + 1];
   const cz = model.cameraCenters[index * 3 + 2];
   const v = [cx - viewer[0], cy - viewer[1], cz - viewer[2]];
   const dist = Math.hypot(...v);
   const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
-  if (dist <= radius) return true;
-  return (v[0] * forward[0] + v[1] * forward[1] + v[2] * forward[2]) / dist > 0;
-}
-
-// Panorama : vrai si la sphère affichée (rayon agrandi) couvre le centre de la vue, y compris depuis son intérieur.
-function panoramaSphereCovers(model, index, viewer, forward) {
-  const cx = model.cameraCenters[index * 3];
-  const cy = model.cameraCenters[index * 3 + 1];
-  const cz = model.cameraCenters[index * 3 + 2];
-  const v = [cx - viewer[0], cy - viewer[1], cz - viewer[2]];
-  const dist = Math.hypot(...v);
-  const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
-  if (dist <= radius) return true;
+  if (dist < 1e-9) return { angle: 0, covers: true };
   const cosAngle = (v[0] * forward[0] + v[1] * forward[1] + v[2] * forward[2]) / dist;
-  return Math.acos(Math.min(1, Math.max(-1, cosAngle))) <= Math.asin(radius / dist);
+  const angle = Math.acos(Math.min(1, Math.max(-1, cosAngle)));
+  const covers = dist <= radius
+    ? angle <= (PANORAMA_VIEW_DEG * Math.PI) / 180
+    : angle <= Math.asin(radius / dist);
+  return { angle, covers };
 }
 
 // Vrai si le point de vue est du côté du sommet caméra par rapport au plan du cadre à la profondeur `near` ;
@@ -1365,7 +1362,7 @@ export function createColmapLayer({
         maxRefAngleDeg: IMAGE_AXIS_DEG,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
-          if (!(isPano(i) ? panoramaInFront(model, i, viewer, forward) : imageInFrontOfViewer(model, i, viewer, forward))) return false;
+          if (isPano(i) || !imageInFrontOfViewer(model, i, viewer, forward)) return false;
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(
@@ -1383,23 +1380,34 @@ export function createColmapLayer({
       // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule sur la
       // meilleure candidate qui le couvre. Sans candidate couvrante, garde l'image courante si elle est encore devant.
       const current = model.slots[0]?.shown ?? null;
+      // Panoramas : le plus centré dans la vue l'emporte ; l'image courante n'est gardée que si elle reste assez centrée.
+      let bestPano = null;
+      for (let i = 0; i < model.colmapImages.length; i++) {
+        if (!isPano(i)) continue;
+        const view = panoramaView(model, i, viewer, forward);
+        if (view.covers && (bestPano === null || view.angle < bestPano.angle)) bestPano = { index: i, angle: view.angle };
+      }
+      let panoPick = bestPano?.index ?? null;
+      if (bestPano !== null && current !== null && isPano(current)) {
+        const cur = panoramaView(model, current, viewer, forward);
+        if (cur.covers && cur.angle <= bestPano.angle + (PANORAMA_HYSTERESIS_DEG * Math.PI) / 180) panoPick = current;
+      }
+      const pinholeCurrent = current !== null && !isPano(current) ? current : null;
       const covers = (index) => {
-        if (isPano(index)) return panoramaSphereCovers(model, index, viewer, forward);
         const image = model.colmapImages[index];
         const camera = model.cameras.get(image.cameraId);
         return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
       };
       const coveringBest = picked.find(covers) ?? null;
       let chosen = picked.slice(0, IMAGE_SHOWN);
-      if (current !== null && covers(current)) chosen = [current];
+      if (panoPick !== null) chosen = [panoPick];
+      else if (pinholeCurrent !== null && covers(pinholeCurrent)) chosen = [pinholeCurrent];
       else if (coveringBest !== null) chosen = [coveringBest];
       else if (
-        current !== null &&
-        (isPano(current)
-          ? panoramaInFront(model, current, viewer, forward)
-          : imageInFrontOfViewer(model, current, viewer, forward) &&
-            viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer))
-      ) chosen = [current];
+        pinholeCurrent !== null &&
+        imageInFrontOfViewer(model, pinholeCurrent, viewer, forward) &&
+        viewerOnApexSide(model.colmapImages[pinholeCurrent], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
+      ) chosen = [pinholeCurrent];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
