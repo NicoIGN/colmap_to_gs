@@ -5,10 +5,10 @@ Garde les images de la taille majoritaire (ou de --size), les relie par lien
 physique dans OUTPUT_DIR/images, et déduit la focale en pixels du champ de vue
 horizontal des métadonnées : f = (largeur / 2) / tan(fov / 2).
 
-Mode multi-caméras (PANORAMAX_MULTI_CAM=true ou --multi-cam) : toutes les
-tailles sont gardées, chacune dans son sous-dossier LxH/ ; Spirula
-(--camera-mode folder) crée alors une caméra par taille. Une seule focale ne
-pouvant pas couvrir plusieurs caméras, aucune focale n'est transmise et
+Mode multi-caméras (PANORAMAX_MULTI_CAM=true ou --multi-cam) : les tailles
+représentant au moins 1 % des images sont gardées, chacune dans son sous-dossier
+LxH/ ; Spirula (--camera-mode folder) crée alors une caméra par taille. Une seule
+focale ne pouvant pas couvrir plusieurs caméras, aucune focale n'est transmise et
 selection.json conserve celle de chaque taille.
 """
 
@@ -167,9 +167,16 @@ def main(argv=None):
         raise SystemExit("--size est incompatible avec le mode multi-caméras")
     if multi_cam:
         keep = None
-        selected = dict.fromkeys(sizes)
-        excluded = []
-        log(f"multi-caméras : {len(counts)} caméra(s), une par taille ; toutes les images sont retenues")
+        total = len(sizes)
+        kept_sizes = {size for size, count in counts.items() if count * 100 >= total}
+        if not kept_sizes:
+            raise SystemExit("Aucune taille n'atteint 1 % des images")
+        selected = {path: None for path in sizes if sizes[path] in kept_sizes}
+        excluded = [path.name for path in sizes if sizes[path] not in kept_sizes]
+        log(
+            f"multi-caméras : {len(kept_sizes)} caméra(s) de {len(counts)} taille(s), "
+            f"une par taille ; tailles sous 1 % écartées : {len(excluded)} image(s)"
+        )
     else:
         keep = args.size or counts.most_common(1)[0][0]
         selected = {path: path.name for path, size in sizes.items() if size == keep}
