@@ -21,6 +21,8 @@ const IMAGE_AXIS_DEG = 30;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
+const PANORAMA_SEGMENTS = 96;
+const PANORAMA_RINGS = 48;
 
 /**
  * Couche COLMAP sparse (PlayCanvas)
@@ -41,6 +43,7 @@ const MODEL_NAMES = {
   8: "SIMPLE_RADIAL_FISHEYE",
   9: "RADIAL_FISHEYE",
   10: "THIN_PRISM_FISHEYE",
+  17: "EQUIRECTANGULAR",
 };
 
 export function colmapBounds(positionSets, flip = false) {
@@ -91,6 +94,7 @@ const MODEL_PARAM_COUNT = {
   SIMPLE_RADIAL_FISHEYE: 4,
   RADIAL_FISHEYE: 5,
   THIN_PRISM_FISHEYE: 12,
+  EQUIRECTANGULAR: 2,
 };
 
 function readU64(view, state) {
@@ -331,6 +335,10 @@ function getFxFy(camera) {
     case "FOV":
       return { fx: p[0], fy: p[0] };
 
+    // Cadre nominal de 90° horizontal, utilisé pour la sélection et les frustums.
+    case "EQUIRECTANGULAR":
+      return { fx: camera.width / 2, fy: camera.width / 2 };
+
     default:
       return { fx: camera.width, fy: camera.height };
   }
@@ -538,6 +546,47 @@ function frustumCorners(image, camera, near) {
     const rotated = mulMat3Vec3(rwc, point);
     return [rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]];
   });
+}
+
+function isPanorama(camera) {
+  return camera.modelName === "EQUIRECTANGULAR";
+}
+
+// Sphère 360° vue de l'intérieur. Repère caméra : x à droite, y vers le bas, z dans le sens du regard.
+// Longitude 0 au centre de l'image ; latitude +90° en haut de l'image (v = 0).
+function panoramaSphere(image, radius) {
+  const rwc = transpose3(qvecToMat3(image.qvec));
+  const center = getCameraCenter(image);
+  const positions = [];
+  const uvs = [];
+  for (let r = 0; r <= PANORAMA_RINGS; r++) {
+    const lat = Math.PI / 2 - (r / PANORAMA_RINGS) * Math.PI;
+    for (let s = 0; s <= PANORAMA_SEGMENTS; s++) {
+      const lon = -Math.PI + (s / PANORAMA_SEGMENTS) * 2 * Math.PI;
+      const local = [
+        Math.cos(lat) * Math.sin(lon) * radius,
+        -Math.sin(lat) * radius,
+        Math.cos(lat) * Math.cos(lon) * radius,
+      ];
+      const rotated = mulMat3Vec3(rwc, local);
+      positions.push(rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]);
+      uvs.push(s / PANORAMA_SEGMENTS, r / PANORAMA_RINGS);
+    }
+  }
+  const row = PANORAMA_SEGMENTS + 1;
+  const indices = [];
+  for (let r = 0; r < PANORAMA_RINGS; r++) {
+    for (let s = 0; s < PANORAMA_SEGMENTS; s++) {
+      const a = r * row + s;
+      const b = a + row;
+      indices.push(a, b, a + 1, a + 1, b, b + 1);
+    }
+  }
+  return {
+    positions: new Float32Array(positions),
+    uvs: new Float32Array(uvs),
+    indices: new Uint16Array(indices),
+  };
 }
 
 // Vrai si les quatre coins du cadre affiché sont tous devant le point de vue, dans le sens du regard.
@@ -906,12 +955,20 @@ export function createColmapLayer({
     if (!texture || disposed || slot.token !== token) return;
     console.log("[images] image affichée", { name: image.name, texture: texture.width + "x" + texture.height });
 
-    // Quad posé sur le plan lointain du frustum, texturé avec l'image.
-    const quad = frustumCorners(image, camera, model.depth * IMAGE_FRUSTUM_SCALE).slice(1);
+    // Quad posé sur le plan lointain du frustum, ou sphère pour un panorama 360°, texturé avec l'image.
     const mesh = new pc.Mesh(app.graphicsDevice);
-    mesh.setPositions(new Float32Array(quad.flat()));
-    mesh.setUvs(0, new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]));
-    mesh.setIndices(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    const radius = model.depth * IMAGE_FRUSTUM_SCALE;
+    if (isPanorama(camera)) {
+      const sphere = panoramaSphere(image, radius);
+      mesh.setPositions(sphere.positions);
+      mesh.setUvs(0, sphere.uvs);
+      mesh.setIndices(sphere.indices);
+    } else {
+      const quad = frustumCorners(image, camera, radius).slice(1);
+      mesh.setPositions(new Float32Array(quad.flat()));
+      mesh.setUvs(0, new Float32Array([0, 0, 1, 0, 1, 1, 0, 1]));
+      mesh.setIndices(new Uint16Array([0, 1, 2, 0, 2, 3]));
+    }
     mesh.update(pc.PRIMITIVE_TRIANGLES, true);
 
     if (!slot.material) {

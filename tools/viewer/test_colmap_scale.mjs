@@ -88,6 +88,57 @@ test("COLMAP loading, flipping and removal notify the navigation bounds", async 
   }
 });
 
+test("COLMAP equirectangular cameras (model 17) load as panoramas", async () => {
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  const input = { addEventListener() {}, removeEventListener() {} };
+  globalThis.document = { getElementById: (id) => id === "colmapFolderInput" ? input : null };
+  globalThis.window = { devicePixelRatio: 1 };
+  const statuses = [];
+  try {
+    const layer = createColmapLayer({
+      app: {
+        root: new TestEntity(),
+        graphicsDevice: {},
+        scene: { layers: { getLayerByName: () => null, push() {} } },
+      },
+      getSceneRadius: () => 1,
+      getFlipUp: () => false,
+      setStatus: (...args) => statuses.push(args),
+      onBoundsChanged: () => {},
+    });
+    const binary = (...fields) => {
+      const buffer = Buffer.alloc(fields.reduce((size, [type]) =>
+        size + ({ u64: 8, f64: 8, u32: 4, u8: 1 })[type], 0));
+      let offset = 0;
+      for (const [type, value] of fields) {
+        if (type === "u64") { buffer.writeBigUInt64LE(BigInt(value), offset); offset += 8; }
+        if (type === "f64") { buffer.writeDoubleLE(value, offset); offset += 8; }
+        if (type === "u32") { buffer.writeUInt32LE(value, offset); offset += 4; }
+        if (type === "u8") { buffer.writeUInt8(value, offset); offset++; }
+      }
+      return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+    };
+    const cameras = binary(["u64", 1], ["u32", 1], ["u32", 17], ["u64", 4096], ["u64", 2048],
+      ["f64", 4096], ["f64", 2048]);
+    const images = binary(["u64", 1], ["u32", 1],
+      ...[1, 0, 0, 0, -10, -20, -30].map((x) => ["f64", x]),
+      ["u32", 1], ["u8", 0], ["u64", 0]);
+    const points = binary(["u64", 1], ["u64", 1],
+      ...[12, 24, 36].map((x) => ["f64", x]),
+      ["u8", 255], ["u8", 255], ["u8", 255], ["f64", 0], ["u64", 0]);
+    await layer.loadFromFileList([
+      { name: "cameras.bin", arrayBuffer: async () => cameras },
+      { name: "images.bin", arrayBuffer: async () => images },
+      { name: "points3D.bin", arrayBuffer: async () => points },
+    ]);
+    assert.equal(statuses.at(-1)[1], "success", JSON.stringify(statuses));
+  } finally {
+    globalThis.document = previousDocument;
+    globalThis.window = previousWindow;
+  }
+});
+
 test("COLMAP bounds include sparse points and camera centers without splats", () => {
   const positions = [[10, 20, 30, 12, 24, 36], [8, 18, 28]];
   assert.deepEqual(colmapBounds(positions), {
