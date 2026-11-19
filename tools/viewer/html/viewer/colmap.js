@@ -12,6 +12,8 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
+// Candidats classés par distance, parmi lesquels on cherche celui dont le cadre agrandi couvre le centre.
+const IMAGE_CANDIDATES = 16;
 // Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
 // Une image candidate doit regarder à moins de cet angle de la direction de vue.
@@ -692,6 +694,8 @@ export function coversViewCenter(image, camera, near, viewer, forward) {
   const rcw = qvecToMat3(image.qvec);
   const center = getCameraCenter(image);
   const p = mulMat3Vec3(rcw, [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
+  // Point de vue au-delà du plan de l'image : l'image est vue par derrière.
+  if (p[2] >= near) return false;
   const d = mulMat3Vec3(rcw, forward);
   if (Math.abs(d[2]) < 1e-9) return false;
   const s = (near - p[2]) / d[2];
@@ -1211,7 +1215,7 @@ export function createColmapLayer({
         viewer,
         direction: forward,
         maxAlong: Infinity,
-        count: IMAGE_SHOWN,
+        count: IMAGE_CANDIDATES,
         maxAngleDeg: 180,
         refAxis: forward,
         maxRefAngleDeg: IMAGE_AXIS_DEG,
@@ -1232,17 +1236,19 @@ export function createColmapLayer({
         },
         stats,
       });
-      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule si la meilleure le couvre.
+      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule sur la
+      // meilleure candidate qui le couvre. Sans candidate couvrante, garde l'image courante si elle est encore devant.
       const current = model.slots[0]?.shown ?? null;
-      const best = picked[0] ?? null;
       const covers = (index) => {
         const image = model.colmapImages[index];
         const camera = model.cameras.get(image.cameraId);
         return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
       };
-      let chosen = picked;
+      const coveringBest = picked.find(covers) ?? null;
+      let chosen = picked.slice(0, IMAGE_SHOWN);
       if (current !== null && covers(current)) chosen = [current];
-      else if (current !== null && (best === null || !covers(best))) chosen = [current];
+      else if (coveringBest !== null) chosen = [coveringBest];
+      else if (current !== null && imageInFrontOfViewer(model, current, viewer, forward)) chosen = [current];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
