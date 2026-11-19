@@ -739,6 +739,31 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
+// Vrai si le point de vue est dans la sphère du panorama ou si la sphère est devant le point de vue.
+function panoramaInFront(model, index, viewer, forward) {
+  const cx = model.cameraCenters[index * 3];
+  const cy = model.cameraCenters[index * 3 + 1];
+  const cz = model.cameraCenters[index * 3 + 2];
+  const v = [cx - viewer[0], cy - viewer[1], cz - viewer[2]];
+  const dist = Math.hypot(...v);
+  const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
+  if (dist <= radius) return true;
+  return (v[0] * forward[0] + v[1] * forward[1] + v[2] * forward[2]) / dist > 0;
+}
+
+// Panorama : vrai si la sphère affichée (rayon agrandi) couvre le centre de la vue, y compris depuis son intérieur.
+function panoramaSphereCovers(model, index, viewer, forward) {
+  const cx = model.cameraCenters[index * 3];
+  const cy = model.cameraCenters[index * 3 + 1];
+  const cz = model.cameraCenters[index * 3 + 2];
+  const v = [cx - viewer[0], cy - viewer[1], cz - viewer[2]];
+  const dist = Math.hypot(...v);
+  const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
+  if (dist <= radius) return true;
+  const cosAngle = (v[0] * forward[0] + v[1] * forward[1] + v[2] * forward[2]) / dist;
+  return Math.acos(Math.min(1, Math.max(-1, cosAngle))) <= Math.asin(radius / dist);
+}
+
 // Vrai si le point de vue est du côté du sommet caméra par rapport au plan du cadre à la profondeur `near` ;
 // faux s'il est au-delà, c.-à-d. qu'il regarde l'image par derrière.
 function viewerOnApexSide(image, near, viewer) {
@@ -763,10 +788,13 @@ export function coversViewCenter(image, camera, near, viewer, forward) {
   return Math.abs(p[0] + s * d[0]) <= halfW && Math.abs(p[1] + s * d[1]) <= halfH;
 }
 
-function buildCameraAxes(images) {
+function buildCameraAxes(images, cameras) {
   const out = new Float32Array(images.length * 3);
   for (let i = 0; i < images.length; i++) {
-    const axis = mulMat3Vec3(transpose3(qvecToMat3(images[i].qvec)), [0, 0, 1]);
+    // Le centre d'un panorama est en -z (voir applyPanoramaYawFix).
+    const camera = cameras.get(images[i].cameraId);
+    const sign = camera && isPanorama(camera) ? -1 : 1;
+    const axis = mulMat3Vec3(transpose3(qvecToMat3(images[i].qvec)), [0, 0, sign]);
     out[i * 3] = axis[0];
     out[i * 3 + 1] = axis[1];
     out[i * 3 + 2] = axis[2];
@@ -1319,6 +1347,10 @@ export function createColmapLayer({
       const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
+      const isPano = (index) => {
+        const camera = model.cameras.get(model.colmapImages[index].cameraId);
+        return !!camera && isPanorama(camera);
+      };
       const stats = { total: 0, inCone: 0 };
       // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
@@ -1333,7 +1365,7 @@ export function createColmapLayer({
         maxRefAngleDeg: IMAGE_AXIS_DEG,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
-          if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
+          if (!(isPano(i) ? panoramaInFront(model, i, viewer, forward) : imageInFrontOfViewer(model, i, viewer, forward))) return false;
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(
@@ -1352,6 +1384,7 @@ export function createColmapLayer({
       // meilleure candidate qui le couvre. Sans candidate couvrante, garde l'image courante si elle est encore devant.
       const current = model.slots[0]?.shown ?? null;
       const covers = (index) => {
+        if (isPano(index)) return panoramaSphereCovers(model, index, viewer, forward);
         const image = model.colmapImages[index];
         const camera = model.cameras.get(image.cameraId);
         return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
@@ -1362,8 +1395,10 @@ export function createColmapLayer({
       else if (coveringBest !== null) chosen = [coveringBest];
       else if (
         current !== null &&
-        imageInFrontOfViewer(model, current, viewer, forward) &&
-        viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
+        (isPano(current)
+          ? panoramaInFront(model, current, viewer, forward)
+          : imageInFrontOfViewer(model, current, viewer, forward) &&
+            viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer))
       ) chosen = [current];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
@@ -1615,7 +1650,7 @@ export function createColmapLayer({
       depth: depth * frustumFactor,
       baseDepth: depth,
       cameraCenters,
-      axes: buildCameraAxes(images),
+      axes: buildCameraAxes(images, cameras),
       imagesOn: false,
       imagesMatched: imageIndex ? images.filter((image) => findImageFile(imageIndex, image.name)).length : 0,
       slots: [],
