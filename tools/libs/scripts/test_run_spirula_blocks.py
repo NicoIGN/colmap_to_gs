@@ -182,8 +182,9 @@ class BlockPipelineTest(unittest.TestCase):
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
                 "  chkpt = os.path.join(prefix, name)\n"
                 "  os.makedirs(chkpt, exist_ok=True)\n"
-                "  open(os.path.join(chkpt, 'chkpt.ply'), 'wb').write(b'ply')\n"
-                "  open(os.path.join(chkpt, 'chkpt.tar'), 'wb').write(b'tar')\n"
+                "  for step in (100, 200):\n"
+                "    open(os.path.join(chkpt, 'chkpt_step-%09d.ply' % step), 'wb').write(b'ply')\n"
+                "    open(os.path.join(chkpt, 'chkpt_step-%09d.tar' % step), 'wb').write(b'tar')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(chkpt, 'scene_transform.json'), 'w'))\n"
             )
             spirula.chmod(0o755)
@@ -526,8 +527,9 @@ class BlockPipelineTest(unittest.TestCase):
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
                 "  chkpt = pathlib.Path(prefix) / 'chkpt'\n"
                 "  chkpt.mkdir(parents=True, exist_ok=True)\n"
-                "  (chkpt / 'chkpt.ply').write_bytes(b'ply')\n"
-                "  (chkpt / 'chkpt.tar').write_bytes(b'tar')\n"
+                "  for step in (100, 200):\n"
+                "    (chkpt / ('chkpt_step-%09d.ply' % step)).write_bytes(b'ply')\n"
+                "    (chkpt / ('chkpt_step-%09d.tar' % step)).write_bytes(b'tar')\n"
                 "  (chkpt / 'scene_transform.json').write_text('{}')\n"
             )
             spirula.chmod(0o755)
@@ -615,7 +617,10 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertTrue(trains)
             for cmd in trains:
                 self.assertEqual(cmd[cmd.index("--steps-per-save") + 1], "500")
-                self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "1")
+                self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "0")
+            leftovers = sorted(p.name for p in root.rglob("chkpt_step-*"))
+            self.assertTrue(leftovers)
+            self.assertTrue(all("000000200" in name for name in leftovers), leftovers)
             env["TRAIN_SP_STEPS_PER_SAVE"] = "abc"
             result = execute("--prepare-only")
             self.assertNotEqual(result.returncode, 0)

@@ -352,7 +352,37 @@ export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-# Spirula écrit le checkpoint latest-only (une paire <nom>.ply + <nom>.tar, réécrite à chaque save) dans splats/chkpt/.
+# Spirula écrit le checkpoint à chaque save (chkpt_step-<N>.ply/.tar) sans rien supprimer :
+# pendant l'entraînement, on ne garde que la paire la plus récente.
+prune_old_checkpoints() {
+  local f step newest=""
+  shopt -s nullglob
+  for f in "$chkpt_dir"/*_step-*.ply; do
+    step="${f##*_step-}"
+    step="${step%.ply}"
+    if [[ -z "$newest" ]] || (( 10#$step > 10#$newest )); then
+      newest="$step"
+    fi
+  done
+  if [[ -n "$newest" ]]; then
+    for f in "$chkpt_dir"/*_step-*.ply "$chkpt_dir"/*_step-*.tar; do
+      step="${f##*_step-}"
+      step="${step%.*}"
+      if (( 10#$step < 10#$newest )); then
+        rm -f -- "$f"
+      fi
+    done
+  fi
+  shopt -u nullglob
+}
+keep_latest_checkpoint_while_training() {
+  while true; do
+    prune_old_checkpoints
+    sleep 2
+  done
+}
+
+# Spirula écrit dans splats/chkpt/ ; le .ply final est exporté dans splats/.
 chkpt_dir="$splats_dir/chkpt"
 export_transform="$chkpt_dir/scene_transform.json"
 resolve_final_ply() {
@@ -362,8 +392,7 @@ resolve_final_ply() {
   shopt -u nullglob
   case ${#plys[@]} in
     0) final_ckpt="" ;;
-    1) final_ckpt="${plys[0]}" ;;
-    *) die "Plusieurs PLY Spirula dans $chkpt_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
+    *) final_ckpt="${plys[${#plys[@]}-1]}" ;;
   esac
 }
 resolve_final_ply
@@ -571,7 +600,7 @@ cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
 [[ -z "$steps_per_save" ]] || cmd+=(--steps-per-save "$steps_per_save")
-cmd+=(--save-only-latest-checkpoint 1)
+cmd+=(--save-only-latest-checkpoint 0)
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
 [[ -z "$warp_spherical" ]] || cmd+=(--warp-spherical-to-pinhole "$warp_spherical")
 for pair in \
@@ -615,11 +644,19 @@ printf '\n' >> "$output_dir/train_command.sh"
 rm -f -- "$train_done_file" "$export_done_file"
 printf '%s\n' "$masks_signature" > "$masks_signature_file"
 
+spirula_status=0
+keep_latest_checkpoint_while_training >/dev/null 2>&1 &
+pruner_pid=$!
+
 if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"
+  stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee "$output_dir/train.log" || spirula_status=$?
 else
-  "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"
+  "${cmd[@]}" 2>&1 | tee "$output_dir/train.log" || spirula_status=$?
 fi
+kill "$pruner_pid" 2>/dev/null || true
+wait "$pruner_pid" 2>/dev/null || true
+[[ "$spirula_status" -eq 0 ]] || die "Spirula a échoué (code $spirula_status) : voir $output_dir/train.log"
+prune_old_checkpoints
 
 resolve_final_ply
 [[ -s "$final_ckpt" ]] ||
