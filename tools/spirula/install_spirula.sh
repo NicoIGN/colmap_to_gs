@@ -56,14 +56,17 @@ trap 'on_error $LINENO' ERR
 # ===============================================================
 
 CLEAN=0
+UPDATE=0
 
 usage() {
     cat <<EOF
 Usage : $0 [OPTIONS]
 
+Sans option : ne fait rien si l'exécutable spirula existe, sinon compile.
+
 Options :
-  --clean    Supprime le répertoire de compilation avant le build
-  --update   Ignoré (compatibilité) : le script met toujours à jour et recompile
+  --update   Met à jour le dépôt et recompile en conservant les artefacts existants
+  --clean    Supprime la compilation existante, puis met à jour le dépôt et recompile tout
   --help     Affiche cette aide
 
 Variables :
@@ -80,7 +83,7 @@ while [[ $# -gt 0 ]]; do
             CLEAN=1
             ;;
         --update)
-            log "[AVERTISSEMENT] --update est ignoré : le dépôt est toujours mis à jour et recompilé."
+            UPDATE=1
             ;;
         --help|-h)
             usage
@@ -127,6 +130,12 @@ esac
 
 log "Système : ${OS}"
 log "Répertoire de compilation : ${BUILD_DIR}"
+
+if [[ "${CLEAN}" -eq 0 && "${UPDATE}" -eq 0 && -x "${REPO_DIR}/${BUILD_DIR}/spirula" ]]; then
+    log "Exécutable Spirula déjà présent : ${REPO_DIR}/${BUILD_DIR}/spirula"
+    log "Rien à faire. Utiliser --update (recompiler en gardant les artefacts) ou --clean (tout recompiler)."
+    exit 0
+fi
 
 # ===============================================================
 # Parallélisme
@@ -507,7 +516,13 @@ if [[ "${CLEAN}" -eq 1 && -d "${BUILD_PATH}" ]]; then
     rm -rf "${BUILD_PATH}"
 fi
 
-log "Recompilation (artefacts existants conservés sauf --clean)."
+if [[ "${CLEAN}" -eq 1 ]]; then
+    log "Compilation complète (--clean)."
+elif [[ "${UPDATE}" -eq 1 ]]; then
+    log "Recompilation avec conservation des artefacts (--update)."
+else
+    log "Compilation (exécutable absent)."
+fi
 
 # ===============================================================
 # Vérification Vulkan avant CMake
