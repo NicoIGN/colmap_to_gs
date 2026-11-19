@@ -385,15 +385,26 @@ keep_latest_checkpoint_while_training() {
 # Spirula écrit dans splats/chkpt/ ; le .ply final est exporté dans splats/.
 chkpt_dir="$splats_dir/chkpt"
 export_transform="$chkpt_dir/scene_transform.json"
+# Le PLY final vit dans splats/ une fois publié ; sinon dans chkpt/ (fin d'entraînement non publiée).
 resolve_final_ply() {
-  local plys=()
+  local plys=() dir
   shopt -s nullglob
-  plys=("$chkpt_dir"/*.ply)
+  for dir in "$splats_dir" "$chkpt_dir"; do
+    plys=("$dir"/*_step-*.ply)
+    (( ${#plys[@]} == 0 )) || break
+  done
   shopt -u nullglob
-  case ${#plys[@]} in
-    0) final_ckpt="" ;;
-    *) final_ckpt="${plys[${#plys[@]}-1]}" ;;
-  esac
+  if (( ${#plys[@]} == 0 )); then
+    final_ckpt=""
+  else
+    final_ckpt="${plys[${#plys[@]}-1]}"
+  fi
+}
+publish_final_ply() {
+  if [[ "$(dirname -- "$final_ckpt")" == "$chkpt_dir" ]]; then
+    mv -f -- "$final_ckpt" "$splats_dir/"
+    final_ckpt="$splats_dir/$(basename -- "$final_ckpt")"
+  fi
 }
 resolve_final_ply
 
@@ -458,12 +469,13 @@ export_world_splat() {
   printf '%q ' "${export_cmd[@]}" > "$output_dir/export_command.sh"
   printf '\n' >> "$output_dir/export_command.sh"
 
+  log "Export .splat en cours : $final_ckpt -> $world_splat"
   rm -f -- "$export_done_file"
   "${export_cmd[@]}" 2>&1 | tee "$output_dir/export.log"
 
   [[ -s "$world_splat" ]] || die "Export absent ou vide : $world_splat"
   mark_export_done "completed_export"
-  log "Export terminé : $world_splat"
+  log "Export .splat terminé : $world_splat"
   log "Marqueur export : $export_done_file"
 }
 
@@ -655,16 +667,21 @@ else
 fi
 kill "$pruner_pid" 2>/dev/null || true
 wait "$pruner_pid" 2>/dev/null || true
-[[ "$spirula_status" -eq 0 ]] || die "Spirula a échoué (code $spirula_status) : voir $output_dir/train.log"
+if [[ "$spirula_status" -ne 0 ]]; then
+  grep -q "Entraînement terminé" "$output_dir/train.log" ||
+    die "Spirula a échoué (code $spirula_status) : voir $output_dir/train.log"
+  echo "[AVERTISSEMENT] Spirula a quitté avec le code $spirula_status après la fin de l'entraînement (plantage à la sortie) ; résultat conservé." >&2
+fi
 prune_old_checkpoints
 
 resolve_final_ply
 [[ -s "$final_ckpt" ]] ||
-  die "Entraînement terminé mais PLY final Spirula introuvable dans $splats_dir"
+  die "Entraînement terminé mais PLY final Spirula introuvable dans $chkpt_dir"
+publish_final_ply
 
 mark_train_done "completed_training"
 printf '%s\n' "$photometric_signature" > "$photometric_signature_file"
-log "Entraînement terminé."
+log "Entraînement terminé. PLY final : $final_ckpt"
 log "Marqueur train : $train_done_file"
 
 export_world_splat
