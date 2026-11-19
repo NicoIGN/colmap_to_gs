@@ -181,9 +181,10 @@ class BlockPipelineTest(unittest.TestCase):
                 "  name = args[args.index('--output-dir-name') + 1]\n"
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
                 "  splats = os.path.join(prefix, name)\n"
-                "  os.makedirs(splats, exist_ok=True)\n"
-                "  open(os.path.join(splats, 'example.ply'), 'wb').write(b'ply')\n"
-                "  open(os.path.join(splats, 'example.tar'), 'wb').write(b'tar')\n"
+                "  chkpt = os.path.join(splats, f'chkpt-{iterations}')\n"
+                "  os.makedirs(chkpt, exist_ok=True)\n"
+                "  open(os.path.join(chkpt, 'example.ply'), 'wb').write(b'ply')\n"
+                "  open(os.path.join(chkpt, 'example.tar'), 'wb').write(b'tar')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(splats, 'scene_transform.json'), 'w'))\n"
             )
             spirula.chmod(0o755)
@@ -524,10 +525,11 @@ class BlockPipelineTest(unittest.TestCase):
                 "  import pathlib\n"
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
-                "  splats = pathlib.Path(prefix) / f'chkpt-{iterations}'\n"
-                "  splats.mkdir(parents=True, exist_ok=True)\n"
-                "  (splats / 'example.ply').write_bytes(b'ply')\n"
-                "  (splats / 'example.tar').write_bytes(b'tar')\n"
+                "  splats = pathlib.Path(prefix) / 'splats'\n"
+                "  chkpt = splats / f'chkpt-{iterations}'\n"
+                "  chkpt.mkdir(parents=True, exist_ok=True)\n"
+                "  (chkpt / 'example.ply').write_bytes(b'ply')\n"
+                "  (chkpt / 'example.tar').write_bytes(b'tar')\n"
                 "  (splats / 'scene_transform.json').write_text('{}')\n"
             )
             spirula.chmod(0o755)

@@ -57,7 +57,7 @@ Usage:
 Important:
   - La visionneuse est désactivée.
   - Le checkpoint final attendu dépend de --num-iterations:
-      {output_dir}/splats/<nom>.ply (PLY final unique écrit par Spirula en latest-only)
+      {output_dir}/splats/chkpt-<step>/<nom>.ply (dernier checkpoint Spirula en latest-only)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
       via tools/postprocess/export_ply.py et splats/scene_transform.json
@@ -352,18 +352,17 @@ export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-# Spirula écrit le checkpoint final (latest-only : une paire <nom>.ply + <nom>.tar) dans chkpt-<numiter>/.
-chkpt_dir="$splats_dir/chkpt-$iteration_count"
-export_transform="$chkpt_dir/scene_transform.json"
+# Spirula écrit le checkpoint latest-only dans splats/chkpt-<step>/ (un seul, le précédent est supprimé par Spirula).
+export_transform="$splats_dir/scene_transform.json"
 resolve_final_ply() {
   local plys=()
   shopt -s nullglob
-  plys=("$chkpt_dir"/*.ply)
+  plys=("$splats_dir"/chkpt-*/*.ply)
   shopt -u nullglob
   case ${#plys[@]} in
     0) final_ckpt="" ;;
     1) final_ckpt="${plys[0]}" ;;
-    *) die "Plusieurs PLY Spirula dans $chkpt_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
+    *) die "Plusieurs PLY Spirula dans $splats_dir/chkpt-* (${#plys[@]}) : 1 attendu en latest-only" ;;
   esac
 }
 resolve_final_ply
@@ -550,8 +549,8 @@ cmd=(
   --data-format colmap
   --colmap-recon-dir sparse/0
   --image-dir images
-  --output-dir-prefix "$splats_dir"
-  --output-dir-name "chkpt-$iteration_count"
+  --output-dir-prefix "$output_dir"
+  --output-dir-name splats
   --lang fr
   --disable-viewer 1
   --keep-viewer-alive 0
@@ -613,12 +612,6 @@ printf '%q ' "${cmd[@]}" > "$output_dir/train_command.sh"
 printf '\n' >> "$output_dir/train_command.sh"
 
 rm -f -- "$train_done_file" "$export_done_file"
-# Un seul checkpoint conservé : on supprime les précédents avant de réécrire.
-shopt -s nullglob
-for old_chkpt in "$splats_dir"/chkpt-*; do
-  rm -rf -- "$old_chkpt"
-done
-shopt -u nullglob
 printf '%s\n' "$masks_signature" > "$masks_signature_file"
 
 if command -v stdbuf >/dev/null 2>&1; then
