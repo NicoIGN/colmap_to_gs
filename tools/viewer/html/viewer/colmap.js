@@ -1028,7 +1028,10 @@ export function createColmapLayer({
     const center = getCameraCenter(image);
     const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
     const cameraWorld = toWorldArray(model, center);
-    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), cameraWorld));
+    // Les panoramas sont dessinés avec x et z inversés (applyPanoramaYawFix) : le centre de l'image est donc en -z.
+    const camera = model.cameras.get(image.cameraId);
+    const axis = camera && isPanorama(camera) ? [0, 0, -1] : [0, 0, 1];
+    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, axis))), cameraWorld));
     const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
     // Léger recul derrière le centre de la caméra pour que son image reste devant l'observateur.
     const back = radius * 0.02;
