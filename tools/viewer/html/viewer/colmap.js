@@ -15,7 +15,6 @@ const IMAGE_SHOWN = 1;
 // Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
 // Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
-const IMAGE_CENTER_DEG = 10;
 // Une image candidate doit regarder à moins de cet angle de l'axe de la caméra affichée.
 const IMAGE_AXIS_DEG = 30;
 const IMAGE_SLOTS = 10;
@@ -1190,7 +1189,6 @@ export function createColmapLayer({
       const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
-      const shownIndex = model.slots[0]?.shown ?? -1;
       const stats = { total: 0, inCone: 0 };
       // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
@@ -1200,9 +1198,7 @@ export function createColmapLayer({
         direction: forward,
         maxAlong: Infinity,
         count: IMAGE_SHOWN,
-        maxAngleDeg: 35,
-        keepAngleDeg: IMAGE_CENTER_DEG,
-        keep: shownIndex,
+        maxAngleDeg: 180,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
           if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
