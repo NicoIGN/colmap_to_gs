@@ -22,6 +22,12 @@ bash tools/images_to_colmap/run.sh /chemin/config.sh
 - `orientations` : conversion de poses caméra calibrées (position, rotation,
   intrinsèques) et d'un PLY coloré, sans nouvelle estimation photogrammétrique.
   `SFM_MASKS=off` est requis.
+- `hloc` : SfM complet via [Hierarchical-Localization](https://github.com/cvg/Hierarchical-Localization)
+  (`hloc_reconstruct.py`, extraction, appariement, triangulation pycolmap). Réglages
+  `HLOC_*` : `HLOC_FEATURES`, `HLOC_MATCHER`, `HLOC_PAIRS` (retrieval ou exhaustive),
+  `HLOC_CAMERA_MODEL`. Si `SFM_MASKS=on`, les points tombant sur un masque SAM
+  (0 = masqué) sont retirés avant l'appariement. Le modèle `equirectangular` n'est pas
+  supporté. `SFM_CAMERA_SPLIT=false` est requis. HLOC est installé par `conda_env.yml`.
 
 **Réglages.** Copier [`param.default.sh`](param.default.sh). Les masques,
 la reprise et le recalage GPX reprennent les réglages du

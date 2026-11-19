@@ -29,9 +29,23 @@ PYTHON_BIN="python3"
 PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
 REMOVE_LOCKS="${REMOVE_LOCKS:-false}" # Forcer seulement après arrêt des anciens calculs.
 
-# Producteur du modele : spirula | colmap | nerfstudio | orientations.
+# Producteur du modele : spirula | colmap | nerfstudio | orientations | hloc.
 # Le mode nerfstudio appelle ns-process-data (COLMAP/SIFT) et exige NVIDIA/CUDA.
+# hloc : SfM complet via Hierarchical-Localization + pycolmap (voir HLOC_*).
 COLMAP_METHOD="spirula"
+
+# --- COLMAP_METHOD=hloc uniquement ---
+# Extraction de points : superpoint_aachen | superpoint_max | superpoint_inloc | r2d2 |
+# d2net-ss | sift | sosnet | disk | dir | netvlad | openibl | cosplace (globaux, non utilisables ici).
+HLOC_FEATURES="superpoint_max"
+# superpoint+lightglue | disk+lightglue | superglue | superglue-fast | NN-superpoint | NN-ratio | NN-mutual | adalam
+HLOC_MATCHER="superpoint+lightglue"
+# retrieval : paires des N voisins les plus proches (HLOC_RETRIEVAL) ; exhaustive : toutes les paires (couteux).
+HLOC_PAIRS="retrieval"
+HLOC_RETRIEVAL="netvlad"    # descripteur global pour retrieval : netvlad | openibl | cosplace
+HLOC_NUM_NEIGHBORS=20       # entier > 0, paires par image en mode retrieval
+# Modele pycolmap (majuscules) : OPENCV, SIMPLE_RADIAL, PINHOLE... HLOC ne gere pas equirectangular.
+HLOC_CAMERA_MODEL="OPENCV"
 
 # --- COLMAP_METHOD=colmap uniquement ---
 SFM_COLMAP_BIN="colmap"

@@ -48,7 +48,8 @@ Les [masques](../segmentation_masks/README.md) et le
 
 **Préparation.** L'[outil images vers COLMAP](../images_to_colmap/README.md)
 est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
-`colmap`, `nerfstudio` (`ns-process-data`) ou `orientations` (poses + LiDAR).
+`colmap`, `nerfstudio` (`ns-process-data`), `orientations` (poses + LiDAR) ou `hloc`
+(SfM Hierarchical-Localization, `HLOC_*`).
 Il peut être lancé seul ; les résultats compatibles sont réutilisés.
 
 **Entraînement.** `TRAIN_BACKEND=spirula|nerfstudio` choisit le moteur sans

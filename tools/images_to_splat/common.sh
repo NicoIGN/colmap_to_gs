@@ -92,6 +92,12 @@ load_config() {
   SFM_COLMAP_BIN="${SFM_COLMAP_BIN:-colmap}"
   SFM_COLMAP_USE_GPU="${SFM_COLMAP_USE_GPU:-true}"
   SFM_COLMAP_MATCHING="${SFM_COLMAP_MATCHING:-exhaustive}"
+  HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}"
+  HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}"
+  HLOC_PAIRS="${HLOC_PAIRS:-retrieval}"
+  HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"
+  HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}"
+  HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}"
   ORIENTATIONS_JSON="${ORIENTATIONS_JSON:-}"
   LIDAR_PLY="${LIDAR_PLY:-}"
   SFM_NS_PROCESS_DATA_BIN="${SFM_NS_PROCESS_DATA_BIN:-ns-process-data}"
@@ -216,7 +222,7 @@ load_config() {
   if ! awk -v v="$SFM_DENSITY_FAR_SUPPORT_RATE" 'BEGIN { exit !(v > 0 && v <= 1) }'; then
     config_error "SFM_DENSITY_FAR_SUPPORT_RATE='$SFM_DENSITY_FAR_SUPPORT_RATE' doit être dans ]0,1]."
   fi
-  config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations'
+  config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations|hloc'
   config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'
   config_choice SFM_COLMAP_MATCHING "$SFM_COLMAP_MATCHING" 'exhaustive|sequential'
   config_choice TRAIN_BACKEND "$TRAIN_BACKEND" 'spirula|nerfstudio'
@@ -235,6 +241,13 @@ load_config() {
   if [[ "$COLMAP_METHOD" == nerfstudio ]]; then
     config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'single'
     config_choice SFM_CAMERA_MODEL "$SFM_CAMERA_MODEL" 'opencv|pinhole|simple_pinhole|opencv_fisheye'
+  fi
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    config_choice HLOC_PAIRS "$HLOC_PAIRS" 'retrieval|exhaustive'
+    config_positive_integer HLOC_NUM_NEIGHBORS "$HLOC_NUM_NEIGHBORS"
+    config_choice HLOC_CAMERA_MODEL "$HLOC_CAMERA_MODEL" 'OPENCV|SIMPLE_RADIAL|RADIAL|PINHOLE|SIMPLE_PINHOLE|FULL_OPENCV'
+    config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
+    config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'false'
   fi
   if [[ "$COLMAP_METHOD" == orientations && "$SFM_MASKS" == on ]]; then
     config_error "La conversion d'orientations ne calcule pas de SfM : définir SFM_MASKS=off."
