@@ -1255,11 +1255,13 @@ export function createColmapLayer({
     const children = [
       {
         name: "Points",
+        visible: false,
         setVisible(visible) { model.pointsEntity.enabled = visible; },
         setHighlight(on) { setMeshHighlight(model.pointsResource, on); },
       },
       {
         name: "Caméras",
+        visible: false,
         setVisible(visible) { model.cameraCentersEntity.enabled = visible; },
         setHighlight(on) { setMeshHighlight(model.cameraCentersResource, on); },
       },
@@ -1311,6 +1313,7 @@ export function createColmapLayer({
       model.slots.forEach(resetSlot);
       refreshEnlarged(model);
       model.imagesMatched = model.colmapImages.filter((image) => findImageFile(index, image.name)).length;
+      if (model.imagesMatched) setImagesMode(model, true);
     }
     trimTextureCache(0);
     for (const model of models.values()) registerModel(model);
@@ -1461,6 +1464,7 @@ export function createColmapLayer({
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
 
+      if (model.imagesMatched) setImagesMode(model, true);
       registerModel(model);
       models.set(id, model);
       return model;
