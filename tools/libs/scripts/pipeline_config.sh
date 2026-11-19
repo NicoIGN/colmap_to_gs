@@ -52,8 +52,6 @@ validate_sfm_geometry_config() {
     config_error "SFM_MIN_INLIERS doit être un entier dans [4,1000000]."
   if [[ "$sfm_backend" == spirula ]]; then
     config_choice SFM_SP_BA_LOSS "${SFM_SP_BA_LOSS:-huber}" 'trivial|huber|cauchy'
-  elif [[ -n "${SFM_SP_BA_LOSS:-}" || -n "${SFM_SP_BA_LOSS_PARAM:-}" ]]; then
-    config_error "SFM_SP_BA_LOSS* ne s'applique qu'à COLMAP_METHOD=spirula."
   fi
   local name value
   for name in SFM_MAX_ERROR SFM_MIN_TRI_ANGLE; do

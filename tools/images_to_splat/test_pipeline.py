@@ -942,6 +942,13 @@ if "--wait" in args:
                 sfm = next(cmd for cmd in self.commands()[before:] if cmd[:2] == ["spirula", "sfm"])
                 self.assertEqual(tuple(sfm[sfm.index(flag) + 1] for flag in flags), values)
 
+    def test_hloc_accepts_spirula_defaults_without_sp_overrides(self):
+        self.append('COLMAP_METHOD="hloc"\nHLOC_PAIRS="retrieval"\nHLOC_RETRIEVAL="netvlad"')
+        result = self.run_pipeline("--phase", "prepare")
+        output = result.stdout + result.stderr
+        self.assertNotIn("ne s'appliquent qu'à COLMAP_METHOD=spirula", output)
+        self.assertNotIn("ne s'applique qu'à COLMAP_METHOD=spirula", output)
+
     def test_geometry_change_refuses_reuse(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         self.append("SFM_MIN_TRI_ANGLE=4")

@@ -275,8 +275,6 @@ load_config() {
     config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
     config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive|sequential'
     config_choice SFM_SP_QUALITY "$SFM_SP_QUALITY" 'low|medium|high|extreme'
-  elif [[ -n "$SFM_SP_FEATURES" || -n "$SFM_SP_MATCHER" || -n "$SFM_SP_PAIRS" || -n "$SFM_SP_QUALITY" ]]; then
-    config_error "SFM_SP_FEATURES, SFM_SP_MATCHER, SFM_SP_PAIRS et SFM_SP_QUALITY ne s'appliquent qu'à COLMAP_METHOD=spirula."
   fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
   config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'true|false'
