@@ -103,4 +103,4 @@ fi
 
 echo "[3dgs] lancement du pipeline images_to_3dgs"
 pipeline_report_phase "pipeline images_to_3dgs"
-bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" "${pipeline_args[@]}"
+bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" ${pipeline_args[@]+"${pipeline_args[@]}"}
