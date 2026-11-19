@@ -574,34 +574,39 @@ function frustumCorners(image, camera, near) {
   });
 }
 
-// Ajoute au tableau `out` les triangles d'un marqueur cube ou sphère centré sur `center`.
+// Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
+// symbolisée par ses parallèles et méridiens, centrés sur `center`.
 function appendPanoramaMarker(out, center, radius, cube) {
   const point = (x, y, z) => [center[0] + x * radius, center[1] + y * radius, center[2] + z * radius];
+  const segment = (a, b) => out.push(...point(...a), ...point(...b));
   if (cube) {
-    const faces = [
-      [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]],
-      [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]],
-      [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]],
-      [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]],
-      [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]],
-      [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]],
-    ];
-    for (const [a, b, c, d] of faces) {
-      for (const corner of [a, b, c, a, c, d]) out.push(...point(...corner));
+    const corners = [];
+    for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+    for (const a of corners) {
+      for (const b of corners) {
+        const differing = (a[0] !== b[0]) + (a[1] !== b[1]) + (a[2] !== b[2]);
+        // Arête : deux coins ne différant que d'un axe, traitée une seule fois.
+        if (differing === 1 && corners.indexOf(a) < corners.indexOf(b)) segment(a, b);
+      }
     }
     return;
   }
   const rings = 6;
-  const segments = 8;
-  const vertex = (r, s) => {
+  const meridians = 8;
+  const samples = 24;
+  const onSphere = (theta, phi) => [Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi)];
+  // Parallèles (cercles à latitude constante), hors pôles.
+  for (let r = 1; r < rings; r++) {
     const theta = (r / rings) * Math.PI;
-    const phi = (s / segments) * 2 * Math.PI;
-    return point(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
-  };
-  for (let r = 0; r < rings; r++) {
-    for (let s = 0; s < segments; s++) {
-      const [p00, p01, p10, p11] = [vertex(r, s), vertex(r, s + 1), vertex(r + 1, s), vertex(r + 1, s + 1)];
-      out.push(...p00, ...p10, ...p11, ...p00, ...p11, ...p01);
+    for (let s = 0; s < samples; s++) {
+      segment(onSphere(theta, (s / samples) * 2 * Math.PI), onSphere(theta, ((s + 1) / samples) * 2 * Math.PI));
+    }
+  }
+  // Méridiens (demi-grands cercles passant par les pôles).
+  for (let m = 0; m < meridians; m++) {
+    const phi = (m / meridians) * 2 * Math.PI;
+    for (let s = 0; s < samples / 2; s++) {
+      segment(onSphere((s / (samples / 2)) * Math.PI, phi), onSphere(((s + 1) / (samples / 2)) * Math.PI, phi));
     }
   }
 }
@@ -1520,7 +1525,7 @@ export function createColmapLayer({
         app,
         new Float32Array(frustums.markers),
         rgba,
-        pc.PRIMITIVE_TRIANGLES,
+        pc.PRIMITIVE_LINES,
         makeColmapMaterial(app, { onTop: true })
       );
       const markersEntity = new pc.Entity("COLMAP panorama markers");
