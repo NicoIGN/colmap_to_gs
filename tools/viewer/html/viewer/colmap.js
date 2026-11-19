@@ -12,12 +12,10 @@ const IMAGE_FRUSTUM_SCALE = 5;
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
 const IMAGE_SHOWN = 1;
-const IMAGE_AXIS_DEG = 35;
 // Hystérésis : une image affichée reste choisie tant que son cadre reste ≥ 80 % du seuil.
 const IMAGE_HYSTERESIS = 0.8;
-// Une image reste affichée tant qu'elle est à moins de cet angle de la direction de vue ; au-delà, la plus centrée prend sa place.
-// Une image candidate doit regarder à moins de cet angle de l'axe de la caméra affichée.
-const IMAGE_AXIS_DEG = 30;
+// Une image candidate doit regarder à moins de cet angle de la direction de vue.
+const IMAGE_AXIS_DEG = 35;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
@@ -686,6 +684,21 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
+// Vrai si le rayon de vue (depuis le point de vue, vers l'avant) traverse le cadre agrandi à la profondeur `near`.
+export function coversViewCenter(image, camera, near, viewer, forward) {
+  const { fx, fy } = getFxFy(camera);
+  const halfW = (camera.width * near) / (2 * fx);
+  const halfH = (camera.height * near) / (2 * fy);
+  const rcw = qvecToMat3(image.qvec);
+  const center = getCameraCenter(image);
+  const p = mulMat3Vec3(rcw, [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
+  const d = mulMat3Vec3(rcw, forward);
+  if (Math.abs(d[2]) < 1e-9) return false;
+  const s = (near - p[2]) / d[2];
+  if (s <= 0) return false;
+  return Math.abs(p[0] + s * d[0]) <= halfW && Math.abs(p[1] + s * d[1]) <= halfH;
+}
+
 function buildCameraAxes(images) {
   const out = new Float32Array(images.length * 3);
   for (let i = 0; i < images.length; i++) {
@@ -1219,11 +1232,11 @@ export function createColmapLayer({
         },
         stats,
       });
-      const key = picked.join(",");
+      const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
         console.log(
-          "[images] caméras retenues :", picked.length, "/", IMAGE_SLOTS,
+          "[images] caméras retenues :", chosen.length, "/", IMAGE_SLOTS,
           `| ${stats.total} caméras, ${stats.inCone} dans le cône 35°, taille max ${(stats.maxSize ?? 0).toFixed(1)} px, cadre ≥ ${IMAGE_MIN_SCREEN_PX} px`,
           "| point de vue", viewer.map((v) => v.toFixed(2))
         );
@@ -1238,7 +1251,18 @@ export function createColmapLayer({
           );
         }
       }
-      assignSlots(model, picked);
+      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule si la meilleure le couvre.
+      const current = model.slots[0]?.shown ?? null;
+      const best = picked[0] ?? null;
+      const covers = (index) => {
+        const image = model.colmapImages[index];
+        const camera = model.cameras.get(image.cameraId);
+        return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
+      };
+      let chosen = picked;
+      if (current !== null && covers(current)) chosen = [current];
+      else if (current !== null && (best === null || !covers(best))) chosen = [current];
+      assignSlots(model, chosen);
       refreshEnlarged(model);
       updateSlotLabels(model);
     }

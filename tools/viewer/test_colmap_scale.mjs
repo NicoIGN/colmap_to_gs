@@ -22,7 +22,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -207,4 +207,14 @@ test("cube map front face samples the equirectangular centre", () => {
   assert.equal(atlas.height, faceSize * 2);
   const texel = (2 * atlas.width + 2) * 4;
   assert.deepEqual([...atlas.data.slice(texel, texel + 3)], [255, 0, 0]);
+});
+
+test("the view ray must cross the enlarged frustum to count as covering the centre", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const camera = { width: 100, height: 100, modelName: "PINHOLE", params: [100, 100, 50, 50] };
+  // Cadre à 5 unités : demi-largeur 2.5.
+  assert.equal(coversViewCenter(image, camera, 5, [0, 0, -10], [0, 0, 1]), true);
+  assert.equal(coversViewCenter(image, camera, 5, [10, 0, -10], [0, 0, 1]), false);
+  assert.equal(coversViewCenter(image, camera, 5, [0, 0, -10], [0, 0, -1]), false);
+  assert.equal(coversViewCenter(image, camera, 5, [0, 0, 6], [0, 0, 1]), false);
 });
