@@ -81,6 +81,8 @@ def run(args):
     prepare_images(["--dataset", str(args.dataset), "--output-dir", str(args.output)])
     marker.write_text(json.dumps(dict(signature=fingerprint, complete=False), indent=2) + "\n")
     selection = json.loads((args.output / "selection.json").read_text())
+    if args.camera_model is None:
+        args.camera_model = selection.get("camera_model") or "opencv"
     images = args.output / "images"
     features = args.output / "features"
     original = args.output / "matches.bin"
@@ -146,8 +148,9 @@ def main():
     parser.add_argument("--min-tri-angle", type=float, default=6)
     parser.add_argument("--ba-loss", choices=("huber", "cauchy", "trivial"), default="huber")
     parser.add_argument("--ba-loss-param", type=float, default=2)
-    parser.add_argument("--camera-model", default="opencv",
-                        choices=("opencv", "pinhole", "opencv-fisheye", "equirectangular"))
+    parser.add_argument("--camera-model", default=None,
+                        choices=("opencv", "pinhole", "opencv-fisheye", "equirectangular"),
+                        help="Défaut : détecté depuis les images (360° -> equirectangular)")
     parser.add_argument("--feature-masks", type=Path)
     args = parser.parse_args()
     try:

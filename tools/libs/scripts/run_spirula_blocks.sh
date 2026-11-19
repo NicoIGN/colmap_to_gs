@@ -52,7 +52,8 @@ SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 NUM_CPUS="${NUM_CPUS:-2}"
 export NUM_CPUS
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
-SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-opencv}"
+SFM_CAMERA_MODEL_EXPLICIT="${SFM_CAMERA_MODEL:+true}"
+SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-}"
 init_sfm_geometry_config
 SFM_SP_PAIR_MAX_DISTANCE="${SFM_SP_PAIR_MAX_DISTANCE:-}"
 SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
@@ -346,6 +347,9 @@ prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
   local feature_args=()
+  local camera_args=()
+  # Sans modèle explicite, le modèle est choisi par la détection 360° de prepare_sfm.py.
+  [[ "$SFM_CAMERA_MODEL_EXPLICIT" != true ]] || camera_args=(--camera-model "$SFM_CAMERA_MODEL")
   pipeline_report_phase "reconstruction SfM"
   if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
         -d "$GS_ROOT" && ( ! -s "$RAW_SPARSE_DIR/cameras.bin" ||
@@ -369,9 +373,8 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-      --camera-model "$SFM_CAMERA_MODEL"
     )
-    sfm_args+=(--threads "$NUM_CPUS")
+    sfm_args+=("${camera_args[@]}" --threads "$NUM_CPUS")
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
     "$PYTHON_BIN" "${sfm_args[@]}"
   elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
@@ -396,8 +399,9 @@ prepare_blocks() {
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
       --min-tri-angle "$SFM_MIN_TRI_ANGLE"
       --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-      --reuse-matches redo --camera-model "$SFM_CAMERA_MODEL"
+      --reuse-matches redo
     )
+    sfm_args+=("${camera_args[@]}")
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
     sfm_args+=(--threads "$NUM_CPUS")

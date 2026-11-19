@@ -69,7 +69,8 @@ SFM_CAMERA_MODE="folder"
 # dans camera-split-backups/. Spirula uniquement, pas avec SFM_CAMERA_MODE=image.
 SFM_CAMERA_SPLIT="false"
 SFM_CAMERA_SPLIT_MIN_IMAGES=50
-SFM_CAMERA_MODEL="opencv"
+# SFM_CAMERA_MODEL non défini : détection automatique (360° -> equirectangular, sinon opencv).
+# Le définir explicitement force le modèle.
 # Filtre expérimental des points isolés/lointains avant découpage (CPU).
 # Sorties COLMAP binaires sparse_clean et sparse_rejected ; original intact.
 # Activer avant préparation ; changer après découpage exige un nouveau workspace.
