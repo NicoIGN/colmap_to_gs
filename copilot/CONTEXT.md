@@ -25,6 +25,7 @@ Paquets utilisés par les tests et le pipeline :
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
 - Sur la machine de session, `numpy` n'est pas installé par défaut ; `pycolmap` et `torch` non plus.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue, comme les 4 tests `test_run_pipeline` liés au verrou `.download.lock` et `test_validate_config` (`KMP_DUPLICATE_LIB_OK`) : échecs préexistants, vérifiés sans changements.
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.

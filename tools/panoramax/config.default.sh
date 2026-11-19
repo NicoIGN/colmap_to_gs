@@ -77,7 +77,7 @@ POSTPROCESS_CLEANER="contextual"
 # Défaut : diagnostic. Valeurs : diagnostic|apply|off.
 # diagnostic = garde tout et exporte les candidats dans <nom>.rejected.splat ;
 # apply = retire les candidats ; off = désactive le test contextuel.
-POSTPROCESS_FILTER_MODE="diagnostic"
+POSTPROCESS_FILTER_MODE="apply"
 
 # Filtre de forme/isolement (export_ply.py). Vide = désactivé ; les deux vont ensemble.
 # Rejet si splat allongé (rapport d'axes > MAX_ASPECT_RATIO) ET isolé

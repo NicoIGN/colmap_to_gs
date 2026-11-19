@@ -522,7 +522,7 @@ for ((index = first_index; index < last_index; index++)); do
   pipeline_report_phase "entraînement et export du bloc $block_id"
   block_sparse="$BLOCKS_DIR/block_$block_id"
   block_output="$GS_ROOT/block_$block_id"
-  splat_name="Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
+  splat_name="block_${block_id}.splat"
   printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$SPLIT_NUM_BLOCKS"
 
   block_args=(

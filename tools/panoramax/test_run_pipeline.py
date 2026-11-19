@@ -353,8 +353,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "merge_splats.py", "filter_splats.py"])
             for index in range(2):
                 splats = dataset / f"gs-3-blocks-2/block_{index:03d}/splats"
-                self.assertTrue((splats / f"Paris-3-block-{index:03d}.bbox.splat").is_file())
-                self.assertEqual((splats / f"Paris-3-block-{index:03d}.splat").read_bytes(),
+                self.assertTrue((splats / f"block_{index:03d}.bbox.splat").is_file())
+                self.assertEqual((splats / f"block_{index:03d}.splat").read_bytes(),
                                  b"splat")
             with config.open("a") as stream:
                 stream.write('SFM_SP_PAIR_MAX_DISTANCE=""\n')

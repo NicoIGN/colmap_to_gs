@@ -17,7 +17,7 @@ export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
-export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+export_filter_mode="${POSTPROCESS_FILTER_MODE:-apply}"
 shape_max_aspect_ratio="${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}"
 shape_isolation_factor="${POSTPROCESS_SHAPE_ISOLATION_FACTOR:-}"
 
@@ -90,7 +90,7 @@ Options:
   --mask-mode MODE          ignore (pixels exclus de la perte) ou empty (appris vides)
   --python-bin PATH
   --export-script PATH
-  --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
+  --export-filter-mode MODE apply (default), diagnostic (writes rejected files), off (default exporter only)
   --shape-max-aspect-ratio R  rejette les splats plus allongés que R (>1) et isolés ; off si vide
   --shape-isolation-factor F  seuil d'isolement, multiple de la médiane (>0) ; requis avec R
   --name FILENAME           Nom de sortie (défaut: block.splat)

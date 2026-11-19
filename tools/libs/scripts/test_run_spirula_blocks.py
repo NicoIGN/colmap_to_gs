@@ -347,8 +347,8 @@ class BlockPipelineTest(unittest.TestCase):
                                 if cmd[:2] == ["spirula", "train"]))
             self.assertTrue(all(cmd[cmd.index("--distraction-robustness") + 1] == "off"
                                 for cmd in commands if cmd[:2] == ["spirula", "train"]))
-            self.assertTrue((data / "gs-3-blocks-2/block_000/splats/Paris-3-block-000.splat").is_file())
-            self.assertTrue((data / "gs-3-blocks-2/block_001/splats/Paris-3-block-001.splat").is_file())
+            self.assertTrue((data / "gs-3-blocks-2/block_000/splats/block_000.splat").is_file())
+            self.assertTrue((data / "gs-3-blocks-2/block_001/splats/block_001.splat").is_file())
 
             second = execute()
             self.assertEqual(second.returncode, 0, second.stderr + second.stdout)

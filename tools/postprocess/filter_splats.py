@@ -459,7 +459,8 @@ def main():
         print("[filtre] " + json.dumps(report, ensure_ascii=False), flush=True)
         if applied.all():
             raise ValueError("Le filtre supprimerait tous les splats ; aucune sortie remplacée")
-        write_records(rejected_path, records, rejected)
+        if args.mode == "diagnostic":
+            write_records(rejected_path, records, rejected)
         write_records(output, records, ~applied)
         report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     except (OSError, ValueError) as exc:

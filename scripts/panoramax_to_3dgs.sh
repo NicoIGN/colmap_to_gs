@@ -136,7 +136,7 @@ SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
 TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-panoramax.splat}"
 MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
-POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
 POSTPROCESS_FILTER_SIZE_FACTOR="${POSTPROCESS_FILTER_SIZE_FACTOR:-10}"
 POSTPROCESS_CLEANER="${POSTPROCESS_CLEANER:-contextual}"
 CLEANGS_PYTHON="${CLEANGS_PYTHON:-$PYTHON_BIN}"
@@ -415,11 +415,11 @@ rm -f -- "$OUTPUT_DIR/.merge_done"
 MERGE_INPUTS=()
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
-  splat="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
+  splat="$GS_ROOT/block_$block_id/splats/block_${block_id}.splat"
   [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
     set_pipeline_stage "recadrage bbox COLMAP du bloc $block_id avant fusion"
-    cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
+    cropped="$GS_ROOT/block_$block_id/splats/block_${block_id}.bbox.splat"
     crop_splat_to_sparse "$splat" "$cropped" "$LIDAR_SPARSE" \
       apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
     splat="$cropped"
