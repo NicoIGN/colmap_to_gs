@@ -27,8 +27,8 @@ PANORAMAX_QUALITY="hd"
 # (instant ou intervalle début/fin, ex. "2024-01-01T00:00:00Z/..").
 PANORAMAX_DATETIME=""
 
-# Défaut : "". Vide = aucune limite utilisateur (recherche API plafonnée
-# à 10000 résultats) ; sinon entier > 0, nombre maximal de photos.
+# Défaut : "". Vide = aucune limite utilisateur (la recherche découpe la zone
+# au-delà de 10000 résultats par requête) ; sinon entier > 0, nombre maximal de photos.
 PANORAMAX_IMAGE_MAX=""
 
 # Défaut : all. Valeurs : all (toutes), normal (photos classiques, type "flat"),

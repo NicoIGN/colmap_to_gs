@@ -568,11 +568,15 @@ Dans un terminal interactif, une barre de progression affiche les photos
 téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
 trouvées, la barre se termine à 100 % du total effectivement sélectionné.
 
-Le script demande jusqu'à 10 000 métadonnées à l'API (sans télécharger les
-images à cette étape), compte les photos dont le point est dans la bbox exacte
-Lambert-93, puis affiche ce total et l'écrit dans `summary.json` (`available`,
-`available_is_exact`). Si l'API renvoie 10 000 résultats sur sa dernière page,
-le total affiché est une borne basse (`+`) et un avertissement le précise.
+Le script demande les métadonnées à l'API (sans télécharger les images à cette
+étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
+par requête : si une requête en atteint 10 000, la zone est découpée en quatre
+quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
+supprimés par `collection/id`. Le script compte ensuite les photos dont le point
+est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
+`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
+basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
+précise. Chaque page brute est écrite dans `pages/`.
 
 `--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
 sans réduire le comptage : par exemple, `--image-max 400` affiche le total

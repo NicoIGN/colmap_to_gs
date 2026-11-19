@@ -247,6 +247,47 @@ def positions_geojson(located, bbox_epsg, to_bbox_crs):
     }
 
 
+MAX_SPLIT_DEPTH = 8
+
+
+def split_bbox(bbox):
+    xmin, ymin, xmax, ymax = bbox
+    xmid, ymid = (xmin + xmax) / 2, (ymin + ymax) / 2
+    return [(xmin, ymin, xmid, ymid), (xmid, ymin, xmax, ymid),
+            (xmin, ymid, xmid, ymax), (xmid, ymid, xmax, ymax)]
+
+
+def search_pages(api_url, bbox, datetime, api_limit, timeout):
+    """Yield (page_url, page) for one STAC search, following its next links."""
+    parameters = {"bbox": ",".join(map(str, bbox)), "limit": api_limit}
+    if datetime:
+        parameters["datetime"] = datetime
+    url = api_url.rstrip("/") + "/search?" + urlencode(parameters)
+    body, method = None, "GET"
+    seen_pages = set()
+    while url:
+        page_key = (url, method, json.dumps(body, sort_keys=True))
+        if page_key in seen_pages:
+            raise ValueError("Boucle détectée dans la pagination Panoramax.")
+        seen_pages.add(page_key)
+        page = read_json(url, timeout, body, method)
+        if not isinstance(page, dict) or not isinstance(page.get("features"), list):
+            raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
+        yield url, page
+        next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
+        if len(next_links) > 1:
+            raise ValueError("Plusieurs liens next : pagination ambiguë.")
+        if next_links:
+            link = next_links[0]
+            url = urljoin(url, link["href"])
+            method = link.get("method", "GET").upper()
+            if method not in ("GET", "POST") or link.get("merge"):
+                raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
+            body = link.get("body") if method == "POST" else None
+        else:
+            url = None
+
+
 def run(args):
     image_max = getattr(args, "image_max", None)
     if image_max is not None and image_max < 1:
@@ -282,10 +323,6 @@ def run(args):
     stac_type = PICTURE_TYPES[picture_type]
     provider = getattr(args, "provider", None) or None
     api_limit = SEARCH_LIMIT
-    parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
-    if args.datetime:
-        parameters["datetime"] = args.datetime
-    url = args.api_url.rstrip("/") + "/search?" + urlencode(parameters)
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
         "bbox": args.bbox, "bbox_wgs84": geographic,
@@ -302,56 +339,49 @@ def run(args):
         "downloaded": 0, "reused": 0, "failed": 0,
     }
     progress = Progress(image_max)
-    seen_items, seen_pages = set(), set()
-    body, method = None, "GET"
+    seen_items = set()
     candidates = []
     api_features = 0
     after_filters = 0
     api_types = Counter()
-    last_page_count = 0
-    while url:
-        page_key = (url, method, json.dumps(body, sort_keys=True))
-        if page_key in seen_pages:
-            raise ValueError("Boucle détectée dans la pagination Panoramax.")
-        seen_pages.add(page_key)
-        page = read_json(url, args.timeout, body, method)
-        if not isinstance(page, dict) or not isinstance(page.get("features"), list):
-            raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
-        counts["pages"] += 1
-        last_page_count = len(page["features"])
-        api_features += last_page_count
-        if not dry_run:
-            atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
-        for feature in page["features"]:
-            if not isinstance(feature, dict) or not feature.get("id"):
-                raise ValueError("Photo STAC sans identifiant.")
-            key = str(feature.get("collection", "")) + "/" + str(feature["id"])
-            if key in seen_items:
-                continue
-            seen_items.add(key)
-            api_types[str(picture_type_of(feature))] += 1
-            if stac_type is not None and picture_type_of(feature) != stac_type:
-                continue
-            if provider is not None and not item_matches_provider(feature, provider):
-                continue
-            after_filters += 1
-            if item_in_bbox(feature, args.bbox, to_bbox_crs):
-                candidates.append((feature, url, key))
-        next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
-        if len(next_links) > 1:
-            raise ValueError("Plusieurs liens next : pagination ambiguë.")
-        if next_links:
-            link = next_links[0]
-            url = urljoin(url, link["href"])
-            method = link.get("method", "GET").upper()
-            if method not in ("GET", "POST") or link.get("merge"):
-                raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
-            body = link.get("body") if method == "POST" else None
-        else:
-            url = None
+    capped = False
+
+    def visit(bbox, depth):
+        nonlocal api_features, after_filters, capped
+        total = 0
+        for source_url, page in search_pages(args.api_url, bbox, args.datetime, api_limit, args.timeout):
+            counts["pages"] += 1
+            total += len(page["features"])
+            api_features += len(page["features"])
+            if not dry_run:
+                atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
+            for feature in page["features"]:
+                if not isinstance(feature, dict) or not feature.get("id"):
+                    raise ValueError("Photo STAC sans identifiant.")
+                key = str(feature.get("collection", "")) + "/" + str(feature["id"])
+                if key in seen_items:
+                    continue
+                seen_items.add(key)
+                api_types[str(picture_type_of(feature))] += 1
+                if stac_type is not None and picture_type_of(feature) != stac_type:
+                    continue
+                if provider is not None and not item_matches_provider(feature, provider):
+                    continue
+                after_filters += 1
+                if item_in_bbox(feature, args.bbox, to_bbox_crs):
+                    candidates.append((feature, source_url, key))
+        # The API caps each search at api_limit results: split the area to reach the rest.
+        if total >= api_limit:
+            if depth >= MAX_SPLIT_DEPTH:
+                capped = True
+                return
+            for quadrant in split_bbox(bbox):
+                visit(quadrant, depth + 1)
+
+    visit(geographic, 0)
 
     counts["available"] = len(candidates)
-    total_is_exact = last_page_count < api_limit
+    total_is_exact = not capped
     counts["available_is_exact"] = total_is_exact
     selected = candidates[:image_max] if image_max is not None else candidates
     progress = Progress(len(selected))

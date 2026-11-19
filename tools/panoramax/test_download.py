@@ -239,6 +239,34 @@ class DownloadTest(unittest.TestCase):
                 server.shutdown()
                 thread.join()
 
+    def test_capped_search_splits_bbox_until_all_photos_are_found(self):
+        points = {"a": (651100, 6861100), "b": (651900, 6861900), "c": (651500, 6861500)}
+        lonlat = {key: Transformer.from_crs(2154, 4326, always_xy=True).transform(*xy)
+                  for key, xy in points.items()}
+
+        def fake_read_json(url, timeout, body=None, method="GET"):
+            query = parse_qs(urlsplit(url).query)
+            minx, miny, maxx, maxy = map(float, query["bbox"][0].split(","))
+            limit = int(query["limit"][0])
+            inside = [key for key, (lon, lat) in lonlat.items()
+                      if minx <= lon <= maxx and miny <= lat <= maxy]
+            features = [{"type": "Feature", "id": key, "collection": "sequence",
+                         "geometry": {"type": "Point", "coordinates": list(lonlat[key])}}
+                        for key in inside[:limit]]
+            return {"type": "FeatureCollection", "features": features, "links": []}
+
+        args = Namespace(
+            bbox=(651000, 6861000, 652000, 6862000), bbox_epsg=2154,
+            output_dir=Path(tempfile.mkdtemp()), api_url="http://localhost/api",
+            datetime=None, quality="hd", timeout=5, image_max=None, dry_run=True,
+        )
+        stdout = io.StringIO()
+        with patch.object(download, "SEARCH_LIMIT", 2), \
+                patch.object(download, "read_json", side_effect=fake_read_json), \
+                contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(download.run(args), 0)
+        self.assertIn("Photos dans la bbox EPSG:2154 : 3\n", stdout.getvalue())
+
     def test_picture_type_filters_candidates(self):
         photo = b"\xff\xd8test-image\xff\xd9"
         lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
