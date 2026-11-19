@@ -800,7 +800,7 @@ export function createColmapLayer({
   const frustumSizeInput = document.getElementById("colmapFrustumSize");
   const imageTransparencyInput = document.getElementById("colmapImageTransparency");
   let frustumFactor = Number(frustumSizeInput?.value ?? 100) / 100;
-  let imageOpacity = 1 - Number(imageTransparencyInput?.value ?? 0) / 100;
+  let imageOpacity = Number(imageTransparencyInput?.value ?? 100) / 100;
 
   let disposed = false;
   let nextModelId = 1;
@@ -907,8 +907,8 @@ export function createColmapLayer({
     material.update();
   }
 
-  function setImageTransparency(percent) {
-    imageOpacity = 1 - percent / 100;
+  function setImageOpacity(percent) {
+    imageOpacity = percent / 100;
     for (const model of models.values()) {
       for (const slot of model.slots ?? []) {
         if (slot.material) applySlotOpacity(slot.material);
@@ -1748,7 +1748,7 @@ export function createColmapLayer({
   });
   listen(imageTransparencyInput, "input", () => {
     setSliderOutput(imageTransparencyInput, "%");
-    setImageTransparency(Number(imageTransparencyInput.value));
+    setImageOpacity(Number(imageTransparencyInput.value));
   });
   refreshPointSizes();
 
