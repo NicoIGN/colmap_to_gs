@@ -24,6 +24,8 @@ const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 const PANORAMA_SEGMENTS = 96;
 // Sphère et cube 360° réduits de 33 % par rapport au cadre agrandi.
 const PANORAMA_SIZE_FACTOR = 0.67;
+// Rayon du marqueur (sphère ou cube) d'un panorama non affiché, en fraction de la profondeur des frustums.
+const PANORAMA_MARKER_FACTOR = 0.5;
 const PANORAMA_RINGS = 48;
 const PANORAMA_CUBE_FACE = 512;
 const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
@@ -480,16 +482,26 @@ function makeColmapMesh(app, positions, rgba, primitive, material) {
   return { mesh, material, meshInstance };
 }
 
-export function getOverlayLayer(app) {
-  const existing = app.scene.layers.getLayerByName("Overlay");
+function getNamedLayer(app, name) {
+  const existing = app.scene.layers.getLayerByName(name);
   if (existing) return existing;
-  // Calque ajouté après « World » (splats) : il est dessiné par-dessus.
-  const layer = new pc.Layer({ name: "Overlay" });
+  // Calques ajoutés après « World » (splats) : ils sont dessinés par-dessus, dans l'ordre de création.
+  const layer = new pc.Layer({ name });
   app.scene.layers.push(layer);
   for (const camera of app.root.findComponents("camera")) {
     if (!camera.layers.includes(layer.id)) camera.layers = [...camera.layers, layer.id];
   }
   return layer;
+}
+
+export function getOverlayLayer(app) {
+  return getNamedLayer(app, "Overlay");
+}
+
+// Calque des images, dessiné après « Overlay » pour passer au-dessus des frustums et sommets caméra.
+function getImageLayer(app) {
+  getOverlayLayer(app);
+  return getNamedLayer(app, "ImageOverlay");
 }
 
 export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = false } = {}) {
@@ -560,6 +572,38 @@ function frustumCorners(image, camera, near) {
     const rotated = mulMat3Vec3(rwc, point);
     return [rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]];
   });
+}
+
+// Ajoute au tableau `out` les triangles d'un marqueur cube ou sphère centré sur `center`.
+function appendPanoramaMarker(out, center, radius, cube) {
+  const point = (x, y, z) => [center[0] + x * radius, center[1] + y * radius, center[2] + z * radius];
+  if (cube) {
+    const faces = [
+      [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]],
+      [[-1, -1, -1], [-1, -1, 1], [-1, 1, 1], [-1, 1, -1]],
+      [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]],
+      [[-1, -1, -1], [1, -1, -1], [1, -1, 1], [-1, -1, 1]],
+      [[-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]],
+      [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]],
+    ];
+    for (const [a, b, c, d] of faces) {
+      for (const corner of [a, b, c, a, c, d]) out.push(...point(...corner));
+    }
+    return;
+  }
+  const rings = 6;
+  const segments = 8;
+  const vertex = (r, s) => {
+    const theta = (r / rings) * Math.PI;
+    const phi = (s / segments) * 2 * Math.PI;
+    return point(Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi));
+  };
+  for (let r = 0; r < rings; r++) {
+    for (let s = 0; s < segments; s++) {
+      const [p00, p01, p10, p11] = [vertex(r, s), vertex(r, s + 1), vertex(r + 1, s), vertex(r + 1, s + 1)];
+      out.push(...p00, ...p10, ...p11, ...p00, ...p11, ...p01);
+    }
+  }
 }
 
 function isPanorama(camera) {
@@ -836,6 +880,7 @@ export function createColmapLayer({
     panoramaMode = mode;
     for (const model of models.values()) {
       model.slots?.forEach(resetSlot);
+      rebuildFrustums(model, new Set());
     }
   }
 
@@ -861,6 +906,7 @@ export function createColmapLayer({
     destroyMeshEntity(model.pointsEntity, model.pointsResource);
     destroyMeshEntity(model.cameraCentersEntity, model.cameraCentersResource);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
+    destroyMeshEntity(null, model.markersResource);
     if (model.rootEntity.parent) model.rootEntity.parent.removeChild(model.rootEntity);
     model.rootEntity.destroy();
   }
@@ -916,18 +962,14 @@ export function createColmapLayer({
     model.enlarged = enlarged;
     const depthOf = (i) => model.depth * (enlarged.has(i) ? IMAGE_FRUSTUM_SCALE : 1);
     const frustums = buildFrustumLines(model.colmapImages, model.cameras, depthOf, enlarged);
-    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
-    const entity = new pc.Entity("COLMAP frustums");
-    entity.addComponent("render", {
-      type: "asset",
-      meshInstances: [resource.meshInstance],
-      layers: [getOverlayLayer(app).id],
-    });
-    entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
-    model.rootEntity.addChild(entity);
+    const group = makeFrustumMeshes(frustums);
+    group.entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
+    model.rootEntity.addChild(group.entity);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
-    model.frustumsEntity = entity;
-    model.frustumsResource = resource;
+    destroyMeshEntity(null, model.markersResource);
+    model.frustumsEntity = group.entity;
+    model.frustumsResource = group.resource;
+    model.markersResource = group.markersResource;
     model.frustumsShown = frustums.shown;
   }
 
@@ -1177,7 +1219,11 @@ export function createColmapLayer({
     if (slot.entity.render) {
       slot.entity.render.meshInstances = [meshInstance];
     } else {
-      slot.entity.addComponent("render", { type: "asset", meshInstances: [meshInstance] });
+      slot.entity.addComponent("render", {
+        type: "asset",
+        meshInstances: [meshInstance],
+        layers: [getImageLayer(app).id],
+      });
     }
     slot.entity.enabled = true;
     slot.texture = texture;
@@ -1323,7 +1369,10 @@ export function createColmapLayer({
       {
         name: "Frustums",
         setVisible(visible) { model.frustumsEntity.enabled = visible; },
-        setHighlight(on) { setMeshHighlight(model.frustumsResource, on); },
+        setHighlight(on) {
+          setMeshHighlight(model.frustumsResource, on);
+          setMeshHighlight(model.markersResource, on);
+        },
       },
     ];
     if (imageIndex) {
@@ -1412,12 +1461,21 @@ export function createColmapLayer({
     for (const i of enlarged) indices.add(i);
 
     const positions = [];
+    const markers = [];
     let shown = 0;
+    const cube = panoramaMode === "cube";
 
     for (const i of indices) {
       const image = images[i];
       const camera = cameras.get(image.cameraId);
       if (!camera) continue;
+
+      if (isPanorama(camera)) {
+        const radius = depthOf(i) * (enlarged.has(i) ? PANORAMA_SIZE_FACTOR : PANORAMA_MARKER_FACTOR);
+        appendPanoramaMarker(markers, getCameraCenter(image), radius, cube);
+        shown++;
+        continue;
+      }
 
       const [p0, p1, p2, p3, p4] = frustumCorners(image, camera, depthOf(i));
 
@@ -1435,9 +1493,45 @@ export function createColmapLayer({
 
     return {
       positions: new Float32Array(positions),
+      markers,
       shown,
       total: images.length,
     };
+  }
+
+  // Frustums (lignes) et marqueurs de panoramas (sphères ou cubes), ce dernier en entité enfant.
+  function makeFrustumMeshes(frustums) {
+    const entity = new pc.Entity("COLMAP frustums");
+    let resource = null;
+    if (frustums.positions.length) {
+      resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
+      entity.addComponent("render", {
+        type: "asset",
+        meshInstances: [resource.meshInstance],
+        layers: [getOverlayLayer(app).id],
+      });
+    }
+    let markersResource = null;
+    if (frustums.markers.length) {
+      const count = frustums.markers.length / 3;
+      const rgba = new Float32Array(count * 4);
+      for (let i = 0; i < count; i++) rgba.set([1, 0, 0, 1], i * 4);
+      markersResource = makeColmapMesh(
+        app,
+        new Float32Array(frustums.markers),
+        rgba,
+        pc.PRIMITIVE_TRIANGLES,
+        makeColmapMaterial(app, { onTop: true })
+      );
+      const markersEntity = new pc.Entity("COLMAP panorama markers");
+      markersEntity.addComponent("render", {
+        type: "asset",
+        meshInstances: [markersResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
+      });
+      entity.addChild(markersEntity);
+    }
+    return { entity, resource, markersResource };
   }
 
   async function loadCandidate(candidate) {
@@ -1509,13 +1603,10 @@ export function createColmapLayer({
       });
       rootEntity.addChild(model.cameraCentersEntity);
 
-      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
-      model.frustumsEntity = new pc.Entity("COLMAP frustums");
-      model.frustumsEntity.addComponent("render", {
-        type: "asset",
-        meshInstances: [model.frustumsResource.meshInstance],
-        layers: [getOverlayLayer(app).id],
-      });
+      const group = makeFrustumMeshes(frustums);
+      model.frustumsResource = group.resource;
+      model.markersResource = group.markersResource;
+      model.frustumsEntity = group.entity;
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
 
