@@ -8,13 +8,13 @@
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
 - Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
-- Chemins dans les commandes projet : `$GIT_ROOT/...`, pas de chemin absolu.
+- Chemins dans les commandes projet : `$GIT_ROOT/...` ; ne pas utiliser de chemin absolu dans les réponses.
 
 ## Dépendances Python (venv dédié)
 Un venv évite l'erreur PEP 668 (`externally-managed-environment`) et les `No module named ...` :
 
 ```bash
-bash copilot/setup_env.sh                       # crée ~/.venvs/colmap_to_gs et installe tout
+bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et installe tout
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
@@ -25,7 +25,6 @@ Paquets utilisés par les tests et le pipeline :
 
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sur la machine de session, `numpy` n'est pas installé par défaut ; `pycolmap` et `torch` non plus.
 - Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/images_to_colmap/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
@@ -72,12 +71,10 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 ## Validation de configuration
 - `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/images_to_splat/common.sh`).
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
-- Vérification sans calcul : `bash tools/panoramax/validate_config.sh config.sh slurm`.
+- Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
 ## Environnement
 - Docker : daemon non lancé par défaut. Vérifier `docker info` ; sinon `nohup dockerd >/tmp/dockerd.log 2>&1 </dev/null &`.
-- Pas de dépôt local sur la machine de session : cloner avec `gh repo clone NicoIGN/colmap_to_gs -- -b review_copilot`.
-- Les chemins de l'utilisateur sont sous `/Users/nbellaiche/DATA/dev/gsplat/...` (macOS) ; ne pas les mettre en dur, utiliser `$GIT_ROOT`.
 
 ## Panoramas HLOC
 - `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
@@ -89,11 +86,3 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
 - Une correction = tests ciblés qui échouent sans le correctif.
-
-## Historique récent
-- `c808dfd` : ignorer les défauts `SFM_SP_*` quand `COLMAP_METHOD` n'est pas `spirula`.
-- `3189c77` : création de `copilot/` (cette note et `setup_env.sh`).
-- `d211ae8` : h5py ajouté aux deux `conda_env.yml` (conda-forge recommandé plutôt que pip).
-- `1256a17` : dédoublonnage de libomp sur macOS dans `install-hloc.sh` (confirmé fonctionnel).
-- `4ff510e`, `f1f12ae` : correctifs `set -u` sur tableaux vides (bash 3.2).
-- `1399b67` : densification MVS optionnelle (`COLMAP_USE_MVS`, défaut `false`), non testée sur Slurm.
