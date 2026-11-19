@@ -564,9 +564,8 @@ function isPanorama(camera) {
   return camera.modelName === "EQUIRECTANGULAR";
 }
 
-// Test temporaire : ?panoYaw180 tourne le panorama de 180° autour de l'axe vertical (x et z inversés).
-function applyPanoramaYawTest(local) {
-  if (typeof location === "undefined" || !new URLSearchParams(location.search).has("panoYaw180")) return;
+// Le panorama COLMAP est tourné de 180° autour de l'axe vertical par rapport à la géométrie : on inverse x et z.
+function applyPanoramaYawFix(local) {
   local[0] = -local[0];
   local[2] = -local[2];
 }
@@ -587,7 +586,7 @@ function panoramaSphere(image, radius) {
         -Math.sin(lat) * radius,
         Math.cos(lat) * Math.cos(lon) * radius,
       ];
-      applyPanoramaYawTest(local);
+      applyPanoramaYawFix(local);
       const rotated = mulMat3Vec3(rwc, local);
       positions.push(rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]);
       uvs.push(s / PANORAMA_SEGMENTS, r / PANORAMA_RINGS);
@@ -662,7 +661,7 @@ function panoramaCube(image, radius) {
     ];
     for (const [a, b, u, v] of corners) {
       const local = [0, 1, 2].map((k) => (face.center[k] + a * face.right[k] + b * face.down[k]) * radius);
-      applyPanoramaYawTest(local);
+      applyPanoramaYawFix(local);
       const world = mulMat3Vec3(rwc, local);
       positions.push(world[0] + center[0], world[1] + center[1], world[2] + center[2]);
       uvs.push(u, v);
