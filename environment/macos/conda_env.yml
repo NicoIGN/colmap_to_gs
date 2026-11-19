@@ -9,13 +9,6 @@ dependencies:
   - pip
 
   ########################################
-  # PYTORCH (macOS, CPU / MPS)
-  # Pas de pin : pytorch 2.3.1 exige llvm-openmp<16, incompatible avec pycolmap 4.2.1 (libfaiss -> llvm-openmp>=22.1.7)
-  ########################################
-  - pytorch
-  - torchvision
-
-  ########################################
   # SCIENTIFIC STACK
   ########################################
   - numpy=1.26.4
