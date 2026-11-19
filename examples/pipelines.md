@@ -1,25 +1,17 @@
-# Pipelines principaux : exécution directe et Slurm
+# Pipelines principaux
 
 [Retour aux exemples](README.md) · [Guide Bash / Slurm](../doc/lancement_bash_slurm.md)
 
-Les scripts sans `launch_` exécutent le pipeline directement sur la machine
-courante, sans réserver de ressources Slurm. Les scripts `launch_` se lancent
-avec `bash` depuis le cluster : ils soumettent les étapes à Slurm, qui réserve
-les ressources configurées. Ne pas les lancer avec `sbatch`.
-
-Sans `--wait`, leur succès indique que les jobs ont été soumis, pas qu'ils ont
-terminé. Avec `--wait`, le lanceur attend le résultat de la fusion. Le lanceur
-vidéo attend toujours la fin de l'extraction avant de soumettre les étapes
-images. Les journaux sont dans `OUTPUT_DIR/logs/`.
-
 Les exemples ci-dessous utilisent `GIT_ROOT` initialisé comme dans
-[l'index](README.md). Adapter les chemins, la partition, les ressources et
-les outils installés à la machine. Sur Slurm, le dépôt, les données, la
-configuration et les sorties doivent être accessibles aux nœuds de calcul
-aux mêmes chemins ; ne pas modifier la configuration pendant les jobs.
-Choisir **une seule** des deux commandes pour un workspace donné.
+[l'index](README.md). Choisir le pipeline selon les données d'entrée, puis
+adapter sa configuration et choisir un mode de lancement.
 
 ## Images locales → 3DGS
+
+À partir d'un dossier de photos, ce pipeline sélectionne les images,
+reconstruit les caméras et les points 3D, découpe la scène en blocs, entraîne
+les gaussiennes, puis fusionne et exporte un fichier `.splat`. Les masques et
+le géoréférencement sont optionnels.
 
 Créer `config-images.sh` et adapter les valeurs :
 
@@ -35,15 +27,20 @@ Le dossier d'images doit exister ; le workspace doit être distinct du dossier
 d'images. Les masques sont désactivés dans cet exemple. Le SfM et l'entraînement
 utilisent Spirula par défaut ; installer et configurer les outils requis.
 
+Deux modes de lancement sont disponibles :
+
 ```bash
-# Direct : exécution sur la machine courante.
+# Directement sur la machine courante.
 bash "$GIT_ROOT/scripts/images_to_3dgs.sh" config-images.sh
 
-# Slurm : soumission et attente de la fin.
+# Sur un serveur Slurm : soumission et attente de la fin.
 bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" config-images.sh --wait
 ```
 
 ## Vidéo → images → 3DGS
+
+À partir d'une vidéo, ce pipeline extrait des images nettes réparties sur sa
+durée, puis lance le pipeline images ci-dessus pour produire un `.splat`.
 
 Créer `config-video.sh` et adapter les valeurs :
 
@@ -58,9 +55,11 @@ SLURM_PARTITION="partition_du_cluster"
 ```
 
 La vidéo doit exister et le dossier d'images doit être distinct du workspace.
-OpenCV, NumPy et tqdm sont nécessaires pour l'extraction. Le lanceur Slurm lit
-`VIDEO`, `NUM_FRAMES` et `SFM_IMAGES_DIR` dans la configuration ; le script
-direct prend la vidéo et le nombre d'images en arguments :
+OpenCV, NumPy et tqdm sont nécessaires pour l'extraction.
+
+Deux modes de lancement sont disponibles. Le lanceur Slurm lit `VIDEO`,
+`NUM_FRAMES` et `SFM_IMAGES_DIR` dans la configuration ; le script direct
+prend la vidéo et le nombre d'images en arguments :
 
 ```bash
 # Direct : extraction puis pipeline sur la machine courante.
@@ -74,6 +73,10 @@ bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" config-video.sh --wait
 
 ## Panoramax → 3DGS
 
+À partir d'une emprise géographique, ce pipeline télécharge les photos
+Panoramax et leurs métadonnées, reconstruit la scène, puis entraîne et exporte
+un `.splat`. La préparation nécessite un accès réseau à Panoramax.
+
 Créer `config-panoramax.sh` et adapter l'emprise Lambert-93 et les chemins :
 
 ```bash
@@ -85,8 +88,8 @@ TRAIN_MASKS="off"
 SLURM_PARTITION="partition_du_cluster"
 ```
 
-La préparation nécessite un accès réseau à Panoramax. Les masques sont
-désactivés ici ; les outils SfM et d'entraînement restent nécessaires.
+Les masques sont désactivés ici ; les outils SfM et d'entraînement restent
+nécessaires. Deux modes de lancement sont disponibles :
 
 ```bash
 # Direct : téléchargement et calcul sur la machine courante.
@@ -96,7 +99,38 @@ bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" config-panoramax.sh
 bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" config-panoramax.sh --wait
 ```
 
-Pour les réglages de ressources, les environnements, les phases et le suivi,
-consulter le [guide Bash / Slurm](../doc/lancement_bash_slurm.md). Les
-lanceurs images et vidéo acceptent aussi `--prepare-only` pour s'arrêter
-après la préparation, sans entraînement ni fusion.
+## Choisir le mode de lancement
+
+Le script sans `launch_` travaille directement sur la machine courante, sans
+réserver de ressources Slurm. Le script `launch_` se lance avec `bash` depuis
+un serveur Slurm ; il soumet les étapes au cluster, qui réserve les ressources
+configurées. Ne pas lancer `launch_` avec `sbatch`.
+
+Sans `--wait`, un retour réussi confirme la soumission, pas la fin du calcul.
+Avec `--wait`, le lanceur attend le résultat de la fusion. Le lanceur vidéo
+attend toujours la fin de l'extraction avant de soumettre le pipeline images.
+Les lanceurs images et vidéo acceptent `--prepare-only` pour arrêter après la
+préparation, sans entraînement ni fusion. Les journaux sont dans
+`OUTPUT_DIR/logs/`.
+
+Sur Slurm, le dépôt, les données, la configuration et les sorties doivent être
+accessibles aux mêmes chemins depuis les nœuds de calcul. Adapter la partition
+et les ressources au cluster, ne pas modifier la configuration pendant les
+jobs et choisir une seule commande par workspace. Pour les ressources, les
+environnements et le suivi, consulter le [guide Bash / Slurm](../doc/lancement_bash_slurm.md).
+
+## Consulter les paramètres avec le helper
+
+Le helper `monparam` décrit les paramètres et leurs valeurs par défaut à partir
+des fichiers de configuration du projet. Il ne lit pas les valeurs d'un
+fichier utilisateur. Charger le helper, puis demander un paramètre ou une phase :
+
+```bash
+source "$GIT_ROOT/scripts/helper.sh"
+monparam COLMAP_METHOD HLOC_CAMERA_MODEL
+monparam --phase slurm
+```
+
+Sans argument, `monparam` liste les phases disponibles. Les paramètres propres
+au lanceur vidéo `VIDEO` et `NUM_FRAMES` sont à renseigner comme indiqué dans
+l'exemple vidéo ci-dessus.
