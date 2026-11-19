@@ -797,6 +797,10 @@ export function createColmapLayer({
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
   let panoramaMirror = panoramaMirrorInput?.checked ?? true;
+  const frustumSizeInput = document.getElementById("colmapFrustumSize");
+  const imageTransparencyInput = document.getElementById("colmapImageTransparency");
+  let frustumFactor = Number(frustumSizeInput?.value ?? 100) / 100;
+  let imageOpacity = 1 - Number(imageTransparencyInput?.value ?? 0) / 100;
 
   let disposed = false;
   let nextModelId = 1;
@@ -877,6 +881,38 @@ export function createColmapLayer({
         [...model.cameras.values()].some(isPanorama)
       );
       panoramaModeRow.hidden = !hasPanorama;
+    }
+  }
+
+  function setSliderOutput(input, suffix) {
+    const output = document.getElementById(`${input.id}Value`);
+    if (output) output.value = `${input.value} ${suffix}`;
+  }
+
+  // Taille des frustums en % de l'échelle actuelle ; reconstruit les frustums et recharge les images affichées.
+  function setFrustumFactor(percent) {
+    frustumFactor = percent / 100;
+    for (const model of models.values()) {
+      model.depth = model.baseDepth * frustumFactor;
+      model.slots?.forEach(resetSlot);
+      model.pickedKey = null;
+      rebuildFrustums(model, new Set());
+    }
+  }
+
+  function applySlotOpacity(material) {
+    material.opacity = imageOpacity;
+    material.blendType = imageOpacity < 1 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+    material.depthWrite = imageOpacity >= 1;
+    material.update();
+  }
+
+  function setImageTransparency(percent) {
+    imageOpacity = 1 - percent / 100;
+    for (const model of models.values()) {
+      for (const slot of model.slots ?? []) {
+        if (slot.material) applySlotOpacity(slot.material);
+      }
     }
   }
 
@@ -1220,7 +1256,7 @@ export function createColmapLayer({
       slot.material.cull = pc.CULLFACE_NONE;
     }
     slot.material.emissiveMap = texture;
-    slot.material.update();
+    applySlotOpacity(slot.material);
 
     const meshInstance = new pc.MeshInstance(mesh, slot.material);
     meshInstance.cull = false;
@@ -1559,7 +1595,7 @@ export function createColmapLayer({
       throw new Error(`Le modèle COLMAP ${candidate.dir || "(racine)"} ne contient aucune position valide.`);
     }
     const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
-    const frustums = buildFrustumLines(images, cameras, () => depth, new Set());
+    const frustums = buildFrustumLines(images, cameras, () => depth * frustumFactor, new Set());
     const id = `colmap-${nextModelId++}`;
     const rootEntity = new pc.Entity(`COLMAP sparse ${candidate.dir || id}`);
     const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
@@ -1576,7 +1612,8 @@ export function createColmapLayer({
       rootEntity,
       colmapImages: images,
       cameras,
-      depth,
+      depth: depth * frustumFactor,
+      baseDepth: depth,
       cameraCenters,
       axes: buildCameraAxes(images),
       imagesOn: false,
@@ -1705,6 +1742,14 @@ export function createColmapLayer({
 
   listen(pointSize, "input", refreshPointSizes);
   listen(cameraSize, "input", refreshPointSizes);
+  listen(frustumSizeInput, "input", () => {
+    setSliderOutput(frustumSizeInput, "%");
+    setFrustumFactor(Number(frustumSizeInput.value));
+  });
+  listen(imageTransparencyInput, "input", () => {
+    setSliderOutput(imageTransparencyInput, "%");
+    setImageTransparency(Number(imageTransparencyInput.value));
+  });
   refreshPointSizes();
 
   refreshUI();
