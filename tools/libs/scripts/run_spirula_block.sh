@@ -57,7 +57,7 @@ Usage:
 Important:
   - La visionneuse est désactivée.
   - Le checkpoint final attendu dépend de --num-iterations:
-      {output_dir}/splats/step-XXXXXXXXX.ckpt/splat.ply
+      {output_dir}/splats/<nom>.ply (PLY final unique écrit par Spirula en latest-only)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
       via tools/postprocess/export_ply.py et splats/scene_transform.json
@@ -353,8 +353,20 @@ export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-printf -v checkpoint_name 'step-%09d.ckpt' "$iteration_count"
-final_ckpt="$splats_dir/$checkpoint_name/splat.ply"
+# En latest-only, Spirula écrit une seule paire plate <nom>.ply + <nom>.tar dans splats/ :
+# ce PLY est le splat final (pas de dossier checkpoint).
+resolve_final_ply() {
+  local plys=()
+  shopt -s nullglob
+  plys=("$splats_dir"/*.ply)
+  shopt -u nullglob
+  case ${#plys[@]} in
+    0) final_ckpt="" ;;
+    1) final_ckpt="${plys[0]}" ;;
+    *) die "Plusieurs PLY Spirula dans $splats_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
+  esac
+}
+resolve_final_ply
 
 mark_train_done() {
   {
@@ -438,7 +450,8 @@ print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["settings"], sor
 fi
 
 if [[ "$clean" == false ]]; then
-  if [[ -s "$final_ckpt" ]]; then
+  resolve_final_ply
+  if [[ -s "$final_ckpt" && -f "$train_done_file" ]]; then
     log "Checkpoint final déjà présent. Entraînement ignoré."
     previous_photometric_signature=""
     [[ ! -f "$photometric_signature_file" ]] ||
@@ -608,8 +621,9 @@ else
   "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"
 fi
 
+resolve_final_ply
 [[ -s "$final_ckpt" ]] ||
-  die "Entraînement terminé mais checkpoint final introuvable : $final_ckpt"
+  die "Entraînement terminé mais PLY final Spirula introuvable dans $splats_dir"
 
 mark_train_done "completed_training"
 printf '%s\n' "$photometric_signature" > "$photometric_signature_file"
