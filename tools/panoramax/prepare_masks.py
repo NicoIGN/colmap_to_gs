@@ -22,7 +22,7 @@ def without_device(settings):
     return {key: value for key, value in settings.items() if key != "device"}
 
 
-def prepare(dataset, workspace, check_only=False):
+def prepare(dataset, workspace, check_only=False, perspective=False):
     sfm = policy("SFM_MASKS")
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
     # Include source images and checkpoint metadata so a completed SfM is never
@@ -37,7 +37,12 @@ def prepare(dataset, workspace, check_only=False):
     weights = [(str(p), p.stat().st_size, p.stat().st_mtime_ns)
                for p in model_files if p.is_file()]
     binary = Path(os.environ["SPIRULA_BIN"]).resolve()
-    binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
+    if perspective and sfm["backend"] != "spirula" and (train is None or train["backend"] != "spirula"):
+        binary_stamp = None
+    else:
+        binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
+    if perspective:
+        inputs.append(("projection", hashlib.sha256((workspace / "projection.json").read_bytes()).hexdigest()))
     generator_hash = hashlib.sha256((Path(__file__).parents[1] /
                                      "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
     def fingerprint(code_hash, policy):
@@ -98,7 +103,8 @@ def prepare(dataset, workspace, check_only=False):
         raise ValueError(f"{features} est un dossier réel : choisir un nouveau workspace pour partager les masques")
     if not previous and any((p / "masks.json").exists() for p in (features, training)):
         raise ValueError("Masques préexistants sans signature : choisir un nouveau workspace")
-    prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
+    if not perspective:
+        prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
     record = {"signature": signature, "input_digest": "sha256", "settings": sfm, "training_settings": train,
               "shared_with_training": shared, "status": "partial"}
     marker.write_text(json.dumps(record, indent=2) + "\n")
@@ -125,9 +131,11 @@ if __name__ == "__main__":
     parser.add_argument("dataset", type=Path)
     parser.add_argument("workspace", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate preparation without generating masks")
+    parser.add_argument("--perspective", action="store_true", help="Utiliser les vues déjà projetées")
     args = parser.parse_args()
     try:
-        prepare(args.dataset.resolve(), args.workspace.resolve(), check_only=args.check)
+        prepare(args.dataset.resolve(), args.workspace.resolve(), check_only=args.check,
+                perspective=args.perspective)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[ERREUR] Préparation des masques : {error}", file=sys.stderr)
         sys.exit(1)

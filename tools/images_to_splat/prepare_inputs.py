@@ -158,6 +158,8 @@ def prepare(check=False):
     source = Path(os.environ["SFM_IMAGES_DIR"]).resolve()
     output = Path(os.environ["OUTPUT_DIR"]).resolve()
     recursive = os.environ["SFM_IMAGES_RECURSIVE"] == "true"
+    project = os.environ.get("SFM_EQUIRECTANGULAR_VIEWS", "false") == "true"
+    selected_dir = output / ("panoramas" if project else "images")
     images = []
     for folder, dirs, files in os.walk(source, followlinks=False):
         dirs.sort()
@@ -173,6 +175,9 @@ def prepare(check=False):
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
     settings = {key: value for key, value in os.environ.items()
                 if key.startswith(("SFM_", "TRAIN_MASKS"))}
+    if not project:
+        settings.pop("SFM_EQUIRECTANGULAR_VIEWS", None)
+        settings.pop("SFM_EQUIRECTANGULAR_VIEW_SIZE", None)
     # Keep old unfiltered signatures compatible without adopting new provenance.
     if settings.get("SFM_FILTER_DENSITY") == "false":
         settings.pop("SFM_FILTER_DENSITY")
@@ -209,6 +214,11 @@ def prepare(check=False):
             "matching": os.environ["SFM_COLMAP_MATCHING"],
             "gpu": os.environ["SFM_COLMAP_USE_GPU"],
         }
+        if project:
+            record["colmap_policy"]["hloc"] = {
+                key: os.environ[key] for key in
+                ("HLOC_FEATURES", "HLOC_MATCHER", "HLOC_PAIRS", "HLOC_RETRIEVAL", "HLOC_NUM_NEIGHBORS")
+            }
         for key in ("ORIENTATIONS_JSON", "LIDAR_PLY"):
             if method == "orientations":
                 path = Path(os.environ[key]).resolve()
@@ -253,7 +263,7 @@ def prepare(check=False):
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
-             ("images", "sfm", "masks", "feature_masks", "train_masks",
+             ("images", "panoramas", "sfm", "masks", "feature_masks", "train_masks",
               "sparse_filtered", "sparse_clean", "sparse_rejected", "blocks", "gs", "gs-nerfstudio")):
         if not resume:
             raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
@@ -269,18 +279,18 @@ def prepare(check=False):
     if check:
         if not (output / ".prepare_done").is_file():
             raise ValueError("Préparation incomplète : relancer --phase prepare.")
-    if resume and (output / "images").is_dir():
+    if resume and selected_dir.is_dir():
         expected = {relative for relative, _, _, _ in images}
         unexpected = [
-            path.relative_to(output / "images").as_posix()
-            for path in (output / "images").rglob("*")
+            path.relative_to(selected_dir).as_posix()
+            for path in selected_dir.rglob("*")
             if not path.is_dir()
-            and path.relative_to(output / "images").as_posix() not in expected
+            and path.relative_to(selected_dir).as_posix() not in expected
         ]
         if unexpected:
             raise ValueError(f"Images inattendues dans le workspace : {unexpected[:5]}")
     for relative, resolved, _, _ in images:
-        target = output / "images" / relative
+        target = selected_dir / relative
         if target.is_symlink():
             if target.resolve() != Path(resolved):
                 raise ValueError(f"Lien image incompatible : {target}")
@@ -291,6 +301,11 @@ def prepare(check=False):
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(resolved)
+    if project:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+        from equirectangular_views import prepare as prepare_views
+        prepare_views(selected_dir, output / "images", output / "projection.json",
+                      int(os.environ["SFM_EQUIRECTANGULAR_VIEW_SIZE"]), check=check)
     if not check:
         output.mkdir(parents=True, exist_ok=True)
         if adopted or rewritten:

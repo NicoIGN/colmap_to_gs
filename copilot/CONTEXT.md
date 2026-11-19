@@ -77,6 +77,11 @@ Les tests écrivent des `__pycache__` suivis par git : avant commit, faire `git 
 - Pas de dépôt local sur la machine de session : cloner avec `gh repo clone NicoIGN/colmap_to_gs -- -b review_copilot`.
 - Les chemins de l'utilisateur sont sous `/Users/nbellaiche/DATA/dev/gsplat/...` (macOS) ; ne pas les mettre en dur, utiliser `$GIT_ROOT`.
 
+## Panoramas HLOC
+- `COLMAP_METHOD=hloc` + `SFM_EQUIRECTANGULAR_VIEWS=true` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
+- GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
+- Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
+
 ## Conventions
 - Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.

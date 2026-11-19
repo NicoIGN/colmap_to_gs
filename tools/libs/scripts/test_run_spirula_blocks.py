@@ -14,6 +14,69 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
+    def test_hloc_panorama_prepare_georeferences_before_split_and_checks_reuse(self):
+        try:
+            import pycolmap
+            import numpy as np
+            from PIL import Image
+            from tools.preprocess.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
+        except ImportError as exc:
+            self.skipTest(f"Dépendance HLOC indisponible : {exc}")
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, _, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(data / "sfm")
+            (data / "images/img.jpg").unlink(missing_ok=True)
+            (data / "metadata").mkdir()
+            coordinates = [(2., 48.), (2.0002, 48.), (2.0002, 48.0002), (2., 48.0002)]
+            geo = np.array([[lat, lon, 0.] for lon, lat in coordinates])
+            origin = geo.mean(axis=0)
+            centers = (geodetic_to_ecef(geo[:, 0], geo[:, 1], geo[:, 2]) -
+                       geodetic_to_ecef(*origin)) @ enu_rotation(origin).T
+            model = pycolmap.Reconstruction()
+            model.add_camera_with_trivial_rig(pycolmap.Camera(
+                model="PINHOLE", width=16, height=16, params=[8, 8, 8, 8], camera_id=1))
+            rotation = pycolmap.Rotation3d(np.array([[1., 0, 0], [0, 0, -1.], [0, 1., 0]]))
+            for index, (lon, lat) in enumerate(coordinates):
+                name = f"img{index}.jpg"
+                Image.new("RGB", (40, 20)).save(data / "images" / name)
+                (data / "metadata" / f"img{index}.json").write_text(json.dumps({
+                    "feature": {"geometry": {"type": "Point", "coordinates": [lon, lat]},
+                                "properties": {"type": "equirectangular"}}
+                }))
+                image = pycolmap.Image(name=f"front/{name}.jpg", camera_id=1, image_id=index + 1)
+                model.add_image_with_trivial_frame(
+                    image, pycolmap.Rigid3d(rotation, -rotation.matrix() @ centers[index]))
+            raw = root / "raw-model"
+            raw.mkdir()
+            model.write(raw)
+            wrapper = root / "bin/python3"
+            stub = (
+                "if args and args[0].endswith('hloc_reconstruct.py'):\n"
+                "  import pathlib, shutil\n"
+                "  out=pathlib.Path(args[args.index('--output')+1]); out.mkdir(parents=True)\n"
+                "  for name in ('cameras.bin','images.bin','points3D.bin'):\n"
+                "    shutil.copyfile(pathlib.Path(os.environ['RAW_MODEL'])/name,out/name)\n"
+                "  with open(log,'a') as f: f.write(json.dumps(['hloc']+args[1:])+'\\n')\n"
+                "  sys.exit(0)\n"
+            )
+            wrapper.write_text(wrapper.read_text().replace(
+                "log = os.environ['COMMAND_LOG']\n", "log = os.environ['COMMAND_LOG']\n" + stub))
+            env.update(COLMAP_METHOD="hloc", SFM_EQUIRECTANGULAR_VIEWS="true",
+                       SFM_EQUIRECTANGULAR_VIEW_SIZE="16", RAW_MODEL=str(raw),
+                       SFM_MASKS="off", TRAIN_MASKS="off")
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            stats = json.loads((data / "sfm/sparse/0/georef_stats.json").read_text())
+            self.assertEqual(stats["mode"], "horizontal")
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertIn("hloc", [command[0] for command in commands])
+            self.assertNotIn(["spirula", "sfm"], [command[:2] for command in commands])
+            self.assertEqual(len(list((data / "sfm/images").rglob("*.jpg"))), 24)
+            env["HLOC_MATCHER"] = "other"
+            refused = execute("--block", "0")
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("Configuration HLOC modifiée", refused.stderr)
+
     def test_lidar_recalage_precedes_partition_and_block_jobs_check_it(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)

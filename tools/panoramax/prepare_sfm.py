@@ -215,7 +215,7 @@ def main(argv=None):
                     values.append(focal)
         samples[size] = len(values)
         if not values:
-            log(f"focale {size[0]}x{size[1]} : aucun champ de vue dans les métadonnées, Spirula l'estimera")
+            log(f"focale {size[0]}x{size[1]} : aucun champ de vue dans les métadonnées")
             continue
         focal = statistics.median(values)
         focals[size] = focal
@@ -227,7 +227,7 @@ def main(argv=None):
     if multi_cam:
         focal = None
         if not camera_model:
-            log("focale non transmise : Spirula estime chaque caméra")
+            log("focale des images source non transmise en mode multi-caméras")
     else:
         focal = focals.get(keep)
 

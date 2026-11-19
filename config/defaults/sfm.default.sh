@@ -18,6 +18,10 @@ HLOC_RETRIEVAL="netvlad"    # descripteur global pour retrieval : netvlad | open
 HLOC_NUM_NEIGHBORS=20       # entier > 0, paires par image en mode retrieval
 # Modèle pycolmap (majuscules) : OPENCV, SIMPLE_RADIAL, PINHOLE... HLOC ne gère pas equirectangular.
 HLOC_CAMERA_MODEL="OPENCV"
+# true : projeter les panoramas 2:1 en six vues perspectives à 110 degrés.
+# Réservé à HLOC ; les vues servent aussi à l'entraînement, avec focale pinhole fixée.
+SFM_EQUIRECTANGULAR_VIEWS="false"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
 
 # --- COLMAP_METHOD=colmap uniquement ---
 SFM_COLMAP_BIN="colmap"

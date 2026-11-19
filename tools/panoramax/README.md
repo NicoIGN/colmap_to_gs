@@ -3,7 +3,7 @@
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
 **Entraînement.** Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
-Le SfM géoréférencé reste celui de Spirula ; `TRAIN_BACKEND=nerfstudio` permet
+Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
 par le [tool de segmentation](../segmentation_masks/README.md), avec
@@ -17,15 +17,43 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 `TRAIN_NS_TRAIN_BIN`, `TRAIN_NS_EXPORT_BIN` et `TRAIN_NS_DOWNSCALE_FACTOR` règlent ce moteur.
 
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
-de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
+de Panoramax, indépendamment de `TRAIN_BACKEND`. Le mode HLOC 360 ci-dessous
+utilise les réglages `HLOC_*` à la place.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
 `SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
-à cette étape. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle est détecté (360° -> `equirectangular`,
+au SfM Spirula. HLOC conserve ses propres réglages et seuils pycolmap. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle Spirula est détecté (360° -> `equirectangular`,
 sans focale ; sinon `opencv`). Le définir force le modèle. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
 [`config/defaults/train.default.sh`](../../config/defaults/train.default.sh) et [`config.default.sh`](config.default.sh) regroupent ces paramètres par backend.
+
+**Panoramax 360 avec HLOC/pycolmap.** Utiliser un nouveau `OUTPUT_DIR` :
+
+```bash
+PANORAMAX_PICTURE_TYPE="360"
+COLMAP_METHOD="hloc"
+SFM_EQUIRECTANGULAR_VIEWS="true"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
+```
+
+Les panoramas complets 2:1 deviennent six vues pinhole de champ 110° avec
+recouvrement, utilisées pour le SfM et l'entraînement choisi par
+`TRAIN_BACKEND`. La focale est fixée ; `HLOC_CAMERA_MODEL` est ignoré. Les vues
+d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
+`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
+pyproj et pycolmap sont requis dans `PYTHON_BIN`.
+
+Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
+Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
+CRS `PANORAMAX_BBOX_EPSG` (2154 par défaut). Le recalage exige au moins trois
+positions reconstruites et une trajectoire non rectiligne. Sans altitudes
+complètes, seul le plan horizontal est ancré : l'altitude locale est arbitraire
+et la verticale suppose les panoramas redressés. Contrôler les résidus dans
+`georef_stats.json` et vérifier visuellement ; les altitudes GPS brutes ne sont
+pas corrigées du géoïde. Les masques générés sont appliqués aux vues projetées.
+Le filtre `SFM_SP_PAIR_MAX_DISTANCE`, MVS et LiDAR ne sont pas disponibles dans
+ce mode. Les changements d'images ou de réglages exigent un nouveau workspace.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la

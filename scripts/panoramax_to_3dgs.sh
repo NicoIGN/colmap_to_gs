@@ -187,7 +187,7 @@ fi
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
 [[ "$PANORAMAX_PICTURE_TYPE" == all || "$PANORAMAX_PICTURE_TYPE" == normal || "$PANORAMAX_PICTURE_TYPE" == 360 ]] ||
   die "PANORAMAX_PICTURE_TYPE doit être all, normal ou 360."
-if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
+if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${COLMAP_METHOD:-spirula}" == spirula && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
   echo "[config] PANORAMAX_PICTURE_TYPE=360 : SFM_CAMERA_MODEL=equirectangular (au lieu de ${SFM_CAMERA_MODEL:-opencv})." >&2
   SFM_CAMERA_MODEL=equirectangular
   export SFM_CAMERA_MODEL
@@ -338,11 +338,23 @@ if [[ "$phase" != merge ]]; then
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
   printf '[pipeline] Étape : %s\n' "$pipeline_stage"
-  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" ]]; then
+  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" &&
+        ( "${COLMAP_METHOD:-spirula}" == spirula || "$TRAIN_BACKEND" == spirula ||
+          ( "${SFM_MASKS:-off}" == on && "${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" == spirula ) ||
+          ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ) ]]; then
     SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
     printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
   fi
   DIR="$DATASET_DIR" \
+  COLMAP_METHOD="${COLMAP_METHOD:-spirula}" \
+  SFM_EQUIRECTANGULAR_VIEWS="${SFM_EQUIRECTANGULAR_VIEWS:-false}" \
+  SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}" \
+  HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" \
+  HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}" \
+  HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" \
+  HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}" \
+  HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}" \
+  GEOREF_EPSG="$PANORAMAX_BBOX_EPSG" \
   SPIRULA_BIN="$SPIRULA_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
   TRAIN_NUM_ITER="$TRAIN_NUM_ITER" \
@@ -472,6 +484,9 @@ cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filt
 if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
   cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
 fi
+if [[ -f "$SFM_DIR/projection.json" ]]; then
+  cp "$SFM_DIR/projection.json" "$GEOREF_DIR/"
+fi
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
   transform="$GS_ROOT/block_$block_id/splats/scene_transform.json"
@@ -509,9 +524,12 @@ data = {
 }
 reference_path = Path(output).parent / "sparse/georef_stats.json"
 if reference_path.is_file():
-    reference = json.loads(reference_path.read_text())["output_reference"]
+    stats = json.loads(reference_path.read_text())
+    reference = stats["output_reference"]
     data["output_reference"] = reference
-    data["coordinate_frame"] = "COLMAP LiDAR-aligned local ENU frame"
+    data["coordinate_frame"] = ("COLMAP GPS-aligned local ENU frame"
+                                if stats.get("status") == "georeferenced"
+                                else "COLMAP LiDAR-aligned local ENU frame")
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 

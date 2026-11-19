@@ -52,12 +52,16 @@ case "$COLMAP_METHOD" in
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/reconstruct.py"
     ;;
   hloc)
+    projection_args=()
+    if [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+      projection_args=(--perspective-view-size "$SFM_EQUIRECTANGULAR_VIEW_SIZE")
+    fi
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/hloc_reconstruct.py" \
       --images "$selected" --output "$sfm/sparse/0" --work "$sfm/hloc" \
       --features "$HLOC_FEATURES" --matcher "$HLOC_MATCHER" --pairs "$HLOC_PAIRS" \
       --retrieval "$HLOC_RETRIEVAL" --num-neighbors "$HLOC_NUM_NEIGHBORS" \
       --camera-model "$HLOC_CAMERA_MODEL" --camera-mode "$camera_mode" \
-      ${mask_args[@]+"${mask_args[@]}"}
+      ${mask_args[@]+"${mask_args[@]}"} ${projection_args[@]+"${projection_args[@]}"}
     ;;
   orientations)
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/orientations_to_colmap.py" \
