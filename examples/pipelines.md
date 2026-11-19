@@ -121,16 +121,15 @@ environnements et le suivi, consulter le [guide Bash / Slurm](../doc/lancement_b
 
 ## Consulter les paramètres avec le helper
 
-Le helper `monparam` décrit les paramètres et leurs valeurs par défaut à partir
+Le script `helper.sh` décrit les paramètres et leurs valeurs par défaut à partir
 des fichiers de configuration du projet. Il ne lit pas les valeurs d'un
-fichier utilisateur. Charger le helper, puis demander un paramètre ou une phase :
+fichier utilisateur. Lui passer un paramètre ou une phase :
 
 ```bash
-source "$GIT_ROOT/scripts/helper.sh"
-monparam COLMAP_METHOD HLOC_CAMERA_MODEL
-monparam --phase slurm
+bash "$GIT_ROOT/scripts/helper.sh" COLMAP_METHOD HLOC_CAMERA_MODEL
+bash "$GIT_ROOT/scripts/helper.sh" --phase slurm
 ```
 
-Sans argument, `monparam` liste les phases disponibles. Les paramètres propres
+Sans argument, le script liste les phases disponibles. Les paramètres propres
 au lanceur vidéo `VIDEO` et `NUM_FRAMES` sont à renseigner comme indiqué dans
 l'exemple vidéo ci-dessus.
