@@ -82,6 +82,22 @@ def focal_from_metadata(path, width):
     return (width / 2) / math.tan(math.radians(fov) / 2)
 
 
+def is_equirectangular(path):
+    """Même règle que tools/panoramax/download.py:picture_type_of."""
+    try:
+        properties = json.loads(path.read_text(encoding="utf-8"))["feature"]["properties"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if properties.get("type") is not None:
+        return properties["type"] == "equirectangular"
+    exif = properties.get("exif") or {}
+    orientation = properties.get("pers:interior_orientation") or {}
+    return (
+        exif.get("Xmp.GPano.ProjectionType") == "equirectangular"
+        or str(orientation.get("field_of_view")) == "360"
+    )
+
+
 def env_flag(name):
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -166,12 +182,24 @@ def main(argv=None):
         for path in selected
     }
 
+    equirectangular = [
+        bool(metadata_dir) and is_equirectangular(metadata_dir / f"{path.stem}.json") for path in selected
+    ]
+    camera_model = None
+    if equirectangular and all(equirectangular):
+        camera_model = "equirectangular"
+        log("images 360 : modèle de caméra equirectangular, focale non transmise")
+    elif any(equirectangular):
+        log("AVERTISSEMENT : images 360 et perspectives mélangées ; modèle de caméra non modifié")
+
     groups = {}
     for path in selected:
         groups.setdefault(sizes[path], []).append(path)
     focals = {}
     samples = {}
     for size, paths in groups.items():
+        if camera_model:
+            break
         values = []
         if metadata_dir:
             for path in paths:
@@ -209,6 +237,7 @@ def main(argv=None):
                     "focal_px": focal,
                     "focals_px": {f"{w}x{h}": value for (w, h), value in focals.items()},
                     "focal_samples": sum(samples.values()),
+                    "camera_model": camera_model,
                 },
                 indent=2,
             )
@@ -220,6 +249,7 @@ def main(argv=None):
     if args.shell:
         print(f"images_dir={target_dir}")
         print(f"focal={focal:.2f}" if focal else "focal=")
+        print(f"camera_model={camera_model or ''}")
 
 
 if __name__ == "__main__":

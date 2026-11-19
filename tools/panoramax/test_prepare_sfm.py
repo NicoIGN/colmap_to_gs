@@ -87,6 +87,21 @@ class PrepareTest(unittest.TestCase):
             self.assertIn("focal=1876.", out)
             self.assertFalse((root / "w").exists())
 
+    def test_equirectangular_selection_sets_camera_model_without_focal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            (root / "metadata").mkdir()
+            for index in range(2):
+                (root / "images" / f"p{index}.jpg").write_bytes(fake_jpeg(4096, 2048))
+                feature = {"feature": {"properties": {"type": "equirectangular", "pers:interior_orientation": {"field_of_view": 95}}}}
+                (root / "metadata" / f"p{index}.json").write_text(json.dumps(feature))
+            out, _ = self.run_main("--dataset", str(root), "--output-dir", str(root / "w"), "--shell")
+            values = dict(line.split("=", 1) for line in out.splitlines())
+            self.assertEqual(values["camera_model"], "equirectangular")
+            self.assertEqual(values["focal"], "")
+            self.assertEqual(json.loads((root / "w" / "selection.json").read_text())["camera_model"], "equirectangular")
+
 
 if __name__ == "__main__":
     unittest.main()

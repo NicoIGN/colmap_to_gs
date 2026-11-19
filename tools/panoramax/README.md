@@ -475,6 +475,10 @@ Le préréglage lance d'abord `prepare_sfm.py` :
   `f = (largeur / 2) / tan(fov / 2)`, soit environ 1877 px pour une imajbox
   4096×2160 à 95° ; l'EXIF HD n'ayant pas de focale, Spirula la devinerait
   sinon très loin ; `--focal` reste prioritaire ;
+- si toutes les images retenues sont à 360° (`type` équirectangulaire,
+  GPano ou champ de vue 360 dans les métadonnées), `--camera-model` passe à
+  `equirectangular` et aucune focale n'est transmise ; un `--camera-model` ou
+  `CAMERA_MODEL` explicite reste prioritaire ;
 - le choix est résumé dans `OUTPUT_DIR/sfm/selection.json`.
 
 `--no-prepare` lance Spirula sur le dataset tel quel. Le script se lance

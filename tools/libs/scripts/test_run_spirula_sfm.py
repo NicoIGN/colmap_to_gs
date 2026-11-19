@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -58,6 +59,31 @@ class SfmRecoveryTest(unittest.TestCase):
                     if expected == 0:
                         self.assertIn("Poursuite avec ce modèle", result.stderr)
                         self.assertIn("1 caméras, 1 images, 1 points", result.stdout)
+
+    def test_panoramax_360_dataset_uses_equirectangular_unless_overridden(self):
+        for extra, expected in (([], "equirectangular"), (["--camera-model", "opencv"], "opencv")):
+            with self.subTest(extra=extra), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                (root / "images").mkdir()
+                (root / "metadata").mkdir()
+                (root / "images" / "p.jpg").write_bytes(
+                    b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" + (1024).to_bytes(2, "big")
+                    + (2048).to_bytes(2, "big") + b"\x01\x01\x11\x00" + b"\xff\xd9"
+                )
+                feature = {"feature": {"properties": {"type": "equirectangular"}}}
+                (root / "metadata" / "p.json").write_text(json.dumps(feature))
+                spirula = root / "spirula"
+                spirula.write_text("#!/bin/sh\n")
+                spirula.chmod(0o755)
+                result = subprocess.run(
+                    ["bash", str(SCRIPT), "--preset", "panoramax", "--spirula-bin", str(spirula),
+                     "--dataset", str(root), "--output-dir", str(root / "sfm"), "--dry-run", *extra],
+                    env=dict(os.environ, PYTHON_BIN=sys.executable),
+                    capture_output=True, text=True, timeout=30,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn(f"--camera-model {expected}", result.stdout)
+                self.assertNotIn("--focal", result.stdout)
 
 
 if __name__ == "__main__":
