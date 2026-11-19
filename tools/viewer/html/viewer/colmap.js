@@ -796,7 +796,7 @@ export function createColmapLayer({
   const panoramaModeSelect = document.getElementById("colmapPanoramaMode");
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
-  let panoramaMirror = panoramaMirrorInput?.checked ?? false;
+  let panoramaMirror = panoramaMirrorInput?.checked ?? true;
 
   let disposed = false;
   let nextModelId = 1;
