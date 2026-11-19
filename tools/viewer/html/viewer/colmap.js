@@ -686,16 +686,23 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
+// Vrai si le point de vue est du côté du sommet caméra par rapport au plan du cadre à la profondeur `near` ;
+// faux s'il est au-delà, c.-à-d. qu'il regarde l'image par derrière.
+function viewerOnApexSide(image, near, viewer) {
+  const center = getCameraCenter(image);
+  const p = mulMat3Vec3(qvecToMat3(image.qvec), [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
+  return p[2] < near;
+}
+
 // Vrai si le rayon de vue (depuis le point de vue, vers l'avant) traverse le cadre agrandi à la profondeur `near`.
 export function coversViewCenter(image, camera, near, viewer, forward) {
   const { fx, fy } = getFxFy(camera);
   const halfW = (camera.width * near) / (2 * fx);
   const halfH = (camera.height * near) / (2 * fy);
+  if (!viewerOnApexSide(image, near, viewer)) return false;
   const rcw = qvecToMat3(image.qvec);
   const center = getCameraCenter(image);
   const p = mulMat3Vec3(rcw, [viewer[0] - center[0], viewer[1] - center[1], viewer[2] - center[2]]);
-  // Point de vue au-delà du plan de l'image : l'image est vue par derrière.
-  if (p[2] >= near) return false;
   const d = mulMat3Vec3(rcw, forward);
   if (Math.abs(d[2]) < 1e-9) return false;
   const s = (near - p[2]) / d[2];
@@ -1248,7 +1255,11 @@ export function createColmapLayer({
       let chosen = picked.slice(0, IMAGE_SHOWN);
       if (current !== null && covers(current)) chosen = [current];
       else if (coveringBest !== null) chosen = [coveringBest];
-      else if (current !== null && imageInFrontOfViewer(model, current, viewer, forward)) chosen = [current];
+      else if (
+        current !== null &&
+        imageInFrontOfViewer(model, current, viewer, forward) &&
+        viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
+      ) chosen = [current];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
