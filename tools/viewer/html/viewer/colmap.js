@@ -1232,6 +1232,17 @@ export function createColmapLayer({
         },
         stats,
       });
+      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule si la meilleure le couvre.
+      const current = model.slots[0]?.shown ?? null;
+      const best = picked[0] ?? null;
+      const covers = (index) => {
+        const image = model.colmapImages[index];
+        const camera = model.cameras.get(image.cameraId);
+        return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
+      };
+      let chosen = picked;
+      if (current !== null && covers(current)) chosen = [current];
+      else if (current !== null && (best === null || !covers(best))) chosen = [current];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
@@ -1251,17 +1262,6 @@ export function createColmapLayer({
           );
         }
       }
-      // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule si la meilleure le couvre.
-      const current = model.slots[0]?.shown ?? null;
-      const best = picked[0] ?? null;
-      const covers = (index) => {
-        const image = model.colmapImages[index];
-        const camera = model.cameras.get(image.cameraId);
-        return !!camera && coversViewCenter(image, camera, model.depth * IMAGE_FRUSTUM_SCALE, viewer, forward);
-      };
-      let chosen = picked;
-      if (current !== null && covers(current)) chosen = [current];
-      else if (current !== null && (best === null || !covers(best))) chosen = [current];
       assignSlots(model, chosen);
       refreshEnlarged(model);
       updateSlotLabels(model);
