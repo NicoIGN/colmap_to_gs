@@ -1,0 +1,37 @@
+name: gsplat
+
+channels:
+  - pytorch
+  - conda-forge
+
+dependencies:
+  - python=3.10
+  - pip
+
+  ########################################
+  # PYTORCH (macOS, CPU / MPS)
+  ########################################
+  - pytorch=2.3.1
+  - torchvision=0.18.1
+
+  ########################################
+  # SCIENTIFIC STACK
+  ########################################
+  - numpy=1.26.4
+  - scipy=1.15.2
+  - scikit-learn
+  - plyfile=1.1
+  - h5py=3.16.0
+
+  ########################################
+  # SFM
+  ########################################
+  - pycolmap=4.2.1
+  # Une seule libomp partagée (pycolmap/torch conda) : évite « OMP: Error #15 » sur macOS.
+  - llvm-openmp
+
+  ########################################
+  # PIP (hloc / SuperGlue : voir tools/colmap/install-hloc.sh)
+  ########################################
+  - pip:
+      - gsplat
