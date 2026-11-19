@@ -447,6 +447,14 @@ if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
+    # Sauvegarde des modifications locales avant la mise à jour
+    if [[ -n "$(git -C "${REPO_DIR}" status --porcelain)" ]]; then
+        log "Modifications locales détectées : mise en stash"
+        git -C "${REPO_DIR}" stash push -u -m "avant mise à jour Spirula ${TIMESTAMP}"
+    else
+        log "Branche propre : aucun stash nécessaire"
+    fi
+
     patches_revert
     REPO_HEAD_BEFORE_PULL="$(git -C "${REPO_DIR}" rev-parse HEAD)"
     git -C "${REPO_DIR}" pull --ff-only
