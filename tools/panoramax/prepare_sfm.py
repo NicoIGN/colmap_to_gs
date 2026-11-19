@@ -226,7 +226,8 @@ def main(argv=None):
 
     if multi_cam:
         focal = None
-        log("focale non transmise : Spirula estime chaque caméra")
+        if not camera_model:
+            log("focale non transmise : Spirula estime chaque caméra")
     else:
         focal = focals.get(keep)
 

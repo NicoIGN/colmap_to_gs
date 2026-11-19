@@ -119,6 +119,22 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(values["focal"], "")
             self.assertEqual(json.loads((root / "w" / "selection.json").read_text())["camera_model"], "equirectangular")
 
+    def test_multi_size_360_does_not_announce_focal_estimation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            (root / "metadata").mkdir()
+            sizes = [(4096, 2048)] * 6 + [(5760, 2880)] * 6
+            for index, (width, height) in enumerate(sizes):
+                (root / "images" / f"p{index}.jpg").write_bytes(fake_jpeg(width, height))
+                feature = {"feature": {"properties": {"type": "equirectangular"}}}
+                (root / "metadata" / f"p{index}.json").write_text(json.dumps(feature))
+            out, err = self.run_main("--dataset", str(root), "--output-dir", str(root / "w"), "--multi-cam", "--shell")
+            values = dict(line.split("=", 1) for line in out.splitlines())
+            self.assertEqual(values["camera_model"], "equirectangular")
+            self.assertEqual(values["focal"], "")
+            self.assertNotIn("Spirula estime", err)
+
 
 if __name__ == "__main__":
     unittest.main()
