@@ -102,6 +102,34 @@ python tools/lidar/fetch_ign_lidar.py \
   --crs EPSG:2154 --output zone.laz
 ```
 
+Depuis l'env `gsplat`, sans le quitter, ce script s'exécute tel quel : PDAL est
+lancé dans `lidar-pdal` automatiquement. Le Python du script doit avoir `numpy`.
+Pour exécuter le script lui-même dans `lidar-pdal`, sans activer l'env :
+
+```bash
+mamba run -n lidar-pdal python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py \
+  --bbox xmin,ymin,xmax,ymax --crs EPSG:2154 --output zone.laz
+```
+
+Avec Conda, remplacer `mamba` par `conda`.
+
+#### Installation de l'env `lidar-pdal`
+
+Une seule fois (Linux/Slurm et macOS, même fichier `environment/ign.slurm/pdal_env.yml`) :
+
+```bash
+mamba env create -y -n lidar-pdal -f $GIT_ROOT/environment/ign.slurm/pdal_env.yml
+```
+
+Pour la mettre à jour après modification du fichier :
+
+```bash
+mamba env update -n lidar-pdal -f $GIT_ROOT/environment/ign.slurm/pdal_env.yml --prune
+```
+
+Vérification : `mamba run -n lidar-pdal pdal --version`. La commande doit afficher
+une version de PDAL.
+
 ### Source de l'approche WFS/COPC
 
 Le projet [IGNfab roofer-with-ignf-datasets](https://github.com/ignfab/roofer-with-ignf-datasets)
