@@ -27,12 +27,12 @@ dependencies:
   ########################################
   # SFM
   ########################################
-  - pycolmap=4.2.1
-  # Une seule libomp partagée (pycolmap/torch conda) : évite « OMP: Error #15 » sur macOS.
+  # Une seule libomp partagée (torch/pycolmap) : évite « OMP: Error #15 » sur macOS.
   - llvm-openmp=22.1.7
 
   ########################################
-  # PIP (hloc / SuperGlue : voir tools/colmap/install-hloc.sh)
+  # PIP (pycolmap, hloc / SuperGlue : voir tools/colmap/install-hloc.sh)
   ########################################
   - pip:
+      - pycolmap==4.2.1
       - gsplat
