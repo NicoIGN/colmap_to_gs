@@ -33,13 +33,14 @@ reste partagé. Les exemples et commentaires de
 ```bash
 PANORAMAX_PICTURE_TYPE="360"
 COLMAP_METHOD="hloc"
-SFM_EQUIRECTANGULAR_VIEWS="true"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
 SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
 ```
 
 Les panoramas complets 2:1 deviennent six vues pinhole de champ 110° avec
 recouvrement, utilisées pour le SfM et l'entraînement choisi par
-`TRAIN_BACKEND`. La focale est fixée ; `HLOC_CAMERA_MODEL` est ignoré. Les vues
+`TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
+les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
 d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
 `bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
 pyproj et pycolmap sont requis dans `PYTHON_BIN`.

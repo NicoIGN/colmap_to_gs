@@ -128,7 +128,7 @@ selected="$OUTPUT_DIR/images"
 sparse="$sfm/sparse/0"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/georef/0"
-elif [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
   sparse="$OUTPUT_DIR/gps_georef/0"
 fi
 if [[ "$COLMAP_USE_MVS" == true ]]; then
@@ -203,7 +203,7 @@ else
   "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     "$PYTHON_BIN" "$script_dir/georeference.py" check
-  elif [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
       --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \
       --output "$OUTPUT_DIR/gps_georef/0" --epsg "$GEOREF_EPSG" --allow-missing --check
@@ -264,7 +264,7 @@ merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inpu
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   set_stage "export de la référence géographique du splat"
   "$PYTHON_BIN" "$script_dir/georeference.py" export
-elif [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
   set_stage "export de la référence GPS du splat"
   "$PYTHON_BIN" - "$OUTPUT_DIR/gps_georef/0/georef_stats.json" "$OUTPUT_DIR" "$EXPORT_SPLAT_NAME" <<'PY'
 import json, sys

@@ -13,7 +13,7 @@ DIR="${DIR:-}"
 SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
-SFM_EQUIRECTANGULAR_VIEWS="${SFM_EQUIRECTANGULAR_VIEWS:-false}"
+HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}"
 SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
 GEOREF_EPSG="${GEOREF_EPSG:-2154}"
 TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
@@ -182,6 +182,9 @@ esac
 [[ -n "$DIR" ]] || { usage >&2; die "Définir DIR avec le chemin du dataset Panoramax."; }
 [[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
 [[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
+if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" != EQUIRECTANGULAR ]]; then
+  die "HLOC Panoramax exige HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
+fi
 config_errors=0
 validate_sfm_geometry_config
 validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" "$COLMAP_METHOD"
@@ -396,7 +399,6 @@ prepare_blocks() {
   [[ "$SFM_CAMERA_MODEL_EXPLICIT" != true ]] || camera_args=(--camera-model "$SFM_CAMERA_MODEL")
   pipeline_report_phase "reconstruction SfM"
   if [[ "$COLMAP_METHOD" == hloc ]]; then
-    [[ "$SFM_EQUIRECTANGULAR_VIEWS" == true ]] || die "HLOC Panoramax exige la projection 360."
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
     "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"

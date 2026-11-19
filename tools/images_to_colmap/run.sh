@@ -44,7 +44,7 @@ train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 sparse="$sfm/sparse/0"
 [[ -z "$GEOREF_GPX_FILE" ]] || sparse="$OUTPUT_DIR/georef/0"
-if [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true && -z "$GEOREF_GPX_FILE" ]]; then
+if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR && -z "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/gps_georef/0"
 fi
 if [[ "$COLMAP_USE_MVS" == true ]]; then
@@ -144,7 +144,7 @@ prepare() {
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     begin_stage "recalage du SfM sur le GPX"
     "$PYTHON_BIN" "$script_dir/georeference.py" prepare
-  elif [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
     begin_stage "recalage du SfM sur les GPS"
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
       --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \

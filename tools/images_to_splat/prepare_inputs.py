@@ -158,7 +158,8 @@ def prepare(check=False):
     source = Path(os.environ["SFM_IMAGES_DIR"]).resolve()
     output = Path(os.environ["OUTPUT_DIR"]).resolve()
     recursive = os.environ["SFM_IMAGES_RECURSIVE"] == "true"
-    project = os.environ.get("SFM_EQUIRECTANGULAR_VIEWS", "false") == "true"
+    project = (os.environ.get("COLMAP_METHOD", "spirula") == "hloc"
+               and os.environ.get("HLOC_CAMERA_MODEL", "OPENCV") == "EQUIRECTANGULAR")
     selected_dir = output / ("panoramas" if project else "images")
     images = []
     for folder, dirs, files in os.walk(source, followlinks=False):
@@ -176,7 +177,6 @@ def prepare(check=False):
     settings = {key: value for key, value in os.environ.items()
                 if key.startswith(("SFM_", "TRAIN_MASKS"))}
     if not project:
-        settings.pop("SFM_EQUIRECTANGULAR_VIEWS", None)
         settings.pop("SFM_EQUIRECTANGULAR_VIEW_SIZE", None)
     # Keep old unfiltered signatures compatible without adopting new provenance.
     if settings.get("SFM_FILTER_DENSITY") == "false":
@@ -242,6 +242,8 @@ def prepare(check=False):
         previous = json.loads(marker.read_text())
         if not isinstance(previous, dict):
             raise ValueError(f"Signature de workspace invalide : {marker}")
+        if project and previous.get("settings", {}).get("SFM_EQUIRECTANGULAR_VIEWS") == "true":
+            previous["settings"].pop("SFM_EQUIRECTANGULAR_VIEWS")
         if previous != record:
             without_partition = dict(previous)
             without_partition["settings"] = {

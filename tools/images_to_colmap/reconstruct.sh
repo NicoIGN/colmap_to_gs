@@ -53,7 +53,7 @@ case "$COLMAP_METHOD" in
     ;;
   hloc)
     projection_args=()
-    if [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
+    if [[ "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
       projection_args=(--perspective-view-size "$SFM_EQUIRECTANGULAR_VIEW_SIZE")
     fi
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/hloc_reconstruct.py" \

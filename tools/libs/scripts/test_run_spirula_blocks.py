@@ -61,7 +61,7 @@ class BlockPipelineTest(unittest.TestCase):
             )
             wrapper.write_text(wrapper.read_text().replace(
                 "log = os.environ['COMMAND_LOG']\n", "log = os.environ['COMMAND_LOG']\n" + stub))
-            env.update(COLMAP_METHOD="hloc", SFM_EQUIRECTANGULAR_VIEWS="true",
+            env.update(COLMAP_METHOD="hloc", HLOC_CAMERA_MODEL="EQUIRECTANGULAR",
                        SFM_EQUIRECTANGULAR_VIEW_SIZE="16", RAW_MODEL=str(raw),
                        SFM_MASKS="off", TRAIN_MASKS="off")
             result = execute("--prepare-only")

@@ -6,10 +6,9 @@ validate_config() {
   local config_errors=0 name value train_backend="${TRAIN_BACKEND:-spirula}"
   reject_legacy_config || return 1
   config_choice COLMAP_METHOD "${COLMAP_METHOD:-spirula}" 'spirula|hloc'
-  config_choice SFM_EQUIRECTANGULAR_VIEWS "${SFM_EQUIRECTANGULAR_VIEWS:-false}" 'true|false'
   if [[ "${COLMAP_METHOD:-spirula}" == hloc ]]; then
-    [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true && "${PANORAMAX_PICTURE_TYPE:-all}" == 360 ]] ||
-      config_error "Panoramax HLOC exige PANORAMAX_PICTURE_TYPE=360 et SFM_EQUIRECTANGULAR_VIEWS=true."
+    [[ "${HLOC_CAMERA_MODEL:-OPENCV}" == EQUIRECTANGULAR && "${PANORAMAX_PICTURE_TYPE:-all}" == 360 ]] ||
+      config_error "Panoramax HLOC exige PANORAMAX_PICTURE_TYPE=360 et HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
     [[ -z "${SFM_SP_PAIR_MAX_DISTANCE:-}" ]] ||
       config_error "SFM_SP_PAIR_MAX_DISTANCE est réservé à Spirula."
     [[ "${COLMAP_USE_MVS:-false}" != true ]] || config_error "MVS n'est pas disponible pour Panoramax HLOC."
@@ -21,8 +20,6 @@ validate_config() {
       config_error "SFM_EQUIRECTANGULAR_VIEW_SIZE doit être >= 2."
     config_choice HLOC_PAIRS "${HLOC_PAIRS:-retrieval}" 'retrieval|exhaustive'
     config_positive_integer HLOC_NUM_NEIGHBORS "${HLOC_NUM_NEIGHBORS:-20}"
-  elif [[ "${SFM_EQUIRECTANGULAR_VIEWS:-false}" == true ]]; then
-    config_error "SFM_EQUIRECTANGULAR_VIEWS=true exige COLMAP_METHOD=hloc."
   fi
   config_choice TRAIN_BACKEND "$train_backend" 'spirula|nerfstudio'
   if [[ "$train_backend" == nerfstudio ]]; then

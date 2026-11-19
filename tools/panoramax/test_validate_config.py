@@ -29,7 +29,7 @@ def effective_panoramax_values():
 class ValidateConfigTest(unittest.TestCase):
     def test_hloc_360_requires_projection_and_disallows_spirula_pair_filter(self):
         extra = ('COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=360\n'
-                 'SFM_EQUIRECTANGULAR_VIEWS=true\nTRAIN_BACKEND=nerfstudio\n')
+                 'HLOC_CAMERA_MODEL=EQUIRECTANGULAR\nTRAIN_BACKEND=nerfstudio\n')
         result, _ = self.execute("validate_config.sh", extra, "slurm")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         result, _ = self.execute("validate_config.sh", extra + 'SFM_SP_PAIR_MAX_DISTANCE=50\n', "slurm")
@@ -39,6 +39,16 @@ class ValidateConfigTest(unittest.TestCase):
                                  'COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=all\n', "slurm")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("PANORAMAX_PICTURE_TYPE=360", result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                 'COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=360\n'
+                                 'HLOC_CAMERA_MODEL=OPENCV\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HLOC_CAMERA_MODEL=EQUIRECTANGULAR", result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                 extra + 'SFM_EQUIRECTANGULAR_VIEWS=true\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_EQUIRECTANGULAR_VIEWS", result.stderr)
+        self.assertIn("HLOC_CAMERA_MODEL", result.stderr)
 
     def test_invalid_geometry_rejected_local_and_slurm(self):
         for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):

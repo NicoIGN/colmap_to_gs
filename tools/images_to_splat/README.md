@@ -57,16 +57,20 @@ Il peut être lancé seul ; les résultats compatibles sont réutilisés.
 
 ```bash
 COLMAP_METHOD="hloc"
-SFM_EQUIRECTANGULAR_VIEWS="true"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
 SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
 GEOREF_EPSG="2154"
 ```
 
+Remplacer l'ancien `SFM_EQUIRECTANGULAR_VIEWS=true` par
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les espaces de travail compatibles restent réutilisables.
+
 Chaque panorama devient six images carrées pinhole de champ 110° avec
 recouvrement. HLOC extrait et apparie les points, puis pycolmap reconstruit ;
 les mêmes vues sont utilisées pour l'entraînement choisi par `TRAIN_BACKEND`.
-La focale pinhole connue est fixée ; `HLOC_CAMERA_MODEL` est ignoré dans ce
-mode. Les vues issues d'un panorama ne sont pas contraintes en rig : leur
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ; les vues sont
+reconstruites en `PINHOLE` avec leur focale connue fixée. Les vues issues d'un
+panorama ne sont pas contraintes en rig : leur
 centre peut différer après reconstruction. Prévoir davantage de temps et de
 stockage. Installer HLOC avec `bash $GIT_ROOT/tools/colmap/install-hloc.sh`
 et disposer de numpy, OpenCV, Pillow, scipy et pyproj dans `PYTHON_BIN`.
