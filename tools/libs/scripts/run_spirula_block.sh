@@ -348,22 +348,22 @@ splats_dir="$output_dir/splats"
 train_done_file="$output_dir/.train_done"
 export_done_file="$output_dir/.export_done"
 
-export_transform="$splats_dir/scene_transform.json"
 export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-# En latest-only, Spirula écrit une seule paire plate <nom>.ply + <nom>.tar dans splats/ :
-# ce PLY est le splat final (pas de dossier checkpoint).
+# Spirula écrit le checkpoint final (latest-only : une paire <nom>.ply + <nom>.tar) dans chkpt-<numiter>/.
+chkpt_dir="$splats_dir/chkpt-$iteration_count"
+export_transform="$chkpt_dir/scene_transform.json"
 resolve_final_ply() {
   local plys=()
   shopt -s nullglob
-  plys=("$splats_dir"/*.ply)
+  plys=("$chkpt_dir"/*.ply)
   shopt -u nullglob
   case ${#plys[@]} in
     0) final_ckpt="" ;;
     1) final_ckpt="${plys[0]}" ;;
-    *) die "Plusieurs PLY Spirula dans $splats_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
+    *) die "Plusieurs PLY Spirula dans $chkpt_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
   esac
 }
 resolve_final_ply
@@ -550,8 +550,8 @@ cmd=(
   --data-format colmap
   --colmap-recon-dir sparse/0
   --image-dir images
-  --output-dir-prefix "$output_dir"
-  --output-dir-name splats
+  --output-dir-prefix "$splats_dir"
+  --output-dir-name "chkpt-$iteration_count"
   --lang fr
   --disable-viewer 1
   --keep-viewer-alive 0
@@ -613,6 +613,12 @@ printf '%q ' "${cmd[@]}" > "$output_dir/train_command.sh"
 printf '\n' >> "$output_dir/train_command.sh"
 
 rm -f -- "$train_done_file" "$export_done_file"
+# Un seul checkpoint conservé : on supprime les précédents avant de réécrire.
+shopt -s nullglob
+for old_chkpt in "$splats_dir"/chkpt-*; do
+  rm -rf -- "$old_chkpt"
+done
+shopt -u nullglob
 printf '%s\n' "$masks_signature" > "$masks_signature_file"
 
 if command -v stdbuf >/dev/null 2>&1; then

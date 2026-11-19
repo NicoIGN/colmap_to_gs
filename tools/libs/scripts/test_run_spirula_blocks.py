@@ -524,7 +524,7 @@ class BlockPipelineTest(unittest.TestCase):
                 "  import pathlib\n"
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
-                "  splats = pathlib.Path(prefix) / 'splats'\n"
+                "  splats = pathlib.Path(prefix) / f'chkpt-{iterations}'\n"
                 "  splats.mkdir(parents=True, exist_ok=True)\n"
                 "  (splats / 'example.ply').write_bytes(b'ply')\n"
                 "  (splats / 'example.tar').write_bytes(b'tar')\n"
