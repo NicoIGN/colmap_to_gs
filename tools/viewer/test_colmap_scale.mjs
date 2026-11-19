@@ -22,7 +22,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -193,4 +193,18 @@ test("distant outliers and splat scene radius do not inflate camera extent", () 
 test("degenerate camera path uses scene radius or reports invalid scale", () => {
   assert.equal(cameraFrustumDepth([0, 0, 0], 0.001), 0.00001);
   assert.throws(() => cameraFrustumDepth([0, 0, 0], 0), /Échelle COLMAP/);
+});
+
+test("cube map front face samples the equirectangular centre", () => {
+  const width = 8;
+  const height = 4;
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  const centre = (2 * width + 4) * 4;
+  rgba.set([255, 0, 0, 255], centre);
+  const faceSize = 4;
+  const atlas = equirectToCubeAtlas(rgba, width, height, faceSize);
+  assert.equal(atlas.width, faceSize * 3);
+  assert.equal(atlas.height, faceSize * 2);
+  const texel = (2 * atlas.width + 2) * 4;
+  assert.deepEqual([...atlas.data.slice(texel, texel + 3)], [255, 0, 0]);
 });

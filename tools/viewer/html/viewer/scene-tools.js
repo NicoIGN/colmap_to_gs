@@ -98,6 +98,29 @@ export function createSceneTools({
     $("toggleSceneInfo")?.getAttribute("aria-expanded") !== "false"
   );
 
+  function setOptionsExpanded(expanded) {
+    $("optionsPanel")?.setAttribute("aria-expanded", String(expanded));
+    $("optionsBody") && ($("optionsBody").hidden = !expanded);
+
+    const button = $("toggleOptions");
+    if (button) {
+      button.setAttribute("aria-expanded", String(expanded));
+      button.setAttribute(
+        "aria-label",
+        expanded
+          ? "Replier le panneau d’options"
+          : "Déplier le panneau d’options"
+      );
+      button.textContent = expanded ? "−" : "+";
+    }
+  }
+
+  listen($("toggleOptions"), "click", () => {
+    setOptionsExpanded($("toggleOptions")?.getAttribute("aria-expanded") === "false");
+  });
+
+  setOptionsExpanded($("toggleOptions")?.getAttribute("aria-expanded") !== "false");
+
   function setSceneInfo({ name = null, count = 0 } = {}) {
     write("sceneFileName", name || "Aucun fichier chargé");
     write(
