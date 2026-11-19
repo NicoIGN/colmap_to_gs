@@ -10,8 +10,8 @@ usage() {
 Usage:
   bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
 
-The config is a trusted Bash file. It overrides tools/panoramax/param.default.sh,
-which is always sourced first; only set the variables you want to change.
+The config is a trusted Bash file. It overrides config/defaults/*.default.sh and
+tools/panoramax/config.default.sh, which are always loaded first; only set the variables you want to change.
 It defines the Panoramax bbox and its EPSG code, output directory, SfM/block/training parameters,
 and final .splat name.
 Default: all. prepare downloads, reconstructs and partitions; train-block trains
@@ -75,7 +75,8 @@ case "$phase" in
   *) die "Étape inconnue : $phase" ;;
 esac
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
-source "$script_dir/param.default.sh"
+source "$repo_root/tools/libs/scripts/pipeline_config.sh"
+load_pipeline_defaults "$repo_root" panoramax
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config || exit 1

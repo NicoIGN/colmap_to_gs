@@ -6,6 +6,17 @@ config_error() {
   config_errors=$((config_errors + 1))
 }
 
+# Charge les défauts partagés par phase (config/defaults), puis le différentiel du pipeline.
+# À appeler avant de sourcer la configuration utilisateur, qui a le dernier mot.
+load_pipeline_defaults() {
+  local repo_root="$1" pipeline="$2" file
+  for file in "$repo_root"/config/defaults/*.default.sh; do
+    [[ -f "$file" ]] || continue
+    source "$file"
+  done
+  source "$repo_root/tools/$pipeline/config.default.sh"
+}
+
 config_choice() {
   local name="$1" value="$2" allowed="$3"
   case "|$allowed|" in

@@ -39,8 +39,9 @@ load_config() {
   local config_errors=0
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
-  source "$config"
   source "$repo_root/tools/libs/scripts/pipeline_config.sh"
+  load_pipeline_defaults "$repo_root" images_to_splat
+  source "$config"
   init_sfm_geometry_config "${COLMAP_METHOD:-spirula}"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \
     MASKS_LABELS MASKS_CONFIDENCE MASKS_DILATE MASKS_MAX_FRACTION; do
@@ -324,7 +325,7 @@ load_config() {
   awk -v o="$SPLIT_OVERLAP_MAX_FRACTION" -v r="$POSTPROCESS_MAX_REMOVAL_FRACTION" \
     -v s="$MERGE_STRENGTH" 'BEGIN {
       exit !(o < 1 && r <= 1 && s > 0)
-    }' || config_error "Seuils hors limites : consulter param.default.sh."
+    }' || config_error "Seuils hors limites : consulter config/defaults/*.default.sh."
   [[ -n "$SFM_CAMERA_MODEL" ]] || config_error "SFM_CAMERA_MODEL ne doit pas être vide."
   local prefix backend model_key
   for prefix in SFM_MASKS TRAIN_MASKS; do
@@ -357,7 +358,7 @@ load_config() {
           if (field == "CONFIDENCE") exit !(x <= 1)
           if (field == "DILATE") exit !(x < 0.1)
           exit !(x > 0 && x <= 1)
-        }' || config_error "$name hors limites : consulter param.default.sh."
+        }' || config_error "$name hors limites : consulter config/defaults/*.default.sh."
     done
   done
   [[ "$EXPORT_SPLAT_NAME" == *.splat && "$EXPORT_SPLAT_NAME" != */* ]] ||

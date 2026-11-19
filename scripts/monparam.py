@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Décrit les paramètres du pipeline Panoramax à partir de param.default.sh."""
+"""Décrit les paramètres des pipelines à partir de config/defaults et des config.default.sh."""
 
 import argparse
 import difflib
@@ -8,9 +8,10 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PARAM_FILES = {
-    "panoramax": ROOT / "tools" / "panoramax" / "param.default.sh",
-    "images_to_splat": ROOT / "tools" / "images_to_splat" / "param.default.sh",
+DEFAULTS_DIR = ROOT / "config" / "defaults"
+PIPELINE_OVERRIDES = {
+    "panoramax": ROOT / "tools" / "panoramax" / "config.default.sh",
+    "images_to_splat": ROOT / "tools" / "images_to_splat" / "config.default.sh",
 }
 
 PHASES = {
@@ -83,14 +84,22 @@ def load_params(path):
 
 
 def load_all():
-    merged = {}
-    for source, path in PARAM_FILES.items():
-        for key, param in load_params(path).items():
+    base = {}
+    for path in sorted(DEFAULTS_DIR.glob("*.default.sh")):
+        base.update(load_params(path))
+    merged = {key: Param(key, param.default, param.comment) for key, param in base.items()}
+    for source, path in PIPELINE_OVERRIDES.items():
+        overrides = load_params(path)
+        for key, param in overrides.items():
             if key not in merged:
                 merged[key] = Param(key, param.default, param.comment)
             elif not merged[key].comment:
                 merged[key].comment = param.comment
-            merged[key].defaults[source] = param.default
+        for key in set(base) | set(overrides):
+            if key in overrides:
+                merged[key].defaults[source] = overrides[key].default
+            else:
+                merged[key].defaults[source] = base[key].default
     return merged
 
 
@@ -153,13 +162,13 @@ def backends_of(key):
 def summary(param):
     text = " ".join(param.comment)
     if not text:
-        return "(pas de commentaire dans param.default.sh)"
+        return "(pas de commentaire dans config/defaults ou config.default.sh)"
     first = re.split(r"(?<=\.)\s", text, maxsplit=1)[0]
     return first if len(first) <= 110 else first[:107] + "..."
 
 
 def show_param(param):
-    text = " ".join(param.comment) or "(pas de commentaire dans param.default.sh)"
+    text = " ".join(param.comment) or "(pas de commentaire dans config/defaults ou config.default.sh)"
     intervals = INTERVAL.findall(text)
     print(param.key)
     print(f"  Phases    : {', '.join(phases_of(param.key))}")

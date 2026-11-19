@@ -16,7 +16,7 @@ Usage:
   bash tools/panoramax/launch.sh /path/to/config.sh [--wait]
 
 Submit preparation, a GPU job array (one block per task), then merge.
-Start from tools/panoramax/param.default.sh (trusted Bash configuration); the config only overrides it.
+Defaults come from config/defaults/*.default.sh and tools/panoramax/config.default.sh; the config only overrides them.
 --wait waits for completion and returns a failure if the job fails.
 Without --wait, success means submission only.
 EOF
@@ -31,7 +31,8 @@ fi
 [[ -f "$1" ]] || die "Configuration introuvable : $1"
 config_path="$(cd -- "$(dirname -- "$1")" && pwd)/$(basename -- "$1")"
 submit_dir="$PWD"
-source "$script_dir/param.default.sh"
+source "$repo_root/tools/libs/scripts/pipeline_config.sh"
+load_pipeline_defaults "$repo_root" panoramax
 source "$config_path"
 source "$script_dir/validate_config.sh"
 validate_config slurm || exit 1

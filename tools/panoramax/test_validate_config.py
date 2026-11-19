@@ -7,6 +7,23 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parent
+REPO = ROOT.parents[1]
+DEFAULT_FILES = sorted((REPO / "config" / "defaults").glob("*.default.sh")) + [ROOT / "config.default.sh"]
+
+
+def effective_panoramax_values():
+    """Valeurs exportées après chargement des défauts Panoramax, comme le pipeline réel."""
+    loader = 'set -a; source "$1"; load_pipeline_defaults "$2" panoramax; set +a; env -0'
+    result = subprocess.run(
+        ["bash", "-c", loader, "_", str(REPO / "tools/libs/scripts/pipeline_config.sh"), str(REPO)],
+        capture_output=True, check=True,
+    )
+    values = {}
+    for item in result.stdout.split(b"\0"):
+        name, sep, value = item.partition(b"=")
+        if sep:
+            values[name.decode()] = value.decode()
+    return values
 
 
 class ValidateConfigTest(unittest.TestCase):
@@ -140,7 +157,8 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             root = Path(temporary)
             config = root / "config.sh"
             config.write_text(
-                f'source "{ROOT / "param.default.sh"}"\n'
+                f'source "{REPO / "tools/libs/scripts/pipeline_config.sh"}"\n'
+                f'load_pipeline_defaults "{REPO}" panoramax\n'
                 f'OUTPUT_DIR="{root / "output"}"\n'
                 'PANORAMAX_BBOX="652600,6863300,652900,6863500"\n'
             )
@@ -151,11 +169,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
             self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_example_covers_pipeline_parameters_with_actual_defaults(self):
-        example = (ROOT / "param.default.sh").read_text()
-        assignments = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)="([^"]*)"$',
-                                 example, re.MULTILINE)
-        values = dict(assignments)
-        self.assertEqual(len(values), len(assignments), "Duplicate config parameters")
+        values = effective_panoramax_values()
         required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
                     "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
@@ -320,9 +334,10 @@ SFM_SP_PAIR_MAX_DISTANCE=30
 
     def test_example_parameters_have_stage_prefixes_or_are_shared(self):
         names = re.findall(r'^(?:export )?([A-Z][A-Z0-9_]*)=',
-                           (ROOT / "param.default.sh").read_text(), re.MULTILINE)
+                           "\n".join(path.read_text() for path in DEFAULT_FILES), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "SPIRULA_DEVICE", "PYTHON_BIN",
-                  "MVK_CONFIG_LOG_LEVEL", "SS_NN_LOG", "NUM_CPUS", "NUM_GPUS"}
+                  "MVK_CONFIG_LOG_LEVEL", "SS_NN_LOG", "NUM_CPUS", "NUM_GPUS",
+                  "PIPELINE_RESUME", "REMOVE_LOCKS"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_",
                     "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_", "LIDAR_")
         for name in names:
