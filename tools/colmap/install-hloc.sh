@@ -17,7 +17,9 @@ Usage: bash tools/colmap/install-hloc.sh [--python PATH]
 
 Installe hloc (+ LightGlue) via pip depuis GitHub, clone SuperGluePretrainedNetwork
 dans site-packages (requis par hloc/extractors/superpoint.py), puis vérifie les imports.
-h5py et pycolmap : installer via conda-forge (mamba install -c conda-forge h5py pycolmap).
+h5py et llvm-openmp : installer via conda-forge (voir environment/*/conda_env.yml).
+pycolmap est installé via pip (pinné dans conda_env.yml). Les versions torch, torchvision
+et numpy déjà présentes sont figées pendant l'installation pour éviter qu'hloc ne les remplace.
 EOF
 }
 while [[ $# -gt 0 ]]; do
