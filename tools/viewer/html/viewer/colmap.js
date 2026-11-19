@@ -22,6 +22,8 @@ const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 const PANORAMA_SEGMENTS = 96;
+// Sphère et cube 360° réduits de 33 % par rapport au cadre agrandi.
+const PANORAMA_SIZE_FACTOR = 0.67;
 const PANORAMA_RINGS = 48;
 const PANORAMA_CUBE_FACE = 512;
 const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
@@ -572,7 +574,7 @@ function applyPanoramaYawFix(local) {
 
 // Sphère 360° vue de l'intérieur. Repère caméra : x à droite, y vers le bas, z dans le sens du regard.
 // Longitude 0 au centre de l'image ; latitude +90° en haut de l'image (v = 0).
-function panoramaSphere(image, radius) {
+function panoramaSphere(image, radius, mirror = false) {
   const rwc = transpose3(qvecToMat3(image.qvec));
   const center = getCameraCenter(image);
   const positions = [];
@@ -589,7 +591,8 @@ function panoramaSphere(image, radius) {
       applyPanoramaYawFix(local);
       const rotated = mulMat3Vec3(rwc, local);
       positions.push(rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]);
-      uvs.push(s / PANORAMA_SEGMENTS, r / PANORAMA_RINGS);
+      const u = s / PANORAMA_SEGMENTS;
+      uvs.push(mirror ? 1 - u : u, r / PANORAMA_RINGS);
     }
   }
   const row = PANORAMA_SEGMENTS + 1;
@@ -610,7 +613,7 @@ function panoramaSphere(image, radius) {
 
 // Atlas 3×2 des six faces du cube (RGBA, faces de faceSize px) échantillonné depuis une équirectangulaire.
 // Les faces suivent CUBE_FACES dans l'ordre, rangées ligne par ligne.
-export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUBE_FACE) {
+export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUBE_FACE, mirror = false) {
   const atlasWidth = faceSize * 3;
   const atlas = new Uint8ClampedArray(atlasWidth * faceSize * 2 * 4);
   CUBE_FACES.forEach((face, index) => {
@@ -626,8 +629,9 @@ export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUB
         const theta = Math.atan2(x, z);
         const phi = Math.atan2(-y, Math.hypot(x, z));
         const sx = Math.min(width - 1, Math.floor((theta / (2 * Math.PI) + 0.5) * width));
+        const sxMirrored = mirror ? width - 1 - sx : sx;
         const sy = Math.min(height - 1, Math.floor((0.5 - phi / Math.PI) * height));
-        const src = (sy * width + sx) * 4;
+        const src = (sy * width + sxMirrored) * 4;
         const dst = ((offsetY + v) * atlasWidth + offsetX + u) * 4;
         atlas[dst] = rgba[src];
         atlas[dst + 1] = rgba[src + 1];
@@ -741,7 +745,9 @@ export function createColmapLayer({
   const cameraSize = document.getElementById("colmapCameraSize");
   const panoramaModeRow = document.getElementById("colmapPanoramaModeRow");
   const panoramaModeSelect = document.getElementById("colmapPanoramaMode");
+  const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
+  let panoramaMirror = panoramaMirrorInput?.checked ?? false;
 
   let disposed = false;
   let nextModelId = 1;
@@ -830,6 +836,15 @@ export function createColmapLayer({
     panoramaMode = mode;
     for (const model of models.values()) {
       model.slots?.forEach(resetSlot);
+    }
+  }
+
+  function setPanoramaMirror(on) {
+    if (panoramaMirror === on) return;
+    panoramaMirror = on;
+    for (const model of models.values()) {
+      model.slots?.forEach(resetSlot);
+      model.pickedKey = null;
     }
   }
 
@@ -1064,7 +1079,7 @@ export function createColmapLayer({
   }
 
   async function getCubeTexture(name) {
-    const key = `${name}|cube`;
+    const key = `${name}|cube|${panoramaMirror ? "mirror" : "direct"}`;
     const cached = textureCache.get(key);
     if (cached) {
       textureCache.delete(key);
@@ -1087,7 +1102,7 @@ export function createColmapLayer({
     sourceContext.drawImage(bitmap, 0, 0);
     bitmap.close?.();
     const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
-    const atlas = equirectToCubeAtlas(pixels, source.width, source.height);
+    const atlas = equirectToCubeAtlas(pixels, source.width, source.height, undefined, panoramaMirror);
     const atlasCanvas = document.createElement("canvas");
     atlasCanvas.width = atlas.width;
     atlasCanvas.height = atlas.height;
@@ -1129,12 +1144,12 @@ export function createColmapLayer({
 
     // Quad posé sur le plan lointain du frustum, sphère ou cube pour un panorama 360°, texturé avec l'image.
     const mesh = new pc.Mesh(app.graphicsDevice);
-    const radius = model.depth * IMAGE_FRUSTUM_SCALE;
+    const radius = model.depth * IMAGE_FRUSTUM_SCALE * (isPanorama(camera) ? PANORAMA_SIZE_FACTOR : 1);
     let geometry;
     if (cube) {
       geometry = panoramaCube(image, radius);
     } else if (isPanorama(camera)) {
-      geometry = panoramaSphere(image, radius);
+      geometry = panoramaSphere(image, radius, panoramaMirror);
     } else {
       const quad = frustumCorners(image, camera, radius).slice(1);
       geometry = {
@@ -1600,6 +1615,11 @@ export function createColmapLayer({
     const onChange = () => setPanoramaMode(panoramaModeSelect.value);
     panoramaModeSelect.addEventListener("change", onChange);
     removers.push(() => panoramaModeSelect.removeEventListener("change", onChange));
+  }
+  if (panoramaMirrorInput) {
+    const onChange = () => setPanoramaMirror(panoramaMirrorInput.checked);
+    panoramaMirrorInput.addEventListener("change", onChange);
+    removers.push(() => panoramaMirrorInput.removeEventListener("change", onChange));
   }
 
   return {
