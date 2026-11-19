@@ -6,7 +6,7 @@
 
 ```bash
 python "$GIT_ROOT/tools/postprocess/filter_splats.py" \
-  --input scene.splat --output diagnostic.splat --mode diagnostic
+  --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/diagnostic.splat" --mode diagnostic
 ```
 
 Le mode diagnostic conserve les gaussiennes et produit un rapport ainsi qu'un
@@ -17,8 +17,8 @@ un filtre peut aussi supprimer des éléments réels. L'entrée n'est pas écras
 
 ```bash
 python "$GIT_ROOT/tools/splat_to_3dtiles/convert.py" \
-  --input scene.splat --georef-summary georef_summary.json \
-  --output-dir scene_tiles --no-open-inspector
+  --input "$DATA_ROOT/scene.splat" --georef-summary "$DATA_ROOT/georef_summary.json" \
+  --output-dir "$DATA_ROOT/scene_tiles" --no-open-inspector
 ```
 
 Le splat doit être en ENU local et le résumé de géoréférencement doit provenir

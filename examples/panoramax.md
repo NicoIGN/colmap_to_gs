@@ -10,10 +10,10 @@ le dossier de sortie :
 ```bash
 bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --bbox "651000,6861000,652000,6862000" \
-  --bbox-epsg 2154 --output-dir panoramax
+  --bbox-epsg 2154 --output-dir "$DATA_ROOT/panoramax"
 ```
 
-Les images et leurs métadonnées sont enregistrées dans `panoramax/`. Un accès
+Les images et leurs métadonnées sont enregistrées dans `$DATA_ROOT/panoramax/`. Un accès
 réseau et les dépendances de
 [`requirements.txt`](../tools/panoramax/requirements.txt) sont nécessaires.
 
@@ -23,7 +23,7 @@ Après avoir préparé un fichier `config-panoramax.sh` contenant au minimum
 `OUTPUT_DIR` et `PANORAMAX_BBOX` :
 
 ```bash
-bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" config-panoramax.sh
+bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 ```
 
 Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](pipelines.md).

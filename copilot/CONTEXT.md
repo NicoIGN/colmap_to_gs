@@ -8,7 +8,7 @@
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
 - Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
-- Chemins dans les commandes projet : `$GIT_ROOT/...` ; ne pas utiliser de chemin absolu dans les réponses.
+- Chemins du projet : `$GIT_ROOT/...` ; données et résultats : `$DATA_ROOT/...`. Ne pas utiliser de chemin absolu dans les réponses.
 
 ## Dépendances Python (venv dédié)
 Un venv évite l'erreur PEP 668 (`externally-managed-environment`) et les `No module named ...` :

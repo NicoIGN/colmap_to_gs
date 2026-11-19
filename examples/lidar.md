@@ -11,7 +11,7 @@ La commande extrait les points LiDAR HD IGN dans une emprise Lambert-93
 ```bash
 python "$GIT_ROOT/tools/lidar/fetch_ign_lidar.py" \
   --bbox 650000,6860000,650100,6860100 \
-  --crs EPSG:2154 --output zone.laz
+  --crs EPSG:2154 --output "$DATA_ROOT/zone.laz"
 ```
 
 Elle produit `zone.laz` et son manifeste `zone.laz.json`, sans écraser une
@@ -25,7 +25,7 @@ automatiquement. Voir la documentation LiDAR pour utiliser un PDAL déjà instal
 
 ```bash
 python "$GIT_ROOT/tools/images_to_colmap/las_to_ply.py" \
-  --input lidar-colore.laz --output points.ply --stride 10
+  --input "$DATA_ROOT/lidar-colore.laz" --output "$DATA_ROOT/points.ply" --stride 10
 ```
 
 `--stride 10` conserve un point sur dix. Le LAZ doit contenir les couleurs
