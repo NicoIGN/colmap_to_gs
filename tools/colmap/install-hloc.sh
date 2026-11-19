@@ -38,7 +38,7 @@ command -v "$python_bin" >/dev/null || die "Python introuvable : $python_bin"
 # Garde torch/torchvision/numpy déjà installés : pip ne doit pas les remplacer.
 constraints="$(mktemp)"
 trap 'rm -f "$constraints"' EXIT
-"$python_bin" -m pip freeze 2>/dev/null | grep -E '^(torch|torchvision|numpy)==' > "$constraints" || true
+"$python_bin" -m pip freeze 2>/dev/null | grep -E '^(torch|torchvision)==' > "$constraints" || true
 echo "numpy<2" >> "$constraints"
 
 "$python_bin" -m pip install --upgrade -c "$constraints" \
