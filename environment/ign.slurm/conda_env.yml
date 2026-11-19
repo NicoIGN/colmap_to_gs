@@ -61,6 +61,8 @@ dependencies:
   - faiss-cpu
   - pycolmap
   - h5py
+  # Une seule libomp partagée (pycolmap/torch conda) : évite « OMP: Error #15 » sur macOS.
+  - llvm-openmp
 
   ########################################
   # OPTIONAL UTILS
