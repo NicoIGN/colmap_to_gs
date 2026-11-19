@@ -57,7 +57,7 @@ Usage:
 Important:
   - La visionneuse est désactivée.
   - Le checkpoint final attendu dépend de --num-iterations:
-      {output_dir}/splats/chkpt-<step>/<nom>.ply (dernier checkpoint Spirula en latest-only)
+      {output_dir}/splats/chkpt/<nom>.ply (dernier checkpoint Spirula en latest-only, réécrit à chaque save)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
       via tools/postprocess/export_ply.py et splats/scene_transform.json
@@ -352,17 +352,18 @@ export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-# Spirula écrit le checkpoint latest-only dans splats/chkpt-<step>/ (un seul, le précédent est supprimé par Spirula).
-export_transform="$splats_dir/scene_transform.json"
+# Spirula écrit le checkpoint latest-only (une paire <nom>.ply + <nom>.tar, réécrite à chaque save) dans splats/chkpt/.
+chkpt_dir="$splats_dir/chkpt"
+export_transform="$chkpt_dir/scene_transform.json"
 resolve_final_ply() {
   local plys=()
   shopt -s nullglob
-  plys=("$splats_dir"/chkpt-*/*.ply)
+  plys=("$chkpt_dir"/*.ply)
   shopt -u nullglob
   case ${#plys[@]} in
     0) final_ckpt="" ;;
     1) final_ckpt="${plys[0]}" ;;
-    *) die "Plusieurs PLY Spirula dans $splats_dir/chkpt-* (${#plys[@]}) : 1 attendu en latest-only" ;;
+    *) die "Plusieurs PLY Spirula dans $chkpt_dir (${#plys[@]}) : 1 attendu en latest-only" ;;
   esac
 }
 resolve_final_ply
@@ -549,8 +550,8 @@ cmd=(
   --data-format colmap
   --colmap-recon-dir sparse/0
   --image-dir images
-  --output-dir-prefix "$output_dir"
-  --output-dir-name splats
+  --output-dir-prefix "$splats_dir"
+  --output-dir-name chkpt
   --lang fr
   --disable-viewer 1
   --keep-viewer-alive 0
