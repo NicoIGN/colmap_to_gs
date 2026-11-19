@@ -3,6 +3,10 @@
 # Usage : bash tools/colmap/install-hloc.sh [--python PATH]
 set -euo pipefail
 
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../../config/defaults/commun.default.sh
+source "$script_dir/../../config/defaults/commun.default.sh"
+
 python_bin="${PYTHON_BIN:-python3}"
 sg_dir_name="SuperGluePretrainedNetwork"
 
