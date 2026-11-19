@@ -60,6 +60,7 @@ dependencies:
   - colmap=3.8
   - faiss-cpu
   - pycolmap
+  - h5py
 
   ########################################
   # OPTIONAL UTILS
