@@ -6,6 +6,7 @@
 - Pipeline images/vidéos → 3DGS (SfM HLOC / Spirula / COLMAP / Nerfstudio, entraînement Spirula, export `.splat`).
 - Point d'entrée vidéo : `scripts/videos_to_3dgs.sh <config.sh> --video <fichier> --num-frames N`.
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
+- Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
 - Chemins dans les commandes projet : `$GIT_ROOT/...`, pas de chemin absolu.
 
@@ -25,7 +26,8 @@ Paquets utilisés par les tests et le pipeline :
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
 - Sur la machine de session, `numpy` n'est pas installé par défaut ; `pycolmap` et `torch` non plus.
-- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue, comme les 4 tests `test_run_pipeline` liés au verrou `.download.lock` et `test_validate_config` (`KMP_DUPLICATE_LIB_OK`) : échecs préexistants, vérifiés sans changements.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/images_to_colmap/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
+- Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
@@ -65,7 +67,7 @@ python -m unittest discover -s tools/panoramax -p 'test_*.py'             # pano
 python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'    # masques
 ```
 
-Les tests écrivent des `__pycache__` suivis par git : avant commit, faire `git checkout -- '*__pycache__*'` ou ne pas les ajouter.
+Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.
 
 ## Validation de configuration
 - `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/images_to_splat/common.sh`).
@@ -79,6 +81,7 @@ Les tests écrivent des `__pycache__` suivis par git : avant commit, faire `git 
 
 ## Panoramas HLOC
 - `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
+- L'ancien paramètre `SFM_EQUIRECTANGULAR_VIEWS` est refusé dans les nouvelles configurations ; les signatures locales où il valait `true` restent compatibles avec le mode `EQUIRECTANGULAR`. En modifiant ces réglages, préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
 - GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
 - Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
 
