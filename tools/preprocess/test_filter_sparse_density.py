@@ -175,7 +175,7 @@ class SparseDensityTest(unittest.TestCase):
             write_model(source, positions, image_count=1)
             with self.assertRaisesRegex(ValueError, "supprimer tous les points"):
                 filter_sparse_model(
-                    source, output, min_neighbors=12, min_cluster_points=5
+                    source, output, min_neighbors=12, min_cluster_points=5, min_views=2
                 )
 
     def test_filter_writes_consistent_sparse_and_report(self):

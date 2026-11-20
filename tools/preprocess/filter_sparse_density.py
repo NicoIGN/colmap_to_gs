@@ -402,7 +402,7 @@ def filter_sparse_model(
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
-    min_views=2,
+    min_views=1,
     vote_fraction=0.75,
     far_support_rate=0.25,
     workers=1,
@@ -534,9 +534,9 @@ def main():
     parser.add_argument("--far-support-rate", type=float, default=0.25,
                         help="Hausse du support requis par doublement de profondeur "
                              "(défaut : 0.25).")
-    parser.add_argument("--min-views", type=int, default=2,
+    parser.add_argument("--min-views", type=int, default=1,
                         help="Nombre de vues évaluables requis ; en dessous, le point est rejeté "
-                             "sans vote (défaut : 2).")
+                             "sans vote (défaut : 1).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
     parser.add_argument("--workers", type=int, default=1,
