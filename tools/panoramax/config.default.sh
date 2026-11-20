@@ -39,6 +39,11 @@ PANORAMAX_PICTURE_TYPE="all"
 # (properties.providers[].name), insensible à la casse.
 PANORAMAX_PROVIDER=""
 
+# Défaut : "". Vide = aucun filtre. Syntaxe : "KEY=V1,V2;KEY2=V3" ; ';' sépare les
+# propriétés (ET), ',' sépare les valeurs d'une propriété (OU), insensible à la casse.
+# KEY : propriété STAC (ex. geovisio:producer) ou tag EXIF (ex. Exif.Image.Software).
+PANORAMAX_FILTERS=""
+
 # Défaut : false. true = SfM multi-caméras : toutes les tailles d'images sont
 # gardées et chaque taille devient une caméra (sous-dossier LxH/). La focale
 # n'est pas transmise à Spirula ; il estime chaque caméra.

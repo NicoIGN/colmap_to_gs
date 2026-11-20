@@ -94,6 +94,8 @@ PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
 PANORAMAX_PICTURE_TYPE="${PANORAMAX_PICTURE_TYPE:-all}"
 PANORAMAX_PROVIDER="${PANORAMAX_PROVIDER:-}"
+# Filtres : "KEY=V1,V2;KEY2=V3" ; ';' sépare les clés (ET), ',' sépare les valeurs (OU).
+PANORAMAX_FILTERS="${PANORAMAX_FILTERS:-}"
 export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
@@ -216,12 +218,24 @@ prepare_images() {
     "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
     "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" "$PANORAMAX_PICTURE_TYPE" \
-    "$PANORAMAX_PROVIDER" <<'PY' || request_status=$?
+    "$PANORAMAX_PROVIDER" "$PANORAMAX_FILTERS" <<'PY' || request_status=$?
 import json
 import sys
 
-path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider = sys.argv[1:]
+path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider, filters = sys.argv[1:]
 stac_types = {"all": None, "normal": "flat", "360": "equirectangular"}
+
+
+def parse_filters(spec):
+    parsed = []
+    for item in spec.split(";"):
+        if not item.strip():
+            continue
+        key, _, values = item.partition("=")
+        parsed.append({"key": key.strip(), "values": [v.strip() for v in values.split(",") if v.strip()]})
+    return parsed or None
+
+
 with open(path, encoding="utf-8") as stream:
     previous = json.load(stream)
 expected = {
@@ -233,6 +247,7 @@ expected = {
     "image_max": int(image_max) if image_max else None,
     "picture_type": stac_types[picture_type],
     "provider": provider or None,
+    "filters": parse_filters(filters),
 }
 for key, value in expected.items():
     actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
@@ -273,6 +288,12 @@ PY
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
   bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
   [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
+  if [[ -n "$PANORAMAX_FILTERS" ]]; then
+    IFS=';' read -r -a panoramax_filter_items <<< "$PANORAMAX_FILTERS"
+    for panoramax_filter_item in "${panoramax_filter_items[@]}"; do
+      [[ -z "${panoramax_filter_item//[[:space:]]/}" ]] || bbox_args+=(--filter "$panoramax_filter_item")
+    done
+  fi
   if [[ "${PIPELINE_RESUME:-false}" == true && -f "$download_done" ]]; then
     printf '[pipeline] Téléchargement déjà terminé (%s) : étape ignorée.\n' "$download_done"
   else

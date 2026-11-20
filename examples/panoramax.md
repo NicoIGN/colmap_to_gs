@@ -56,6 +56,17 @@ bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 
 Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](pipelines.md).
 
+Pour filtrer les photos du pipeline complet, utiliser `PANORAMAX_FILTERS` :
+`;` sépare les propriétés (ET), `,` sépare les valeurs d'une propriété (OU), la
+comparaison est insensible à la casse :
+
+```bash
+PANORAMAX_FILTERS="geovisio:producer=immergis,overflorian;Exif.Image.Software=H19.03.02.02.00"
+```
+
+Ce filtre est transmis à `download.py` sous forme de `--filter` répétés et enregistré dans
+`request.json` ; changer `PANORAMAX_FILTERS` sur un `OUTPUT_DIR` existant est refusé.
+
 Pour les panoramas 360 avec HLOC, ajouter à la configuration
 `PANORAMAX_PICTURE_TYPE=360`, `COLMAP_METHOD=hloc` et
 `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les prérequis de reconstruction et

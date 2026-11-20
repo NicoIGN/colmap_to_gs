@@ -112,11 +112,10 @@ Filtres répétables `--filter KEY=VALEURS` : KEY est une propriété STAC (ex.
 séparées par des virgules sont en OU, les filtres successifs en ET, sans tenir
 compte de la casse :
 
-```bash
-python tools/panoramax/download.py ... \
-  --filter geovisio:producer=immergis,overflorian \
-  --filter Exif.Image.Software=H19.03.02.02.00
 ```
+
+Dans le pipeline complet, la même syntaxe s'écrit dans une seule variable :
+`PANORAMAX_FILTERS="geovisio:producer=immergis,overflorian;Exif.Image.Software=H19.03.02.02.00"`.
 
 Les métadonnées conservent le Feature STAC complet : coordonnées, date, séquence,
 propriétés, assets, liens de provenance et informations de licence/attribution
