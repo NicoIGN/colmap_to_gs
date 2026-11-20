@@ -103,6 +103,7 @@ def run(args):
         args.spirula_bin, "sfm", "match", str(features), "--output", str(original),
         "--pairs", ("prefilter" if selection["selected"] >= 100 else "exhaustive")
         if args.pairs == "auto" else args.pairs,
+        "--prefilter-neighbors", str(args.prefilter_neighbors),
         "--matcher", args.matcher, "--camera-mode", "folder", "--camera-model", args.camera_model,
         "--max-error", str(args.max_error), "--min-inliers", str(args.min_inliers),
         *common,
@@ -142,6 +143,7 @@ def main():
     parser.add_argument("--features", default="aliked-n16rot")
     parser.add_argument("--matcher", default="lightglue")
     parser.add_argument("--pairs", choices=("auto", "prefilter", "exhaustive", "sequential"), default="prefilter")
+    parser.add_argument("--prefilter-neighbors", type=int, default=16)
     parser.add_argument("--max-image-size", type=int, default=4096)
     parser.add_argument("--aliked-max-features", type=int, default=4096)
     parser.add_argument("--threads", type=int, default=0)

@@ -52,6 +52,7 @@ TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+SFM_SP_PREFILTER_NEIGHBORS="${SFM_SP_PREFILTER_NEIGHBORS:-16}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
 SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
@@ -121,6 +122,7 @@ Variables:
   SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
   SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
   SFM_SP_PAIRS                 Spirula pair selection (prefilter)
+  SFM_SP_PREFILTER_NEIGHBORS   Neighbours kept per image by prefilter pairing (16)
   SFM_SP_FEATURES              Feature extractor (aliked-n16rot)
   SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 2)
@@ -449,6 +451,7 @@ prepare_blocks() {
       "$repo_root/tools/panoramax/run_sfm_filtered.py"
       --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
       --max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --pairs "$SFM_SP_PAIRS"
+      --prefilter-neighbors "$SFM_SP_PREFILTER_NEIGHBORS"
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
@@ -473,6 +476,7 @@ prepare_blocks() {
       --output-dir "$SFM_DIR"
       --preset panoramax
       --pairs "$SFM_SP_PAIRS"
+      --prefilter-neighbors "$SFM_SP_PREFILTER_NEIGHBORS"
       --quality "$SFM_SP_QUALITY"
       --max-image-size "$SFM_MAX_IMAGE_SIZE"
       --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"

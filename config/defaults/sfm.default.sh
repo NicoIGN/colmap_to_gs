@@ -53,6 +53,8 @@ SFM_SP_MATCHER="bruteforce"
 # prefilter|auto|exhaustive|sequential ; exhaustive est coûteux.
 # sequential : noms triés dans l'ordre de la vidéo, SFM_CAMERA_SPLIT=false.
 SFM_SP_PAIRS="prefilter"
+# prefilter : voisins retenus par image (plus petit = appariement plus court).
+SFM_SP_PREFILTER_NEIGHBORS="16"
 # low|medium|high|extreme : préréglage Spirula ; high plafonne les points max à 8192
 # et écrase SFM_ALIKED_MAX_FEATURES. Utiliser extreme pour aller au-delà.
 SFM_SP_QUALITY="high"
