@@ -283,6 +283,21 @@ export function createNavigationSystem({
     camera.updateMatrixWorld(true);
   }
 
+  /**
+   * Roulis : rotation autour de l'axe caméra → centre de vue.
+   * La position de la caméra et la cible restent inchangées ; seul le vecteur haut tourne.
+   */
+  function rollView(angle) {
+    if (!angle) return;
+    const axis = target.clone().sub(camera.position);
+    if (axis.lengthSq() < 1e-12) return;
+    axis.normalize();
+    const roll = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+    camera.up.applyQuaternion(roll).normalize();
+    camera.lookAt(target);
+    camera.updateMatrixWorld(true);
+  }
+
   function panPixels(dx, dy, height) {
     const PAN_GAIN = 3;
     const speed = getSpeedValue() / 10;
@@ -542,7 +557,7 @@ export function createNavigationSystem({
 
       // Priorité aux mesures : ne pas prévenir l’événement,
       // flouter un champ ou capturer le pointeur.
-      if (event.shiftKey || event.metaKey) return;
+      if (event.metaKey || (event.shiftKey && event.button !== 2)) return;
 
       // Alt + clic gauche : orbite autour du centre de scène, axe principal fixe.
       const centerOrbit =
@@ -558,6 +573,8 @@ export function createNavigationSystem({
         mode = "zoom";
       } else if (event.button === 2 && event.ctrlKey) {
         mode = "look";
+      } else if (event.button === 2 && event.shiftKey) {
+        mode = "roll";
       } else if (
         event.button === lookBinding.button &&
         (!lookBinding.modifier || event[lookBinding.modifier])
@@ -628,7 +645,7 @@ export function createNavigationSystem({
       if (
         buttonReleased ||
         !getCanNavigate() ||
-        event.shiftKey ||
+        (event.shiftKey && drag.mode !== "roll") ||
         (event.altKey && drag.mode !== "centerOrbit") ||
         event.metaKey ||
         (drag.requiresControl && !event.ctrlKey) ||
@@ -669,6 +686,8 @@ export function createNavigationSystem({
         orbitScene(dx, dy);
       } else if (drag.mode === "look") {
         orbitLook(-dx * 0.005, -dy * 0.005);
+      } else if (drag.mode === "roll") {
+        rollView(dx * 0.005);
       } else {
         navigateWithCollision(() => {
           panPixels(dx, dy, canvas.clientHeight);
