@@ -15,7 +15,11 @@ TRAIN_NUM_ITER="20000"   # PAR BLOC, pas réparti entre les blocs
 
 # --- TRAIN_BACKEND=spirula uniquement ---
 TRAIN_SP_PRESET="3dgs"
-TRAIN_SP_QUALITY="ultra"    # low|medium|high|ultra ; macro, pas une résolution
+# Macro Spirula (--quality) : règle le budget de splats et la durée, pas la résolution.
+# low : 200 k splats, 15 000 itérations ; medium : 1 M, 30 000 ;
+# high : 3 M, 50 000 ; ultra : 10 M, 80 000. Spirula seul applique le défaut "medium".
+# Les budgets explicites (TRAIN_SP_CAP_MAX, TRAIN_NUM_ITER) priment sur la macro.
+TRAIN_SP_QUALITY="ultra"    # low|medium|high|ultra
 # Ces budgets explicites priment sur TRAIN_SP_QUALITY.
 TRAIN_SP_CAP_MAX="2000000"  # PAR BLOC : 4 x 2 M = jusqu'à 8 M avant fusion
 # Vide : plafond TRAIN_SP_CAP_MAX ; sinon limite par bloc à
