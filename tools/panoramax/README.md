@@ -77,7 +77,7 @@ Bbox (EPSG indiqué) → recherche STAC/WGS84 → vérification des prises de vu
 
 ```bash
 bash tools/panoramax/download.sh \
-  --bbox "651000,6861000,652000,6862000" --bbox-epsg 2154 \
+  --bbox "651000,6861000,652000,6862000" --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
 
@@ -144,7 +144,7 @@ Depuis la racine du dépôt :
 ```bash
 bash tools/panoramax/download.sh \
   --bbox "651000,6861000,652000,6862000" \
-  --bbox-epsg 2154 \
+  --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
 
@@ -152,7 +152,7 @@ Options :
 
 | Option | Description |
 |---|---|
-| `--bbox-epsg 2154` | Code EPSG des coordonnées de `--bbox` ; défaut `2154` (Lambert-93) |
+| `--crs EPSG:2154` | Système de coordonnées de `--bbox` ; défaut `EPSG:2154` (Lambert-93) |
 | `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
 | `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
 | `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |

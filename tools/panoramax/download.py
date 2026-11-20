@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -143,6 +144,13 @@ def parse_bbox(text):
     ):
         raise argparse.ArgumentTypeError("Bbox finie requise avec xmin < xmax et ymin < ymax.")
     return bbox
+
+
+def parse_crs(text):
+    match = re.fullmatch(r"EPSG:(\d+)", text.strip(), flags=re.IGNORECASE)
+    if not match or int(match.group(1)) < 1:
+        raise argparse.ArgumentTypeError("Utiliser un code du type EPSG:2154.")
+    return int(match.group(1))
 
 
 def parse_positive_int(text):
@@ -491,11 +499,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--bbox", required=True, type=parse_bbox,
-        help="xmin,ymin,xmax,ymax dans les unités de --bbox-epsg",
+        help="xmin,ymin,xmax,ymax dans les unités de --crs",
     )
     parser.add_argument(
-        "--bbox-epsg", type=parse_positive_int, default=2154,
-        help="Code EPSG des coordonnées de --bbox (défaut : 2154, Lambert-93)",
+        "--crs", dest="bbox_epsg", type=parse_crs, default=2154, metavar="EPSG:CODE",
+        help="Système de coordonnées de --bbox, ex. EPSG:2154 (défaut : Lambert-93)",
     )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--api-url", default="https://explore.panoramax.fr/api", help="Racine API STAC, sans /search")
@@ -520,7 +528,7 @@ def main():
     )
     parser.add_argument(
         "--geojson", action=argparse.BooleanOptionalAction, default=True,
-        help="Écrire positions.geojson (sommets des photos dans --bbox-epsg, attributs STAC) (défaut : oui)",
+        help="Écrire positions.geojson (sommets des photos dans --crs, attributs STAC) (défaut : oui)",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

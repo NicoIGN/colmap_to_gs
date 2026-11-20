@@ -169,6 +169,12 @@ class DownloadTest(unittest.TestCase):
             with self.assertRaises(download.argparse.ArgumentTypeError):
                 download.parse_bbox(value)
 
+    def test_crs_accepts_only_epsg_prefix(self):
+        self.assertEqual(download.parse_crs("EPSG:2154"), 2154)
+        for value in ("2154", "EPSG:", "EPSG:0", "proj:2154"):
+            with self.assertRaises(download.argparse.ArgumentTypeError):
+                download.parse_crs(value)
+
     def test_image_max_stops_pagination_at_total_selection_limit(self):
         requests = []
         photo = b"\xff\xd8test-image\xff\xd9"

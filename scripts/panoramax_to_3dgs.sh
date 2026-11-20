@@ -266,7 +266,7 @@ PY
     die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
   fi
 
-  bbox_args=(--bbox "$PANORAMAX_BBOX" --bbox-epsg "$PANORAMAX_BBOX_EPSG" \
+  bbox_args=(--bbox "$PANORAMAX_BBOX" --crs "EPSG:$PANORAMAX_BBOX_EPSG" \
     --output-dir "$DATASET_DIR" \
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")

@@ -10,7 +10,7 @@ le dossier de sortie :
 ```bash
 bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --bbox "651000,6861000,652000,6862000" \
-  --bbox-epsg 2154 --output-dir "$DATA_ROOT/panoramax"
+  --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax"
 ```
 
 Les images et leurs métadonnées sont enregistrées dans `$DATA_ROOT/panoramax/`. Un accès
