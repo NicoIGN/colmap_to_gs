@@ -529,6 +529,8 @@ function canStartLoad() {
 
 // Données sans splat (COLMAP, LiDAR) : la vue suit leur emprise.
 function applyFreeBounds(box, bounds, frame) {
+  const previousCenter = sceneCenter.clone();
+  const previousTarget = target.clone();
   box.makeEmpty();
   if (bounds) {
     box.set(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max));
@@ -537,7 +539,11 @@ function applyFreeBounds(box, bounds, frame) {
     navigation.clearNavigation();
     if (hasFreeData()) {
       computeSceneBounds();
-      if (frame && bounds) navigation.fitToView(sceneBox);
+      if (frame && bounds) {
+        navigation.fitToView(sceneBox);
+      } else {
+        keepPivotOnCenter(previousCenter, previousTarget);
+      }
     } else {
       sceneBox.makeEmpty();
       sceneCenter.set(0, 0, 0);
@@ -545,6 +551,18 @@ function applyFreeBounds(box, bounds, frame) {
     }
   }
   refreshUI();
+}
+
+// Pivot resté sur l’ancien centre des données (ex. géoréférencement arrivé après l’import) :
+// il suit le déplacement du centre, la caméra est décalée du même vecteur.
+function keepPivotOnCenter(previousCenter, previousTarget) {
+  const tolerance = 1e-6 * Math.max(1, sceneRadius);
+  if (previousTarget.distanceTo(previousCenter) > tolerance) return;
+  const delta = sceneCenter.clone().sub(previousCenter);
+  if (delta.lengthSq() === 0) return;
+  target.add(delta);
+  camera.position.add(delta);
+  syncCamera();
 }
 
 function computeSceneBounds() {
