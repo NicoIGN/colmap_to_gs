@@ -524,7 +524,8 @@ export function createMeasurementSystem({
     }
 
   function onPointerDown(event) {
-    if (!event.shiftKey) return;
+    // Shift + clic droit est réservé à la rotation de la vue (navigation.js).
+    if (!event.shiftKey || event.button === 2) return;
 
     // Réserver Shift à la mesure et empêcher le drag habituel.
     consume(event);
