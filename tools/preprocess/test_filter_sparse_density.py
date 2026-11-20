@@ -164,22 +164,17 @@ class SparseDensityTest(unittest.TestCase):
         np.testing.assert_array_equal(parallel[0], serial[0])
         np.testing.assert_array_equal(parallel[1], serial[1])
 
-    def test_insufficient_camera_views_do_not_make_a_removal_decision(self):
+    def test_non_evaluable_points_are_removed_and_all_removal_is_refused(self):
         positions = np.vstack((np.tile([0, 0, 10.0], (20, 1)), [[0, 0, 100]]))
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "sparse"
             output = root / "filtered"
             write_model(source, positions, image_count=1)
-            report = filter_sparse_model(
-                source, output, min_neighbors=12, min_cluster_points=5
-            )
-            self.assertEqual(report["points_removed"], 0)
-            self.assertEqual(len(read_output_point_ids(
-                root / "filtered_clean/points3D.bin")), 21)
-            self.assertEqual(read_output_point_ids(root / "filtered_rejected/points3D.bin"), [])
-            self.assertTrue(all(refs == [-1] * 21 for _, refs in
-                                read_image_point_ids(root / "filtered_rejected/images.bin")))
+            with self.assertRaisesRegex(ValueError, "supprimer tous les points"):
+                filter_sparse_model(
+                    source, output, min_neighbors=12, min_cluster_points=5
+                )
 
     def test_filter_writes_consistent_sparse_and_report(self):
         rng = np.random.default_rng(7)

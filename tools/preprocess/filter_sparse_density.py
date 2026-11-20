@@ -454,9 +454,9 @@ def filter_sparse_model(
         progress=progress,
         verbose=verbose,
     )
-    rejected = (
-        (evaluable >= min_views)
-        & (suspicious >= np.ceil(vote_fraction * evaluable))
+    not_evaluable = evaluable < min_views
+    rejected = not_evaluable | (
+        (suspicious >= np.ceil(vote_fraction * evaluable))
         & (suspicious > 0)
     )
     if rejected.all():
@@ -477,6 +477,7 @@ def filter_sparse_model(
         "points_kept": int((~rejected).sum()),
         "points_removed": int(rejected.sum()),
         "points_with_enough_views": int((evaluable >= min_views).sum()),
+        "points_not_evaluable_removed": int(not_evaluable.sum()),
         "removed_points": [
             {
                 "point3D_id": int(point_ids[index]),
@@ -532,7 +533,8 @@ def main():
                         help="Hausse du support requis par doublement de profondeur "
                              "(défaut : 0.25).")
     parser.add_argument("--min-views", type=int, default=2,
-                        help="Nombre de vues évaluables requis (défaut : 2).")
+                        help="Nombre de vues évaluables requis ; en dessous, le point est rejeté "
+                             "sans vote (défaut : 2).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
     parser.add_argument("--workers", type=int, default=1,
