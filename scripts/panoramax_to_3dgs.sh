@@ -286,7 +286,10 @@ PY
     download_status=0
     "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}" || download_status=$?
     "$PYTHON_BIN" "$download_lock_helper" "$download_lock" --pid "$$" --release
-    ((download_status == 0)) || die "Téléchargement Panoramax en échec (code $download_status)."
+    ((download_status == 0)) || {
+      printf '[ERREUR] échec du téléchargement des photos Panoramax (code %s).\n' "$download_status" >&2
+      exit "$download_status"
+    }
     touch -- "$download_done"
   fi
 

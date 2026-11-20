@@ -28,7 +28,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -56,7 +56,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 "    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
                 "sys.exit(13)\n")
             python.chmod(0o755)
@@ -96,7 +96,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -145,7 +145,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, runpy, sys\n"
                 "args = sys.argv[1:]\n"
-                "if args and args[0] != '-' and not args[0].endswith('pipeline_report.py'):\n"
+                "if args and args[0] != '-' and not args[0].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 "  with open(os.environ['COMMAND_LOG'], 'a') as log:\n"
                 "    log.write(os.path.basename(args[0]) + '\\n')\n"
                 "if args and args[0].endswith('download.py'):\n"
@@ -239,6 +239,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'PANORAMAX_QUALITY="hd"\n'
                 'PANORAMAX_IMAGE_MAX="5"\n'
                 f'SPIRULA_BIN="{spirula}"\n'
+                'SPIRULA_DEVICE="0"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
                 'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_SP_CAP_MAX="1000"\n'
                 'TRAIN_SP_PRESET="3dgs"\nTRAIN_SP_QUALITY="high"\nTRAIN_SP_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'

@@ -360,10 +360,11 @@ SFM_SP_PAIR_MAX_DISTANCE=30
                            "\n".join(path.read_text() for path in DEFAULT_FILES), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "SPIRULA_DEVICE", "PYTHON_BIN",
                   "MVK_CONFIG_LOG_LEVEL", "SS_NN_LOG", "NUM_CPUS", "NUM_GPUS",
-                  "PIPELINE_RESUME", "REMOVE_LOCKS", "COLMAP_METHOD", "TRAIN_BACKEND"}
+                  "PIPELINE_RESUME", "REMOVE_LOCKS", "COLMAP_METHOD", "COLMAP_USE_MVS", "TRAIN_BACKEND",
+                  "KMP_DUPLICATE_LIB_OK"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_", "HLOC_", "GEOREF_",
                     "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_", "LIDAR_",
-                    "ORIENTATIONS_")
+                    "ORIENTATIONS_", "MVS_")
         for name in names:
             self.assertTrue(name in shared or name.startswith(prefixes), name)
 
