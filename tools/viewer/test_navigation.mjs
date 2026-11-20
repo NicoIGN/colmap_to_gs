@@ -288,9 +288,9 @@ test("mouse navigation distinguishes pan, look, orbit and modifier release", (t)
     const rollPosition = camera.position.clone();
     const rollTarget = target.clone();
     const rollUp = camera.up.clone();
-    canvas.dispatch("pointerdown", { shiftKey: true });
+    canvas.dispatch("pointerdown", { altKey: true });
     assert.equal(canvas.captured, true);
-    canvas.dispatch("pointermove", { shiftKey: true, clientX: 15, clientY: 5 });
+    canvas.dispatch("pointermove", { altKey: true, clientX: 15, clientY: 5 });
     assert.deepEqual(camera.position, rollPosition);
     assert.deepEqual(target, rollTarget);
     assert.notDeepEqual(camera.up, rollUp);

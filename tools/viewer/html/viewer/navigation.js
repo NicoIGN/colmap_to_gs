@@ -557,13 +557,15 @@ export function createNavigationSystem({
 
       // Priorité aux mesures : ne pas prévenir l’événement,
       // flouter un champ ou capturer le pointeur.
-      if (event.metaKey || (event.shiftKey && event.button !== 2)) return;
+      if (event.metaKey || event.shiftKey) return;
 
       // Alt + clic gauche : orbite autour du centre de scène, axe principal fixe.
       const centerOrbit =
         event.altKey && event.button === 0 && !event.ctrlKey;
+      // Alt + clic droit : roulis autour de l'axe caméra → centre de vue.
+      const roll = event.altKey && event.button === 2 && !event.ctrlKey;
 
-      if (event.altKey && !centerOrbit) return;
+      if (event.altKey && !centerOrbit && !roll) return;
 
       let mode = null;
 
@@ -573,9 +575,9 @@ export function createNavigationSystem({
         mode = "zoom";
       } else if (event.button === 2 && event.ctrlKey) {
         mode = "look";
-      } else if (event.button === 2 && event.shiftKey) {
+      } else if (roll) {
         mode = "roll";
-        setStatus("Rotation de la vue autour de l'axe caméra → centre (Shift + clic droit).");
+        setStatus("Rotation de la vue autour de l'axe caméra → centre (Alt + clic droit).");
       } else if (
         event.button === lookBinding.button &&
         (!lookBinding.modifier || event[lookBinding.modifier])
@@ -646,8 +648,8 @@ export function createNavigationSystem({
       if (
         buttonReleased ||
         !getCanNavigate() ||
-        (event.shiftKey && drag.mode !== "roll") ||
-        (event.altKey && drag.mode !== "centerOrbit") ||
+        event.shiftKey ||
+        (event.altKey && drag.mode !== "centerOrbit" && drag.mode !== "roll") ||
         event.metaKey ||
         (drag.requiresControl && !event.ctrlKey) ||
         (
