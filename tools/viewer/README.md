@@ -77,6 +77,12 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   signale. Le nuage est sous-échantillonné à 2 millions de points au maximum,
   coloré par RVB si présent, sinon par classe ASPRS. Décodage via laz-perf
   (chargé depuis jsdelivr) ; limite : 1 Gio.
+- Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
+  en données 3D filaires : chaque table d'entités devient une sous-couche de
+  lignes (polylignes et contours de polygones ; points ignorés). Il suit le même
+  géoréférencement / CRS (EPSG) que le LiDAR. La couleur se règle dans
+  « Options » (« Couleur des données filaires »). Décodage SQLite via sql.js
+  (chargé depuis jsdelivr) ; limite : 512 Mio, 4 millions de sommets affichés.
 - Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.
 - Le clic gauche-glisser orbite autour de la cible ; le clic droit-glisser ou
   milieu-glisser déplace la vue sans touche supplémentaire. Ctrl + clic

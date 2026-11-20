@@ -334,7 +334,8 @@
   <div id="drop">
     Déposer une scène .sog, .ply, .splat ou .ksplat,
     un géoréférencement .json, une trajectoire .gpx,
-    un nuage LiDAR .laz / .las ou un dossier COLMAP.
+    un nuage LiDAR .laz / .las, un GeoPackage .gpkg (filaire)
+    ou un dossier COLMAP.
   </div>
 
   <!-- Options d'affichage : haut droite, repliable via scene-tools.js. -->
@@ -362,6 +363,14 @@
         </label>
 
         <input type="color" id="backgroundColor" value="#10131b" />
+      </div>
+
+      <div class="section row">
+        <label for="wireColor" class="hint inline-hint">
+          Couleur des données filaires
+        </label>
+
+        <input type="color" id="wireColor" value="#00e5ff" />
       </div>
 
       <label class="check">

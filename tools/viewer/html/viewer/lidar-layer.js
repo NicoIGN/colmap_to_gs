@@ -177,7 +177,7 @@ function buildSource(name, header, decoded) {
 }
 
 // Transformation affine LAZ (CRS projeté) → repère monde de la scène.
-function placementFor(source, georef) {
+export function placementFor(source, georef) {
   if (!georef) {
     return { mode: "local", note: "Aucun géoréférencement : nuage centré à l’origine." };
   }
@@ -210,7 +210,7 @@ function placementFor(source, georef) {
   };
 }
 
-function worldPositions(source, placement) {
+export function worldPositions(source, placement) {
   const { rel, count } = source;
   if (placement.mode === "local") return rel;
 

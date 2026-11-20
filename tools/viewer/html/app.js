@@ -20,6 +20,7 @@ import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
+import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -104,6 +105,7 @@ let sceneTools = null;
 let colmapLayer = null;
 let gpsLayer = null;
 let lidarLayer = null;
+let gpkgLayer = null;
 
 
 const canvas = document.createElement("canvas");
@@ -491,6 +493,7 @@ function releaseScene() {
   sceneTools?.reset();
   colmapLayer?.clear();
   lidarLayer?.clear();
+  gpkgLayer?.clear();
   gpsLayer?.clear();
   layerManager?.clear();
 
@@ -849,6 +852,13 @@ async function handleDroppedFiles(fileList, items) {
         await lidarLayer.loadFile(lidarFile, sidecar);
         return;
       }
+    }
+
+    const gpkgFile = files.find((f) => /\.gpkg$/i.test(f.name));
+    if (gpkgFile && files.length === 1) {
+      if (!gpkgLayer) throw new Error("L’importeur GeoPackage n’est pas initialisé.");
+      await gpkgLayer.loadFile(gpkgFile);
+      return;
     }
 
     const sceneFile = files.find((f) => isSupportedSceneName(f.name));
@@ -1310,6 +1320,7 @@ function installUI() {
   });
 
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
+  $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1336,6 +1347,7 @@ function installUI() {
     applyUpFlip();
     colmapLayer?.setFlipUp($("flipUp").checked);
     lidarLayer?.setFlipUp($("flipUp").checked);
+    gpkgLayer?.setFlipUp($("flipUp").checked);
 
     computeSceneBounds();
     syncCamera();
@@ -1693,6 +1705,15 @@ async function initialize() {
         registerGroup: (group) => layerManager.addGroup(group),
       });
 
+      gpkgLayer = createGpkgLayer({
+        app,
+        setStatus,
+        getFlipUp: () => $("flipUp").checked,
+        getGeoref: () => sceneTools?.getGeoref() ?? null,
+        registerGroup: (group) => layerManager.addGroup(group),
+      });
+      gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
+
       installUI();
       installDnD();
 
@@ -1702,6 +1723,7 @@ async function initialize() {
         navigation?.frame(dt);
         sceneTools?.frame(dt);
         lidarLayer?.refreshPlacement();
+        gpkgLayer?.refreshPlacement();
         colmapLayer?.frame();
 
         // Peut être null pendant init/teardown.
@@ -1762,6 +1784,9 @@ async function initialize() {
 
         lidarLayer?.dispose();
         lidarLayer = null;
+
+        gpkgLayer?.dispose();
+        gpkgLayer = null;
     
       progress.dispose();
       app?.destroy();
