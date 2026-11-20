@@ -406,3 +406,36 @@ export async function readGeorefFile(file) {
 
   return parseGeoref(data);
 }
+
+// gauge.txt (Spirula) : repère ENU métrique dont l'origine est un point WGS84.
+export async function readGaugeFile(file, epsg = 2154) {
+  if (file.size > MAX_GEOREF_BYTES) {
+    throw new Error("gauge.txt trop volumineux.");
+  }
+
+  const values = new Map();
+  for (const raw of (await file.text()).split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const [key, ...rest] = line.split(/\s+/);
+    values.set(key, rest.join(" "));
+  }
+
+  const lat = Number(values.get("origin_lat"));
+  const lon = Number(values.get("origin_lon"));
+  const alt = Number(values.get("origin_alt") ?? 0);
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || !Number.isFinite(alt)) {
+    throw new Error("gauge.txt sans origin_lat / origin_lon valides.");
+  }
+
+  return parseGeoref({
+    output_reference: {
+      type: "local_ENU",
+      units: "m",
+      axes: ["East", "North", "Up"],
+      origin_lat_lon_height: [lat, lon, alt],
+      origin_projected: { epsg },
+    },
+  });
+}

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { readGeorefFile } from "./georef.js";
+import { readGaugeFile, readGeorefFile } from "./georef.js";
 
 /**
  * Géoréférencement, GPX et encart d’informations.
@@ -787,8 +787,47 @@ export function createSceneTools({
       return true;
     }
 
+  function applyGeoref(reference) {
+    georef = reference;
+    resetTrack();
+    updateGeorefInfo();
+    clearNavigation();
+    resetMeasurement();
+    refreshAppUI();
+  }
+
+  // Le JSON de géoréférencement ne dépend pas d'une scène splat : il s'applique aussi seul.
+  async function importGeorefFile(file) {
+    setStatus(`Lecture de ${file.name}…`);
+    const reference = await readGeorefFile(file);
+    if (disposed) return;
+
+    applyGeoref(reference);
+    setStatus(
+      `Référence associée — EPSG:${reference.epsg}. ` +
+      "Tu peux importer le GPX WGS84."
+    );
+  }
+
+  async function importGaugeFile(file) {
+    const reference = await readGaugeFile(file);
+    if (disposed) return null;
+
+    applyGeoref(reference);
+    return reference;
+  }
+
   async function importFile(file) {
     if (disposed) return;
+
+    if (/\.json$/i.test(file.name)) {
+      try {
+        await importGeorefFile(file);
+      } catch (error) {
+        setStatus(`Import impossible : ${error?.message || error}`, true);
+      }
+      return;
+    }
 
     const initial = getState();
 
@@ -812,36 +851,6 @@ export function createSceneTools({
     };
 
     try {
-      if (/\.json$/i.test(file.name)) {
-        setStatus(`Lecture de ${file.name}…`);
-
-        const reference = await readGeorefFile(file);
-        console.log("[georef] lu", file.name, {
-          epsg: reference.epsg,
-          origin: reference.origin,
-          originGeographic: reference.originGeographic,
-        });
-
-        if (!valid()) {
-          console.warn("[georef] ignoré : scène changée pendant la lecture", { ready: getState().ready });
-          return;
-        }
-
-        georef = reference;
-        resetTrack();
-        updateGeorefInfo();
-        clearNavigation();
-        resetMeasurement();
-        refreshAppUI();
-
-        setStatus(
-          `Référence associée — EPSG:${georef.epsg}. ` +
-          "Tu peux importer le GPX WGS84."
-        );
-
-        return;
-      }
-
       if (!georef) {
         throw new Error(
           "Associe le JSON de géoréférencement avant le GPX."
@@ -1128,6 +1137,7 @@ export function createSceneTools({
         setSceneInfo,
         getAbsoluteCoordinates,
         importFile,
+        importGaugeFile,
         refreshUI,
         rebuildTrack,
         frame,

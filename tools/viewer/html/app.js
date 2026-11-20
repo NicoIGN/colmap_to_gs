@@ -1697,6 +1697,7 @@ async function initialize() {
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => applyFreeBounds(colmapBox, bounds, frame),
+        onGauge: (file) => sceneTools?.importGaugeFile(file),
       });
 
       console.info("[APP] COLMAP initialisé.");

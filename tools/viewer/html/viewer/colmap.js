@@ -812,6 +812,7 @@ export function createColmapLayer({
   registerLayer,
   registerGroup,
   onBoundsChanged,
+  onGauge,
 }) {
   const sceneColmapInfo = document.getElementById("sceneColmapInfo");
   const input = document.getElementById("colmapFolderInput");
@@ -1721,10 +1722,21 @@ export function createColmapLayer({
       if (base === "cameras.bin") group.cameras = file;
       if (base === "images.bin") group.images = file;
       if (base === "points3D.bin") group.points = file;
+      if (base === "gauge.txt") group.gauge = file;
     }
+    const findGauge = (dir) => {
+      let current = dir;
+      while (true) {
+        const gauge = groups.get(current)?.gauge;
+        if (gauge) return gauge;
+        if (!current) return null;
+        const idx = current.lastIndexOf("/");
+        current = idx >= 0 ? current.slice(0, idx) : "";
+      }
+    };
     const candidates = [...groups.entries()]
       .filter(([, group]) => group.cameras && group.images && group.points)
-      .map(([dir, group]) => ({ dir, ...group }))
+      .map(([dir, group]) => ({ dir, ...group, gauge: findGauge(dir) }))
       .sort((a, b) => a.dir.localeCompare(b.dir));
 
     if (!candidates.length) {
@@ -1737,12 +1749,23 @@ export function createColmapLayer({
 
     const shouldFrame = models.size === 0;
     let added = 0;
+    let gaugeFile = null;
     try {
       for (const candidate of candidates) {
         setStatus(`Chargement COLMAP : ${candidate.dir || "(racine)"}`);
-        if (await loadCandidate(candidate)) added++;
+        if (await loadCandidate(candidate)) {
+          added++;
+          if (candidate.gauge) gaugeFile = candidate.gauge;
+        }
       }
       if (!added) return;
+      if (gaugeFile && onGauge) {
+        try {
+          await onGauge(gaugeFile);
+        } catch (error) {
+          console.warn("[colmap] gauge.txt ignoré :", error);
+        }
+      }
       refreshUI();
       refreshInfo();
       onBoundsChanged?.(getCombinedBounds(), shouldFrame);
