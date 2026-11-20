@@ -393,6 +393,8 @@ resolve_final_ply() {
   (( ${#plys[@]} )) || plys=("$chkpt_dir"/*_step-*.ply)
   # Spirula en latest-only écrit parfois un PLY final sans numéro de step (<nom>.ply).
   (( ${#plys[@]} )) || plys=("$chkpt_dir"/*.ply)
+  # PLY final déjà publié (sans numéro de step) dans splats/.
+  (( ${#plys[@]} )) || plys=("$splats_dir"/*.ply)
   shopt -u nullglob
   if (( ${#plys[@]} == 0 )); then
     final_ckpt=""
@@ -422,6 +424,17 @@ mark_export_done() {
     printf 'reason=%s\n' "$1"
     printf 'output=%s\n' "$world_splat"
   } > "$export_done_file"
+}
+
+finalize_training() {
+  local finalize_lock="$output_dir/.train_finalize.lock"
+  "$python_bin" "$lock_helper" "$finalize_lock" --pid "$$" --resume "${PIPELINE_RESUME:-false}" --ignore "${REMOVE_LOCKS:-false}" --workspace "${OUTPUT_DIR:-$output_dir}"
+  resolve_final_ply
+  [[ -s "$final_ckpt" ]] ||
+    die "Entraînement terminé mais PLY final Spirula introuvable dans $chkpt_dir"
+  publish_final_ply
+  mark_train_done "$1"
+  "$python_bin" "$lock_helper" "$finalize_lock" --pid "$$" --release
 }
 
 export_world_splat() {
@@ -494,7 +507,15 @@ fi
 
 if [[ "$clean" == false ]]; then
   resolve_final_ply
-  if [[ -s "$final_ckpt" && -f "$train_done_file" ]]; then
+  training_finished=false
+  if [[ -f "$train_done_file" ]]; then
+    training_finished=true
+  elif [[ "${PIPELINE_RESUME:-false}" == true && -s "$final_ckpt" && -f "$output_dir/train.log" ]] &&
+       grep -q "Entraînement terminé" "$output_dir/train.log"; then
+    training_finished=true
+    log "Entraînement terminé avant interruption (PLY final présent) : finalisation sans réentraîner."
+  fi
+  if [[ -s "$final_ckpt" && "$training_finished" == true ]]; then
     log "Checkpoint final déjà présent. Entraînement ignoré."
     previous_photometric_signature=""
     [[ ! -f "$photometric_signature_file" ]] ||
@@ -509,7 +530,7 @@ if [[ "$clean" == false ]]; then
     if [[ "$previous_signature" != "$masks_signature" ]]; then
       echo "[AVERTISSEMENT] Ce bloc a été entraîné avec d'autres masques (voir $masks_signature_file) ; --clean pour réentraîner." >&2
     fi
-    mark_train_done "found_final_ckpt"
+    finalize_training "found_final_ckpt"
     export_world_splat
     exit 0
   fi
@@ -675,13 +696,7 @@ if [[ "$spirula_status" -ne 0 ]]; then
   echo "[AVERTISSEMENT] Spirula a quitté avec le code $spirula_status après la fin de l'entraînement (plantage à la sortie) ; résultat conservé." >&2
 fi
 prune_old_checkpoints
-
-resolve_final_ply
-[[ -s "$final_ckpt" ]] ||
-  die "Entraînement terminé mais PLY final Spirula introuvable dans $chkpt_dir"
-publish_final_ply
-
-mark_train_done "completed_training"
+finalize_training "completed_training"
 printf '%s\n' "$photometric_signature" > "$photometric_signature_file"
 log "Entraînement terminé. PLY final : $final_ckpt"
 log "Marqueur train : $train_done_file"

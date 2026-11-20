@@ -252,6 +252,7 @@ class BlockPipelineTest(unittest.TestCase):
                 "      open(os.path.join(chkpt, 'chkpt_step-%09d.ply' % step), 'wb').write(b'ply')\n"
                 "      open(os.path.join(chkpt, 'chkpt_step-%09d.tar' % step), 'wb').write(b'tar')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(chkpt, 'scene_transform.json'), 'w'))\n"
+                "  print('Entraînement terminé', flush=True)\n"
             )
             spirula.chmod(0o755)
             env = dict(
@@ -284,6 +285,24 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PLY final", result.stdout + result.stderr)
             self.assertTrue(list(root.rglob("block_*.splat")), result.stdout + result.stderr)
+
+    def test_finished_training_is_not_retrained_when_resumed_before_done_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env["TEST_SPIRULA_FINAL_WITHOUT_STEP"] = "1"
+            first = execute()
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            for done in root.rglob(".train_done"):
+                done.unlink()
+            for export_done in root.rglob(".export_done"):
+                export_done.unlink()
+            trains_before = log.read_text().count('"train"')
+            env["PIPELINE_RESUME"] = "true"
+            second = execute()
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            self.assertEqual(log.read_text().count('"train"'), trains_before, second.stdout + second.stderr)
+            self.assertEqual(len(list(root.rglob(".train_done"))), 2)
+            self.assertFalse(list(root.rglob(".train_finalize.lock")))
 
     def test_automatic_growth_in_local_and_array_workers(self):
         for mode in ("local", "array"):
