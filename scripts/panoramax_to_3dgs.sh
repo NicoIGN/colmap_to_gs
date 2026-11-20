@@ -223,7 +223,7 @@ import json
 import sys
 
 path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider, filters = sys.argv[1:]
-stac_types = {"all": None, "normal": "flat", "360": "equirectangular"}
+stac_types = {"all": "all", "normal": "normal", "360": "360"}
 
 
 def parse_filters(spec):
@@ -251,6 +251,8 @@ expected = {
 }
 for key, value in expected.items():
     actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
+    if key == "picture_type" and actual is None:
+        actual = "all"
     if key == "api_url":
         actual = actual.rstrip("/")
         value = value.rstrip("/")
@@ -293,6 +295,7 @@ PY
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
   [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
+  bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
   if [[ -n "$PANORAMAX_FILTERS" ]]; then
     IFS=';' read -r -a panoramax_filter_items <<< "$PANORAMAX_FILTERS"
     for panoramax_filter_item in "${panoramax_filter_items[@]}"; do

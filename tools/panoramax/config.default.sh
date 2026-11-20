@@ -31,8 +31,8 @@ PANORAMAX_DATETIME=""
 # au-delà de 10000 résultats par requête) ; sinon entier > 0, nombre maximal de photos.
 PANORAMAX_IMAGE_MAX=""
 
-# Défaut : all. Valeurs : all (toutes), normal (photos classiques, type "flat"),
-# 360 (photos équirectangulaires, type "equirectangular").
+# Défaut : all. Valeurs : all (toutes), normal (photos non 360), 360 (équirectangulaires).
+# Le type vient de la collection ; s'il n'y est pas, il est lu dans le XMP GPano de l'image.
 PANORAMAX_PICTURE_TYPE="all"
 
 # Défaut : "". Vide = tous les providers ; sinon nom exact du provider STAC

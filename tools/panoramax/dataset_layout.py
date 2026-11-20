@@ -6,8 +6,11 @@ Deux layouts sont acceptés : à plat (images/, metadata/) ou par collection
 
 import json
 import os
+import re
 from pathlib import Path
 
+XMP_HEADER = b"http://ns.adobe.com/xap/1.0/\x00"
+GPANO_PROJECTION = re.compile(r'GPano:ProjectionType\s*(?:=\s*"([^"]*)"|>\s*([^<\s]+)\s*<)')
 SOF_MARKERS = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
 
 
@@ -99,6 +102,44 @@ def picture_type_of(feature):
     except (TypeError, ValueError):
         pass
     return None
+
+
+def image_is_equirectangular(path):
+    """Lit GPano:ProjectionType dans le XMP du JPEG, pour les photos dont le type n'est pas dans la collection."""
+    with Path(path).open("rb") as stream:
+        if stream.read(2) != b"\xff\xd8":
+            return False
+        while True:
+            head = stream.read(4)
+            if len(head) < 4 or head[0] != 0xFF or head[1] in (0xD9, 0xDA):
+                return False
+            length = int.from_bytes(head[2:4], "big")
+            if length < 2:
+                return False
+            payload = stream.read(length - 2)
+            if head[1] == 0xE1 and payload.startswith(XMP_HEADER):
+                xml = payload[len(XMP_HEADER):].decode("utf-8", "replace")
+                for match in GPANO_PROJECTION.finditer(xml):
+                    value = (match.group(1) or match.group(2) or "").strip()
+                    if value.casefold() == "equirectangular":
+                        return True
+
+
+def resolved_picture_type(feature, image=None):
+    """Type STAC/EXIF de la collection, sinon XMP GPano de l'image elle-même."""
+    kind = picture_type_of(feature)
+    if kind is None and image is not None and image_is_equirectangular(image):
+        return "equirectangular"
+    return kind
+
+
+def picture_type_matches(kind, wanted):
+    """wanted : all, 360 (equirectangular) ou normal (tout le reste)."""
+    if wanted == "all":
+        return True
+    if wanted == "360":
+        return kind == "equirectangular"
+    return kind != "equirectangular"
 
 
 def metadata_index(dataset):

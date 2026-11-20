@@ -22,10 +22,13 @@ from urllib.request import Request, urlopen
 from pyproj import Transformer
 from pyproj.exceptions import ProjError
 
-from dataset_layout import exif_of, jpeg_size, picture_type_of
+from dataset_layout import (
+    exif_of, jpeg_size, picture_type_matches, picture_type_of, resolved_picture_type,
+)
 
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
 SEARCH_LIMIT = 10000
+PICTURE_TYPES = ("all", "normal", "360")
 
 
 class Progress:
@@ -400,6 +403,9 @@ def run(args):
     provider = getattr(args, "provider", None) or None
     filters = getattr(args, "filters", None) or None
     verbose = getattr(args, "verbose", True)
+    picture_type = getattr(args, "picture_type", "all") or "all"
+    if picture_type not in PICTURE_TYPES:
+        raise ValueError("Le type d'image doit être all, normal ou 360.")
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
         "bbox": args.bbox, "bbox_wgs84": geographic,
@@ -409,11 +415,12 @@ def run(args):
         "provider": provider,
         "filters": [{"key": key, "values": names} for key, names in filters] if filters else None,
         "api_limit": api_limit,
+        "picture_type": picture_type,
         "dry_run": dry_run,
     })
     counts = {
         "pages": 0, "available": 0, "selected": 0,
-        "downloaded": 0, "reused": 0, "failed": 0,
+        "downloaded": 0, "reused": 0, "failed": 0, "filtered_type": 0,
     }
     progress = Progress(image_max)
     seen_items = set()
@@ -448,6 +455,9 @@ def run(args):
                     continue
                 if filters is not None and not item_matches_filters(feature, filters):
                     continue
+                kind = picture_type_of(feature)
+                if kind is not None and not picture_type_matches(kind, picture_type):
+                    continue
                 after_filters += 1
                 if item_in_bbox(feature, args.bbox, to_bbox_crs):
                     candidates.append((feature, source_url, key))
@@ -470,8 +480,10 @@ def run(args):
     counts["available"] = len(candidates)
     total_is_exact = not capped
     counts["available_is_exact"] = total_is_exact
-    selected = candidates[:image_max] if image_max is not None else candidates
-    progress = Progress(len(selected))
+    # Candidates without a type in the collection are checked on the image itself, so
+    # the --image-max limit is applied to photos kept after that check.
+    selected = candidates
+    progress = Progress(min(len(candidates), image_max) if image_max is not None else len(candidates))
     print(
         f"Photos renvoyées par l'API : {api_features} (types : {dict(api_types)}) ; "
         f"après filtres type/provider : {after_filters}"
@@ -480,8 +492,6 @@ def run(args):
         f"Photos dans la bbox EPSG:{bbox_epsg} : "
         f"{counts['available']}{'' if total_is_exact else '+'}"
     )
-    if image_max is not None:
-        print(f"Limite appliquée : {len(selected)} photo(s) sur {counts['available']} disponibles")
     if not total_is_exact:
         print(
             f"AVERTISSEMENT : l'API a atteint la limite de recherche "
@@ -494,6 +504,8 @@ def run(args):
     known = {path.stem: path for path in output.glob("*/metadata/*.json")}
     with (contextlib.nullcontext() if dry_run else manifest_path.open("w", encoding="utf-8")) as manifest:
         for feature, source_url, key in selected:
+            if image_max is not None and len(located) >= image_max:
+                break
             counts["selected"] += 1
             name = hashlib.sha256(key.encode("utf-8")).hexdigest()
             metadata = known.get(name) or output / collection_folder(feature) / "metadata" / f"{name}.json"
@@ -534,6 +546,12 @@ def run(args):
                     os.replace(temporary, image)
                     record["status"] = "downloaded"
                 record["size"] = "x".join(str(value) for value in jpeg_size(image))
+                if not picture_type_matches(resolved_picture_type(feature, image), picture_type):
+                    image.unlink(missing_ok=True)
+                    located.pop()
+                    counts["selected"] -= 1
+                    counts["filtered_type"] += 1
+                    continue
                 atomic_json(metadata, {
                     "feature": feature, "source_page": source_url,
                     "download": {"url": asset_url, "quality": args.quality, "bytes": size},
@@ -553,6 +571,10 @@ def run(args):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
             manifest.flush()
     progress.finish(counts)
+    if counts["filtered_type"]:
+        print(f"Filtre type (XMP de l'image) : {counts['filtered_type']} photo(s) écartée(s) ({picture_type})")
+    if image_max is not None:
+        print(f"Limite appliquée : {len(located)} photo(s) sur {counts['available']} disponibles")
     if not dry_run and place_by_size(located, output):
         with manifest_path.open("w", encoding="utf-8") as manifest:
             for _, record in located:
@@ -611,6 +633,13 @@ def main():
             "Filtre répétable sur une propriété STAC (ex. geovisio:producer) ou un tag EXIF "
             "(ex. Exif.Image.Software), valeurs séparées par des virgules, insensible à la casse. "
             "Exemple : --filter geovisio:producer=immergis,overflorian --filter Exif.Image.Software=H19.03.02.02.00"
+        ),
+    )
+    parser.add_argument(
+        "--picture-type", choices=PICTURE_TYPES, default="all",
+        help=(
+            "all, normal (non 360) ou 360 (equirectangular). Le type vient de la collection ; "
+            "s'il n'y est pas, il est lu dans le XMP GPano de l'image téléchargée (défaut : all)"
         ),
     )
     parser.add_argument(

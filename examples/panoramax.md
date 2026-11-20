@@ -98,3 +98,6 @@ Pour les panoramas 360 avec HLOC, ajouter à la configuration
 `PANORAMAX_PICTURE_TYPE=360`, `COLMAP_METHOD=hloc` et
 `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les prérequis de reconstruction et
 d'entraînement et les limites de ce mode sont décrits dans la documentation.
+`PANORAMAX_PICTURE_TYPE=360` ou `normal` filtre le téléchargement : le type STAC
+ou EXIF de la collection est utilisé ; si absent, le XMP GPano du JPEG téléchargé
+décide (les photos sans type ni GPano sont considérées comme non 360).

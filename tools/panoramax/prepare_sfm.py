@@ -22,7 +22,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from dataset_layout import image_files, jpeg_size, metadata_index, picture_type_of
+from dataset_layout import image_files, jpeg_size, metadata_index, resolved_picture_type
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 
@@ -58,12 +58,13 @@ def focal_from_metadata(path, width):
 
 
 def is_equirectangular(path):
-    """Même règle que download.py (dataset_layout.picture_type_of)."""
+    """Même règle que download.py (dataset_layout.resolved_picture_type), avec le XMP du JPEG en repli."""
     try:
         feature = json.loads(path.read_text(encoding="utf-8"))["feature"]
     except (OSError, ValueError, KeyError, TypeError):
         return False
-    return picture_type_of(feature) == "equirectangular"
+    image = path.parent.parent / "images" / f"{path.stem}.jpg"
+    return resolved_picture_type(feature, image if image.is_file() else None) == "equirectangular"
 
 
 def env_flag(name):

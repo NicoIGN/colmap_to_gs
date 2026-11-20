@@ -47,6 +47,27 @@ class PictureTypeTest(unittest.TestCase):
         self.assertEqual(download.picture_type_of(float_fov), "equirectangular")
 
 
+class ImageXmpTypeTest(unittest.TestCase):
+    def jpeg_with_xmp(self, xml):
+        header = b"http://ns.adobe.com/xap/1.0/\x00"
+        app1 = b"\xff\xe1" + (len(header + xml) + 2).to_bytes(2, "big") + header + xml
+        return b"\xff\xd8" + app1 + b"\xff\xda\x00\x02\x00\xff\xd9"
+
+    def test_gpano_xmp_marks_image_equirectangular_when_collection_has_no_type(self):
+        from dataset_layout import image_is_equirectangular, resolved_picture_type
+        sphere = self.jpeg_with_xmp(b'<x:xmpmeta><rdf:Description GPano:ProjectionType="equirectangular"/></x:xmpmeta>')
+        flat = self.jpeg_with_xmp(b"<x:xmpmeta><rdf:Description/></x:xmpmeta>")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "sphere.jpg").write_bytes(sphere)
+            (root / "flat.jpg").write_bytes(flat)
+            self.assertTrue(image_is_equirectangular(root / "sphere.jpg"))
+            self.assertFalse(image_is_equirectangular(root / "flat.jpg"))
+            self.assertEqual(resolved_picture_type({"properties": {}}, root / "sphere.jpg"), "equirectangular")
+            self.assertIsNone(resolved_picture_type({"properties": {}}, root / "flat.jpg"))
+            self.assertEqual(resolved_picture_type({"properties": {"type": "flat"}}, root / "sphere.jpg"), "flat")
+
+
 class DownloadTest(unittest.TestCase):
     def test_jpeg_and_generic_binary_content_types(self):
         photo = PHOTO
@@ -142,7 +163,7 @@ class DownloadTest(unittest.TestCase):
                         summary = json.loads((output / "summary.json").read_text())
                         self.assertEqual(summary, {
                             "pages": 2, "available": 2, "available_is_exact": True,
-                            "selected": 2, "downloaded": 2, "reused": 0, "failed": 0,
+                            "selected": 2, "downloaded": 2, "reused": 0, "failed": 0, "filtered_type": 0,
                         })
                         self.assertEqual(len(collection_files(output, "images", "*.jpg")), 2)
                         self.assertEqual(len(list((output / "pages").glob("*.json"))), 2)
