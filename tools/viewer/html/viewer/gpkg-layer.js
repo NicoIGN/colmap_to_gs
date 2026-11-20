@@ -103,7 +103,30 @@ const ICO_FACES = [
   [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
   [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
 ];
-const SPHERE_VERTICES = ICO_VERTICES.length;
+// Une subdivision de l'icosaèdre (42 sommets, 80 faces) pour que les points soient ronds et non facettés.
+function subdivideIcosahedron(vertices, faces) {
+  const out = vertices.map((v) => [...v]);
+  const midpointCache = new Map();
+  const midpoint = (a, b) => {
+    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+    if (midpointCache.has(key)) return midpointCache.get(key);
+    const m = [0, 1, 2].map((k) => (out[a][k] + out[b][k]) / 2);
+    const n = Math.hypot(...m);
+    out.push(m.map((x) => x / n));
+    midpointCache.set(key, out.length - 1);
+    return out.length - 1;
+  };
+  const outFaces = [];
+  for (const [a, b, c] of faces) {
+    const ab = midpoint(a, b);
+    const bc = midpoint(b, c);
+    const ca = midpoint(c, a);
+    outFaces.push([a, ab, ca], [b, bc, ab], [c, ca, bc], [ab, bc, ca]);
+  }
+  return { vertices: out, faces: outFaces };
+}
+const SPHERE = subdivideIcosahedron(ICO_VERTICES, ICO_FACES);
+const SPHERE_VERTICES = SPHERE.vertices.length;
 // Rayon des sphères en proportion de l'emprise de la couche (unités des données).
 const POINT_RADIUS_RATIO = 0.004;
 const POINT_RADIUS_DEFAULT = 0.5;
@@ -137,30 +160,73 @@ function buildSource(name, epsg, polylines, points) {
   return { name, epsg, centre, rel, count: vertexCount, pointRel, pointCount, radius };
 }
 
-// Un icosaèdre centré sur chaque point, en coordonnées monde (même transformation que les lignes).
+// Une sphère centrée sur chaque point, en coordonnées monde (même transformation que les lignes).
 function buildSphereMesh(app, source, placement, radius) {
   const centres = worldPositions({ rel: source.pointRel, count: source.pointCount }, placement);
   const n = source.pointCount;
+  const unit = SPHERE.vertices;
   const positions = new Float32Array(n * SPHERE_VERTICES * 3);
-  const indices = new Uint32Array(n * ICO_FACES.length * 3);
+  const normals = new Float32Array(n * SPHERE_VERTICES * 3);
+  const indices = new Uint32Array(n * SPHERE.faces.length * 3);
   for (let p = 0; p < n; p++) {
     for (let v = 0; v < SPHERE_VERTICES; v++) {
       const o = (p * SPHERE_VERTICES + v) * 3;
       for (let k = 0; k < 3; k++) {
-        positions[o + k] = centres[p * 3 + k] + ICO_VERTICES[v][k] * radius;
+        positions[o + k] = centres[p * 3 + k] + unit[v][k] * radius;
+        normals[o + k] = unit[v][k];
       }
     }
-    for (let f = 0; f < ICO_FACES.length; f++) {
+    for (let f = 0; f < SPHERE.faces.length; f++) {
       for (let j = 0; j < 3; j++) {
-        indices[(p * ICO_FACES.length + f) * 3 + j] = p * SPHERE_VERTICES + ICO_FACES[f][j];
+        indices[(p * SPHERE.faces.length + f) * 3 + j] = p * SPHERE_VERTICES + SPHERE.faces[f][j];
       }
     }
   }
   const mesh = new pc.Mesh(app.graphicsDevice);
   mesh.setPositions(positions);
+  mesh.setNormals(normals);
   mesh.setIndices(indices);
   mesh.update(pc.PRIMITIVE_TRIANGLES, true);
   return mesh;
+}
+
+// Sphères éclairées (lambert simple) : sans ombrage, une sphère unie se lit comme un disque plat.
+function makeSphereMaterial(color) {
+  const material = new pc.ShaderMaterial({
+    uniqueName: "GpkgSpherePointsMaterial",
+    attributes: {
+      vertex_position: pc.SEMANTIC_POSITION,
+      vertex_normal: pc.SEMANTIC_NORMAL,
+    },
+    vertexGLSL: `
+      attribute vec3 vertex_position;
+      attribute vec3 vertex_normal;
+      uniform mat4 matrix_model;
+      uniform mat4 matrix_viewProjection;
+      varying vec3 vNormal;
+      void main(void) {
+        vNormal = mat3(matrix_model) * vertex_normal;
+        gl_Position = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+      }
+    `,
+    fragmentGLSL: `
+      precision highp float;
+      uniform vec3 uColor;
+      varying vec3 vNormal;
+      void main(void) {
+        vec3 light = normalize(vec3(0.4, 0.8, 0.6));
+        float lambert = max(dot(normalize(vNormal), light), 0.0);
+        gl_FragColor = vec4(uColor * (0.35 + 0.65 * lambert), 1.0);
+      }
+    `,
+  });
+  material.setParameter("uColor", [color.r, color.g, color.b]);
+  material.cull = pc.CULLFACE_BACK;
+  material.depthTest = false;
+  material.depthWrite = false;
+  material.blendType = pc.BLEND_NONE;
+  material.update();
+  return material;
 }
 
 export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
@@ -184,6 +250,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   function destroyRender(child) {
     for (const mesh of child.resource?.meshes ?? []) mesh.destroy?.();
     child.resource?.material?.destroy?.();
+    child.resource?.sphereMaterial?.destroy?.();
     for (const material of child.resource?.highlightMaterials ?? []) material.destroy?.();
     child.resource = null;
     child.root?.destroy?.();
@@ -214,6 +281,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
 
     const positionSets = [];
     const meshes = [];
+    let pointMesh = null;
     if (hasLines) {
       const linePositions = worldPositions(child.source, placement);
       positionSets.push(linePositions);
@@ -225,18 +293,20 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     if (hasPoints) {
       positionSets.push(worldPositions({ rel: child.source.pointRel, count: child.source.pointCount }, placement));
       const radius = (child.source.radius * pointSize) / DEFAULT_POINT_SIZE;
-      meshes.push(buildSphereMesh(app, child.source, placement, radius));
+      pointMesh = buildSphereMesh(app, child.source, placement, radius);
+      meshes.push(pointMesh);
     }
     child.bounds = colmapBounds(positionSets, false);
 
     const material = makeUnlitMaterial(wireColor);
+    const sphereMaterial = pointMesh ? makeSphereMaterial(wireColor) : null;
     const highlightMaterials = HIGHLIGHT_OFFSETS.map(makeHighlightMaterial);
-    child.resource = { meshes, material, highlightMaterials };
+    child.resource = { meshes, material, sphereMaterial, pointMesh, highlightMaterials };
 
     child.lineEntity = new pc.Entity(`GPKG lignes · ${child.source.name}`);
     child.lineEntity.addComponent("render", {
       type: "asset",
-      meshInstances: meshes.map((mesh) => new pc.MeshInstance(mesh, material)),
+      meshInstances: meshes.map((mesh) => new pc.MeshInstance(mesh, mesh === pointMesh ? sphereMaterial : material)),
       layers: [getOverlayLayer(app).id],
     });
 
@@ -402,6 +472,10 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
           material.emissive.copy(wireColor);
           material.diffuse.copy(wireColor);
           material.update();
+          if (child.resource.sphereMaterial) {
+            child.resource.sphereMaterial.setParameter("uColor", [wireColor.r, wireColor.g, wireColor.b]);
+            child.resource.sphereMaterial.update();
+          }
         }
       }
     },
