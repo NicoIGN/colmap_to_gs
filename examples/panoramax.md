@@ -13,6 +13,16 @@ bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax"
 ```
 
+Lancer le téléchargement dans l'env `lidar-pdal` (créé par `environment/ign.slurm/pdal_env.yml`) :
+
+```bash
+micromamba -n lidar-pdal run bash "$GIT_ROOT/tools/panoramax/download.sh" \
+  --bbox "655150,6861000,656000,6861400" --crs EPSG:2154 \
+  --dry-run --output-dir ./
+```
+
+`--dry-run` affiche ce qui serait téléchargé sans écrire de fichiers.
+
 Les images et leurs métadonnées sont enregistrées dans un dossier par collection STAC,
 `$DATA_ROOT/panoramax/<id-collection>/images/` et `.../metadata/`. Si une collection
 mélange plusieurs tailles d'image, elle est répartie dans `<id-collection>-<LxH>/`.
