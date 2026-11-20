@@ -456,7 +456,8 @@ def filter_sparse_model(
         verbose=verbose,
     )
     not_evaluable = evaluable < min_views
-    rejected = (not_evaluable & (not keep_non_evaluable)) | (
+    dropped_unevaluable = not_evaluable & (not keep_non_evaluable)
+    rejected = dropped_unevaluable | (
         (suspicious >= np.ceil(vote_fraction * evaluable))
         & (suspicious > 0)
     )
@@ -480,7 +481,7 @@ def filter_sparse_model(
         "points_with_enough_views": int((evaluable >= min_views).sum()),
         "points_ignored": int(not_evaluable.sum()),
         "points_suspicious": int((suspicious > 0).sum()),
-        "points_removed_by_votes": int((rejected & ~not_evaluable).sum()),
+        "points_removed_by_votes": int((rejected & ~dropped_unevaluable).sum()),
         "removed_points": [
             {
                 "point3D_id": int(point_ids[index]),

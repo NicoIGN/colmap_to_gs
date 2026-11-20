@@ -181,7 +181,8 @@ class SparseDensityTest(unittest.TestCase):
                 source, output, min_neighbors=12, min_cluster_points=5, min_views=2,
                 keep_non_evaluable=True,
             )
-            self.assertEqual(report["points_removed"], 0)
+            self.assertEqual(report["points_removed"], 1)
+            self.assertEqual(report["points_removed_by_votes"], 1)
             self.assertEqual(report["points_ignored"], 21)
 
     def test_filter_writes_consistent_sparse_and_report(self):
