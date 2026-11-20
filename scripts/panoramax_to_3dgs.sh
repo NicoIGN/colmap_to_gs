@@ -292,7 +292,6 @@ PY
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
-  bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
   [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
   if [[ -n "$PANORAMAX_FILTERS" ]]; then
     IFS=';' read -r -a panoramax_filter_items <<< "$PANORAMAX_FILTERS"

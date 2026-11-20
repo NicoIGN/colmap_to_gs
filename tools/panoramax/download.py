@@ -22,7 +22,7 @@ from urllib.request import Request, urlopen
 from pyproj import Transformer
 from pyproj.exceptions import ProjError
 
-from dataset_layout import jpeg_size
+from dataset_layout import exif_of, jpeg_size, picture_type_of
 
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
 SEARCH_LIMIT = 10000
@@ -174,30 +174,6 @@ def parse_filter(text):
     return key.strip(), names
 
 
-PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
-
-
-def exif_of(properties):
-    exif = properties.get("exif") or {}
-    if isinstance(exif, str):
-        try:
-            exif = json.loads(exif)
-        except ValueError:
-            exif = {}
-    return exif if isinstance(exif, dict) else {}
-
-
-def picture_type_of(feature):
-    """Renvoie le type STAC ; certaines photos n'ont que les métadonnées de projection."""
-    properties = feature.get("properties", {})
-    if properties.get("type") is not None:
-        return properties["type"]
-    if exif_of(properties).get("Xmp.GPano.ProjectionType") == "equirectangular":
-        return "equirectangular"
-    orientation = properties.get("pers:interior_orientation") or {}
-    if str(orientation.get("field_of_view")) == "360":
-        return "equirectangular"
-    return None
 
 
 def item_matches_provider(feature, provider):
@@ -228,10 +204,9 @@ def item_matches_filters(feature, filters):
     return True
 
 
-def filter_report_rows(feature, stac_type, provider, filters):
-    """(filtre, valeur, conservée) pour chaque filtre type/provider/--filter, sans tenir compte des autres."""
-    picture = picture_type_of(feature)
-    rows = [("type", str(picture), stac_type is None or picture == stac_type)]
+def filter_report_rows(feature, provider, filters):
+    """(filtre, valeur, conservée) pour chaque filtre provider/--filter, sans tenir compte des autres."""
+    rows = []
     if provider is not None:
         names = [
             str(entry.get("name", "")) for entry in (feature.get("properties", {}).get("providers") or [])
@@ -421,21 +396,16 @@ def run(args):
     output.mkdir(parents=True, exist_ok=True)
     if not dry_run:
         (output / "pages").mkdir(parents=True, exist_ok=True)
-    picture_type = getattr(args, "picture_type", "all")
-    if picture_type not in PICTURE_TYPES:
-        raise ValueError("Le type d'image doit être all, normal ou 360.")
-    stac_type = PICTURE_TYPES[picture_type]
+    api_limit = SEARCH_LIMIT
     provider = getattr(args, "provider", None) or None
     filters = getattr(args, "filters", None) or None
     verbose = getattr(args, "verbose", True)
-    api_limit = SEARCH_LIMIT
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
         "bbox": args.bbox, "bbox_wgs84": geographic,
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
-        "picture_type": stac_type,
         "provider": provider,
         "filters": [{"key": key, "values": names} for key, names in filters] if filters else None,
         "api_limit": api_limit,
@@ -471,11 +441,9 @@ def run(args):
                     continue
                 seen_items.add(key)
                 if verbose:
-                    for label, value, kept in filter_report_rows(feature, stac_type, provider, filters):
+                    for label, value, kept in filter_report_rows(feature, provider, filters):
                         verbose_counts[(label, value, kept)] += 1
                 api_types[str(picture_type_of(feature))] += 1
-                if stac_type is not None and picture_type_of(feature) != stac_type:
-                    continue
                 if provider is not None and not item_matches_provider(feature, provider):
                     continue
                 if filters is not None and not item_matches_filters(feature, filters):
@@ -632,10 +600,6 @@ def main():
         "--image-max",
         type=parse_positive_int,
         help="Nombre maximum de photos à sélectionner et télécharger (toutes pages confondues)",
-    )
-    parser.add_argument(
-        "--picture-type", choices=tuple(PICTURE_TYPES), default="all",
-        help="all (défaut), normal (photos classiques) ou 360 (équirectangulaires)",
     )
     parser.add_argument(
         "--provider",

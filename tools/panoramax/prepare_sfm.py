@@ -22,7 +22,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from dataset_layout import image_files, jpeg_size, metadata_index
+from dataset_layout import image_files, jpeg_size, metadata_index, picture_type_of
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 
@@ -58,19 +58,12 @@ def focal_from_metadata(path, width):
 
 
 def is_equirectangular(path):
-    """Même règle que tools/panoramax/download.py:picture_type_of."""
+    """Même règle que download.py (dataset_layout.picture_type_of)."""
     try:
-        properties = json.loads(path.read_text(encoding="utf-8"))["feature"]["properties"]
+        feature = json.loads(path.read_text(encoding="utf-8"))["feature"]
     except (OSError, ValueError, KeyError, TypeError):
         return False
-    if properties.get("type") is not None:
-        return properties["type"] == "equirectangular"
-    exif = properties.get("exif") or {}
-    orientation = properties.get("pers:interior_orientation") or {}
-    return (
-        exif.get("Xmp.GPano.ProjectionType") == "equirectangular"
-        or str(orientation.get("field_of_view")) == "360"
-    )
+    return picture_type_of(feature) == "equirectangular"
 
 
 def env_flag(name):

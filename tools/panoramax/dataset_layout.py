@@ -4,6 +4,7 @@ Deux layouts sont acceptés : à plat (images/, metadata/) ou par collection
 (<collection>/images/, <collection>/metadata/), tel que produit par download.py.
 """
 
+import json
 import os
 from pathlib import Path
 
@@ -66,6 +67,38 @@ def json_index(folder):
         path.relative_to(folder).with_suffix("").as_posix(): path
         for path in sorted(folder.rglob("*.json")) if path.is_file()
     }
+
+
+def exif_of(properties):
+    """EXIF STAC : dict, ou chaîne JSON selon l'API ; renvoie toujours un dict."""
+    exif = properties.get("exif") or {}
+    if isinstance(exif, str):
+        try:
+            exif = json.loads(exif)
+        except ValueError:
+            return {}
+    return exif if isinstance(exif, dict) else {}
+
+
+def picture_type_of(feature):
+    """Type STAC (equirectangular, flat...) ; sinon déduit de l'EXIF GPano ou du champ de vue 360.
+
+    Le type peut être absent de la collection et n'apparaître que dans l'EXIF.
+    """
+    properties = feature.get("properties") or {}
+    if properties.get("type") is not None:
+        return properties["type"]
+    for key, value in exif_of(properties).items():
+        if key.split(":")[-1].split(".")[-1].casefold() == "projectiontype" and \
+                str(value).strip().casefold() == "equirectangular":
+            return "equirectangular"
+    orientation = properties.get("pers:interior_orientation") or {}
+    try:
+        if float(orientation.get("field_of_view")) == 360:
+            return "equirectangular"
+    except (TypeError, ValueError):
+        pass
+    return None
 
 
 def metadata_index(dataset):
