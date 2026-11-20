@@ -3,7 +3,11 @@
 ## Message à copier pour une nouvelle session
 
 ```text
-Nous travaillons sur NicoIGN/colmap_to_gs, un projet qui transforme des photos, vidéos ou images Panoramax en scènes 3D Gaussian Splatting : préparation des données, reconstruction COLMAP, entraînement et export. Connecte-toi au dépôt sur la branche review_copilot et lis d'abord copilot/CONTEXT.md (attention aux majuscules : c'est le fichier désigné par « copilot/context.md »). Cette note contient les conventions, les points d'entrée et les pièges à connaître. Utilise GIT_ROOT pour les chemins du projet et DATA_ROOT pour les données et résultats, sans chemins absolus dans les réponses. Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
+Nous travaillons sur NicoIGN/colmap_to_gs, un projet qui transforme des photos, vidéos ou images Panoramax en scènes 3D Gaussian Splatting : 
+préparation des données, reconstruction COLMAP, entraînement et export. Connecte-toi au dépôt sur la branche review_copilot et lis d'abord copilot/CONTEXT.md 
+Cette note contient les conventions, les points d'entrée et les pièges à connaître. 
+Utilise GIT_ROOT pour les chemins du projet sans chemins absolus dans les réponses. 
+Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
 ```
 
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
