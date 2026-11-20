@@ -403,6 +403,7 @@ def filter_sparse_model(
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
     min_views=1,
+    keep_non_evaluable=False,
     vote_fraction=0.75,
     far_support_rate=0.25,
     workers=1,
@@ -455,7 +456,7 @@ def filter_sparse_model(
         verbose=verbose,
     )
     not_evaluable = evaluable < min_views
-    rejected = not_evaluable | (
+    rejected = (not_evaluable & (not keep_non_evaluable)) | (
         (suspicious >= np.ceil(vote_fraction * evaluable))
         & (suspicious > 0)
     )
@@ -498,6 +499,7 @@ def filter_sparse_model(
             "low_density_fraction": low_density_fraction,
             "far_support_rate": far_support_rate,
             "min_views": min_views,
+            "keep_non_evaluable": keep_non_evaluable,
             "vote_fraction": vote_fraction,
         },
     }
@@ -537,6 +539,9 @@ def main():
     parser.add_argument("--min-views", type=int, default=1,
                         help="Nombre de vues évaluables requis ; en dessous, le point est rejeté "
                              "sans vote (défaut : 1).")
+    parser.add_argument("--keep-non-evaluable", action="store_true",
+                        help="Conserver les points non évaluables au lieu de les rejeter "
+                             "(défaut : rejetés).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
     parser.add_argument("--workers", type=int, default=1,
@@ -557,6 +562,7 @@ def main():
             min_cluster_fraction=args.min_cluster_fraction,
             low_density_fraction=args.low_density_fraction,
             min_views=args.min_views,
+            keep_non_evaluable=args.keep_non_evaluable,
             vote_fraction=args.vote_fraction,
             far_support_rate=args.far_support_rate,
             workers=args.workers,

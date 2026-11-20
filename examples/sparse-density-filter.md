@@ -29,7 +29,8 @@ Choisir un préfixe dont les dossiers `_clean` et `_rejected` n'existent pas enc
 Les valeurs `--vote-fraction` et `--far-support-rate` correspondent à
 `SFM_DENSITY_VOTE_FRACTION` et `SFM_DENSITY_FAR_SUPPORT_RATE` (défauts 0.75 et 0.25).
 Les autres options (`--neighbors`, `--min-views`, `--low-density-fraction`, etc.)
-ont les défauts du script ; lancer `--help` pour la liste complète.
+ont les défauts du script ; `--keep-non-evaluable` conserve les points sans assez de vues
+évaluables (défaut : rejetés). Lancer `--help` pour la liste complète.
 
 ## Vérifier le résultat
 
