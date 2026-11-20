@@ -18,10 +18,18 @@ const IMAGE_CANDIDATES = 16;
 const IMAGE_HYSTERESIS = 0.8;
 // Une image candidate doit regarder à moins de cet angle de la direction de vue.
 const IMAGE_AXIS_DEG = 35;
+// Panorama vu de l'intérieur de sa sphère : il est affiché si son centre est à moins de cet angle du sens de la vue.
+const PANORAMA_VIEW_DEG = 30;
+// Un panorama courant n'est remplacé que si un autre est nettement plus centré.
+const PANORAMA_HYSTERESIS_DEG = 5;
 const IMAGE_SLOTS = 10;
 const IMAGE_MAX_WIDTH = 1024;
 const TEXTURE_CACHE_SIZE = IMAGE_SLOTS;
 const PANORAMA_SEGMENTS = 96;
+// Sphère et cube 360° réduits de 33 % par rapport au cadre agrandi.
+const PANORAMA_SIZE_FACTOR = 0.67;
+// Rayon du marqueur (sphère ou cube) d'un panorama non affiché, en fraction de la profondeur des frustums.
+const PANORAMA_MARKER_FACTOR = 0.5;
 const PANORAMA_RINGS = 48;
 const PANORAMA_CUBE_FACE = 512;
 const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
@@ -478,16 +486,26 @@ function makeColmapMesh(app, positions, rgba, primitive, material) {
   return { mesh, material, meshInstance };
 }
 
-export function getOverlayLayer(app) {
-  const existing = app.scene.layers.getLayerByName("Overlay");
+function getNamedLayer(app, name) {
+  const existing = app.scene.layers.getLayerByName(name);
   if (existing) return existing;
-  // Calque ajouté après « World » (splats) : il est dessiné par-dessus.
-  const layer = new pc.Layer({ name: "Overlay" });
+  // Calques ajoutés après « World » (splats) : ils sont dessinés par-dessus, dans l'ordre de création.
+  const layer = new pc.Layer({ name });
   app.scene.layers.push(layer);
   for (const camera of app.root.findComponents("camera")) {
     if (!camera.layers.includes(layer.id)) camera.layers = [...camera.layers, layer.id];
   }
   return layer;
+}
+
+export function getOverlayLayer(app) {
+  return getNamedLayer(app, "Overlay");
+}
+
+// Calque des images, dessiné après « Overlay » pour passer au-dessus des frustums et sommets caméra.
+function getImageLayer(app) {
+  getOverlayLayer(app);
+  return getNamedLayer(app, "ImageOverlay");
 }
 
 export function makePointMesh(app, positions, colors, pointSize = 3, { onTop = false } = {}) {
@@ -560,6 +578,43 @@ function frustumCorners(image, camera, near) {
   });
 }
 
+// Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
+// symbolisée par ses parallèles et méridiens, centrés sur `center`.
+function appendPanoramaMarker(out, center, radius, cube) {
+  const point = (x, y, z) => [center[0] + x * radius, center[1] + y * radius, center[2] + z * radius];
+  const segment = (a, b) => out.push(...point(...a), ...point(...b));
+  if (cube) {
+    const corners = [];
+    for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) corners.push([x, y, z]);
+    for (const a of corners) {
+      for (const b of corners) {
+        const differing = (a[0] !== b[0]) + (a[1] !== b[1]) + (a[2] !== b[2]);
+        // Arête : deux coins ne différant que d'un axe, traitée une seule fois.
+        if (differing === 1 && corners.indexOf(a) < corners.indexOf(b)) segment(a, b);
+      }
+    }
+    return;
+  }
+  const rings = 6;
+  const meridians = 8;
+  const samples = 24;
+  const onSphere = (theta, phi) => [Math.sin(theta) * Math.cos(phi), Math.cos(theta), Math.sin(theta) * Math.sin(phi)];
+  // Parallèles (cercles à latitude constante), hors pôles.
+  for (let r = 1; r < rings; r++) {
+    const theta = (r / rings) * Math.PI;
+    for (let s = 0; s < samples; s++) {
+      segment(onSphere(theta, (s / samples) * 2 * Math.PI), onSphere(theta, ((s + 1) / samples) * 2 * Math.PI));
+    }
+  }
+  // Méridiens (demi-grands cercles passant par les pôles).
+  for (let m = 0; m < meridians; m++) {
+    const phi = (m / meridians) * 2 * Math.PI;
+    for (let s = 0; s < samples / 2; s++) {
+      segment(onSphere((s / (samples / 2)) * Math.PI, phi), onSphere(((s + 1) / (samples / 2)) * Math.PI, phi));
+    }
+  }
+}
+
 function isPanorama(camera) {
   return camera.modelName === "EQUIRECTANGULAR";
 }
@@ -572,7 +627,7 @@ function applyPanoramaYawFix(local) {
 
 // Sphère 360° vue de l'intérieur. Repère caméra : x à droite, y vers le bas, z dans le sens du regard.
 // Longitude 0 au centre de l'image ; latitude +90° en haut de l'image (v = 0).
-function panoramaSphere(image, radius) {
+function panoramaSphere(image, radius, mirror = false) {
   const rwc = transpose3(qvecToMat3(image.qvec));
   const center = getCameraCenter(image);
   const positions = [];
@@ -589,7 +644,8 @@ function panoramaSphere(image, radius) {
       applyPanoramaYawFix(local);
       const rotated = mulMat3Vec3(rwc, local);
       positions.push(rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]);
-      uvs.push(s / PANORAMA_SEGMENTS, r / PANORAMA_RINGS);
+      const u = s / PANORAMA_SEGMENTS;
+      uvs.push(mirror ? 1 - u : u, r / PANORAMA_RINGS);
     }
   }
   const row = PANORAMA_SEGMENTS + 1;
@@ -610,7 +666,7 @@ function panoramaSphere(image, radius) {
 
 // Atlas 3×2 des six faces du cube (RGBA, faces de faceSize px) échantillonné depuis une équirectangulaire.
 // Les faces suivent CUBE_FACES dans l'ordre, rangées ligne par ligne.
-export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUBE_FACE) {
+export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUBE_FACE, mirror = false) {
   const atlasWidth = faceSize * 3;
   const atlas = new Uint8ClampedArray(atlasWidth * faceSize * 2 * 4);
   CUBE_FACES.forEach((face, index) => {
@@ -626,8 +682,9 @@ export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUB
         const theta = Math.atan2(x, z);
         const phi = Math.atan2(-y, Math.hypot(x, z));
         const sx = Math.min(width - 1, Math.floor((theta / (2 * Math.PI) + 0.5) * width));
+        const sxMirrored = mirror ? width - 1 - sx : sx;
         const sy = Math.min(height - 1, Math.floor((0.5 - phi / Math.PI) * height));
-        const src = (sy * width + sx) * 4;
+        const src = (sy * width + sxMirrored) * 4;
         const dst = ((offsetY + v) * atlasWidth + offsetX + u) * 4;
         atlas[dst] = rgba[src];
         atlas[dst + 1] = rgba[src + 1];
@@ -686,6 +743,24 @@ function imageInFrontOfViewer(model, index, viewer, forward) {
     .every((c) => (c[0] - viewer[0]) * forward[0] + (c[1] - viewer[1]) * forward[1] + (c[2] - viewer[2]) * forward[2] > 0);
 }
 
+// Panorama : angle entre le sens de la vue et le centre de la sphère, et vrai si la sphère affichée (rayon agrandi)
+// couvre le centre de la vue. Depuis l'intérieur, on compare l'angle à PANORAMA_VIEW_DEG.
+function panoramaView(model, index, viewer, forward) {
+  const cx = model.cameraCenters[index * 3];
+  const cy = model.cameraCenters[index * 3 + 1];
+  const cz = model.cameraCenters[index * 3 + 2];
+  const v = [cx - viewer[0], cy - viewer[1], cz - viewer[2]];
+  const dist = Math.hypot(...v);
+  const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
+  if (dist < 1e-9) return { angle: 0, covers: true };
+  const cosAngle = (v[0] * forward[0] + v[1] * forward[1] + v[2] * forward[2]) / dist;
+  const angle = Math.acos(Math.min(1, Math.max(-1, cosAngle)));
+  const covers = dist <= radius
+    ? angle <= (PANORAMA_VIEW_DEG * Math.PI) / 180
+    : angle <= Math.asin(radius / dist);
+  return { angle, covers };
+}
+
 // Vrai si le point de vue est du côté du sommet caméra par rapport au plan du cadre à la profondeur `near` ;
 // faux s'il est au-delà, c.-à-d. qu'il regarde l'image par derrière.
 function viewerOnApexSide(image, near, viewer) {
@@ -710,10 +785,13 @@ export function coversViewCenter(image, camera, near, viewer, forward) {
   return Math.abs(p[0] + s * d[0]) <= halfW && Math.abs(p[1] + s * d[1]) <= halfH;
 }
 
-function buildCameraAxes(images) {
+function buildCameraAxes(images, cameras) {
   const out = new Float32Array(images.length * 3);
   for (let i = 0; i < images.length; i++) {
-    const axis = mulMat3Vec3(transpose3(qvecToMat3(images[i].qvec)), [0, 0, 1]);
+    // Le centre d'un panorama est en -z (voir applyPanoramaYawFix).
+    const camera = cameras.get(images[i].cameraId);
+    const sign = camera && isPanorama(camera) ? -1 : 1;
+    const axis = mulMat3Vec3(transpose3(qvecToMat3(images[i].qvec)), [0, 0, sign]);
     out[i * 3] = axis[0];
     out[i * 3 + 1] = axis[1];
     out[i * 3 + 2] = axis[2];
@@ -734,6 +812,7 @@ export function createColmapLayer({
   registerLayer,
   registerGroup,
   onBoundsChanged,
+  onGauge,
 }) {
   const sceneColmapInfo = document.getElementById("sceneColmapInfo");
   const input = document.getElementById("colmapFolderInput");
@@ -741,7 +820,13 @@ export function createColmapLayer({
   const cameraSize = document.getElementById("colmapCameraSize");
   const panoramaModeRow = document.getElementById("colmapPanoramaModeRow");
   const panoramaModeSelect = document.getElementById("colmapPanoramaMode");
+  const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
+  let panoramaMirror = panoramaMirrorInput?.checked ?? true;
+  const frustumSizeInput = document.getElementById("colmapFrustumSize");
+  const imageTransparencyInput = document.getElementById("colmapImageTransparency");
+  let frustumFactor = Number(frustumSizeInput?.value ?? 100) / 100;
+  let imageOpacity = Number(imageTransparencyInput?.value ?? 100) / 100;
 
   let disposed = false;
   let nextModelId = 1;
@@ -815,7 +900,7 @@ export function createColmapLayer({
   function refreshUI() {
     const ready = models.size > 0;
 
-    if (pointSize) pointSize.disabled = !ready;
+    if (pointSize) pointSize.disabled = false;
     if (cameraSize) cameraSize.disabled = !ready;
     if (panoramaModeRow) {
       const hasPanorama = [...models.values()].some((model) =>
@@ -825,11 +910,53 @@ export function createColmapLayer({
     }
   }
 
+  function setSliderOutput(input, suffix) {
+    const output = document.getElementById(`${input.id}Value`);
+    if (output) output.value = `${input.value} ${suffix}`;
+  }
+
+  // Taille des frustums en % de l'échelle actuelle ; reconstruit les frustums et recharge les images affichées.
+  function setFrustumFactor(percent) {
+    frustumFactor = percent / 100;
+    for (const model of models.values()) {
+      model.depth = model.baseDepth * frustumFactor;
+      model.slots?.forEach(resetSlot);
+      model.pickedKey = null;
+      rebuildFrustums(model, new Set());
+    }
+  }
+
+  function applySlotOpacity(material) {
+    material.opacity = imageOpacity;
+    material.blendType = imageOpacity < 1 ? pc.BLEND_NORMAL : pc.BLEND_NONE;
+    material.depthWrite = imageOpacity >= 1;
+    material.update();
+  }
+
+  function setImageOpacity(percent) {
+    imageOpacity = percent / 100;
+    for (const model of models.values()) {
+      for (const slot of model.slots ?? []) {
+        if (slot.material) applySlotOpacity(slot.material);
+      }
+    }
+  }
+
   function setPanoramaMode(mode) {
     if (panoramaMode === mode) return;
     panoramaMode = mode;
     for (const model of models.values()) {
       model.slots?.forEach(resetSlot);
+      rebuildFrustums(model, new Set());
+    }
+  }
+
+  function setPanoramaMirror(on) {
+    if (panoramaMirror === on) return;
+    panoramaMirror = on;
+    for (const model of models.values()) {
+      model.slots?.forEach(resetSlot);
+      model.pickedKey = null;
     }
   }
 
@@ -846,6 +973,7 @@ export function createColmapLayer({
     destroyMeshEntity(model.pointsEntity, model.pointsResource);
     destroyMeshEntity(model.cameraCentersEntity, model.cameraCentersResource);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
+    destroyMeshEntity(null, model.markersResource);
     if (model.rootEntity.parent) model.rootEntity.parent.removeChild(model.rootEntity);
     model.rootEntity.destroy();
   }
@@ -901,18 +1029,14 @@ export function createColmapLayer({
     model.enlarged = enlarged;
     const depthOf = (i) => model.depth * (enlarged.has(i) ? IMAGE_FRUSTUM_SCALE : 1);
     const frustums = buildFrustumLines(model.colmapImages, model.cameras, depthOf, enlarged);
-    const resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
-    const entity = new pc.Entity("COLMAP frustums");
-    entity.addComponent("render", {
-      type: "asset",
-      meshInstances: [resource.meshInstance],
-      layers: [getOverlayLayer(app).id],
-    });
-    entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
-    model.rootEntity.addChild(entity);
+    const group = makeFrustumMeshes(frustums);
+    group.entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
+    model.rootEntity.addChild(group.entity);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
-    model.frustumsEntity = entity;
-    model.frustumsResource = resource;
+    destroyMeshEntity(null, model.markersResource);
+    model.frustumsEntity = group.entity;
+    model.frustumsResource = group.resource;
+    model.markersResource = group.markersResource;
     model.frustumsShown = frustums.shown;
   }
 
@@ -966,7 +1090,10 @@ export function createColmapLayer({
     const center = getCameraCenter(image);
     const point = (v) => [center[0] + v[0], center[1] + v[1], center[2] + v[2]];
     const cameraWorld = toWorldArray(model, center);
-    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, [0, 0, 1]))), cameraWorld));
+    // Les panoramas sont dessinés avec x et z inversés (applyPanoramaYawFix) : le centre de l'image est donc en -z.
+    const camera = model.cameras.get(image.cameraId);
+    const axis = camera && isPanorama(camera) ? [0, 0, -1] : [0, 0, 1];
+    const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, axis))), cameraWorld));
     const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
     // Léger recul derrière le centre de la caméra pour que son image reste devant l'observateur.
     const back = radius * 0.02;
@@ -1064,7 +1191,7 @@ export function createColmapLayer({
   }
 
   async function getCubeTexture(name) {
-    const key = `${name}|cube`;
+    const key = `${name}|cube|${panoramaMirror ? "mirror" : "direct"}`;
     const cached = textureCache.get(key);
     if (cached) {
       textureCache.delete(key);
@@ -1087,7 +1214,7 @@ export function createColmapLayer({
     sourceContext.drawImage(bitmap, 0, 0);
     bitmap.close?.();
     const pixels = sourceContext.getImageData(0, 0, source.width, source.height).data;
-    const atlas = equirectToCubeAtlas(pixels, source.width, source.height);
+    const atlas = equirectToCubeAtlas(pixels, source.width, source.height, undefined, panoramaMirror);
     const atlasCanvas = document.createElement("canvas");
     atlasCanvas.width = atlas.width;
     atlasCanvas.height = atlas.height;
@@ -1129,12 +1256,12 @@ export function createColmapLayer({
 
     // Quad posé sur le plan lointain du frustum, sphère ou cube pour un panorama 360°, texturé avec l'image.
     const mesh = new pc.Mesh(app.graphicsDevice);
-    const radius = model.depth * IMAGE_FRUSTUM_SCALE;
+    const radius = model.depth * IMAGE_FRUSTUM_SCALE * (isPanorama(camera) ? PANORAMA_SIZE_FACTOR : 1);
     let geometry;
     if (cube) {
       geometry = panoramaCube(image, radius);
     } else if (isPanorama(camera)) {
-      geometry = panoramaSphere(image, radius);
+      geometry = panoramaSphere(image, radius, panoramaMirror);
     } else {
       const quad = frustumCorners(image, camera, radius).slice(1);
       geometry = {
@@ -1155,14 +1282,18 @@ export function createColmapLayer({
       slot.material.cull = pc.CULLFACE_NONE;
     }
     slot.material.emissiveMap = texture;
-    slot.material.update();
+    applySlotOpacity(slot.material);
 
     const meshInstance = new pc.MeshInstance(mesh, slot.material);
     meshInstance.cull = false;
     if (slot.entity.render) {
       slot.entity.render.meshInstances = [meshInstance];
     } else {
-      slot.entity.addComponent("render", { type: "asset", meshInstances: [meshInstance] });
+      slot.entity.addComponent("render", {
+        type: "asset",
+        meshInstances: [meshInstance],
+        layers: [getImageLayer(app).id],
+      });
     }
     slot.entity.enabled = true;
     slot.texture = texture;
@@ -1214,6 +1345,10 @@ export function createColmapLayer({
       const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
+      const isPano = (index) => {
+        const camera = model.cameras.get(model.colmapImages[index].cameraId);
+        return !!camera && isPanorama(camera);
+      };
       const stats = { total: 0, inCone: 0 };
       // Mode photographe : la caméra la plus proche du point de vue, qui regarde dans le sens de la vue.
       const picked = selectNearestImages({
@@ -1228,7 +1363,7 @@ export function createColmapLayer({
         maxRefAngleDeg: IMAGE_AXIS_DEG,
         rankByDistance: true,
         accept: (i, relaxed = false) => {
-          if (!imageInFrontOfViewer(model, i, viewer, forward)) return false;
+          if (isPano(i) || !imageInFrontOfViewer(model, i, viewer, forward)) return false;
           const size = nominalScreenSize(model, i);
           if (!relaxed) stats.maxSize = Math.max(stats.maxSize ?? 0, size);
           const dist = Math.hypot(
@@ -1246,6 +1381,19 @@ export function createColmapLayer({
       // Garde l'image courante tant que son cadre agrandi couvre le centre de la vue ; sinon bascule sur la
       // meilleure candidate qui le couvre. Sans candidate couvrante, garde l'image courante si elle est encore devant.
       const current = model.slots[0]?.shown ?? null;
+      // Panoramas : le plus centré dans la vue l'emporte ; l'image courante n'est gardée que si elle reste assez centrée.
+      let bestPano = null;
+      for (let i = 0; i < model.colmapImages.length; i++) {
+        if (!isPano(i)) continue;
+        const view = panoramaView(model, i, viewer, forward);
+        if (view.covers && (bestPano === null || view.angle < bestPano.angle)) bestPano = { index: i, angle: view.angle };
+      }
+      let panoPick = bestPano?.index ?? null;
+      if (bestPano !== null && current !== null && isPano(current)) {
+        const cur = panoramaView(model, current, viewer, forward);
+        if (cur.covers && cur.angle <= bestPano.angle + (PANORAMA_HYSTERESIS_DEG * Math.PI) / 180) panoPick = current;
+      }
+      const pinholeCurrent = current !== null && !isPano(current) ? current : null;
       const covers = (index) => {
         const image = model.colmapImages[index];
         const camera = model.cameras.get(image.cameraId);
@@ -1253,13 +1401,14 @@ export function createColmapLayer({
       };
       const coveringBest = picked.find(covers) ?? null;
       let chosen = picked.slice(0, IMAGE_SHOWN);
-      if (current !== null && covers(current)) chosen = [current];
+      if (panoPick !== null) chosen = [panoPick];
+      else if (pinholeCurrent !== null && covers(pinholeCurrent)) chosen = [pinholeCurrent];
       else if (coveringBest !== null) chosen = [coveringBest];
       else if (
-        current !== null &&
-        imageInFrontOfViewer(model, current, viewer, forward) &&
-        viewerOnApexSide(model.colmapImages[current], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
-      ) chosen = [current];
+        pinholeCurrent !== null &&
+        imageInFrontOfViewer(model, pinholeCurrent, viewer, forward) &&
+        viewerOnApexSide(model.colmapImages[pinholeCurrent], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
+      ) chosen = [pinholeCurrent];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
@@ -1308,7 +1457,10 @@ export function createColmapLayer({
       {
         name: "Frustums",
         setVisible(visible) { model.frustumsEntity.enabled = visible; },
-        setHighlight(on) { setMeshHighlight(model.frustumsResource, on); },
+        setHighlight(on) {
+          setMeshHighlight(model.frustumsResource, on);
+          setMeshHighlight(model.markersResource, on);
+        },
       },
     ];
     if (imageIndex) {
@@ -1397,12 +1549,21 @@ export function createColmapLayer({
     for (const i of enlarged) indices.add(i);
 
     const positions = [];
+    const markers = [];
     let shown = 0;
+    const cube = panoramaMode === "cube";
 
     for (const i of indices) {
       const image = images[i];
       const camera = cameras.get(image.cameraId);
       if (!camera) continue;
+
+      if (isPanorama(camera)) {
+        const radius = depthOf(i) * (enlarged.has(i) ? PANORAMA_SIZE_FACTOR : PANORAMA_MARKER_FACTOR);
+        appendPanoramaMarker(markers, getCameraCenter(image), radius, cube);
+        shown++;
+        continue;
+      }
 
       const [p0, p1, p2, p3, p4] = frustumCorners(image, camera, depthOf(i));
 
@@ -1420,9 +1581,45 @@ export function createColmapLayer({
 
     return {
       positions: new Float32Array(positions),
+      markers,
       shown,
       total: images.length,
     };
+  }
+
+  // Frustums (lignes) et marqueurs de panoramas (sphères ou cubes), ce dernier en entité enfant.
+  function makeFrustumMeshes(frustums) {
+    const entity = new pc.Entity("COLMAP frustums");
+    let resource = null;
+    if (frustums.positions.length) {
+      resource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
+      entity.addComponent("render", {
+        type: "asset",
+        meshInstances: [resource.meshInstance],
+        layers: [getOverlayLayer(app).id],
+      });
+    }
+    let markersResource = null;
+    if (frustums.markers.length) {
+      const count = frustums.markers.length / 3;
+      const rgba = new Float32Array(count * 4);
+      for (let i = 0; i < count; i++) rgba.set([1, 0, 0, 1], i * 4);
+      markersResource = makeColmapMesh(
+        app,
+        new Float32Array(frustums.markers),
+        rgba,
+        pc.PRIMITIVE_LINES,
+        makeColmapMaterial(app, { onTop: true })
+      );
+      const markersEntity = new pc.Entity("COLMAP panorama markers");
+      markersEntity.addComponent("render", {
+        type: "asset",
+        meshInstances: [markersResource.meshInstance],
+        layers: [getOverlayLayer(app).id],
+      });
+      entity.addChild(markersEntity);
+    }
+    return { entity, resource, markersResource };
   }
 
   async function loadCandidate(candidate) {
@@ -1442,7 +1639,7 @@ export function createColmapLayer({
       throw new Error(`Le modèle COLMAP ${candidate.dir || "(racine)"} ne contient aucune position valide.`);
     }
     const depth = cameraFrustumDepth(cameraCenters, getSceneRadius?.());
-    const frustums = buildFrustumLines(images, cameras, () => depth, new Set());
+    const frustums = buildFrustumLines(images, cameras, () => depth * frustumFactor, new Set());
     const id = `colmap-${nextModelId++}`;
     const rootEntity = new pc.Entity(`COLMAP sparse ${candidate.dir || id}`);
     const label = candidate.dir.split("/").filter(Boolean).slice(-3).join("/") || "racine";
@@ -1459,9 +1656,10 @@ export function createColmapLayer({
       rootEntity,
       colmapImages: images,
       cameras,
-      depth,
+      depth: depth * frustumFactor,
+      baseDepth: depth,
       cameraCenters,
-      axes: buildCameraAxes(images),
+      axes: buildCameraAxes(images, cameras),
       imagesOn: false,
       imagesMatched: imageIndex ? images.filter((image) => findImageFile(imageIndex, image.name)).length : 0,
       slots: [],
@@ -1494,13 +1692,10 @@ export function createColmapLayer({
       });
       rootEntity.addChild(model.cameraCentersEntity);
 
-      model.frustumsResource = makeLineMesh(app, frustums.positions, [1, 0, 0, 1], { onTop: true });
-      model.frustumsEntity = new pc.Entity("COLMAP frustums");
-      model.frustumsEntity.addComponent("render", {
-        type: "asset",
-        meshInstances: [model.frustumsResource.meshInstance],
-        layers: [getOverlayLayer(app).id],
-      });
+      const group = makeFrustumMeshes(frustums);
+      model.frustumsResource = group.resource;
+      model.markersResource = group.markersResource;
+      model.frustumsEntity = group.entity;
       rootEntity.addChild(model.frustumsEntity);
       rootEntity.setLocalEulerAngles(getFlipUp?.() ? 180 : 0, 0, 0);
 
@@ -1527,10 +1722,21 @@ export function createColmapLayer({
       if (base === "cameras.bin") group.cameras = file;
       if (base === "images.bin") group.images = file;
       if (base === "points3D.bin") group.points = file;
+      if (base === "gauge.txt") group.gauge = file;
     }
+    const findGauge = (dir) => {
+      let current = dir;
+      while (true) {
+        const gauge = groups.get(current)?.gauge;
+        if (gauge) return gauge;
+        if (!current) return null;
+        const idx = current.lastIndexOf("/");
+        current = idx >= 0 ? current.slice(0, idx) : "";
+      }
+    };
     const candidates = [...groups.entries()]
       .filter(([, group]) => group.cameras && group.images && group.points)
-      .map(([dir, group]) => ({ dir, ...group }))
+      .map(([dir, group]) => ({ dir, ...group, gauge: findGauge(dir) }))
       .sort((a, b) => a.dir.localeCompare(b.dir));
 
     if (!candidates.length) {
@@ -1543,12 +1749,23 @@ export function createColmapLayer({
 
     const shouldFrame = models.size === 0;
     let added = 0;
+    let gaugeFile = null;
     try {
       for (const candidate of candidates) {
         setStatus(`Chargement COLMAP : ${candidate.dir || "(racine)"}`);
-        if (await loadCandidate(candidate)) added++;
+        if (await loadCandidate(candidate)) {
+          added++;
+          if (candidate.gauge) gaugeFile = candidate.gauge;
+        }
       }
       if (!added) return;
+      if (gaugeFile && onGauge) {
+        try {
+          await onGauge(gaugeFile);
+        } catch (error) {
+          console.warn("[colmap] gauge.txt ignoré :", error);
+        }
+      }
       refreshUI();
       refreshInfo();
       onBoundsChanged?.(getCombinedBounds(), shouldFrame);
@@ -1591,6 +1808,14 @@ export function createColmapLayer({
 
   listen(pointSize, "input", refreshPointSizes);
   listen(cameraSize, "input", refreshPointSizes);
+  listen(frustumSizeInput, "input", () => {
+    setSliderOutput(frustumSizeInput, "%");
+    setFrustumFactor(Number(frustumSizeInput.value));
+  });
+  listen(imageTransparencyInput, "input", () => {
+    setSliderOutput(imageTransparencyInput, "%");
+    setImageOpacity(Number(imageTransparencyInput.value));
+  });
   refreshPointSizes();
 
   refreshUI();
@@ -1600,6 +1825,11 @@ export function createColmapLayer({
     const onChange = () => setPanoramaMode(panoramaModeSelect.value);
     panoramaModeSelect.addEventListener("change", onChange);
     removers.push(() => panoramaModeSelect.removeEventListener("change", onChange));
+  }
+  if (panoramaMirrorInput) {
+    const onChange = () => setPanoramaMirror(panoramaMirrorInput.checked);
+    panoramaMirrorInput.addEventListener("change", onChange);
+    removers.push(() => panoramaMirrorInput.removeEventListener("change", onChange));
   }
 
   return {

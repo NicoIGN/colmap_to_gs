@@ -28,7 +28,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -56,7 +56,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 "    os.execv(sys.executable, [sys.executable, *sys.argv[1:]])\n"
                 "sys.exit(13)\n")
             python.chmod(0o755)
@@ -96,7 +96,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             python.write_text(
                 f"#!{sys.executable}\n"
                 "import os, sys\n"
-                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith('pipeline_report.py'):\n"
+                "if sys.argv[1:2] == ['-'] or sys.argv[1].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 f"  os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n"
                 "sys.exit(42)\n"
             )
@@ -145,7 +145,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, runpy, sys\n"
                 "args = sys.argv[1:]\n"
-                "if args and args[0] != '-' and not args[0].endswith('pipeline_report.py'):\n"
+                "if args and args[0] != '-' and not args[0].endswith(('pipeline_report.py', 'pipeline_lock.py')):\n"
                 "  with open(os.environ['COMMAND_LOG'], 'a') as log:\n"
                 "    log.write(os.path.basename(args[0]) + '\\n')\n"
                 "if args and args[0].endswith('download.py'):\n"
@@ -156,8 +156,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'bbox':bbox,'api_url':args[args.index('--api-url')+1],"
                 "    'datetime':None,'quality':args[args.index('--quality')+1],"
                 "    'image_max':int(args[args.index('--image-max')+1]),"
-                "    'bbox_epsg':int(args[args.index('--bbox-epsg')+1]),"
-                "    'bbox_crs':'EPSG:'+args[args.index('--bbox-epsg')+1]},"
+                "    'bbox_epsg':int(args[args.index('--crs')+1].split(':')[1]),"
+                "    'bbox_crs':args[args.index('--crs')+1]},"
                 "    open(os.path.join(root,'request.json'),'w'))\n"
                 "  json.dump({'available':1,'selected':1}, open(os.path.join(root,'summary.json'),'w'))\n"
                 "  open(os.path.join(root,'images','photo.jpg'),'wb').write(b'jpeg')\n"
@@ -225,9 +225,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  assert get('--distraction-robustness')=='mild', args\n"
                 "  assert get('--num-iterations')=='3', args\n"
                 "  assert (get('--growth-factor'),get('--refine-stop-iter'),get('--refine-stop-num-iter'),get('--floater-suppression'))==('1.03','2','1','mild'), args\n"
-                "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); splats=os.path.join(root,name); ckpt=os.path.join(splats,f'step-{n:09d}.ckpt'); os.makedirs(ckpt,exist_ok=True)\n"
-                "  open(os.path.join(ckpt,'splat.ply'),'wb').write(b'ply')\n"
-                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(splats,'scene_transform.json'),'w'))\n"
+                "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); chkpt=os.path.join(root,name); os.makedirs(chkpt,exist_ok=True)\n"
+                "  open(os.path.join(chkpt,f'chkpt_step-{n:09d}.ply'),'wb').write(b'ply')\n"
+                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(chkpt,'scene_transform.json'),'w'))\n"
             )
             spirula.chmod(0o755)
             config = root / "dataset.sh"
@@ -239,6 +239,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 'PANORAMAX_QUALITY="hd"\n'
                 'PANORAMAX_IMAGE_MAX="5"\n'
                 f'SPIRULA_BIN="{spirula}"\n'
+                'SPIRULA_DEVICE="0"\n'
                 f'PYTHON_BIN="{fake_python}"\n'
                 'SPLIT_NUM_BLOCKS="2"\nTRAIN_NUM_ITER="3"\nTRAIN_SP_CAP_MAX="1000"\n'
                 'TRAIN_SP_PRESET="3dgs"\nTRAIN_SP_QUALITY="high"\nTRAIN_SP_DISTRACTION_ROBUSTNESS="mild"\nSFM_MAX_IMAGE_SIZE="1600"\n'
@@ -353,8 +354,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "merge_splats.py", "filter_splats.py"])
             for index in range(2):
                 splats = dataset / f"gs-3-blocks-2/block_{index:03d}/splats"
-                self.assertTrue((splats / f"Paris-3-block-{index:03d}.bbox.splat").is_file())
-                self.assertEqual((splats / f"Paris-3-block-{index:03d}.splat").read_bytes(),
+                self.assertTrue((splats / f"block_{index:03d}.bbox.splat").is_file())
+                self.assertEqual((splats / f"block_{index:03d}.splat").read_bytes(),
                                  b"splat")
             with config.open("a") as stream:
                 stream.write('SFM_SP_PAIR_MAX_DISTANCE=""\n')

@@ -1,8 +1,9 @@
 # Notebook vidéo Colab T4
 
 Ouvrir `colmap_to_gs_video_T4.ipynb` dans Colab, sélectionner un runtime GPU et
-exécuter les cellules dans l'ordre. Renseigner la vidéo, l'archive Spirula exacte,
-le nom de run et l'acceptation personnelle de la licence SAM.
+exécuter les cellules dans l'ordre. La première cellule de paramètres contient
+trois blocs : entrées principales (vidéo, nom de run, nombre de frames,
+itérations, plafond de splats, `MASKS`), réglages rarement modifiés et valeurs figées.
 
 Le notebook utilise `review_copilot` par défaut. Le YAML et le helper
 `colab_runtime.py` doivent être présents sur la branche sélectionnée.
@@ -12,35 +13,31 @@ est lancé avec `run -n`, sans l'option Conda `--no-capture-output` qui provoque
 `exec: --: invalid option` dans le runtime testé. Un programme natif peut
 néanmoins tamponner lui-même ses messages.
 
-La cellule Python dédiée `ACCEPT_SAM_LICENSE = True`, juste avant les réglages,
-enregistre l'acceptation dans le noyau courant. L'exécuter seulement après
-lecture et acceptation personnelle de la licence SAM. Après redémarrage,
-réexécuter cette cellule ; aucun `export` Bash n'est nécessaire.
+`ACCEPT_SAM_LICENSE = True` fait partie du bloc de réglages rarement modifiés :
+en l'exécutant, vous acceptez la licence SAM (https://github.com/facebookresearch/sam3/blob/main/LICENSE).
+Vérifiez-la avant d'exécuter le notebook.
 
 ## Paramètres et réexécution
 
-La première cellule lit les variables d'environnement `TRAIN_NUM_ITER`
-(12000), `TRAIN_SP_CAP_MAX` (500000 splats maximum **par bloc**),
-`SPLIT_NUM_BLOCKS` (**1** par défaut), `MAMBA_ENV` (`gsplat`) et `RUN_NAME`
-(`video_run`). On peut aussi modifier directement leurs valeurs Python.
+Le notebook ne lit plus de variables d'environnement : les réglages sont
+des affectations Python directes dans la première cellule. `MASKS` (`'on'` ou
+`'off'`) est propagé à `SFM_MASKS` et `TRAIN_MASKS`.
+`TRAIN_NUM_ITER` (12000), `TRAIN_SP_CAP_MAX` (500000 splats maximum **par bloc**)
+et `RUN_NAME` (`video_run`) sont dans le premier bloc. `SPLIT_NUM_BLOCKS` vaut **1**.
 `NUM_CPUS` vaut **2** par défaut : les images sont réparties entre deux processus Spirula SAM parallèles sur le même GPU. Chaque processus charge son
 modèle ; réduire à **1** en cas de mémoire GPU insuffisante. Le gain de vitesse
 n'est pas garanti si un seul processus sature déjà le GPU. Ce paramètre
 ne change pas les masques demandés et n'invalide pas les résultats existants.
-`SFM_SP_PAIRS` sélectionne les paires d'images pour Spirula : `prefilter` par
-défaut, ou `sequential`, `auto`, `exhaustive`. Pour essayer `sequential` sur
-une vidéo, définir également `SFM_CAMERA_SPLIT='false'` : ses sous-dossiers
-ne préservent pas l'ordre temporel global. Les frames doivent être nommées dans
-l'ordre. La fermeture de boucle dépend de la version de Spirula. Un changement
-de sélection des paires exige un nouveau workspace SfM.
-Un iPhone peut changer d'objectif ou de focale pendant la vidéo : Spirula
-produit alors plusieurs modèles. Avec `SFM_CAMERA_SPLIT=true` (défaut du
-notebook), chaque modèle d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images (100)
-devient un groupe de frames ; les frames non recalées rejoignent le groupe de
-leur voisine la plus proche. Un second SfM est calculé avec une caméra par groupe
-(`output/sfm_cameras/`), puis remplace `sfm/sparse` ; l'ancien SfM est conservé
-dans `sfm/sparse-before-camera-split`. `SFM_CAMERA_MODE=image` (une caméra par
-frame) reste possible, sans cette séparation.
+`SFM_SP_PAIRS` vaut `sequential` (`prefilter`, `auto`, `exhaustive` possibles).
+Les frames doivent être nommées dans l'ordre temporel. La fermeture de boucle
+dépend de la version de Spirula. Un changement de sélection des paires exige
+un nouveau workspace SfM.
+Valeurs figées dans le notebook : `SFM_CAMERA_SPLIT='false'`,
+`SFM_CAMERA_MODE='folder'`, `SFM_FILTER_DENSITY='false'`, `SFM_MIN_TRI_ANGLE='6'`,
+`PHASE='all'`, `MAMBA_ENV='gsplat'`, `COLMAP_ARCHIVE=''`, `SPIRULA_LOCAL_ROOT=''`.
+Le découpage par caméra (`SFM_CAMERA_SPLIT=true`, qui crée un SfM par groupe de
+frames de caméra) reste disponible en modifiant ces valeurs dans la cellule ;
+il n'est pas utilisé par défaut.
 Le notebook transmet les paramètres d'entraînement à la configuration Bash,
 avec `export SS_NN_LOG=1`. Pour d'autres données ou réglages d'un entraînement
 déjà commencé, choisir un nouveau `RUN_NAME` plutôt que réutiliser ses checkpoints.
@@ -68,15 +65,15 @@ Ce forçage exige `PIPELINE_RESUME=true` (déjà activé dans le notebook).
 Ce forçage n'arrête aucun processus et ne doit pas servir à lancer deux
 calculs simultanés sur le même run.
 
-`SPIRULA_LOCAL_ROOT` facultatif désigne une installation Spirula locale
-existante contenant le binaire `SPIRULA_BINARY_RELATIVE` et le modèle SAM.
-Dans ce cas, l'archive Spirula Drive n'est pas requise. Sinon, l'extraction
-de l'archive est réutilisée par SHA256. Aucun checkout ou environnement
-étranger n'est supprimé automatiquement.
+`SPIRULA_LOCAL_ROOT` est figé à `''` : l'extraction de `SPIRULA_ARCHIVE` est
+réutilisée par SHA256. Aucun checkout ou environnement étranger n'est supprimé
+automatiquement.
 
-## Repartir d'un ZIP COLMAP sur Drive
+## Repartir d'un ZIP COLMAP sur Drive (code conservé, désactivé)
 
-Renseigner `COLMAP_ARCHIVE` dans la première cellule (ou dans l'environnement) :
+`COLMAP_ARCHIVE` est figé à `''` dans le notebook : le calcul part toujours de la
+vidéo. Le code de restauration reste présent pour un usage avancé ; pour l'activer,
+mettre le chemin du ZIP dans la cellule de paramètres :
 
 ```python
 COLMAP_ARCHIVE = '/content/drive/MyDrive/colmap_to_gs_runs/mon-run-colmap-20261115.zip'
@@ -98,8 +95,7 @@ si `PHASE='all'` (`prepare` s'arrête après la préparation).
 
 Relancer tout avec le même ZIP vérifie et réutilise l'import. Un ZIP modifié,
 un sparse local divergent ou un workspace vidéo déjà utilisé sont refusés :
-choisir un nouveau `RUN_NAME`. Conserver `COLMAP_ARCHIVE` pour les relances
-de ce run. Les images importées restent dans le run, afin que les sauvegardes
+choisir un nouveau `RUN_NAME`. Les images importées restent dans le run, afin que les sauvegardes
 soient autonomes.
 
 ## Disque local et Drive
@@ -131,8 +127,8 @@ dans un ZIP horodaté de `DRIVE_BACKUPS`. Les fichiers images liés sont copiés
 dans l'archive. Un modèle incomplet est refusé.
 
 `/content` est éphémère : les checkpoints locaux disparaissent avec le runtime.
-Le ZIP COLMAP permet de recommencer l'entraînement dans un nouveau runtime via
-`COLMAP_ARCHIVE`, mais pas de restaurer un entraînement interrompu.
+Le ZIP COLMAP permet de recommencer l'entraînement dans un nouveau runtime
+(si `COLMAP_ARCHIVE` est activé), mais pas de restaurer un entraînement interrompu.
 Dans le même runtime, garder le run local et `PIPELINE_RESUME=true` pour
 reprendre les artefacts locaux. Pour d'autres données, choisir un nouveau RUN_NAME.
 

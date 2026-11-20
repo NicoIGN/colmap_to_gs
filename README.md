@@ -163,6 +163,7 @@ Détails et options : [conversion 3D Tiles](tools/splat_to_3dtiles/README.md) et
 
 ### Documentation des outils
 
+- [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
 - [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/images_to_colmap/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).

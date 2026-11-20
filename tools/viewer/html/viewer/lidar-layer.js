@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { makePointMesh, setMeshHighlight } from "./colmap.js";
+import { colmapBounds, makePointMesh, setMeshHighlight } from "./colmap.js";
 import { classColor, decodePointRecord, parseLasHeader } from "./las-header.js";
 
 export const LAZ_PERF_URL = "https://cdn.jsdelivr.net/npm/laz-perf@0.0.7/lib/web/laz-perf.js";
@@ -177,7 +177,7 @@ function buildSource(name, header, decoded) {
 }
 
 // Transformation affine LAZ (CRS projeté) → repère monde de la scène.
-function placementFor(source, georef) {
+export function placementFor(source, georef) {
   if (!georef) {
     return { mode: "local", note: "Aucun géoréférencement : nuage centré à l’origine." };
   }
@@ -210,7 +210,7 @@ function placementFor(source, georef) {
   };
 }
 
-function worldPositions(source, placement) {
+export function worldPositions(source, placement) {
   const { rel, count } = source;
   if (placement.mode === "local") return rel;
 
@@ -228,11 +228,19 @@ function worldPositions(source, placement) {
   return out;
 }
 
-export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup }) {
+export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
   const layers = new Map();
+
+  function emitBounds(frame) {
+    const boxes = [...layers.values()].map((layer) => layer.bounds).filter(Boolean);
+    const bounds = boxes.length
+      ? colmapBounds(boxes.flatMap((box) => [box.min, box.max]), Boolean(getFlipUp?.()))
+      : null;
+    onBoundsChanged?.(bounds, frame);
+  }
 
   function destroyRender(layer) {
     layer.resource?.mesh?.destroy?.();
@@ -246,10 +254,10 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     destroyRender(layer);
     const placement = placementFor(layer.source, georef);
     layer.placement = placement;
+    const positions = worldPositions(layer.source, placement);
+    layer.bounds = colmapBounds([positions], false);
 
-    layer.resource = makePointMesh(
-      app, worldPositions(layer.source, placement), layer.source.colors, POINT_SIZE
-    );
+    layer.resource = makePointMesh(app, positions, layer.source.colors, POINT_SIZE);
     setMeshHighlight(layer.resource, layer.highlighted);
     const pointsEntity = new pc.Entity(`LiDAR points · ${layer.name}`);
     pointsEntity.addComponent("render", {
@@ -272,6 +280,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     if (georef === lastGeoref) return;
     lastGeoref = georef;
     for (const layer of layers.values()) render(layer, georef);
+    emitBounds(false);
   }
 
   async function loadFile(file, sidecarFile = null) {
@@ -332,8 +341,11 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
         layer.unregister?.();
         destroyRender(layer);
         layers.delete(id);
+        emitBounds(false);
       },
     }) ?? null;
+
+    emitBounds(true);
 
     const sampled = source.count < source.totalPoints
       ? ` (sous-échantillonné : ${source.count.toLocaleString("fr-FR")} / ${source.totalPoints.toLocaleString("fr-FR")})`
@@ -348,6 +360,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       destroyRender(layer);
     }
     layers.clear();
+    emitBounds(false);
   }
 
   return {
@@ -359,6 +372,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       for (const layer of layers.values()) {
         layer.root?.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
       }
+      emitBounds(false);
     },
 
     dispose() {

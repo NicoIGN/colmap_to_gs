@@ -25,7 +25,7 @@ class SlurmLaunchTest(unittest.TestCase):
         shutil.copytree(SOURCE.parents[1] / "config" / "defaults", self.pipeline_dir.parents[1] / "config" / "defaults")
         shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
         shared_scripts.mkdir(parents=True)
-        for name in ("pipeline_config.sh", "pipeline_slurm.sh"):
+        for name in ("pipeline_config.sh", "pipeline_lidar.sh", "pipeline_report.sh", "pipeline_slurm.sh"):
             shutil.copyfile(SOURCE.parents[1] / "tools/libs/scripts" / name, shared_scripts / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"
@@ -33,9 +33,9 @@ class SlurmLaunchTest(unittest.TestCase):
             f'OUTPUT_DIR="{self.output}"\n'
             'PANORAMAX_BBOX="651000,6861000,652000,6862000"\n'
             'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
-            'PYTHON_BIN=job-python\n'
+            'NUM_CPUS=16\nPYTHON_BIN=job-python\n'
         )
-        pipeline_script = self.pipeline_dir.parents[1] / "script/panoramax_to_3dgs.sh"
+        pipeline_script = self.pipeline_dir.parents[1] / "scripts/panoramax_to_3dgs.sh"
         pipeline_script.parent.mkdir()
         pipeline_script.write_text(
             '#!/usr/bin/env bash\nset -euo pipefail\nsource "$1"\n'
@@ -133,6 +133,7 @@ if "--wait" in args:
         )
         self.make_tool(
             "job-python", '#!/usr/bin/env bash\n'
+            '[[ "$*" == *pipeline_report.py* ]] && exit 0\n'
             '[[ "$1" == -c && "$2" == "import numpy, scipy, tqdm, pyproj, plyfile" ]] '
             '|| exit 99\nexit "${TEST_IMPORT_STATUS:-0}"\n',
         )
@@ -170,7 +171,7 @@ if "--wait" in args:
         self.assertIn("--gres=gpu:1", prepare)
         self.assertIn("--gres=gpu:1", blocks)
         self.assertIn("--gres=none", merge)
-        self.assertIn("--array=0-1%2", blocks)
+        self.assertIn("--array=0-1%1", blocks)
         self.assertIn("--dependency=afterok:12345", blocks)
         self.assertIn("--dependency=afterok:12346", merge)
         for args in (blocks, merge):
@@ -189,7 +190,7 @@ if "--wait" in args:
         )
         with self.config.open("a") as stream:
             stream.write(
-                'SLURM_PARTITION=gpu-test\nNUM_CPUS=6\n'
+                'SLURM_PARTITION=gpu-test\nNUM_CPUS=6\nNUM_GPUS=2\n'
                 'SLURM_MEMORY=32G\nSLURM_TIME_LIMIT=02:30:00\n'
                 'SLURM_GPU_TYPE=a100\nSLURM_ACCOUNT=project\nSLURM_QOS=normal\n'
                 f'SLURM_ENV_SETUP="{setup}"\nSLURM_CONDA_ENV=gsplat\n'

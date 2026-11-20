@@ -119,6 +119,19 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(values["focal"], "")
             self.assertEqual(json.loads((root / "w" / "selection.json").read_text())["camera_model"], "equirectangular")
 
+    def test_mixed_equirectangular_and_perspective_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "images").mkdir()
+            (root / "metadata").mkdir()
+            for index, projection in enumerate(["equirectangular", "perspective"]):
+                (root / "images" / f"p{index}.jpg").write_bytes(fake_jpeg(4096, 2048))
+                feature = {"feature": {"properties": {"type": projection}}}
+                (root / "metadata" / f"p{index}.json").write_text(json.dumps(feature))
+            with self.assertRaises(SystemExit) as raised:
+                self.run_main("--dataset", str(root), "--output-dir", str(root / "w"), "--shell")
+            self.assertIn("mélangées", str(raised.exception))
+
     def test_multi_size_360_does_not_announce_focal_estimation(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -134,6 +147,22 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(values["camera_model"], "equirectangular")
             self.assertEqual(values["focal"], "")
             self.assertNotIn("Spirula estime", err)
+
+    def test_per_collection_layout_ignores_sfm_workspace_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset = Path(tmp) / "panoramax"
+            collection = dataset / "immergis"
+            (collection / "images").mkdir(parents=True)
+            (collection / "metadata").mkdir()
+            (dataset / "sfm" / "images").mkdir(parents=True)
+            for name in ("a0", "a1"):
+                (collection / "images" / f"{name}.jpg").write_bytes(fake_jpeg(4096, 2160))
+                (collection / "metadata" / f"{name}.json").write_text(json.dumps({"download": {}}))
+            (dataset / "sfm" / "images" / "stale.jpg").write_bytes(fake_jpeg(4096, 2160))
+            work = Path(tmp) / "work"
+            out, _ = self.run_main("--dataset", str(dataset), "--output-dir", str(work), "--shell")
+            self.assertEqual(sorted(p.name for p in (work / "images").iterdir()), ["a0.jpg", "a1.jpg"])
+            self.assertIn("focal=", out)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
 **Entraînement.** Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
-Le SfM géoréférencé reste celui de Spirula ; `TRAIN_BACKEND=nerfstudio` permet
+Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
 par le [tool de segmentation](../segmentation_masks/README.md), avec
@@ -17,15 +17,44 @@ Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfa
 `TRAIN_NS_TRAIN_BIN`, `TRAIN_NS_EXPORT_BIN` et `TRAIN_NS_DOWNSCALE_FACTOR` règlent ce moteur.
 
 **Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
-de Panoramax, qui reste le producteur SfM quel que soit `TRAIN_BACKEND`.
+de Panoramax, indépendamment de `TRAIN_BACKEND`. Le mode HLOC 360 ci-dessous
+utilise les réglages `HLOC_*` à la place.
 `SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
 `SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
-à cette étape. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle est détecté (360° -> `equirectangular`,
+au SfM Spirula. HLOC conserve ses propres réglages et seuils pycolmap. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle Spirula est détecté (360° -> `equirectangular`,
 sans focale ; sinon `opencv`). Le définir force le modèle. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
 
 Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
 reste partagé. Les exemples et commentaires de
 [`config/defaults/train.default.sh`](../../config/defaults/train.default.sh) et [`config.default.sh`](config.default.sh) regroupent ces paramètres par backend.
+
+**Panoramax 360 avec HLOC/pycolmap.** Utiliser un nouveau `OUTPUT_DIR` :
+
+```bash
+PANORAMAX_PICTURE_TYPE="360"
+COLMAP_METHOD="hloc"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
+```
+
+Les panoramas complets 2:1 deviennent six vues pinhole de champ 110° avec
+recouvrement, utilisées pour le SfM et l'entraînement choisi par
+`TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
+les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
+d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
+`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
+pyproj et pycolmap sont requis dans `PYTHON_BIN`.
+
+Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
+Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
+CRS `PANORAMAX_BBOX_EPSG` (2154 par défaut). Le recalage exige au moins trois
+positions reconstruites et une trajectoire non rectiligne. Sans altitudes
+complètes, seul le plan horizontal est ancré : l'altitude locale est arbitraire
+et la verticale suppose les panoramas redressés. Contrôler les résidus dans
+`georef_stats.json` et vérifier visuellement ; les altitudes GPS brutes ne sont
+pas corrigées du géoïde. Les masques générés sont appliqués aux vues projetées.
+Le filtre `SFM_SP_PAIR_MAX_DISTANCE`, MVS et LiDAR ne sont pas disponibles dans
+ce mode. Les changements d'images ou de réglages exigent un nouveau workspace.
 
 **Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
 l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
@@ -48,7 +77,7 @@ Bbox (EPSG indiqué) → recherche STAC/WGS84 → vérification des prises de vu
 
 ```bash
 bash tools/panoramax/download.sh \
-  --bbox "651000,6861000,652000,6862000" --bbox-epsg 2154 \
+  --bbox "651000,6861000,652000,6862000" --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
 
@@ -65,13 +94,28 @@ vue dans la bbox et son système d'origine.
 
 ```text
 output-dir/
-├── images/<identifiant-haché>.jpg
-├── metadata/<identifiant-haché>.json
+├── <id-collection-stac>/images/<identifiant-haché>.jpg
+├── <id-collection-stac>/metadata/<identifiant-haché>.json
+├── <id-collection-stac>-<LARGEURxHAUTEUR>/...   # seulement si la collection mélange plusieurs tailles
 ├── pages/page-000001.json
 ├── manifest.jsonl
-├── request.json               # bbox, code EPSG d'entrée et requête API
+├── request.json               # bbox, code EPSG d'entrée, requête API et filtres
 └── summary.json
 ```
+
+Chaque collection STAC a son dossier (identifiant STAC). Si une collection contient
+plusieurs tailles d'image, ses photos sont réparties dans `<id>-<LxH>/` pour garantir
+une taille unique par dossier.
+
+Filtres répétables `--filter KEY=VALEURS` : KEY est une propriété STAC (ex.
+`geovisio:producer`) ou un tag EXIF (ex. `Exif.Image.Software`) ; les valeurs
+séparées par des virgules sont en OU, les filtres successifs en ET, sans tenir
+compte de la casse :
+
+```
+
+Dans le pipeline complet, la même syntaxe s'écrit dans une seule variable :
+`PANORAMAX_FILTERS="geovisio:producer=immergis,overflorian;Exif.Image.Software=H19.03.02.02.00"`.
 
 Les métadonnées conservent le Feature STAC complet : coordonnées, date, séquence,
 propriétés, assets, liens de provenance et informations de licence/attribution
@@ -115,7 +159,7 @@ Depuis la racine du dépôt :
 ```bash
 bash tools/panoramax/download.sh \
   --bbox "651000,6861000,652000,6862000" \
-  --bbox-epsg 2154 \
+  --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
 
@@ -123,7 +167,7 @@ Options :
 
 | Option | Description |
 |---|---|
-| `--bbox-epsg 2154` | Code EPSG des coordonnées de `--bbox` ; défaut `2154` (Lambert-93) |
+| `--crs EPSG:2154` | Système de coordonnées de `--bbox` ; défaut `EPSG:2154` (Lambert-93) |
 | `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
 | `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
 | `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
@@ -418,7 +462,7 @@ Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final 
 il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
 calcul existant, déplacer le workspace `panoramax/sfm/` **et**
 les entraînements `panoramax/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/` en sauvegarde,
-puis relancer la préparation et les blocs ; garder `images/` et `metadata/`
+puis relancer la préparation et les blocs ; garder les dossiers `<id-collection>*/` (images et metadata)
 pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
 la signature ne correspond pas au rayon, aux paramètres et aux entrées.
 À paramètres identiques, un SfM filtré terminé est réutilisé ; après un échec
@@ -568,11 +612,15 @@ Dans un terminal interactif, une barre de progression affiche les photos
 téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
 trouvées, la barre se termine à 100 % du total effectivement sélectionné.
 
-Le script demande jusqu'à 10 000 métadonnées à l'API (sans télécharger les
-images à cette étape), compte les photos dont le point est dans la bbox exacte
-Lambert-93, puis affiche ce total et l'écrit dans `summary.json` (`available`,
-`available_is_exact`). Si l'API renvoie 10 000 résultats sur sa dernière page,
-le total affiché est une borne basse (`+`) et un avertissement le précise.
+Le script demande les métadonnées à l'API (sans télécharger les images à cette
+étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
+par requête : si une requête en atteint 10 000, la zone est découpée en quatre
+quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
+supprimés par `collection/id`. Le script compte ensuite les photos dont le point
+est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
+`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
+basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
+précise. Chaque page brute est écrite dans `pages/`.
 
 `--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
 sans réduire le comptage : par exemple, `--image-max 400` affiche le total

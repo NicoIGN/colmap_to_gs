@@ -60,8 +60,8 @@ class SfmRecoveryTest(unittest.TestCase):
                         self.assertIn("Poursuite avec ce modèle", result.stderr)
                         self.assertIn("1 caméras, 1 images, 1 points", result.stdout)
 
-    def test_panoramax_360_dataset_uses_equirectangular_unless_overridden(self):
-        for extra, expected in (([], "equirectangular"), (["--camera-model", "opencv"], "opencv")):
+    def test_panoramax_360_dataset_uses_equirectangular_and_refuses_opencv_override(self):
+        for extra, expected in (([], "equirectangular"), (["--camera-model", "opencv"], None)):
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 (root / "images").mkdir()
@@ -81,6 +81,10 @@ class SfmRecoveryTest(unittest.TestCase):
                     env=dict(os.environ, PYTHON_BIN=sys.executable),
                     capture_output=True, text=True, timeout=30,
                 )
+                if expected is None:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("Images 360 détectées", result.stderr)
+                    continue
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertIn(f"--camera-model {expected}", result.stdout)
                 self.assertNotIn("--focal", result.stdout)

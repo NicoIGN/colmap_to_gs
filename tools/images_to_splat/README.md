@@ -52,6 +52,45 @@ est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
 (SfM Hierarchical-Localization, `HLOC_*`).
 Il peut être lancé seul ; les résultats compatibles sont réutilisés.
 
+**Panoramas 360 avec HLOC.** Pour les photos ou images extraites de vidéos
+équirectangulaires complètes (rapport 2:1), activer :
+
+```bash
+COLMAP_METHOD="hloc"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
+GEOREF_EPSG="2154"
+```
+
+Remplacer l'ancien `SFM_EQUIRECTANGULAR_VIEWS=true` par
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les espaces de travail compatibles restent réutilisables.
+
+Chaque panorama devient six images carrées pinhole de champ 110° avec
+recouvrement. HLOC extrait et apparie les points, puis pycolmap reconstruit ;
+les mêmes vues sont utilisées pour l'entraînement choisi par `TRAIN_BACKEND`.
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ; les vues sont
+reconstruites en `PINHOLE` avec leur focale connue fixée. Les vues issues d'un
+panorama ne sont pas contraintes en rig : leur
+centre peut différer après reconstruction. Prévoir davantage de temps et de
+stockage. Installer HLOC avec `bash $GIT_ROOT/tools/colmap/install-hloc.sh`
+et disposer de numpy, OpenCV, Pillow, scipy et pyproj dans `PYTHON_BIN`.
+HLOC utilise ses propres seuils pycolmap, pas les seuils `SFM_MAX_ERROR`,
+`SFM_MIN_INLIERS` et `SFM_MIN_TRI_ANGLE` du SfM Spirula/COLMAP direct.
+
+Les GPS EXIF sont conservés dans `gps_georef/0/gps_positions.json`. Au moins
+trois panoramas reconstruits et une trajectoire non rectiligne sont nécessaires
+pour recaler le modèle en ENU local métrique ; `GEOREF_EPSG` décrit l'origine
+projetée du repère (Lambert-93 par défaut), pas les coordonnées du modèle.
+Sans assez de GPS, un avertissement est émis et le modèle reste dans son repère
+SfM non métrique. Sans altitudes complètes, seul le plan horizontal est ancré :
+l'altitude reste arbitraire et la verticale suppose des panoramas redressés.
+Les coordonnées GPS et les hauteurs sont approximatives, sans correction de
+géoïde ; vérifier le rapport `gps_georef/0/georef_stats.json` et le résultat.
+L'extracteur vidéo ne garantit pas la conservation de GPS dans les images.
+Changer les images ou paramètres nécessite un nouveau `OUTPUT_DIR`. Les masques
+générés restent disponibles ; les masques externes, GPX, MVS et LiDAR ne sont
+pas pris en charge avec ce mode.
+
 **Entraînement.** `TRAIN_BACKEND=spirula|nerfstudio` choisit le moteur sans
 changer le modèle COLMAP. Nerfstudio exige PyTorch et un GPU NVIDIA utilisable
 via CUDA ; sinon le calcul est refusé avant l'entraînement, sans repli CPU.

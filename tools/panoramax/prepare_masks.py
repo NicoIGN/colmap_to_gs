@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 
+from dataset_layout import image_files, metadata_index
 from prepare_sfm import main as prepare_images
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import enabled, generate, policy
@@ -22,22 +23,27 @@ def without_device(settings):
     return {key: value for key, value in settings.items() if key != "device"}
 
 
-def prepare(dataset, workspace, check_only=False):
+def prepare(dataset, workspace, check_only=False, perspective=False):
     sfm = policy("SFM_MASKS")
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
     # Include source images and checkpoint metadata so a completed SfM is never
     # silently reused after its extraction mask policy or inputs have changed.
     # Content hashes keep a re-download of identical photos from invalidating the SfM.
     inputs = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
-              for p in sorted((dataset / "images").rglob("*")) if p.is_file()]
+              for p in image_files(dataset)]
     metadata = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
-                for p in sorted((dataset / "metadata").rglob("*.json"))]
+                for p in sorted(metadata_index(dataset).values())]
     model = Path(sfm["model"])
     model_files = [model] if model.is_file() else sorted(model.rglob("*"))
     weights = [(str(p), p.stat().st_size, p.stat().st_mtime_ns)
                for p in model_files if p.is_file()]
     binary = Path(os.environ["SPIRULA_BIN"]).resolve()
-    binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
+    if perspective and sfm["backend"] != "spirula" and (train is None or train["backend"] != "spirula"):
+        binary_stamp = None
+    else:
+        binary_stamp = (str(binary), binary.stat().st_size, binary.stat().st_mtime_ns)
+    if perspective:
+        inputs.append(("projection", hashlib.sha256((workspace / "projection.json").read_bytes()).hexdigest()))
     generator_hash = hashlib.sha256((Path(__file__).parents[1] /
                                      "segmentation_masks/generate_masks.py").read_bytes()).hexdigest()
     def fingerprint(code_hash, policy):
@@ -65,10 +71,12 @@ def prepare(dataset, workspace, check_only=False):
             without_device(previous_settings) == without_device(sfm)):
         print("[masques] Signature SfM héritée acceptée (migration unique vers SHA-256).", flush=True)
         compatible.add(previous.get("signature"))
-    # These generator updates change only consent forwarding and diagnostics.
+    # These generator updates change only consent forwarding, diagnostics, or the
+    # speed of dilation (distance transform gives identical masks, commit f039271).
     if generator_hash in (
             "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
-            "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896"):
+            "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896",
+            "16bc0e17e25fb01933fbd907941c1ea8b01e48084b857a17b0fffe1748d42437"):
         if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
             compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379",
                                        previous_settings))
@@ -98,7 +106,8 @@ def prepare(dataset, workspace, check_only=False):
         raise ValueError(f"{features} est un dossier réel : choisir un nouveau workspace pour partager les masques")
     if not previous and any((p / "masks.json").exists() for p in (features, training)):
         raise ValueError("Masques préexistants sans signature : choisir un nouveau workspace")
-    prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
+    if not perspective:
+        prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
     record = {"signature": signature, "input_digest": "sha256", "settings": sfm, "training_settings": train,
               "shared_with_training": shared, "status": "partial"}
     marker.write_text(json.dumps(record, indent=2) + "\n")
@@ -125,9 +134,11 @@ if __name__ == "__main__":
     parser.add_argument("dataset", type=Path)
     parser.add_argument("workspace", type=Path)
     parser.add_argument("--check", action="store_true", help="Validate preparation without generating masks")
+    parser.add_argument("--perspective", action="store_true", help="Utiliser les vues déjà projetées")
     args = parser.parse_args()
     try:
-        prepare(args.dataset.resolve(), args.workspace.resolve(), check_only=args.check)
+        prepare(args.dataset.resolve(), args.workspace.resolve(), check_only=args.check,
+                perspective=args.perspective)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f"[ERREUR] Préparation des masques : {error}", file=sys.stderr)
         sys.exit(1)

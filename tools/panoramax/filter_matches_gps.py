@@ -12,6 +12,8 @@ import tempfile
 
 from pyproj import Geod
 
+from dataset_layout import json_index
+
 
 U32 = struct.Struct("<I")
 PAIR = struct.Struct("<IIiI")
@@ -32,13 +34,13 @@ def copy_bytes(source, target, size):
         size -= len(chunk)
 
 
-def position(metadata_dir, image_name):
+def position(metadata, image_name):
     # Spirula stores relative feature stems, without the JPEG extension.
     name = Path(image_name)
     if name.is_absolute() or ".." in name.parts:
         raise ValueError(f"Nom d'image non relatif : {image_name}")
-    path = metadata_dir / f"{image_name}.json"
-    if not path.is_file():
+    path = metadata.get(image_name)
+    if path is None:
         return None
     with path.open(encoding="utf-8") as stream:
         data = json.load(stream)
@@ -85,14 +87,20 @@ def copy_camera_tail(source, target, version, image_count):
         raise ValueError("Octets inattendus après les caméras VKMT")
 
 
-def filter_matches(input_path, output_path, metadata_dir, max_distance):
-    input_path, output_path, metadata_dir = map(Path, (input_path, output_path, metadata_dir))
+def filter_matches(input_path, output_path, metadata, max_distance):
+    """metadata : dossier de JSON Panoramax, ou index {nom: chemin} (cf. dataset_layout.metadata_index)."""
+    input_path, output_path = map(Path, (input_path, output_path))
     if not math.isfinite(max_distance) or max_distance <= 0:
         raise ValueError("Le rayon GPS doit être fini et strictement positif")
     if input_path.resolve() == output_path.resolve():
         raise ValueError("La sortie filtrée doit être distincte du matches.bin original")
-    if not metadata_dir.is_dir():
-        raise ValueError(f"Métadonnées Panoramax absentes : {metadata_dir}")
+    if isinstance(metadata, dict):
+        index = metadata
+    else:
+        metadata_dir = Path(metadata)
+        if not metadata_dir.is_dir():
+            raise ValueError(f"Métadonnées Panoramax absentes : {metadata_dir}")
+        index = json_index(metadata_dir)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary_name = tempfile.mkstemp(dir=output_path.parent, suffix=".part")
     temporary = Path(temporary_name)
@@ -118,7 +126,7 @@ def filter_matches(input_path, output_path, metadata_dir, max_distance):
                 name = read_exact(source, name_size)
                 features = read_exact(source, 4)
                 target.write(raw + name + features)
-                positions.append(position(metadata_dir, name.decode("utf-8")))
+                positions.append(position(index, name.decode("utf-8")))
             counts["images"] = image_count
             counts["images_without_gps"] = sum(p is None for p in positions)
             pair_count = U32.unpack(read_exact(source, 4))[0]

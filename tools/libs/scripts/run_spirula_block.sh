@@ -17,7 +17,7 @@ export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
 export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
-export_filter_mode="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+export_filter_mode="${POSTPROCESS_FILTER_MODE:-apply}"
 shape_max_aspect_ratio="${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}"
 shape_isolation_factor="${POSTPROCESS_SHAPE_ISOLATION_FACTOR:-}"
 
@@ -37,6 +37,7 @@ train_resolution_divisor="${TRAIN_RESOLUTION_DIVISOR:-}"
 growth_factor="${TRAIN_SP_GROWTH_FACTOR:-}"
 refine_stop_iter="${TRAIN_SP_REFINE_STOP_ITER:-}"
 refine_stop_num_iter="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+steps_per_save="${TRAIN_SP_STEPS_PER_SAVE:-}"
 floater_suppression="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
 warp_spherical="${TRAIN_SP_WARP_SPHERICAL:-}"
 masks_dir="${MASKS_DIR:-}"
@@ -56,7 +57,7 @@ Usage:
 Important:
   - La visionneuse est désactivée.
   - Le checkpoint final attendu dépend de --num-iterations:
-      {output_dir}/splats/step-XXXXXXXXX.ckpt/splat.ply
+      {output_dir}/splats/chkpt_step-<N>.ply (splat.ply du dernier step-<N>.ckpt de Spirula, publié dans splats/ en fin d'entraînement)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
       via tools/postprocess/export_ply.py et splats/scene_transform.json
@@ -82,13 +83,14 @@ Options:
   --growth-factor X         Croissance explicite (> 1); sinon estimation [1.001, 1.05]
   --refine-stop-iter N      Pas minimal d'arrêt de la croissance
   --refine-stop-num-iter N  Arrêt de la croissance N pas avant la fin
+  --steps-per-save N        Sauvegarde toutes les N itérations (défaut Spirula 2000) ; seul le dernier checkpoint est conservé
   --floater-suppression M   off, mild ou strong
   --warp-spherical-to-pinhole B  true (défaut Spirula) : 360 découpée en vues pinhole ; false : équirectangulaire direct
   --masks-dir PATH          Masques d'entraînement (<image>.png, 255 gardé, 0 masqué)
   --mask-mode MODE          ignore (pixels exclus de la perte) ou empty (appris vides)
   --python-bin PATH
   --export-script PATH
-  --export-filter-mode MODE diagnostic (default), apply, off (default exporter only)
+  --export-filter-mode MODE apply (default), diagnostic (writes rejected files), off (default exporter only)
   --shape-max-aspect-ratio R  rejette les splats plus allongés que R (>1) et isolés ; off si vide
   --shape-isolation-factor F  seuil d'isolement, multiple de la médiane (>0) ; requis avec R
   --name FILENAME           Nom de sortie (défaut: block.splat)
@@ -146,6 +148,7 @@ while [[ $# -gt 0 ]]; do
     --growth-factor) need_arg "$@"; growth_factor="$2"; shift 2 ;;
     --refine-stop-iter) need_arg "$@"; refine_stop_iter="$2"; shift 2 ;;
     --refine-stop-num-iter) need_arg "$@"; refine_stop_num_iter="$2"; shift 2 ;;
+    --steps-per-save) need_arg "$@"; steps_per_save="$2"; shift 2 ;;
     --floater-suppression) need_arg "$@"; floater_suppression="$2"; shift 2 ;;
     --warp-spherical-to-pinhole) need_arg "$@"; warp_spherical="$2"; shift 2 ;;
     --masks-dir) need_arg "$@"; masks_dir="$2"; shift 2 ;;
@@ -225,6 +228,8 @@ for value in "$refine_stop_iter" "$refine_stop_num_iter"; do
   [[ -z "$value" ]] || is_nonnegative_integer "$value" ||
     die "--refine-stop-iter et --refine-stop-num-iter attendent un entier >= 0"
 done
+[[ -z "$steps_per_save" ]] || [[ "$steps_per_save" =~ ^[1-9][0-9]*$ ]] ||
+  die "--steps-per-save attend un entier > 0"
 case "$floater_suppression" in
   ""|off|mild|strong) ;;
   *) die "--floater-suppression attend off, mild ou strong" ;;
@@ -343,13 +348,89 @@ splats_dir="$output_dir/splats"
 train_done_file="$output_dir/.train_done"
 export_done_file="$output_dir/.export_done"
 
-export_transform="$splats_dir/scene_transform.json"
 export_points="$output_dir/sparse/0/points3D.bin"
 world_splat="$splats_dir/$export_name"
 
 iteration_count=$((10#$num_iterations))
-printf -v checkpoint_name 'step-%09d.ckpt' "$iteration_count"
-final_ckpt="$splats_dir/$checkpoint_name/splat.ply"
+# Spirula écrit le checkpoint à chaque save (chkpt_step-<N>.ply/.tar) sans rien supprimer :
+# pendant l'entraînement, on ne garde que la paire la plus récente.
+prune_old_checkpoints() {
+  local f step newest=""
+  shopt -s nullglob
+  for f in "$chkpt_dir"/*_step-*.ply; do
+    step="${f##*_step-}"
+    step="${step%.ply}"
+    if [[ -z "$newest" ]] || (( 10#$step > 10#$newest )); then
+      newest="$step"
+    fi
+  done
+  if [[ -n "$newest" ]]; then
+    for f in "$chkpt_dir"/*_step-*.ply "$chkpt_dir"/*_step-*.tar; do
+      step="${f##*_step-}"
+      step="${step%.*}"
+      if (( 10#$step < 10#$newest )); then
+        rm -f -- "$f"
+      fi
+    done
+  fi
+  shopt -u nullglob
+  prune_old_step_checkpoints
+}
+# Spirula (save-full-checkpoint) écrit un dossier step-<N>.ckpt par sauvegarde : on ne garde que le
+# plus récent, et seulement une fois qu'il est complet, pour ne pas perdre la reprise.
+prune_old_step_checkpoints() {
+  local dirs=() i
+  shopt -s nullglob
+  dirs=("$chkpt_dir"/step-*.ckpt)
+  shopt -u nullglob
+  (( ${#dirs[@]} > 1 )) || return 0
+  local newest="${dirs[${#dirs[@]}-1]}"
+  [[ -s "$newest/splat.ply" && -s "$newest/state.tar" ]] || return 0
+  for ((i = 0; i < ${#dirs[@]} - 1; i++)); do
+    rm -rf -- "${dirs[i]}"
+  done
+}
+keep_latest_checkpoint_while_training() {
+  while true; do
+    prune_old_checkpoints
+    sleep 2
+  done
+}
+
+# Spirula écrit dans splats/chkpt/ ; le .ply final est exporté dans splats/.
+chkpt_dir="$splats_dir/chkpt"
+export_transform="$chkpt_dir/scene_transform.json"
+# Le PLY final vit dans splats/ une fois publié ; sinon dans chkpt/ (fin d'entraînement non publiée).
+resolve_final_ply() {
+  local plys=()
+  shopt -s nullglob
+  # Zéro-padding : le dernier élément du glob est le step le plus récent.
+  plys=("$chkpt_dir"/step-*.ckpt/splat.ply)
+  (( ${#plys[@]} )) || plys=("$splats_dir"/*_step-*.ply)
+  (( ${#plys[@]} )) || plys=("$chkpt_dir"/*_step-*.ply)
+  # Spirula en latest-only écrit parfois un PLY final sans numéro de step (<nom>.ply).
+  (( ${#plys[@]} )) || plys=("$chkpt_dir"/*.ply)
+  # PLY final déjà publié (sans numéro de step) dans splats/.
+  (( ${#plys[@]} )) || plys=("$splats_dir"/*.ply)
+  shopt -u nullglob
+  if (( ${#plys[@]} == 0 )); then
+    final_ckpt=""
+  else
+    final_ckpt="${plys[${#plys[@]}-1]}"
+  fi
+}
+publish_final_ply() {
+  local target
+  [[ "$(dirname -- "$final_ckpt")" != "$splats_dir" ]] || return 0
+  if [[ "$(basename -- "$final_ckpt")" == splat.ply ]]; then
+    target="$splats_dir/chkpt_$(basename -- "$(dirname -- "$final_ckpt")" .ckpt).ply"
+  else
+    target="$splats_dir/$(basename -- "$final_ckpt")"
+  fi
+  mv -f -- "$final_ckpt" "$target"
+  final_ckpt="$target"
+}
+resolve_final_ply
 
 mark_train_done() {
   {
@@ -365,6 +446,17 @@ mark_export_done() {
     printf 'reason=%s\n' "$1"
     printf 'output=%s\n' "$world_splat"
   } > "$export_done_file"
+}
+
+finalize_training() {
+  local finalize_lock="$output_dir/.train_finalize.lock"
+  "$python_bin" "$lock_helper" "$finalize_lock" --pid "$$" --resume "${PIPELINE_RESUME:-false}" --ignore "${REMOVE_LOCKS:-false}" --workspace "${OUTPUT_DIR:-$output_dir}"
+  resolve_final_ply
+  [[ -s "$final_ckpt" ]] ||
+    die "Entraînement terminé mais PLY final Spirula introuvable dans $chkpt_dir"
+  publish_final_ply
+  mark_train_done "$1"
+  "$python_bin" "$lock_helper" "$finalize_lock" --pid "$$" --release
 }
 
 export_world_splat() {
@@ -412,12 +504,15 @@ export_world_splat() {
   printf '%q ' "${export_cmd[@]}" > "$output_dir/export_command.sh"
   printf '\n' >> "$output_dir/export_command.sh"
 
+  log "Export .splat en cours : $final_ckpt -> $world_splat"
   rm -f -- "$export_done_file"
   "${export_cmd[@]}" 2>&1 | tee "$output_dir/export.log"
 
   [[ -s "$world_splat" ]] || die "Export absent ou vide : $world_splat"
+  # Publie la transformation à l'emplacement attendu par l'orchestrateur (splats/scene_transform.json).
+  cp -- "$export_transform" "$splats_dir/scene_transform.json"
   mark_export_done "completed_export"
-  log "Export terminé : $world_splat"
+  log "Export .splat terminé : $world_splat"
   log "Marqueur export : $export_done_file"
 }
 
@@ -433,7 +528,16 @@ print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["settings"], sor
 fi
 
 if [[ "$clean" == false ]]; then
-  if [[ -s "$final_ckpt" ]]; then
+  resolve_final_ply
+  training_finished=false
+  if [[ -f "$train_done_file" ]]; then
+    training_finished=true
+  elif [[ "${PIPELINE_RESUME:-false}" == true && -s "$final_ckpt" && -f "$output_dir/train.log" ]] &&
+       grep -q "Entraînement terminé" "$output_dir/train.log"; then
+    training_finished=true
+    log "Entraînement terminé avant interruption (PLY final présent) : finalisation sans réentraîner."
+  fi
+  if [[ -s "$final_ckpt" && "$training_finished" == true ]]; then
     log "Checkpoint final déjà présent. Entraînement ignoré."
     previous_photometric_signature=""
     [[ ! -f "$photometric_signature_file" ]] ||
@@ -448,7 +552,7 @@ if [[ "$clean" == false ]]; then
     if [[ "$previous_signature" != "$masks_signature" ]]; then
       echo "[AVERTISSEMENT] Ce bloc a été entraîné avec d'autres masques (voir $masks_signature_file) ; --clean pour réentraîner." >&2
     fi
-    mark_train_done "found_final_ckpt"
+    finalize_training "found_final_ckpt"
     export_world_splat
     exit 0
   fi
@@ -532,13 +636,12 @@ cmd=(
   --data-format colmap
   --colmap-recon-dir sparse/0
   --image-dir images
-  --output-dir-prefix "$output_dir"
-  --output-dir-name splats
+  --output-dir-prefix "$splats_dir"
+  --output-dir-name chkpt
   --lang fr
   --disable-viewer 1
   --keep-viewer-alive 0
   --save-full-checkpoint 1
-  --save-only-latest-checkpoint 0
 )
 
 [[ -z "$quality" ]] || cmd+=(--quality "$quality")
@@ -553,6 +656,8 @@ cmd+=(--distraction-robustness "$distraction_robustness")
 [[ -z "$growth_factor" ]] || cmd+=(--growth-factor "$growth_factor")
 [[ -z "$refine_stop_iter" ]] || cmd+=(--refine-stop-iter "$refine_stop_iter")
 [[ -z "$refine_stop_num_iter" ]] || cmd+=(--refine-stop-num-iter "$refine_stop_num_iter")
+[[ -z "$steps_per_save" ]] || cmd+=(--steps-per-save "$steps_per_save")
+cmd+=(--save-only-latest-checkpoint 0)
 [[ -z "$floater_suppression" ]] || cmd+=(--floater-suppression "$floater_suppression")
 [[ -z "$warp_spherical" ]] || cmd+=(--warp-spherical-to-pinhole "$warp_spherical")
 for pair in \
@@ -596,18 +701,26 @@ printf '\n' >> "$output_dir/train_command.sh"
 rm -f -- "$train_done_file" "$export_done_file"
 printf '%s\n' "$masks_signature" > "$masks_signature_file"
 
+spirula_status=0
+keep_latest_checkpoint_while_training >/dev/null 2>&1 &
+pruner_pid=$!
+
 if command -v stdbuf >/dev/null 2>&1; then
-  stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"
+  stdbuf -oL -eL "${cmd[@]}" 2>&1 | tee "$output_dir/train.log" || spirula_status=$?
 else
-  "${cmd[@]}" 2>&1 | tee "$output_dir/train.log"
+  "${cmd[@]}" 2>&1 | tee "$output_dir/train.log" || spirula_status=$?
 fi
-
-[[ -s "$final_ckpt" ]] ||
-  die "Entraînement terminé mais checkpoint final introuvable : $final_ckpt"
-
-mark_train_done "completed_training"
+kill "$pruner_pid" 2>/dev/null || true
+wait "$pruner_pid" 2>/dev/null || true
+if [[ "$spirula_status" -ne 0 ]]; then
+  grep -q "Entraînement terminé" "$output_dir/train.log" ||
+    die "Spirula a échoué (code $spirula_status) : voir $output_dir/train.log"
+  echo "[AVERTISSEMENT] Spirula a quitté avec le code $spirula_status après la fin de l'entraînement (plantage à la sortie) ; résultat conservé." >&2
+fi
+prune_old_checkpoints
+finalize_training "completed_training"
 printf '%s\n' "$photometric_signature" > "$photometric_signature_file"
-log "Entraînement terminé."
+log "Entraînement terminé. PLY final : $final_ckpt"
 log "Marqueur train : $train_done_file"
 
 export_world_splat

@@ -44,6 +44,9 @@ train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 sparse="$sfm/sparse/0"
 [[ -z "$GEOREF_GPX_FILE" ]] || sparse="$OUTPUT_DIR/georef/0"
+if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR && -z "$GEOREF_GPX_FILE" ]]; then
+  sparse="$OUTPUT_DIR/gps_georef/0"
+fi
 if [[ "$COLMAP_USE_MVS" == true ]]; then
   [[ -z "$GEOREF_GPX_FILE" ]] ||
     die "COLMAP_USE_MVS=true est incompatible avec GEOREF_GPX_FILE (le recalage lit le sparse, pas le dense)."
@@ -141,6 +144,12 @@ prepare() {
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     begin_stage "recalage du SfM sur le GPX"
     "$PYTHON_BIN" "$script_dir/georeference.py" prepare
+  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
+    begin_stage "recalage du SfM sur les GPS"
+    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+      --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \
+      --output "$OUTPUT_DIR/gps_georef/0" --epsg "$GEOREF_EPSG" --allow-missing
+    "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR/gps_georef/0"
   fi
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
     begin_stage "filtrage du sparse par densité"

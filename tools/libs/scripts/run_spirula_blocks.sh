@@ -12,6 +12,10 @@ reject_legacy_config || exit 1
 DIR="${DIR:-}"
 SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
+HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
+GEOREF_EPSG="${GEOREF_EPSG:-2154}"
 TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
 TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
 SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-1}"
@@ -22,6 +26,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
   TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
   TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
   TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-2000}"
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
@@ -33,6 +38,7 @@ else
   TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
   TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
   TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-}"
   TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
   TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
   TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
@@ -102,6 +108,7 @@ Variables:
   TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
   TRAIN_SP_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
   TRAIN_SP_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+  TRAIN_SP_STEPS_PER_SAVE            Sauvegarde du checkpoint toutes les N itérations (Spirula steps_per_save, défaut 2000 ; seul le dernier est conservé)
                             Growth stops at max(TRAIN_SP_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER)
   TRAIN_SP_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
   TRAIN_SP_PRESET              Spirula training preset (3dgs)
@@ -174,10 +181,21 @@ case "${1:-}" in
 esac
 [[ -n "$DIR" ]] || { usage >&2; die "Définir DIR avec le chemin du dataset Panoramax."; }
 [[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
-[[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
+has_images=false
+for images_dir in "$DIR/images" "$DIR"/*/images; do
+  [[ -d "$images_dir" ]] || continue
+  if [[ "$images_dir" == "$DIR/images" || -d "${images_dir%/images}/metadata" ]]; then
+    has_images=true
+    break
+  fi
+done
+[[ "$has_images" == true ]] || die "Aucun dossier d'images Panoramax dans : $DIR (attendu : images/ ou <collection>/images avec metadata/)"
+if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" != EQUIRECTANGULAR ]]; then
+  die "HLOC Panoramax exige HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
+fi
 config_errors=0
 validate_sfm_geometry_config
-validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
+validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" "$COLMAP_METHOD"
 if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
   die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
 fi
@@ -200,7 +218,7 @@ if [[ "$TRAIN_BACKEND" == spirula ]]; then
     [[ "$TRAIN_SP_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
       awk -v x="$TRAIN_SP_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
   } || die "TRAIN_SP_GROWTH_FACTOR doit être vide ou un nombre > 1."
-  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER; do
+  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER TRAIN_SP_STEPS_PER_SAVE; do
     value="${!value_name}"
     [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
       die "$value_name doit être vide ou un entier >= 0 : $value"
@@ -292,10 +310,14 @@ if [[ "$TRAIN_MASKS" == on ]]; then
 fi
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
-if [[ "$SPIRULA_BIN" == */* ]]; then
-  [[ -x "$SPIRULA_BIN" ]] || die "Spirula introuvable ou non exécutable : $SPIRULA_BIN"
-else
-  SPIRULA_BIN="$(command -v "$SPIRULA_BIN")" || die "Spirula introuvable dans le PATH."
+if [[ "$COLMAP_METHOD" == spirula || "$TRAIN_BACKEND" == spirula ||
+      ( "$SFM_MASKS" == on && "$SFM_MASKS_BACKEND" == spirula ) ||
+      ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ]]; then
+  if [[ "$SPIRULA_BIN" == */* ]]; then
+    [[ -x "$SPIRULA_BIN" ]] || die "Spirula introuvable ou non exécutable : $SPIRULA_BIN"
+  else
+    SPIRULA_BIN="$(command -v "$SPIRULA_BIN")" || die "Spirula introuvable dans le PATH."
+  fi
 fi
 
 DIR="$(cd -- "$DIR" && pwd)"
@@ -331,9 +353,11 @@ if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
 fi
 SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
 
-"$PYTHON_BIN" "$repo_root/tools/libs/python/sfm_geometry_policy.py" "$SFM_DIR" \
-  "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
-  "$SFM_SP_BA_LOSS" "$SFM_SP_BA_LOSS_PARAM"
+if [[ "$COLMAP_METHOD" == spirula ]]; then
+  "$PYTHON_BIN" "$repo_root/tools/libs/python/sfm_geometry_policy.py" "$SFM_DIR" \
+    "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
+    "$SFM_SP_BA_LOSS" "$SFM_SP_BA_LOSS_PARAM"
+fi
 
 export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
 if [[ "$SFM_MASKS" == on ]]; then
@@ -343,6 +367,37 @@ if [[ "$SFM_MASKS" == on ]]; then
   done
 fi
 
+check_hloc_policy() {
+  "$PYTHON_BIN" - "$SFM_DIR" "${HLOC_FEATURES:-superpoint_max}" \
+    "${HLOC_MATCHER:-superpoint+lightglue}" "${HLOC_PAIRS:-retrieval}" \
+    "${HLOC_RETRIEVAL:-netvlad}" "${HLOC_NUM_NEIGHBORS:-20}" "$DIR" "$1" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+dataset = Path(sys.argv[-2])
+digest = hashlib.sha256((root / "projection.json").read_bytes() +
+                        json.dumps(sys.argv[2:-2]).encode())
+for folder in ("images", "metadata"):
+    for path in sorted((dataset / folder).rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(dataset)).encode())
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+signature = digest.hexdigest()
+marker = root / "hloc_policy.json"
+if marker.exists():
+    if json.loads(marker.read_text())["signature"] != signature:
+        raise SystemExit("[ERREUR] Configuration HLOC modifiée : choisir un nouveau workspace.")
+elif sys.argv[-1] == "check":
+    raise SystemExit("[ERREUR] Signature HLOC absente : lancer la préparation.")
+elif (root / "sparse").exists() or (root / "hloc").exists():
+    raise SystemExit("[ERREUR] SfM existant sans signature HLOC : choisir un nouveau workspace.")
+else:
+    marker.write_text(json.dumps({"signature": signature}) + "\n")
+PY
+}
+
 prepare_blocks() {
   local block_count block_id block_sparse file index
   local sfm_args
@@ -351,18 +406,45 @@ prepare_blocks() {
   # Sans modèle explicite, le modèle est choisi par la détection 360° de prepare_sfm.py.
   [[ "$SFM_CAMERA_MODEL_EXPLICIT" != true ]] || camera_args=(--camera-model "$SFM_CAMERA_MODEL")
   pipeline_report_phase "reconstruction SfM"
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
+      --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
+    "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$SFM_DIR/images" \
+      --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
+  fi
   if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
         -d "$GS_ROOT" && ( ! -s "$RAW_SPARSE_DIR/cameras.bin" ||
         ! -s "$RAW_SPARSE_DIR/images.bin" || ! -s "$RAW_SPARSE_DIR/points3D.bin" ) ]]; then
     die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
   fi
   if [[ "$SFM_MASKS" == on ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR"
+    mask_projection_args=()
+    [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" \
+      ${mask_projection_args[@]+"${mask_projection_args[@]}"}
     feature_args=(--feature-masks "$SFM_DIR/feature_masks")
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
   fi
-  if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    local hloc_raw="$SFM_DIR/hloc/sparse/0"
+    check_hloc_policy prepare
+    if [[ ! -s "$hloc_raw/cameras.bin" || ! -s "$hloc_raw/images.bin" || ! -s "$hloc_raw/points3D.bin" ]]; then
+      [[ ! -d "$SFM_DIR/hloc" ]] || die "SfM HLOC partiel : déplacer le workspace avant de recommencer."
+      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/hloc_reconstruct.py" \
+        --images "$SFM_DIR/images" --output "$hloc_raw" --work "$SFM_DIR/hloc/work" \
+        --features "${HLOC_FEATURES:-superpoint_max}" --matcher "${HLOC_MATCHER:-superpoint+lightglue}" \
+        --pairs "${HLOC_PAIRS:-retrieval}" --retrieval "${HLOC_RETRIEVAL:-netvlad}" \
+        --num-neighbors "${HLOC_NUM_NEIGHBORS:-20}" --camera-model PINHOLE --camera-mode single \
+        --perspective-view-size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" \
+        ${feature_args[@]+"${feature_args[@]}"}
+    fi
+    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+      --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
+      --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata"
+  elif [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
     sfm_args=(
       "$repo_root/tools/panoramax/run_sfm_filtered.py"
       --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
@@ -492,8 +574,20 @@ fi
 }
 
 if [[ "$mode" == block ]]; then
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$SFM_DIR/images" \
+      --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
+    check_hloc_policy check
+    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+      --projection "$SFM_DIR/projection.json" --sparse "$SFM_DIR/hloc/sparse/0" \
+      --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata" --check
+  fi
   if [[ "$SFM_MASKS" == on ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" --check
+    mask_projection_args=()
+    [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" --check \
+      ${mask_projection_args[@]+"${mask_projection_args[@]}"}
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
   fi
@@ -519,7 +613,7 @@ for ((index = first_index; index < last_index; index++)); do
   pipeline_report_phase "entraînement et export du bloc $block_id"
   block_sparse="$BLOCKS_DIR/block_$block_id"
   block_output="$GS_ROOT/block_$block_id"
-  splat_name="Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
+  splat_name="block_${block_id}.splat"
   printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$SPLIT_NUM_BLOCKS"
 
   block_args=(
@@ -553,6 +647,7 @@ for ((index = first_index; index < last_index; index++)); do
     [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
     [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
     [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")
+    [[ -z "$TRAIN_SP_STEPS_PER_SAVE" ]] || block_args+=(--steps-per-save "$TRAIN_SP_STEPS_PER_SAVE")
     printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
   fi
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")

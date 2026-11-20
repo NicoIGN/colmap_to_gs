@@ -15,7 +15,11 @@ TRAIN_NUM_ITER="20000"   # PAR BLOC, pas réparti entre les blocs
 
 # --- TRAIN_BACKEND=spirula uniquement ---
 TRAIN_SP_PRESET="3dgs"
-TRAIN_SP_QUALITY="ultra"    # low|medium|high|ultra ; macro, pas une résolution
+# Macro Spirula (--quality) : règle le budget de splats et la durée, pas la résolution.
+# low : 200 k splats, 15 000 itérations ; medium : 1 M, 30 000 ;
+# high : 3 M, 50 000 ; ultra : 10 M, 80 000. Spirula seul applique le défaut "medium".
+# Les budgets explicites (TRAIN_SP_CAP_MAX, TRAIN_NUM_ITER) priment sur la macro.
+TRAIN_SP_QUALITY="ultra"    # low|medium|high|ultra
 # Ces budgets explicites priment sur TRAIN_SP_QUALITY.
 TRAIN_SP_CAP_MAX="2000000"  # PAR BLOC : 4 x 2 M = jusqu'à 8 M avant fusion
 # Vide : plafond TRAIN_SP_CAP_MAX ; sinon limite par bloc à
@@ -32,6 +36,9 @@ TRAIN_SP_REFINE_STOP_ITER="14000"
 # Ici : max(14000, 20000-4000) = 16000, puis 4000 itérations de stabilisation.
 # Si REFINE_STOP_ITER >= TRAIN_NUM_ITER, aucune phase finale sans densification.
 TRAIN_SP_REFINE_STOP_NUM_ITER="4000"
+# Sauvegarde du checkpoint toutes les N itérations (Spirula --steps-per-save).
+# Seul le dernier checkpoint est conservé (--save-only-latest-checkpoint 1).
+TRAIN_SP_STEPS_PER_SAVE="2000"
 TRAIN_SP_FLOATER_SUPPRESSION="mild"       # off|mild|strong
 TRAIN_SP_DISTRACTION_ROBUSTNESS="off"     # off|mild|strong
 # Corrections photométriques Spirula uniquement ; vide = défauts Spirula observés :

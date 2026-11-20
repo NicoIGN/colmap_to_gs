@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SfM HLOC (extraction, appariement, triangulation pycolmap) vers un modèle COLMAP binaire."""
 import argparse
+import math
 import shutil
 import sys
 from pathlib import Path
@@ -57,6 +58,7 @@ def main():
     parser.add_argument("--num-neighbors", type=int, default=20)
     parser.add_argument("--camera-model", required=True)
     parser.add_argument("--camera-mode", required=True, choices=list(CAMERA_MODES))
+    parser.add_argument("--perspective-view-size", type=int)
     args = parser.parse_args()
 
     work = args.work
@@ -82,11 +84,23 @@ def main():
     match_features.main(matcher_conf, pairs, features, export_dir=work, matches=matches)
 
     camera_mode = pycolmap.CameraMode.__members__[CAMERA_MODES[args.camera_mode]]
+    image_options = {"camera_model": args.camera_model}
+    mapper_options = None
+    if args.perspective_view_size:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+        from equirectangular_views import FOV_DEGREES
+        size = args.perspective_view_size
+        focal = size / (2 * math.tan(math.radians(FOV_DEGREES) / 2))
+        camera_mode = pycolmap.CameraMode.SINGLE
+        image_options = {"camera_model": "PINHOLE",
+                         "camera_params": f"{focal},{focal},{size / 2},{size / 2}"}
+        mapper_options = {"ba_refine_focal_length": False, "ba_refine_principal_point": False,
+                          "ba_refine_extra_params": False}
     sfm = work / "sfm"
     reconstruction_result = reconstruction.main(
         sfm, args.images, pairs, features, matches,
         camera_mode=camera_mode,
-        image_options={"camera_model": args.camera_model},
+        image_options=image_options, mapper_options=mapper_options,
     )
     if reconstruction_result is None:
         sys.exit("Erreur : HLOC n'a produit aucune reconstruction.")

@@ -128,6 +128,8 @@ selected="$OUTPUT_DIR/images"
 sparse="$sfm/sparse/0"
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   sparse="$OUTPUT_DIR/georef/0"
+elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
+  sparse="$OUTPUT_DIR/gps_georef/0"
 fi
 if [[ "$COLMAP_USE_MVS" == true ]]; then
   sparse="$sfm/mvs/sparse/0"
@@ -201,6 +203,10 @@ else
   "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     "$PYTHON_BIN" "$script_dir/georeference.py" check
+  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+      --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \
+      --output "$OUTPUT_DIR/gps_georef/0" --epsg "$GEOREF_EPSG" --allow-missing --check
   fi
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
     check_filtered_sparse
@@ -258,6 +264,17 @@ merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inpu
 if [[ -n "$GEOREF_GPX_FILE" ]]; then
   set_stage "export de la référence géographique du splat"
   "$PYTHON_BIN" "$script_dir/georeference.py" export
+elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
+  set_stage "export de la référence GPS du splat"
+  "$PYTHON_BIN" - "$OUTPUT_DIR/gps_georef/0/georef_stats.json" "$OUTPUT_DIR" "$EXPORT_SPLAT_NAME" <<'PY'
+import json, sys
+from pathlib import Path
+stats, output, splat = sys.argv[1:]
+data = json.loads(Path(stats).read_text())
+data["splat"] = Path(splat).name
+data["source_positions"] = "gps_georef/0/gps_positions.json"
+(Path(output) / (Path(splat).stem + ".georef.json")).write_text(json.dumps(data, indent=2) + "\n")
+PY
 fi
 set_stage "nettoyage LiDAR du splat final"
 if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_CLEAN_GEOREF" && "$LIDAR_COLMAP_ALIGN" != true ]]; then

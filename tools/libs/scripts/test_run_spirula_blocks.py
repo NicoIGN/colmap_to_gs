@@ -14,6 +14,69 @@ REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
 class BlockPipelineTest(unittest.TestCase):
+    def test_hloc_panorama_prepare_georeferences_before_split_and_checks_reuse(self):
+        try:
+            import pycolmap
+            import numpy as np
+            from PIL import Image
+            from tools.preprocess.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
+        except ImportError as exc:
+            self.skipTest(f"Dépendance HLOC indisponible : {exc}")
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, _, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(data / "sfm")
+            (data / "images/img.jpg").unlink(missing_ok=True)
+            (data / "metadata").mkdir()
+            coordinates = [(2., 48.), (2.0002, 48.), (2.0002, 48.0002), (2., 48.0002)]
+            geo = np.array([[lat, lon, 0.] for lon, lat in coordinates])
+            origin = geo.mean(axis=0)
+            centers = (geodetic_to_ecef(geo[:, 0], geo[:, 1], geo[:, 2]) -
+                       geodetic_to_ecef(*origin)) @ enu_rotation(origin).T
+            model = pycolmap.Reconstruction()
+            model.add_camera_with_trivial_rig(pycolmap.Camera(
+                model="PINHOLE", width=16, height=16, params=[8, 8, 8, 8], camera_id=1))
+            rotation = pycolmap.Rotation3d(np.array([[1., 0, 0], [0, 0, -1.], [0, 1., 0]]))
+            for index, (lon, lat) in enumerate(coordinates):
+                name = f"img{index}.jpg"
+                Image.new("RGB", (40, 20)).save(data / "images" / name)
+                (data / "metadata" / f"img{index}.json").write_text(json.dumps({
+                    "feature": {"geometry": {"type": "Point", "coordinates": [lon, lat]},
+                                "properties": {"type": "equirectangular"}}
+                }))
+                image = pycolmap.Image(name=f"front/{name}.jpg", camera_id=1, image_id=index + 1)
+                model.add_image_with_trivial_frame(
+                    image, pycolmap.Rigid3d(rotation, -rotation.matrix() @ centers[index]))
+            raw = root / "raw-model"
+            raw.mkdir()
+            model.write(raw)
+            wrapper = root / "bin/python3"
+            stub = (
+                "if args and args[0].endswith('hloc_reconstruct.py'):\n"
+                "  import pathlib, shutil\n"
+                "  out=pathlib.Path(args[args.index('--output')+1]); out.mkdir(parents=True)\n"
+                "  for name in ('cameras.bin','images.bin','points3D.bin'):\n"
+                "    shutil.copyfile(pathlib.Path(os.environ['RAW_MODEL'])/name,out/name)\n"
+                "  with open(log,'a') as f: f.write(json.dumps(['hloc']+args[1:])+'\\n')\n"
+                "  sys.exit(0)\n"
+            )
+            wrapper.write_text(wrapper.read_text().replace(
+                "log = os.environ['COMMAND_LOG']\n", "log = os.environ['COMMAND_LOG']\n" + stub))
+            env.update(COLMAP_METHOD="hloc", HLOC_CAMERA_MODEL="EQUIRECTANGULAR",
+                       SFM_EQUIRECTANGULAR_VIEW_SIZE="16", RAW_MODEL=str(raw),
+                       SFM_MASKS="off", TRAIN_MASKS="off")
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            stats = json.loads((data / "sfm/sparse/0/georef_stats.json").read_text())
+            self.assertEqual(stats["mode"], "horizontal")
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertIn("hloc", [command[0] for command in commands])
+            self.assertNotIn(["spirula", "sfm"], [command[:2] for command in commands])
+            self.assertEqual(len(list((data / "sfm/images").rglob("*.jpg"))), 24)
+            env["HLOC_MATCHER"] = "other"
+            refused = execute("--block", "0")
+            self.assertNotEqual(refused.returncode, 0)
+            self.assertIn("Configuration HLOC modifiée", refused.stderr)
+
     def test_lidar_recalage_precedes_partition_and_block_jobs_check_it(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
@@ -180,11 +243,14 @@ class BlockPipelineTest(unittest.TestCase):
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  name = args[args.index('--output-dir-name') + 1]\n"
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
-                "  splats = os.path.join(prefix, name)\n"
-                "  ckpt = os.path.join(splats, f'step-{iterations:09d}.ckpt')\n"
-                "  os.makedirs(ckpt, exist_ok=True)\n"
-                "  open(os.path.join(ckpt, 'splat.ply'), 'wb').write(b'ply')\n"
-                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(splats, 'scene_transform.json'), 'w'))\n"
+                "  chkpt = os.path.join(prefix, name)\n"
+                "  os.makedirs(chkpt, exist_ok=True)\n"
+                "  for step in (100, 200):\n"
+                "    d = os.path.join(chkpt, 'step-%09d.ckpt' % step); os.makedirs(d, exist_ok=True)\n"
+                "    open(os.path.join(d, 'splat.ply'), 'wb').write(b'ply')\n"
+                "    open(os.path.join(d, 'state.tar'), 'wb').write(b'tar')\n"
+                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(chkpt, 'scene_transform.json'), 'w'))\n"
+                "  print('Entraînement terminé', flush=True)\n"
             )
             spirula.chmod(0o755)
             env = dict(
@@ -208,6 +274,35 @@ class BlockPipelineTest(unittest.TestCase):
                 )
 
             return root, data, sparse, env, log, execute
+
+    def test_final_splat_comes_from_latest_step_and_is_published_to_splats(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PLY final", result.stdout + result.stderr)
+            self.assertTrue(list(root.rglob("block_*.splat")), result.stdout + result.stderr)
+            splats = sorted(root.rglob("chkpt_step-000000200.ply"))
+            self.assertEqual(len(splats), 2, result.stdout + result.stderr)
+            self.assertTrue(all(p.parent.name == "splats" for p in splats))
+            self.assertFalse(list(root.rglob("step-000000100.ckpt")))
+
+    def test_finished_training_is_not_retrained_when_resumed_before_done_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            first = execute()
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            for done in root.rglob(".train_done"):
+                done.unlink()
+            for export_done in root.rglob(".export_done"):
+                export_done.unlink()
+            trains_before = log.read_text().count('"train"')
+            env["PIPELINE_RESUME"] = "true"
+            second = execute()
+            self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+            self.assertEqual(log.read_text().count('"train"'), trains_before, second.stdout + second.stderr)
+            self.assertEqual(len(list(root.rglob(".train_done"))), 2)
+            self.assertFalse(list(root.rglob(".train_finalize.lock")))
 
     def test_automatic_growth_in_local_and_array_workers(self):
         for mode in ("local", "array"):
@@ -346,8 +441,8 @@ class BlockPipelineTest(unittest.TestCase):
                                 if cmd[:2] == ["spirula", "train"]))
             self.assertTrue(all(cmd[cmd.index("--distraction-robustness") + 1] == "off"
                                 for cmd in commands if cmd[:2] == ["spirula", "train"]))
-            self.assertTrue((data / "gs-3-blocks-2/block_000/splats/Paris-3-block-000.splat").is_file())
-            self.assertTrue((data / "gs-3-blocks-2/block_001/splats/Paris-3-block-001.splat").is_file())
+            self.assertTrue((data / "gs-3-blocks-2/block_000/splats/block_000.splat").is_file())
+            self.assertTrue((data / "gs-3-blocks-2/block_001/splats/block_001.splat").is_file())
 
             second = execute()
             self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
@@ -524,11 +619,12 @@ class BlockPipelineTest(unittest.TestCase):
                 "  import pathlib\n"
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
-                "  splats = pathlib.Path(prefix) / 'splats'\n"
-                "  ckpt = splats / f'step-{iterations:09d}.ckpt'\n"
-                "  ckpt.mkdir(parents=True, exist_ok=True)\n"
-                "  (ckpt / 'splat.ply').write_bytes(b'ply')\n"
-                "  (splats / 'scene_transform.json').write_text('{}')\n"
+                "  chkpt = pathlib.Path(prefix) / 'chkpt'\n"
+                "  chkpt.mkdir(parents=True, exist_ok=True)\n"
+                "  for step in (100, 200):\n"
+                "    (chkpt / ('chkpt_step-%09d.ply' % step)).write_bytes(b'ply')\n"
+                "    (chkpt / ('chkpt_step-%09d.tar' % step)).write_bytes(b'tar')\n"
+                "  (chkpt / 'scene_transform.json').write_text('{}')\n"
             )
             spirula.chmod(0o755)
             python = fake_bin / "python"
@@ -591,7 +687,6 @@ class BlockPipelineTest(unittest.TestCase):
                     self.assertEqual(cmd[cmd.index("--distraction-robustness") + 1], "strong")
                     self.assertEqual(cmd[cmd.index("--cap-max") + 1], "1000")
                     self.assertEqual(cmd[cmd.index("--num-iterations") + 1], "3")
-                    self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "0")
             env["TRAIN_SP_QUALITY"] = "invalid"
             result = execute("--prepare-only")
             self.assertNotEqual(result.returncode, 0)
@@ -604,6 +699,26 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("--quality doit", result.stderr)
             self.assertFalse((root / "unused").exists())
+
+    def test_steps_per_save_is_forwarded_and_keeps_only_latest_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env["TRAIN_SP_STEPS_PER_SAVE"] = "500"
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()]
+            trains = [cmd for cmd in commands if cmd[:2] == ["spirula", "train"]]
+            self.assertTrue(trains)
+            for cmd in trains:
+                self.assertEqual(cmd[cmd.index("--steps-per-save") + 1], "500")
+                self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "0")
+            leftovers = sorted(p.name for p in root.rglob("step-*.ckpt"))
+            self.assertTrue(leftovers)
+            self.assertTrue(all("000000200" in name for name in leftovers), leftovers)
+            env["TRAIN_SP_STEPS_PER_SAVE"] = "abc"
+            result = execute("--prepare-only")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("TRAIN_SP_STEPS_PER_SAVE", result.stderr)
 
     def test_invalid_distraction_robustness_is_rejected_by_workers(self):
         with tempfile.TemporaryDirectory() as temporary:

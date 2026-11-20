@@ -27,17 +27,22 @@ PANORAMAX_QUALITY="hd"
 # (instant ou intervalle début/fin, ex. "2024-01-01T00:00:00Z/..").
 PANORAMAX_DATETIME=""
 
-# Défaut : "". Vide = aucune limite utilisateur (recherche API plafonnée
-# à 10000 résultats) ; sinon entier > 0, nombre maximal de photos.
+# Défaut : "". Vide = aucune limite utilisateur (la recherche découpe la zone
+# au-delà de 10000 résultats par requête) ; sinon entier > 0, nombre maximal de photos.
 PANORAMAX_IMAGE_MAX=""
 
-# Défaut : all. Valeurs : all (toutes), normal (photos classiques, type "flat"),
-# 360 (photos équirectangulaires, type "equirectangular").
+# Défaut : all. Valeurs : all (toutes), normal (photos non 360), 360 (équirectangulaires).
+# Le type vient de la collection ; s'il n'y est pas, il est lu dans le XMP GPano de l'image.
 PANORAMAX_PICTURE_TYPE="all"
 
 # Défaut : "". Vide = tous les providers ; sinon nom exact du provider STAC
 # (properties.providers[].name), insensible à la casse.
 PANORAMAX_PROVIDER=""
+
+# Défaut : "". Vide = aucun filtre. Syntaxe : "KEY=V1,V2;KEY2=V3" ; ';' sépare les
+# propriétés (ET), ',' sépare les valeurs d'une propriété (OU), insensible à la casse.
+# KEY : propriété STAC (ex. geovisio:producer) ou tag EXIF (ex. Exif.Image.Software).
+PANORAMAX_FILTERS=""
 
 # Défaut : false. true = SfM multi-caméras : toutes les tailles d'images sont
 # gardées et chaque taille devient une caméra (sous-dossier LxH/). La focale
@@ -77,7 +82,7 @@ POSTPROCESS_CLEANER="contextual"
 # Défaut : diagnostic. Valeurs : diagnostic|apply|off.
 # diagnostic = garde tout et exporte les candidats dans <nom>.rejected.splat ;
 # apply = retire les candidats ; off = désactive le test contextuel.
-POSTPROCESS_FILTER_MODE="diagnostic"
+POSTPROCESS_FILTER_MODE="apply"
 
 # Filtre de forme/isolement (export_ply.py). Vide = désactivé ; les deux vont ensemble.
 # Rejet si splat allongé (rapport d'axes > MAX_ASPECT_RATIO) ET isolé

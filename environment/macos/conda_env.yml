@@ -16,6 +16,7 @@ dependencies:
   - scikit-learn
   - plyfile=1.1
   - h5py=3.16.0
+  - pyproj
 
   ########################################
   # SFM

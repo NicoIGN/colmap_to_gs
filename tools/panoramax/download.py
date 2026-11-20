@@ -7,6 +7,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -21,8 +22,13 @@ from urllib.request import Request, urlopen
 from pyproj import Transformer
 from pyproj.exceptions import ProjError
 
+from dataset_layout import (
+    exif_of, jpeg_size, picture_type_matches, picture_type_of, resolved_picture_type,
+)
+
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
 SEARCH_LIMIT = 10000
+PICTURE_TYPES = ("all", "normal", "360")
 
 
 class Progress:
@@ -145,6 +151,13 @@ def parse_bbox(text):
     return bbox
 
 
+def parse_crs(text):
+    match = re.fullmatch(r"EPSG:(\d+)", text.strip(), flags=re.IGNORECASE)
+    if not match or int(match.group(1)) < 1:
+        raise argparse.ArgumentTypeError("Utiliser un code du type EPSG:2154.")
+    return int(match.group(1))
+
+
 def parse_positive_int(text):
     try:
         value = int(text)
@@ -155,21 +168,15 @@ def parse_positive_int(text):
     return value
 
 
-PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
+def parse_filter(text):
+    """Parse KEY=V1,V2 : une valeur de la liste suffit (OU) ; plusieurs --filter se cumulent (ET)."""
+    key, separator, values = text.partition("=")
+    names = [value.strip() for value in values.split(",") if value.strip()]
+    if not separator or not key.strip() or not names:
+        raise argparse.ArgumentTypeError(f"Filtre attendu KEY=VALEUR[,VALEUR] : {text!r}")
+    return key.strip(), names
 
 
-def picture_type_of(feature):
-    """Renvoie le type STAC ; certaines photos n'ont que les métadonnées de projection."""
-    properties = feature.get("properties", {})
-    if properties.get("type") is not None:
-        return properties["type"]
-    exif = properties.get("exif") or {}
-    if exif.get("Xmp.GPano.ProjectionType") == "equirectangular":
-        return "equirectangular"
-    orientation = properties.get("pers:interior_orientation") or {}
-    if str(orientation.get("field_of_view")) == "360":
-        return "equirectangular"
-    return None
 
 
 def item_matches_provider(feature, provider):
@@ -180,6 +187,82 @@ def item_matches_provider(feature, provider):
         isinstance(entry, dict) and str(entry.get("name", "")).casefold() == provider.casefold()
         for entry in providers
     )
+
+
+def feature_value(feature, key):
+    """Valeur d'un filtre : propriété STAC (ex. geovisio:producer), sinon tag EXIF (ex. Exif.Image.Software)."""
+    if key == "collection":
+        return feature.get("collection")
+    properties = feature.get("properties", {})
+    if key in properties:
+        return properties[key]
+    return exif_of(properties).get(key)
+
+
+def item_matches_filters(feature, filters):
+    for key, names in filters:
+        value = feature_value(feature, key)
+        if value is None or str(value).casefold() not in {name.casefold() for name in names}:
+            return False
+    return True
+
+
+def filter_report_rows(feature, provider, filters):
+    """(filtre, valeur, conservée) pour chaque filtre provider/--filter, sans tenir compte des autres."""
+    rows = []
+    if provider is not None:
+        names = [
+            str(entry.get("name", "")) for entry in (feature.get("properties", {}).get("providers") or [])
+            if isinstance(entry, dict)
+        ]
+        rows.append(("provider", ", ".join(names) or "(absent)", item_matches_provider(feature, provider)))
+    for key, names in filters or []:
+        value = feature_value(feature, key)
+        text = "(absent)" if value is None else str(value)
+        rows.append((key, text, value is not None and text.casefold() in {name.casefold() for name in names}))
+    return rows
+
+
+def collection_folder(feature):
+    identifier = str(feature.get("collection") or "sans-collection")
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", identifier).strip("._") or "sans-collection"
+
+
+def place_by_size(located, output):
+    """Range chaque collection dans <base>/ si elle n'a qu'une taille, sinon <base>-<WxH>/.
+
+    Retourne True si des fichiers ont été déplacés (le manifest doit alors être réécrit).
+    """
+    sizes = {}
+    for feature, record in located:
+        if record.get("status") in ("downloaded", "reused") and "size" in record:
+            sizes.setdefault(collection_folder(feature), set()).add(record["size"])
+    moved = False
+    vacated = set()
+    for feature, record in located:
+        if record.get("status") not in ("downloaded", "reused") or "size" not in record:
+            continue
+        base = collection_folder(feature)
+        folder = base if len(sizes[base]) == 1 else f"{base}-{record['size']}"
+        image_source = output / record["image"]
+        metadata_source = output / record["metadata"]
+        if image_source.parent.parent.name == folder:
+            continue
+        target = output / folder
+        (target / "images").mkdir(parents=True, exist_ok=True)
+        (target / "metadata").mkdir(parents=True, exist_ok=True)
+        image_target = target / "images" / image_source.name
+        metadata_target = target / "metadata" / metadata_source.name
+        image_source.replace(image_target)
+        metadata_source.replace(metadata_target)
+        vacated.update({image_source.parent, metadata_source.parent, image_source.parent.parent})
+        record["image"] = str(image_target.relative_to(output))
+        record["metadata"] = str(metadata_target.relative_to(output))
+        moved = True
+    for folder in sorted(vacated, key=lambda path: len(path.parts), reverse=True):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    return moved
 
 
 def item_in_bbox(feature, bbox, to_bbox_crs):
@@ -247,6 +330,47 @@ def positions_geojson(located, bbox_epsg, to_bbox_crs):
     }
 
 
+MAX_SPLIT_DEPTH = 8
+
+
+def split_bbox(bbox):
+    xmin, ymin, xmax, ymax = bbox
+    xmid, ymid = (xmin + xmax) / 2, (ymin + ymax) / 2
+    return [(xmin, ymin, xmid, ymid), (xmid, ymin, xmax, ymid),
+            (xmin, ymid, xmid, ymax), (xmid, ymid, xmax, ymax)]
+
+
+def search_pages(api_url, bbox, datetime, api_limit, timeout):
+    """Yield (page_url, page) for one STAC search, following its next links."""
+    parameters = {"bbox": ",".join(map(str, bbox)), "limit": api_limit}
+    if datetime:
+        parameters["datetime"] = datetime
+    url = api_url.rstrip("/") + "/search?" + urlencode(parameters)
+    body, method = None, "GET"
+    seen_pages = set()
+    while url:
+        page_key = (url, method, json.dumps(body, sort_keys=True))
+        if page_key in seen_pages:
+            raise ValueError("Boucle détectée dans la pagination Panoramax.")
+        seen_pages.add(page_key)
+        page = read_json(url, timeout, body, method)
+        if not isinstance(page, dict) or not isinstance(page.get("features"), list):
+            raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
+        yield url, page
+        next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
+        if len(next_links) > 1:
+            raise ValueError("Plusieurs liens next : pagination ambiguë.")
+        if next_links:
+            link = next_links[0]
+            url = urljoin(url, link["href"])
+            method = link.get("method", "GET").upper()
+            if method not in ("GET", "POST") or link.get("merge"):
+                raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
+            body = link.get("body") if method == "POST" else None
+        else:
+            url = None
+
+
 def run(args):
     image_max = getattr(args, "image_max", None)
     if image_max is not None and image_max < 1:
@@ -274,87 +398,92 @@ def run(args):
     dry_run = bool(getattr(args, "dry_run", False))
     output.mkdir(parents=True, exist_ok=True)
     if not dry_run:
-        for folder in ("images", "metadata", "pages"):
-            (output / folder).mkdir(parents=True, exist_ok=True)
-    picture_type = getattr(args, "picture_type", "all")
+        (output / "pages").mkdir(parents=True, exist_ok=True)
+    api_limit = SEARCH_LIMIT
+    provider = getattr(args, "provider", None) or None
+    filters = getattr(args, "filters", None) or None
+    verbose = getattr(args, "verbose", True)
+    picture_type = getattr(args, "picture_type", "all") or "all"
     if picture_type not in PICTURE_TYPES:
         raise ValueError("Le type d'image doit être all, normal ou 360.")
-    stac_type = PICTURE_TYPES[picture_type]
-    provider = getattr(args, "provider", None) or None
-    api_limit = SEARCH_LIMIT
-    parameters = {"bbox": ",".join(map(str, geographic)), "limit": api_limit}
-    if args.datetime:
-        parameters["datetime"] = args.datetime
-    url = args.api_url.rstrip("/") + "/search?" + urlencode(parameters)
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
         "bbox": args.bbox, "bbox_wgs84": geographic,
         "api_url": args.api_url, "datetime": args.datetime, "quality": args.quality,
         "selection": "photo_capture_point_inside_bbox",
         "image_max": image_max,
-        "picture_type": stac_type,
         "provider": provider,
+        "filters": [{"key": key, "values": names} for key, names in filters] if filters else None,
         "api_limit": api_limit,
+        "picture_type": picture_type,
         "dry_run": dry_run,
     })
     counts = {
         "pages": 0, "available": 0, "selected": 0,
-        "downloaded": 0, "reused": 0, "failed": 0,
+        "downloaded": 0, "reused": 0, "failed": 0, "filtered_type": 0,
     }
     progress = Progress(image_max)
-    seen_items, seen_pages = set(), set()
-    body, method = None, "GET"
+    seen_items = set()
     candidates = []
     api_features = 0
     after_filters = 0
     api_types = Counter()
-    last_page_count = 0
-    while url:
-        page_key = (url, method, json.dumps(body, sort_keys=True))
-        if page_key in seen_pages:
-            raise ValueError("Boucle détectée dans la pagination Panoramax.")
-        seen_pages.add(page_key)
-        page = read_json(url, args.timeout, body, method)
-        if not isinstance(page, dict) or not isinstance(page.get("features"), list):
-            raise ValueError(f"Réponse STAC FeatureCollection invalide : {url}")
-        counts["pages"] += 1
-        last_page_count = len(page["features"])
-        api_features += last_page_count
-        if not dry_run:
-            atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
-        for feature in page["features"]:
-            if not isinstance(feature, dict) or not feature.get("id"):
-                raise ValueError("Photo STAC sans identifiant.")
-            key = str(feature.get("collection", "")) + "/" + str(feature["id"])
-            if key in seen_items:
-                continue
-            seen_items.add(key)
-            api_types[str(picture_type_of(feature))] += 1
-            if stac_type is not None and picture_type_of(feature) != stac_type:
-                continue
-            if provider is not None and not item_matches_provider(feature, provider):
-                continue
-            after_filters += 1
-            if item_in_bbox(feature, args.bbox, to_bbox_crs):
-                candidates.append((feature, url, key))
-        next_links = [link for link in page.get("links", []) if link.get("rel") == "next"]
-        if len(next_links) > 1:
-            raise ValueError("Plusieurs liens next : pagination ambiguë.")
-        if next_links:
-            link = next_links[0]
-            url = urljoin(url, link["href"])
-            method = link.get("method", "GET").upper()
-            if method not in ("GET", "POST") or link.get("merge"):
-                raise ValueError("Pagination STAC non prise en charge (méthode ou merge).")
-            body = link.get("body") if method == "POST" else None
-        else:
-            url = None
+    verbose_counts = Counter()
+    capped = False
+
+    def visit(bbox, depth):
+        nonlocal api_features, after_filters, capped
+        total = 0
+        for source_url, page in search_pages(args.api_url, bbox, args.datetime, api_limit, args.timeout):
+            counts["pages"] += 1
+            total += len(page["features"])
+            api_features += len(page["features"])
+            if not dry_run:
+                atomic_json(output / "pages" / f"page-{counts['pages']:06d}.json", page)
+            for feature in page["features"]:
+                if not isinstance(feature, dict) or not feature.get("id"):
+                    raise ValueError("Photo STAC sans identifiant.")
+                key = str(feature.get("collection", "")) + "/" + str(feature["id"])
+                if key in seen_items:
+                    continue
+                seen_items.add(key)
+                if verbose:
+                    for label, value, kept in filter_report_rows(feature, provider, filters):
+                        verbose_counts[(label, value, kept)] += 1
+                api_types[str(picture_type_of(feature))] += 1
+                if provider is not None and not item_matches_provider(feature, provider):
+                    continue
+                if filters is not None and not item_matches_filters(feature, filters):
+                    continue
+                kind = picture_type_of(feature)
+                if kind is not None and not picture_type_matches(kind, picture_type):
+                    continue
+                after_filters += 1
+                if item_in_bbox(feature, args.bbox, to_bbox_crs):
+                    candidates.append((feature, source_url, key))
+        # The API caps each search at api_limit results: split the area to reach the rest.
+        if total >= api_limit:
+            if depth >= MAX_SPLIT_DEPTH:
+                capped = True
+                return
+            for quadrant in split_bbox(bbox):
+                visit(quadrant, depth + 1)
+
+    visit(geographic, 0)
+
+    if verbose and verbose_counts:
+        print("Filtres (verbose) :")
+        for label, value, kept in sorted(verbose_counts, key=lambda row: (row[0], row[1], not row[2])):
+            status = "conservé" if kept else "filtré"
+            print(f"  {label} {value} : {verbose_counts[(label, value, kept)]} {status}")
 
     counts["available"] = len(candidates)
-    total_is_exact = last_page_count < api_limit
+    total_is_exact = not capped
     counts["available_is_exact"] = total_is_exact
-    selected = candidates[:image_max] if image_max is not None else candidates
-    progress = Progress(len(selected))
+    # Candidates without a type in the collection are checked on the image itself, so
+    # the --image-max limit is applied to photos kept after that check.
+    selected = candidates
+    progress = Progress(min(len(candidates), image_max) if image_max is not None else len(candidates))
     print(
         f"Photos renvoyées par l'API : {api_features} (types : {dict(api_types)}) ; "
         f"après filtres type/provider : {after_filters}"
@@ -363,8 +492,6 @@ def run(args):
         f"Photos dans la bbox EPSG:{bbox_epsg} : "
         f"{counts['available']}{'' if total_is_exact else '+'}"
     )
-    if image_max is not None:
-        print(f"Limite appliquée : {len(selected)} photo(s) sur {counts['available']} disponibles")
     if not total_is_exact:
         print(
             f"AVERTISSEMENT : l'API a atteint la limite de recherche "
@@ -374,12 +501,15 @@ def run(args):
 
     located = []
     manifest_path = output / "manifest.jsonl"
+    known = {path.stem: path for path in output.glob("*/metadata/*.json")}
     with (contextlib.nullcontext() if dry_run else manifest_path.open("w", encoding="utf-8")) as manifest:
         for feature, source_url, key in selected:
+            if image_max is not None and len(located) >= image_max:
+                break
             counts["selected"] += 1
             name = hashlib.sha256(key.encode("utf-8")).hexdigest()
-            image = output / "images" / f"{name}.jpg"
-            metadata = output / "metadata" / f"{name}.json"
+            metadata = known.get(name) or output / collection_folder(feature) / "metadata" / f"{name}.json"
+            image = metadata.parent.parent / "images" / f"{name}.jpg"
             record = {
                 "id": feature["id"], "collection": feature.get("collection"),
                 "image": str(image.relative_to(output)),
@@ -407,12 +537,21 @@ def run(args):
                     size = image.stat().st_size
                     record["status"] = "reused"
                 else:
+                    image.parent.mkdir(parents=True, exist_ok=True)
+                    metadata.parent.mkdir(parents=True, exist_ok=True)
                     fd, temporary_name = tempfile.mkstemp(dir=image.parent, suffix=".part")
                     os.close(fd)
                     temporary = Path(temporary_name)
                     size = download_image(asset_url, temporary, args.timeout)
                     os.replace(temporary, image)
                     record["status"] = "downloaded"
+                record["size"] = "x".join(str(value) for value in jpeg_size(image))
+                if not picture_type_matches(resolved_picture_type(feature, image), picture_type):
+                    image.unlink(missing_ok=True)
+                    located.pop()
+                    counts["selected"] -= 1
+                    counts["filtered_type"] += 1
+                    continue
                 atomic_json(metadata, {
                     "feature": feature, "source_page": source_url,
                     "download": {"url": asset_url, "quality": args.quality, "bytes": size},
@@ -432,6 +571,14 @@ def run(args):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
             manifest.flush()
     progress.finish(counts)
+    if counts["filtered_type"]:
+        print(f"Filtre type (XMP de l'image) : {counts['filtered_type']} photo(s) écartée(s) ({picture_type})")
+    if image_max is not None:
+        print(f"Limite appliquée : {len(located)} photo(s) sur {counts['available']} disponibles")
+    if not dry_run and place_by_size(located, output):
+        with manifest_path.open("w", encoding="utf-8") as manifest:
+            for _, record in located:
+                manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
     if getattr(args, "geojson", True):
         atomic_json(
             output / "positions.geojson",
@@ -461,11 +608,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--bbox", required=True, type=parse_bbox,
-        help="xmin,ymin,xmax,ymax dans les unités de --bbox-epsg",
+        help="xmin,ymin,xmax,ymax dans les unités de --crs",
     )
     parser.add_argument(
-        "--bbox-epsg", type=parse_positive_int, default=2154,
-        help="Code EPSG des coordonnées de --bbox (défaut : 2154, Lambert-93)",
+        "--crs", dest="bbox_epsg", type=parse_crs, default=2154, metavar="EPSG:CODE",
+        help="Système de coordonnées de --bbox, ex. EPSG:2154 (défaut : Lambert-93)",
     )
     parser.add_argument("--output-dir", required=True, type=Path)
     parser.add_argument("--api-url", default="https://explore.panoramax.fr/api", help="Racine API STAC, sans /search")
@@ -477,12 +624,23 @@ def main():
         help="Nombre maximum de photos à sélectionner et télécharger (toutes pages confondues)",
     )
     parser.add_argument(
-        "--picture-type", choices=tuple(PICTURE_TYPES), default="all",
-        help="all (défaut), normal (photos classiques) ou 360 (équirectangulaires)",
-    )
-    parser.add_argument(
         "--provider",
         help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
+    )
+    parser.add_argument(
+        "--filter", dest="filters", action="append", type=parse_filter, metavar="KEY=VALEURS",
+        help=(
+            "Filtre répétable sur une propriété STAC (ex. geovisio:producer) ou un tag EXIF "
+            "(ex. Exif.Image.Software), valeurs séparées par des virgules, insensible à la casse. "
+            "Exemple : --filter geovisio:producer=immergis,overflorian --filter Exif.Image.Software=H19.03.02.02.00"
+        ),
+    )
+    parser.add_argument(
+        "--picture-type", choices=PICTURE_TYPES, default="all",
+        help=(
+            "all, normal (non 360) ou 360 (equirectangular). Le type vient de la collection ; "
+            "s'il n'y est pas, il est lu dans le XMP GPano de l'image téléchargée (défaut : all)"
+        ),
     )
     parser.add_argument(
         "--dry-run", action="store_true",
@@ -490,7 +648,11 @@ def main():
     )
     parser.add_argument(
         "--geojson", action=argparse.BooleanOptionalAction, default=True,
-        help="Écrire positions.geojson (sommets des photos dans --bbox-epsg, attributs STAC) (défaut : oui)",
+        help="Écrire positions.geojson (sommets des photos dans --crs, attributs STAC) (défaut : oui)",
+    )
+    parser.add_argument(
+        "--verbose", action=argparse.BooleanOptionalAction, default=True,
+        help="Lister, par filtre et par valeur, les photos conservées ou filtrées (défaut : oui ; --no-verbose pour couper)",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

@@ -1,19 +1,30 @@
 # Note de contexte Copilot — colmap_to_gs
 
+## Message à copier pour une nouvelle session
+
+```text
+Nous travaillons sur NicoIGN/colmap_to_gs, un projet qui transforme des photos, vidéos ou images Panoramax en scènes 3D Gaussian Splatting : 
+préparation des données, reconstruction COLMAP, entraînement et export. Connecte-toi au dépôt sur la branche review_copilot et lis d'abord copilot/CONTEXT.md 
+Cette note contient les conventions, les points d'entrée et les pièges à connaître. 
+Utilise GIT_ROOT pour les chemins du projet sans chemins absolus dans les réponses. 
+Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
+```
+
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
 
 ## Projet
 - Pipeline images/vidéos → 3DGS (SfM HLOC / Spirula / COLMAP / Nerfstudio, entraînement Spirula, export `.splat`).
 - Point d'entrée vidéo : `scripts/videos_to_3dgs.sh <config.sh> --video <fichier> --num-frames N`.
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
+- Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
-- Chemins dans les commandes projet : `$GIT_ROOT/...`, pas de chemin absolu.
+- Chemins du projet : `$GIT_ROOT/...` ; données et résultats : `$DATA_ROOT/...`. Ne pas utiliser de chemin absolu dans les réponses.
 
 ## Dépendances Python (venv dédié)
 Un venv évite l'erreur PEP 668 (`externally-managed-environment`) et les `No module named ...` :
 
 ```bash
-bash copilot/setup_env.sh                       # crée ~/.venvs/colmap_to_gs et installe tout
+bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et installe tout
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
@@ -22,9 +33,10 @@ Paquets utilisés par les tests et le pipeline :
 - Lidar / panoramax : `pyproj laspy lazrs` (`tools/lidar/requirements.txt`, `tools/panoramax/requirements.txt`)
 - HLOC / COLMAP : `pycolmap>=4.2` (`tools/lidar/requirements-colmap.txt`)
 
-Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
+Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sur la machine de session, `numpy` n'est pas installé par défaut ; `pycolmap` et `torch` non plus.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/images_to_colmap/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
+- Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
@@ -34,6 +46,7 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm` : les suites et scripts �
 
 ## macOS : HLOC et OpenMP
 - HLOC s'installe avec `tools/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
+- LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
 - macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
 - HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
 - Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
@@ -63,27 +76,23 @@ python -m unittest discover -s tools/panoramax -p 'test_*.py'             # pano
 python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'    # masques
 ```
 
-Les tests écrivent des `__pycache__` suivis par git : avant commit, faire `git checkout -- '*__pycache__*'` ou ne pas les ajouter.
+Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.
 
 ## Validation de configuration
 - `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/images_to_splat/common.sh`).
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
-- Vérification sans calcul : `bash tools/panoramax/validate_config.sh config.sh slurm`.
+- Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
 ## Environnement
 - Docker : daemon non lancé par défaut. Vérifier `docker info` ; sinon `nohup dockerd >/tmp/dockerd.log 2>&1 </dev/null &`.
-- Pas de dépôt local sur la machine de session : cloner avec `gh repo clone NicoIGN/colmap_to_gs -- -b review_copilot`.
-- Les chemins de l'utilisateur sont sous `/Users/nbellaiche/DATA/dev/gsplat/...` (macOS) ; ne pas les mettre en dur, utiliser `$GIT_ROOT`.
+
+## Panoramas HLOC
+- `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
+- L'ancien paramètre `SFM_EQUIRECTANGULAR_VIEWS` est refusé dans les nouvelles configurations ; les signatures locales où il valait `true` restent compatibles avec le mode `EQUIRECTANGULAR`. En modifiant ces réglages, préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
+- GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
+- Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
 
 ## Conventions
 - Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
 - Une correction = tests ciblés qui échouent sans le correctif.
-
-## Historique récent
-- `c808dfd` : ignorer les défauts `SFM_SP_*` quand `COLMAP_METHOD` n'est pas `spirula`.
-- `3189c77` : création de `copilot/` (cette note et `setup_env.sh`).
-- `d211ae8` : h5py ajouté aux deux `conda_env.yml` (conda-forge recommandé plutôt que pip).
-- `1256a17` : dédoublonnage de libomp sur macOS dans `install-hloc.sh` (confirmé fonctionnel).
-- `4ff510e`, `f1f12ae` : correctifs `set -u` sur tableaux vides (bash 3.2).
-- `1399b67` : densification MVS optionnelle (`COLMAP_USE_MVS`, défaut `false`), non testée sur Slurm.

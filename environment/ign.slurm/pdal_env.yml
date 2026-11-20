@@ -14,6 +14,9 @@ dependencies:
   - laspy
   - lazrs-python
   - pycolmap>=4.2
+  - pyogrio
+  - shapely
+ 
   - pip:
       - plyfile
       - laspy[lazrs]

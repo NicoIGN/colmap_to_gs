@@ -94,6 +94,8 @@ PANORAMAX_DATETIME="${PANORAMAX_DATETIME:-}"
 PANORAMAX_IMAGE_MAX="${PANORAMAX_IMAGE_MAX:-}"
 PANORAMAX_PICTURE_TYPE="${PANORAMAX_PICTURE_TYPE:-all}"
 PANORAMAX_PROVIDER="${PANORAMAX_PROVIDER:-}"
+# Filtres : "KEY=V1,V2;KEY2=V3" ; ';' sépare les clés (ET), ',' sépare les valeurs (OU).
+PANORAMAX_FILTERS="${PANORAMAX_FILTERS:-}"
 export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
@@ -136,7 +138,7 @@ SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
 TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-panoramax.splat}"
 MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
-POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-diagnostic}"
+POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
 POSTPROCESS_FILTER_SIZE_FACTOR="${POSTPROCESS_FILTER_SIZE_FACTOR:-10}"
 POSTPROCESS_CLEANER="${POSTPROCESS_CLEANER:-contextual}"
 CLEANGS_PYTHON="${CLEANGS_PYTHON:-$PYTHON_BIN}"
@@ -187,7 +189,7 @@ fi
   die "PANORAMAX_QUALITY doit être hd, sd ou thumb."
 [[ "$PANORAMAX_PICTURE_TYPE" == all || "$PANORAMAX_PICTURE_TYPE" == normal || "$PANORAMAX_PICTURE_TYPE" == 360 ]] ||
   die "PANORAMAX_PICTURE_TYPE doit être all, normal ou 360."
-if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
+if [[ "$PANORAMAX_PICTURE_TYPE" == 360 && "${COLMAP_METHOD:-spirula}" == spirula && "${SFM_CAMERA_MODEL:-opencv}" != equirectangular ]]; then
   echo "[config] PANORAMAX_PICTURE_TYPE=360 : SFM_CAMERA_MODEL=equirectangular (au lieu de ${SFM_CAMERA_MODEL:-opencv})." >&2
   SFM_CAMERA_MODEL=equirectangular
   export SFM_CAMERA_MODEL
@@ -216,12 +218,24 @@ prepare_images() {
     "$PYTHON_BIN" - \
     "$DATASET_DIR/request.json" "$PANORAMAX_BBOX" "$PANORAMAX_BBOX_EPSG" "$PANORAMAX_API_URL" \
     "$PANORAMAX_DATETIME" "$PANORAMAX_QUALITY" "$PANORAMAX_IMAGE_MAX" "$PANORAMAX_PICTURE_TYPE" \
-    "$PANORAMAX_PROVIDER" <<'PY' || request_status=$?
+    "$PANORAMAX_PROVIDER" "$PANORAMAX_FILTERS" <<'PY' || request_status=$?
 import json
 import sys
 
-path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider = sys.argv[1:]
-stac_types = {"all": None, "normal": "flat", "360": "equirectangular"}
+path, bbox, bbox_epsg, api_url, datetime, quality, image_max, picture_type, provider, filters = sys.argv[1:]
+stac_types = {"all": "all", "normal": "normal", "360": "360"}
+
+
+def parse_filters(spec):
+    parsed = []
+    for item in spec.split(";"):
+        if not item.strip():
+            continue
+        key, _, values = item.partition("=")
+        parsed.append({"key": key.strip(), "values": [v.strip() for v in values.split(",") if v.strip()]})
+    return parsed or None
+
+
 with open(path, encoding="utf-8") as stream:
     previous = json.load(stream)
 expected = {
@@ -233,9 +247,12 @@ expected = {
     "image_max": int(image_max) if image_max else None,
     "picture_type": stac_types[picture_type],
     "provider": provider or None,
+    "filters": parse_filters(filters),
 }
 for key, value in expected.items():
     actual = previous.get(key, 2154 if key == "bbox_epsg" else None)
+    if key == "picture_type" and actual is None:
+        actual = "all"
     if key == "api_url":
         actual = actual.rstrip("/")
         value = value.rstrip("/")
@@ -261,18 +278,30 @@ PY
     die "Lecture impossible de $DATASET_DIR/request.json (code $request_status)."
   fi
 
-  if [[ ! -e "$DATASET_DIR/request.json" && -d "$DATASET_DIR/images" ]] &&
-     [[ -n "$(ls -A "$DATASET_DIR/images" 2>/dev/null)" ]]; then
-    die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
+  stray_photos=""
+  for images_dir in "$DATASET_DIR/images" "$DATASET_DIR"/*/images; do
+    [[ -d "$images_dir" ]] || continue
+    [[ "$images_dir" == "$DATASET_DIR/images" || -d "${images_dir%/images}/metadata" ]] || continue
+    stray_photos="$(find "$images_dir" -type f -print -quit 2>/dev/null)"
+    [[ -z "$stray_photos" ]] || break
+  done
+  if [[ ! -e "$DATASET_DIR/request.json" && -n "$stray_photos" ]]; then
+    die "$DATASET_DIR contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
   fi
 
-  bbox_args=(--bbox "$PANORAMAX_BBOX" --bbox-epsg "$PANORAMAX_BBOX_EPSG" \
+  bbox_args=(--bbox "$PANORAMAX_BBOX" --crs "EPSG:$PANORAMAX_BBOX_EPSG" \
     --output-dir "$DATASET_DIR" \
     --api-url "$PANORAMAX_API_URL" --quality "$PANORAMAX_QUALITY")
   [[ -z "$PANORAMAX_DATETIME" ]] || bbox_args+=(--datetime "$PANORAMAX_DATETIME")
   [[ -z "$PANORAMAX_IMAGE_MAX" ]] || bbox_args+=(--image-max "$PANORAMAX_IMAGE_MAX")
-  bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
   [[ -z "$PANORAMAX_PROVIDER" ]] || bbox_args+=(--provider "$PANORAMAX_PROVIDER")
+  bbox_args+=(--picture-type "$PANORAMAX_PICTURE_TYPE")
+  if [[ -n "$PANORAMAX_FILTERS" ]]; then
+    IFS=';' read -r -a panoramax_filter_items <<< "$PANORAMAX_FILTERS"
+    for panoramax_filter_item in "${panoramax_filter_items[@]}"; do
+      [[ -z "${panoramax_filter_item//[[:space:]]/}" ]] || bbox_args+=(--filter "$panoramax_filter_item")
+    done
+  fi
   if [[ "${PIPELINE_RESUME:-false}" == true && -f "$download_done" ]]; then
     printf '[pipeline] Téléchargement déjà terminé (%s) : étape ignorée.\n' "$download_done"
   else
@@ -286,19 +315,27 @@ PY
     download_status=0
     "$PYTHON_BIN" "$script_dir/download.py" "${bbox_args[@]}" || download_status=$?
     "$PYTHON_BIN" "$download_lock_helper" "$download_lock" --pid "$$" --release
-    ((download_status == 0)) || die "Téléchargement Panoramax en échec (code $download_status)."
+    ((download_status == 0)) || {
+      printf '[ERREUR] échec du téléchargement des photos Panoramax (code %s).\n' "$download_status" >&2
+      printf '[ERREUR] Diagnostic téléchargement : %s/summary.json et %s/manifest.jsonl\n' \
+        "$DATASET_DIR" "$DATASET_DIR" >&2
+      exit "$download_status"
+    }
     touch -- "$download_done"
   fi
 
   # The downloader retains old files for manual resume. The dedicated pipeline
   # directory must contain exactly this run's successful/reused manifest images.
   set_pipeline_stage "validation des photos téléchargées"
-  "$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
+  "$PYTHON_BIN" - "$DATASET_DIR" "$script_dir" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+sys.path.insert(0, sys.argv[2])
+from dataset_layout import image_files
+
 manifest = root / "manifest.jsonl"
 if not manifest.is_file():
     raise SystemExit(f"Manifeste absent après téléchargement : {manifest}")
@@ -307,11 +344,10 @@ for line in manifest.read_text(encoding="utf-8").splitlines():
     item = json.loads(line)
     if item.get("status") in ("downloaded", "reused"):
         expected.add(item["image"])
-images = root / "images"
 stale = sorted(
-    str(path.relative_to(root))
-    for path in images.glob("*.jpg")
-    if str(path.relative_to(root)) not in expected
+    path.relative_to(root).as_posix()
+    for path in image_files(root)
+    if path.relative_to(root).as_posix() not in expected
 )
 if stale:
     raise SystemExit(
@@ -338,11 +374,23 @@ if [[ "$phase" != merge ]]; then
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
   printf '[pipeline] Étape : %s\n' "$pipeline_stage"
-  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" ]]; then
+  if [[ "$SPIRULA_DEVICE" == auto && -n "$SPIRULA_BIN" &&
+        ( "${COLMAP_METHOD:-spirula}" == spirula || "$TRAIN_BACKEND" == spirula ||
+          ( "${SFM_MASKS:-off}" == on && "${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" == spirula ) ||
+          ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ) ]]; then
     SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
     printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
   fi
   DIR="$DATASET_DIR" \
+  COLMAP_METHOD="${COLMAP_METHOD:-spirula}" \
+  HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}" \
+  SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}" \
+  HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" \
+  HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}" \
+  HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" \
+  HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}" \
+  HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}" \
+  GEOREF_EPSG="$PANORAMAX_BBOX_EPSG" \
   SPIRULA_BIN="$SPIRULA_BIN" \
   PYTHON_BIN="$PYTHON_BIN" \
   TRAIN_NUM_ITER="$TRAIN_NUM_ITER" \
@@ -415,11 +463,11 @@ rm -f -- "$OUTPUT_DIR/.merge_done"
 MERGE_INPUTS=()
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
-  splat="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.splat"
+  splat="$GS_ROOT/block_$block_id/splats/block_${block_id}.splat"
   [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
   if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
     set_pipeline_stage "recadrage bbox COLMAP du bloc $block_id avant fusion"
-    cropped="$GS_ROOT/block_$block_id/splats/Paris-${TRAIN_NUM_ITER}-block-${block_id}.bbox.splat"
+    cropped="$GS_ROOT/block_$block_id/splats/block_${block_id}.bbox.splat"
     crop_splat_to_sparse "$splat" "$cropped" "$LIDAR_SPARSE" \
       apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
     splat="$cropped"
@@ -464,13 +512,20 @@ set_pipeline_stage "copie des références de géoréférencement"
 mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
-cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
+mkdir -p "$GEOREF_DIR/metadata"
+for metadata_dir in "$DATASET_DIR/metadata" "$DATASET_DIR"/*/metadata; do
+  [[ -d "$metadata_dir" ]] || continue
+  cp -R "$metadata_dir/." "$GEOREF_DIR/metadata/"
+done
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
 cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
 if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
   cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
+fi
+if [[ -f "$SFM_DIR/projection.json" ]]; then
+  cp "$SFM_DIR/projection.json" "$GEOREF_DIR/"
 fi
 for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
   block_id="$(printf '%03d' "$index")"
@@ -509,9 +564,12 @@ data = {
 }
 reference_path = Path(output).parent / "sparse/georef_stats.json"
 if reference_path.is_file():
-    reference = json.loads(reference_path.read_text())["output_reference"]
+    stats = json.loads(reference_path.read_text())
+    reference = stats["output_reference"]
     data["output_reference"] = reference
-    data["coordinate_frame"] = "COLMAP LiDAR-aligned local ENU frame"
+    data["coordinate_frame"] = ("COLMAP GPS-aligned local ENU frame"
+                                if stats.get("status") == "georeferenced"
+                                else "COLMAP LiDAR-aligned local ENU frame")
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 

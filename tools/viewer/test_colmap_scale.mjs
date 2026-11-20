@@ -207,6 +207,10 @@ test("cube map front face samples the equirectangular centre", () => {
   assert.equal(atlas.height, faceSize * 2);
   const texel = (2 * atlas.width + 2) * 4;
   assert.deepEqual([...atlas.data.slice(texel, texel + 3)], [255, 0, 0]);
+  // Avec l'inversion gauche/droite, le centre avant est échantillonné à la colonne miroir.
+  const mirrored = equirectToCubeAtlas(rgba, width, height, faceSize, true);
+  const mirroredTexel = (2 * mirrored.width + 2) * 4;
+  assert.notDeepEqual([...mirrored.data.slice(mirroredTexel, mirroredTexel + 3)], [255, 0, 0]);
 });
 
 test("the view ray must cross the enlarged frustum to count as covering the centre", () => {

@@ -7,7 +7,7 @@ import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULTS_DIR = ROOT / "config" / "defaults"
 PIPELINE_OVERRIDES = {
     "panoramax": ROOT / "tools" / "panoramax" / "config.default.sh",

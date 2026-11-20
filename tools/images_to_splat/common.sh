@@ -99,6 +99,7 @@ load_config() {
   HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"
   HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}"
   HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}"
+  SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
   ORIENTATIONS_JSON="${ORIENTATIONS_JSON:-}"
   LIDAR_PLY="${LIDAR_PLY:-}"
   SFM_NS_PROCESS_DATA_BIN="${SFM_NS_PROCESS_DATA_BIN:-ns-process-data}"
@@ -224,6 +225,19 @@ load_config() {
     config_error "SFM_DENSITY_FAR_SUPPORT_RATE='$SFM_DENSITY_FAR_SUPPORT_RATE' doit être dans ]0,1]."
   fi
   config_choice COLMAP_METHOD "$COLMAP_METHOD" 'spirula|colmap|nerfstudio|orientations|hloc'
+  config_positive_integer SFM_EQUIRECTANGULAR_VIEW_SIZE "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
+  if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
+    [[ "$SFM_EQUIRECTANGULAR_VIEW_SIZE" =~ ^[1-9][0-9]*$ ]] &&
+      (( SFM_EQUIRECTANGULAR_VIEW_SIZE >= 2 )) || config_error "SFM_EQUIRECTANGULAR_VIEW_SIZE doit être >= 2."
+    [[ -z "$SFM_MASKS_DIR" && -z "$TRAIN_MASKS_DIR" ]] ||
+      config_error "La projection 360 ne prend pas en charge les masques externes."
+    [[ "${COLMAP_USE_MVS:-false}" != true ]] ||
+      config_error "COLMAP_USE_MVS=true n'est pas compatible avec la projection 360."
+    [[ -z "$GEOREF_GPX_FILE" ]] ||
+      config_error "GEOREF_GPX_FILE n'est pas encore compatible avec la projection 360 ; les GPS EXIF sont utilisés."
+    [[ "${LIDAR_COLMAP_ALIGN:-false}" != true && "${LIDAR_CLEAN:-false}" != true ]] ||
+      config_error "Le traitement LiDAR n'est pas encore compatible avec la projection 360."
+  fi
   config_choice SFM_COLMAP_USE_GPU "$SFM_COLMAP_USE_GPU" 'true|false'
   config_choice SFM_COLMAP_MATCHING "$SFM_COLMAP_MATCHING" 'exhaustive|sequential'
   config_choice TRAIN_BACKEND "$TRAIN_BACKEND" 'spirula|nerfstudio'
@@ -246,7 +260,7 @@ load_config() {
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     config_choice HLOC_PAIRS "$HLOC_PAIRS" 'retrieval|exhaustive'
     config_positive_integer HLOC_NUM_NEIGHBORS "$HLOC_NUM_NEIGHBORS"
-    config_choice HLOC_CAMERA_MODEL "$HLOC_CAMERA_MODEL" 'OPENCV|SIMPLE_RADIAL|RADIAL|PINHOLE|SIMPLE_PINHOLE|FULL_OPENCV'
+    config_choice HLOC_CAMERA_MODEL "$HLOC_CAMERA_MODEL" 'OPENCV|SIMPLE_RADIAL|RADIAL|PINHOLE|SIMPLE_PINHOLE|FULL_OPENCV|EQUIRECTANGULAR'
     config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
     config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'false'
   fi

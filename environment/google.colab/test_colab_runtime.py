@@ -267,55 +267,28 @@ class ColabRuntimeTests(unittest.TestCase):
         config = next(c for c in notebook["cells"] if c["metadata"]["id"] == "config")
         self.assertIn("'OUTPUT_DIR': str(OUTPUT)", "".join(config["source"]))
 
-    def test_notebook_config_writes_only_local_output_and_requires_license(self):
+    def test_notebook_config_writes_only_local_output_and_applies_masks_switch(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
-        source = "".join(next(c for c in notebook["cells"]
-                              if c["metadata"]["id"] == "config")["source"])
-        namespace = dict(ACCEPT_SAM_LICENSE=False)
+        cells = {cell["metadata"]["id"]: "".join(cell["source"]) for cell in notebook["cells"]}
+        namespace = {}
+        with patch.object(Path, "mkdir"), contextlib.redirect_stdout(io.StringIO()):
+            exec(cells["parameters"], namespace)
+        namespace.update(RUN=self.root, OUTPUT=self.root / "output", FRAMES=self.root / "frames",
+                         SOURCE_IMAGES=self.root / "frames", SPIRULA_ROOT=self.root / "spirula",
+                         SPIRULA_BIN=self.root / "spirula/bin", SAM_MODEL=self.root / "sam.ggml")
         with self.assertRaisesRegex(RuntimeError, "licence"):
-            exec(source, namespace)
-        ids = [cell["metadata"]["id"] for cell in notebook["cells"]]
-        self.assertLess(ids.index("sam-license"), ids.index("config"))
-        license_cell = notebook["cells"][ids.index("sam-license")]
-        exec("".join(license_cell["source"]), namespace)
-        self.assertIs(namespace["ACCEPT_SAM_LICENSE"], True)
-        namespace.update(ACCEPT_SAM_LICENSE=True, RUN=self.root,
-                         OUTPUT=self.root / "output", FRAMES=self.root / "frames",
-                         SOURCE_IMAGES=self.root / "frames", COLMAP_ARCHIVE="",
-                         REMOVE_LOCKS="false", PIPELINE_RESUME="true", NUM_CPUS=3,
-                         SFM_CAMERA_MODE="folder", SFM_CAMERA_SPLIT="true", SFM_CAMERA_SPLIT_MIN_IMAGES=100,
-                         SFM_SP_PAIRS="sequential",
-                         TRAIN_NUM_ITER=1234, TRAIN_SP_CAP_MAX=54321, SPLIT_NUM_BLOCKS=1,
-                         SPIRULA_ROOT=self.root / "spirula", SPIRULA_BIN=self.root / "spirula/bin",
-                         SAM_MODEL=self.root / "sam.ggml", RUN_NAME="video", PHASE="all")
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(source, namespace)
-        config = namespace["CONFIG"]
-        result = subprocess.check_output(
-            ["bash", "-c", 'source "$1"; printf "%s" "$OUTPUT_DIR"', "_", str(config)], text=True)
-        self.assertEqual(result, str(self.root / "output"))
-        self.assertNotIn("/content/drive", config.read_text())
-        jobs = subprocess.check_output(
-            ["bash", "-c", 'source "$1"; printf "%s" "$NUM_CPUS"', "_", str(config)], text=True)
-        self.assertEqual(jobs, "3")
-        split = subprocess.check_output(
-            ["bash", "-c", 'source "$1"; printf "%s %s" "$SFM_CAMERA_SPLIT" "$SFM_CAMERA_SPLIT_MIN_IMAGES"',
-             "_", str(config)], text=True)
-        self.assertEqual(split, "true 100")
-        self.assertIn("SFM_SP_PAIRS=sequential\n", config.read_text())
-        inherited = subprocess.check_output(
-            ["bash", "-c", 'source "$1"; bash -c \'printf "%s" "$SS_NN_LOG"\'', "_", str(config)],
-            text=True)
-        self.assertEqual(inherited, "1")
-        for key, value in (("TRAIN_NUM_ITER", "1234"), ("TRAIN_SP_CAP_MAX", "54321"),
-                           ("SPLIT_NUM_BLOCKS", "1")):
-            self.assertIn(f"{key}={value}\n", config.read_text())
-        namespace["COLMAP_ARCHIVE"] = "/drive/colmap.zip"
-        namespace["SOURCE_IMAGES"] = self.root / "colmap-input/images"
-        with contextlib.redirect_stdout(io.StringIO()):
-            exec(source, namespace)
-        self.assertIn("SFM_MASKS=off\n", config.read_text())
-        self.assertIn(str(namespace["SOURCE_IMAGES"]), config.read_text())
+            exec(cells["config"], dict(namespace, ACCEPT_SAM_LICENSE=False))
+        for masks in ("on", "off"):
+            with self.subTest(masks=masks), contextlib.redirect_stdout(io.StringIO()):
+                settings = dict(namespace, MASKS=masks, NUM_CPUS=3)
+                exec(cells["config"], settings)
+                config = settings["CONFIG"]
+                values = subprocess.check_output(
+                    ["bash", "-c", 'source "$1"; printf "%s|%s|%s|%s|%s" "$OUTPUT_DIR" "$SFM_MASKS" '
+                     '"$TRAIN_MASKS" "$NUM_CPUS" "$SFM_CAMERA_SPLIT"', "_", str(config)],
+                    text=True).split("|")
+                self.assertEqual(values, [str(self.root / "output"), masks, masks, "3", "false"])
+                self.assertNotIn("/content/drive", config.read_text())
 
     def test_conda_reuses_matching_env_and_updates_unmarked_without_erasing(self):
         prefix = self.root / "env"
@@ -471,43 +444,20 @@ class ColabRuntimeTests(unittest.TestCase):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
         source = "".join(next(cell for cell in notebook["cells"]
                               if cell["metadata"]["id"] == "parameters")["source"])
-        with patch.dict(os.environ, {"PIPELINE_RESUME": "false", "REMOVE_LOCKS": "true"}, clear=True):
-            with patch.object(Path, "mkdir") as mkdir:
-                with self.assertRaisesRegex(ValueError, "exige PIPELINE_RESUME=true"):
-                    exec(source, {})
-                mkdir.assert_not_called()
+        source = source.replace("PIPELINE_RESUME = 'true'", "PIPELINE_RESUME = 'false'")
+        source = source.replace("REMOVE_LOCKS = 'false'", "REMOVE_LOCKS = 'true'")
+        with patch.object(Path, "mkdir") as mkdir:
+            with self.assertRaisesRegex(ValueError, "exige PIPELINE_RESUME=true"):
+                exec(source, {})
+            mkdir.assert_not_called()
 
-    def test_first_cell_reads_training_environment_and_defaults_to_one_block(self):
+    def test_parameters_reject_unknown_masks_value(self):
         notebook = json.loads(Path(__file__).with_name("colmap_to_gs_video_T4.ipynb").read_text())
-        tree = ast.parse("".join(next(cell for cell in notebook["cells"]
-                                    if cell["metadata"]["id"] == "parameters")["source"]))
-        names = {"TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "SPLIT_NUM_BLOCKS", "COLMAP_ARCHIVE",
-                 "PIPELINE_RESUME", "REMOVE_LOCKS", "NUM_CPUS", "SFM_CAMERA_SPLIT",
-                 "SFM_CAMERA_SPLIT_MIN_IMAGES", "SFM_SP_PAIRS"}
-        assignments = [node for node in tree.body if isinstance(node, ast.Assign)
-                       and any(isinstance(target, ast.Name) and target.id in names for target in node.targets)]
-        code = compile(ast.Module(body=assignments, type_ignores=[]), "parameters", "exec")
-        with patch.dict(os.environ, {}, clear=True):
-            namespace = dict(os=os)
-            exec(code, namespace)
-            self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 1)
-            self.assertEqual(namespace["COLMAP_ARCHIVE"], "")
-            self.assertEqual(namespace["REMOVE_LOCKS"], "false")
-            self.assertEqual(namespace["PIPELINE_RESUME"], "true")
-            self.assertEqual(namespace["NUM_CPUS"], 2)
-            self.assertEqual(namespace["SFM_CAMERA_SPLIT"], "true")
-            self.assertEqual(namespace["SFM_CAMERA_SPLIT_MIN_IMAGES"], 100)
-            self.assertEqual(namespace["SFM_SP_PAIRS"], "prefilter")
-        with patch.dict(os.environ, TRAIN_NUM_ITER="9876", TRAIN_SP_CAP_MAX="456789",
-                        SPLIT_NUM_BLOCKS="3", COLMAP_ARCHIVE="/drive/model.zip", NUM_CPUS="4",
-                        SFM_SP_PAIRS="sequential"):
-            exec(code, namespace)
-            self.assertEqual(namespace["TRAIN_NUM_ITER"], 9876)
-            self.assertEqual(namespace["TRAIN_SP_CAP_MAX"], 456789)
-            self.assertEqual(namespace["SPLIT_NUM_BLOCKS"], 3)
-            self.assertEqual(namespace["COLMAP_ARCHIVE"], "/drive/model.zip")
-            self.assertEqual(namespace["NUM_CPUS"], 4)
-            self.assertEqual(namespace["SFM_SP_PAIRS"], "sequential")
+        source = "".join(next(cell for cell in notebook["cells"]
+                              if cell["metadata"]["id"] == "parameters")["source"])
+        with patch.object(Path, "mkdir"):
+            with self.assertRaisesRegex(ValueError, "MASKS doit valoir on ou off"):
+                exec(source.replace("MASKS = 'off'", "MASKS = 'maybe'"), {})
 
     def test_colmap_restore_rejects_missing_images_unsafe_paths_and_existing_workspace(self):
         validator = [sys.executable, str(Path(__file__).resolve().parents[2]

@@ -27,6 +27,29 @@ def effective_panoramax_values():
 
 
 class ValidateConfigTest(unittest.TestCase):
+    def test_hloc_360_requires_projection_and_disallows_spirula_pair_filter(self):
+        extra = ('COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=360\n'
+                 'HLOC_CAMERA_MODEL=EQUIRECTANGULAR\nTRAIN_BACKEND=nerfstudio\n')
+        result, _ = self.execute("validate_config.sh", extra, "slurm")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        result, _ = self.execute("validate_config.sh", extra + 'SFM_SP_PAIR_MAX_DISTANCE=50\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("réservé à Spirula", result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                 'COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=all\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("PANORAMAX_PICTURE_TYPE=360", result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                 'COLMAP_METHOD=hloc\nPANORAMAX_PICTURE_TYPE=360\n'
+                                 'HLOC_CAMERA_MODEL=OPENCV\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("HLOC_CAMERA_MODEL=EQUIRECTANGULAR", result.stderr)
+        result, _ = self.execute("validate_config.sh",
+                                 extra + 'SFM_EQUIRECTANGULAR_VIEWS=true\n', "slurm")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_EQUIRECTANGULAR_VIEWS", result.stderr)
+        self.assertIn("HLOC_CAMERA_MODEL", result.stderr)
+
     def test_invalid_geometry_rejected_local_and_slurm(self):
         for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
@@ -337,10 +360,11 @@ SFM_SP_PAIR_MAX_DISTANCE=30
                            "\n".join(path.read_text() for path in DEFAULT_FILES), re.MULTILINE)
         shared = {"OUTPUT_DIR", "SPIRULA_BIN", "SPIRULA_DEVICE", "PYTHON_BIN",
                   "MVK_CONFIG_LOG_LEVEL", "SS_NN_LOG", "NUM_CPUS", "NUM_GPUS",
-                  "PIPELINE_RESUME", "REMOVE_LOCKS", "COLMAP_METHOD", "TRAIN_BACKEND"}
+                  "PIPELINE_RESUME", "REMOVE_LOCKS", "COLMAP_METHOD", "COLMAP_USE_MVS", "TRAIN_BACKEND",
+                  "KMP_DUPLICATE_LIB_OK"}
         prefixes = ("PANORAMAX_", "SFM_", "TRAIN_", "SPLIT_", "MASKS_", "HLOC_", "GEOREF_",
                     "MERGE_", "POSTPROCESS_", "EXPORT_", "CLEANGS_", "SLURM_", "NS_", "LIDAR_",
-                    "ORIENTATIONS_")
+                    "ORIENTATIONS_", "MVS_")
         for name in names:
             self.assertTrue(name in shared or name.startswith(prefixes), name)
 

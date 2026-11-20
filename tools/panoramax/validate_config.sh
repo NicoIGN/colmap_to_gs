@@ -5,6 +5,22 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)/tools/libs/scr
 validate_config() {
   local config_errors=0 name value train_backend="${TRAIN_BACKEND:-spirula}"
   reject_legacy_config || return 1
+  config_choice COLMAP_METHOD "${COLMAP_METHOD:-spirula}" 'spirula|hloc'
+  if [[ "${COLMAP_METHOD:-spirula}" == hloc ]]; then
+    [[ "${HLOC_CAMERA_MODEL:-OPENCV}" == EQUIRECTANGULAR && "${PANORAMAX_PICTURE_TYPE:-all}" == 360 ]] ||
+      config_error "Panoramax HLOC exige PANORAMAX_PICTURE_TYPE=360 et HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
+    [[ -z "${SFM_SP_PAIR_MAX_DISTANCE:-}" ]] ||
+      config_error "SFM_SP_PAIR_MAX_DISTANCE est réservé à Spirula."
+    [[ "${COLMAP_USE_MVS:-false}" != true ]] || config_error "MVS n'est pas disponible pour Panoramax HLOC."
+    [[ "${LIDAR_COLMAP_ALIGN:-false}" != true && "${LIDAR_CLEAN:-false}" != true ]] ||
+      config_error "Le traitement LiDAR n'est pas encore compatible avec Panoramax HLOC."
+    config_positive_integer SFM_EQUIRECTANGULAR_VIEW_SIZE "${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
+    value="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] && (( value >= 2 )) ||
+      config_error "SFM_EQUIRECTANGULAR_VIEW_SIZE doit être >= 2."
+    config_choice HLOC_PAIRS "${HLOC_PAIRS:-retrieval}" 'retrieval|exhaustive'
+    config_positive_integer HLOC_NUM_NEIGHBORS "${HLOC_NUM_NEIGHBORS:-20}"
+  fi
   config_choice TRAIN_BACKEND "$train_backend" 'spirula|nerfstudio'
   if [[ "$train_backend" == nerfstudio ]]; then
     config_positive_integer TRAIN_NS_DOWNSCALE_FACTOR "${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
@@ -17,7 +33,7 @@ validate_config() {
     esac
   fi
   validate_sfm_geometry_config
-  validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" spirula
+  validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" "${COLMAP_METHOD:-spirula}"
   if [[ -n "${SFM_SP_IMAGE_EXPOSURE:-}" && -n "${SFM_SP_PAIR_MAX_DISTANCE:-}" ]]; then
     config_error "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
   fi
@@ -38,7 +54,7 @@ validate_config() {
   config_positive_integer SFM_ALIKED_MAX_FEATURES "${SFM_ALIKED_MAX_FEATURES:-4096}"
   config_choice SFM_CAMERA_MODEL "${SFM_CAMERA_MODEL:-opencv}" \
     'opencv|pinhole|opencv-fisheye|equirectangular'
-  if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula ]]; then
+  if [[ "${SFM_CAMERA_MODEL:-opencv}" == equirectangular && "$train_backend" != spirula && "${COLMAP_METHOD:-spirula}" != hloc ]]; then
     config_error "SFM_CAMERA_MODEL=equirectangular exige TRAIN_BACKEND=spirula."
   fi
   for name in PANORAMAX_IMAGE_MAX NUM_CPUS; do
@@ -69,7 +85,7 @@ validate_config() {
   esac
   config_choice TRAIN_CLEAN "${TRAIN_CLEAN:-false}" 'true|false|1|0|yes|no|on|off'
   config_choice PANORAMAX_REPLACE_REQUEST "${PANORAMAX_REPLACE_REQUEST:-false}" 'true|false|1|0|yes|no|on|off'
-  config_choice POSTPROCESS_FILTER_MODE "${POSTPROCESS_FILTER_MODE:-diagnostic}" 'diagnostic|apply|off'
+  config_choice POSTPROCESS_FILTER_MODE "${POSTPROCESS_FILTER_MODE:-apply}" 'diagnostic|apply|off'
   config_choice TRAIN_MASKS "${TRAIN_MASKS:-off}" 'on|off|true|false|1|0|yes|no'
   config_choice TRAIN_MASKS_BACKEND "${TRAIN_MASKS_BACKEND:-segmentation}" 'segmentation|spirula'
   config_choice TRAIN_MASKS_MODE "${TRAIN_MASKS_MODE:-auto}" 'auto|ignore|empty'

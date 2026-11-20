@@ -22,45 +22,20 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from dataset_layout import image_files, jpeg_size, metadata_index, resolved_picture_type
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
-SOF_MARKERS = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
-
-
-def jpeg_size(path):
-    with path.open("rb") as stream:
-        if stream.read(2) != b"\xff\xd8":
-            raise ValueError("pas un JPEG")
-        while True:
-            byte = stream.read(1)
-            if not byte:
-                raise ValueError("en-tête SOF introuvable")
-            if byte != b"\xff":
-                continue
-            marker = stream.read(1)
-            while marker == b"\xff":
-                marker = stream.read(1)
-            if not marker:
-                raise ValueError("en-tête SOF introuvable")
-            code = marker[0]
-            if code in (0x01, 0xD8) or 0xD0 <= code <= 0xD7:
-                continue
-            length_bytes = stream.read(2)
-            if len(length_bytes) != 2:
-                raise ValueError("segment JPEG tronqué")
-            length = int.from_bytes(length_bytes, "big")
-            if code in SOF_MARKERS:
-                data = stream.read(5)
-                if len(data) != 5:
-                    raise ValueError("segment SOF tronqué")
-                return int.from_bytes(data[3:5], "big"), int.from_bytes(data[1:3], "big")
-            stream.seek(length - 2, os.SEEK_CUR)
 
 
 def resolve_inputs(dataset):
+    """Retourne les images (toutes collections confondues) et l'index {nom: JSON} des métadonnées."""
     dataset = Path(dataset).resolve()
-    images_dir = dataset / "images" if (dataset / "images").is_dir() else dataset
-    metadata_dir = images_dir.parent / "metadata"
-    return images_dir, metadata_dir if metadata_dir.is_dir() else None
+    images = [path for path in image_files(dataset) if path.suffix.lower() in IMAGE_EXTENSIONS]
+    if images:
+        return images, metadata_index(dataset) or None
+    # Ancien appel : dossier d'images nu, métadonnées dans le dossier parent.
+    images = [path for path in sorted(dataset.glob("*")) if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS]
+    return images, metadata_index(dataset.parent) or None
 
 
 def parse_size(text):
@@ -83,19 +58,13 @@ def focal_from_metadata(path, width):
 
 
 def is_equirectangular(path):
-    """Même règle que tools/panoramax/download.py:picture_type_of."""
+    """Même règle que download.py (dataset_layout.resolved_picture_type), avec le XMP du JPEG en repli."""
     try:
-        properties = json.loads(path.read_text(encoding="utf-8"))["feature"]["properties"]
+        feature = json.loads(path.read_text(encoding="utf-8"))["feature"]
     except (OSError, ValueError, KeyError, TypeError):
         return False
-    if properties.get("type") is not None:
-        return properties["type"] == "equirectangular"
-    exif = properties.get("exif") or {}
-    orientation = properties.get("pers:interior_orientation") or {}
-    return (
-        exif.get("Xmp.GPano.ProjectionType") == "equirectangular"
-        or str(orientation.get("field_of_view")) == "360"
-    )
+    image = path.parent.parent / "images" / f"{path.stem}.jpg"
+    return resolved_picture_type(feature, image if image.is_file() else None) == "equirectangular"
 
 
 def env_flag(name):
@@ -139,25 +108,23 @@ def main(argv=None):
     parser.add_argument("--shell", action="store_true", help="Écrire images_dir= et focal= sur stdout")
     args = parser.parse_args(argv)
 
-    images_dir, metadata_dir = resolve_inputs(args.dataset)
-    if not images_dir.is_dir():
-        raise SystemExit(f"Dossier d'images introuvable : {images_dir}")
+    images, metadata_dir = resolve_inputs(args.dataset)
+    if not images:
+        raise SystemExit(f"Aucune image dans les dossiers images/ de {args.dataset}")
     output_dir = Path(args.output_dir).resolve()
     target_dir = output_dir / "images"
-    if target_dir.resolve() == images_dir:
+    if any(path.parent.resolve() == target_dir.resolve() for path in images):
         raise SystemExit("Le workspace ne doit pas contenir le dossier d'images source")
 
     log = lambda message: print(f"[prepare] {message}", file=sys.stderr)
     sizes = {}
-    for path in sorted(images_dir.iterdir()):
-        if path.suffix.lower() not in IMAGE_EXTENSIONS or not path.is_file():
-            continue
+    for path in sorted(images):
         try:
             sizes[path] = jpeg_size(path)
         except (OSError, ValueError) as exc:
             log(f"ignorée {path.name} : {exc}")
     if not sizes:
-        raise SystemExit(f"Aucune image JPEG dans {images_dir}")
+        raise SystemExit(f"Aucune image JPEG dans {args.dataset}")
 
     counts = Counter(sizes.values())
     for (width, height), count in counts.most_common():
@@ -190,14 +157,17 @@ def main(argv=None):
     }
 
     equirectangular = [
-        bool(metadata_dir) and is_equirectangular(metadata_dir / f"{path.stem}.json") for path in selected
+        path.stem in (metadata_dir or {}) and is_equirectangular(metadata_dir[path.stem]) for path in selected
     ]
     camera_model = None
     if equirectangular and all(equirectangular):
         camera_model = "equirectangular"
         log("images 360 : modèle de caméra equirectangular, focale non transmise")
     elif any(equirectangular):
-        log("AVERTISSEMENT : images 360 et perspectives mélangées ; modèle de caméra non modifié")
+        raise SystemExit(
+            "images 360 et perspectives mélangées : un seul modèle de caméra ne peut pas les décrire. "
+            "Utiliser PANORAMAX_PICTURE_TYPE=360 ou normal."
+        )
 
     groups = {}
     for path in selected:
@@ -210,12 +180,14 @@ def main(argv=None):
         values = []
         if metadata_dir:
             for path in paths:
-                focal = focal_from_metadata(metadata_dir / f"{path.stem}.json", size[0])
+                if path.stem not in metadata_dir:
+                    continue
+                focal = focal_from_metadata(metadata_dir[path.stem], size[0])
                 if focal:
                     values.append(focal)
         samples[size] = len(values)
         if not values:
-            log(f"focale {size[0]}x{size[1]} : aucun champ de vue dans les métadonnées, Spirula l'estimera")
+            log(f"focale {size[0]}x{size[1]} : aucun champ de vue dans les métadonnées")
             continue
         focal = statistics.median(values)
         focals[size] = focal
@@ -227,7 +199,7 @@ def main(argv=None):
     if multi_cam:
         focal = None
         if not camera_model:
-            log("focale non transmise : Spirula estime chaque caméra")
+            log("focale des images source non transmise en mode multi-caméras")
     else:
         focal = focals.get(keep)
 
@@ -236,7 +208,7 @@ def main(argv=None):
         (output_dir / "selection.json").write_text(
             json.dumps(
                 {
-                    "source_images": str(images_dir),
+                    "source_images": str(Path(args.dataset).resolve()),
                     "multi_cam": multi_cam,
                     "size": list(keep) if keep else None,
                     "sizes": {f"{w}x{h}": len(paths) for (w, h), paths in groups.items()},
