@@ -387,12 +387,12 @@ chkpt_dir="$splats_dir/chkpt"
 export_transform="$chkpt_dir/scene_transform.json"
 # Le PLY final vit dans splats/ une fois publié ; sinon dans chkpt/ (fin d'entraînement non publiée).
 resolve_final_ply() {
-  local plys=() dir
+  local plys=()
   shopt -s nullglob
-  for dir in "$splats_dir" "$chkpt_dir"; do
-    plys=("$dir"/*_step-*.ply)
-    (( ${#plys[@]} == 0 )) || break
-  done
+  plys=("$splats_dir"/*_step-*.ply)
+  (( ${#plys[@]} )) || plys=("$chkpt_dir"/*_step-*.ply)
+  # Spirula en latest-only écrit parfois un PLY final sans numéro de step (<nom>.ply).
+  (( ${#plys[@]} )) || plys=("$chkpt_dir"/*.ply)
   shopt -u nullglob
   if (( ${#plys[@]} == 0 )); then
     final_ckpt=""

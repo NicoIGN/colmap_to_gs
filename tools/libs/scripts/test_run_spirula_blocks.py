@@ -245,9 +245,12 @@ class BlockPipelineTest(unittest.TestCase):
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
                 "  chkpt = os.path.join(prefix, name)\n"
                 "  os.makedirs(chkpt, exist_ok=True)\n"
-                "  for step in (100, 200):\n"
-                "    open(os.path.join(chkpt, 'chkpt_step-%09d.ply' % step), 'wb').write(b'ply')\n"
-                "    open(os.path.join(chkpt, 'chkpt_step-%09d.tar' % step), 'wb').write(b'tar')\n"
+                "  if os.environ.get('TEST_SPIRULA_FINAL_WITHOUT_STEP'):\n"
+                "    open(os.path.join(chkpt, name + '.ply'), 'wb').write(b'ply')\n"
+                "  else:\n"
+                "    for step in (100, 200):\n"
+                "      open(os.path.join(chkpt, 'chkpt_step-%09d.ply' % step), 'wb').write(b'ply')\n"
+                "      open(os.path.join(chkpt, 'chkpt_step-%09d.tar' % step), 'wb').write(b'tar')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(chkpt, 'scene_transform.json'), 'w'))\n"
             )
             spirula.chmod(0o755)
@@ -272,6 +275,15 @@ class BlockPipelineTest(unittest.TestCase):
                 )
 
             return root, data, sparse, env, log, execute
+
+    def test_final_ply_without_step_suffix_is_published(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            env["TEST_SPIRULA_FINAL_WITHOUT_STEP"] = "1"
+            result = execute()
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("PLY final", result.stdout + result.stderr)
+            self.assertTrue(list(root.rglob("block_*.splat")), result.stdout + result.stderr)
 
     def test_automatic_growth_in_local_and_array_workers(self):
         for mode in ("local", "array"):
