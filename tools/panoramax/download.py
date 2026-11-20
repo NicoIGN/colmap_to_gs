@@ -177,13 +177,22 @@ def parse_filter(text):
 PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
 
 
+def exif_of(properties):
+    exif = properties.get("exif") or {}
+    if isinstance(exif, str):
+        try:
+            exif = json.loads(exif)
+        except ValueError:
+            exif = {}
+    return exif if isinstance(exif, dict) else {}
+
+
 def picture_type_of(feature):
     """Renvoie le type STAC ; certaines photos n'ont que les métadonnées de projection."""
     properties = feature.get("properties", {})
     if properties.get("type") is not None:
         return properties["type"]
-    exif = properties.get("exif") or {}
-    if exif.get("Xmp.GPano.ProjectionType") == "equirectangular":
+    if exif_of(properties).get("Xmp.GPano.ProjectionType") == "equirectangular":
         return "equirectangular"
     orientation = properties.get("pers:interior_orientation") or {}
     if str(orientation.get("field_of_view")) == "360":
@@ -208,13 +217,7 @@ def feature_value(feature, key):
     properties = feature.get("properties", {})
     if key in properties:
         return properties[key]
-    exif = properties.get("exif") or {}
-    if isinstance(exif, str):
-        try:
-            exif = json.loads(exif)
-        except ValueError:
-            exif = {}
-    return exif.get(key)
+    return exif_of(properties).get(key)
 
 
 def item_matches_filters(feature, filters):
@@ -223,6 +226,23 @@ def item_matches_filters(feature, filters):
         if value is None or str(value).casefold() not in {name.casefold() for name in names}:
             return False
     return True
+
+
+def filter_report_rows(feature, stac_type, provider, filters):
+    """(filtre, valeur, conservée) pour chaque filtre type/provider/--filter, sans tenir compte des autres."""
+    picture = picture_type_of(feature)
+    rows = [("type", str(picture), stac_type is None or picture == stac_type)]
+    if provider is not None:
+        names = [
+            str(entry.get("name", "")) for entry in (feature.get("properties", {}).get("providers") or [])
+            if isinstance(entry, dict)
+        ]
+        rows.append(("provider", ", ".join(names) or "(absent)", item_matches_provider(feature, provider)))
+    for key, names in filters or []:
+        value = feature_value(feature, key)
+        text = "(absent)" if value is None else str(value)
+        rows.append((key, text, value is not None and text.casefold() in {name.casefold() for name in names}))
+    return rows
 
 
 def collection_folder(feature):
@@ -407,6 +427,7 @@ def run(args):
     stac_type = PICTURE_TYPES[picture_type]
     provider = getattr(args, "provider", None) or None
     filters = getattr(args, "filters", None) or None
+    verbose = getattr(args, "verbose", True)
     api_limit = SEARCH_LIMIT
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
@@ -430,6 +451,7 @@ def run(args):
     api_features = 0
     after_filters = 0
     api_types = Counter()
+    verbose_counts = Counter()
     capped = False
 
     def visit(bbox, depth):
@@ -448,6 +470,9 @@ def run(args):
                 if key in seen_items:
                     continue
                 seen_items.add(key)
+                if verbose:
+                    for label, value, kept in filter_report_rows(feature, stac_type, provider, filters):
+                        verbose_counts[(label, value, kept)] += 1
                 api_types[str(picture_type_of(feature))] += 1
                 if stac_type is not None and picture_type_of(feature) != stac_type:
                     continue
@@ -467,6 +492,12 @@ def run(args):
                 visit(quadrant, depth + 1)
 
     visit(geographic, 0)
+
+    if verbose and verbose_counts:
+        print("Filtres (verbose) :")
+        for label, value, kept in sorted(verbose_counts, key=lambda row: (row[0], row[1], not row[2])):
+            status = "conservé" if kept else "filtré"
+            print(f"  {label} {value} : {verbose_counts[(label, value, kept)]} {status}")
 
     counts["available"] = len(candidates)
     total_is_exact = not capped
@@ -625,6 +656,10 @@ def main():
     parser.add_argument(
         "--geojson", action=argparse.BooleanOptionalAction, default=True,
         help="Écrire positions.geojson (sommets des photos dans --crs, attributs STAC) (défaut : oui)",
+    )
+    parser.add_argument(
+        "--verbose", action=argparse.BooleanOptionalAction, default=True,
+        help="Lister, par filtre et par valeur, les photos conservées ou filtrées (défaut : oui ; --no-verbose pour couper)",
     )
     parser.add_argument("--timeout", type=float, default=120, help="Délai réseau en secondes")
     args = parser.parse_args()

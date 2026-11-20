@@ -362,6 +362,18 @@ class DownloadTest(unittest.TestCase):
             download.parse_filter("sans-egal")
         self.assertEqual(download.collection_folder(feature), "uuid-1")
 
+    def test_filter_report_rows_mark_kept_and_filtered_per_filter(self):
+        feature = {"id": "p", "properties": {
+            "geovisio:producer": "Immergis", "exif": "{\"Exif.Image.Software\": \"H19\"}",
+            "providers": [{"name": "Immergis", "roles": ["producer"]}],
+        }}
+        rows = download.filter_report_rows(
+            feature, None, "immergis", [("geovisio:producer", ["overflorian"]), ("Exif.Image.Software", ["H19"])],
+        )
+        self.assertIn(("provider", "Immergis", True), rows)
+        self.assertIn(("geovisio:producer", "Immergis", False), rows)
+        self.assertIn(("Exif.Image.Software", "H19", True), rows)
+
     def test_place_by_size_splits_only_mixed_collections(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary)

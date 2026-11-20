@@ -51,6 +51,10 @@ bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --filter Exif.Image.Software=H19.03.02.02.00
 ```
 
+Par défaut, le téléchargement affiche pour chaque filtre (type, provider, `--filter`) le nombre de
+photos conservées et filtrées, par valeur, par exemple `provider immergis : 75 conservé`. Ajouter
+`--no-verbose` pour désactiver ce rapport.
+
 Pour ne garder qu'une collection précise, utiliser son identifiant STAC :
 
 ```bash
