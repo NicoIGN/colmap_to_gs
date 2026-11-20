@@ -288,6 +288,8 @@ PY
     "$PYTHON_BIN" "$download_lock_helper" "$download_lock" --pid "$$" --release
     ((download_status == 0)) || {
       printf '[ERREUR] échec du téléchargement des photos Panoramax (code %s).\n' "$download_status" >&2
+      printf '[ERREUR] Diagnostic téléchargement : %s/summary.json et %s/manifest.jsonl\n' \
+        "$DATASET_DIR" "$DATASET_DIR" >&2
       exit "$download_status"
     }
     touch -- "$download_done"

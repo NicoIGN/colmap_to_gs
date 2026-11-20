@@ -474,6 +474,8 @@ export_world_splat() {
   "${export_cmd[@]}" 2>&1 | tee "$output_dir/export.log"
 
   [[ -s "$world_splat" ]] || die "Export absent ou vide : $world_splat"
+  # Publie la transformation à l'emplacement attendu par l'orchestrateur (splats/scene_transform.json).
+  cp -- "$export_transform" "$splats_dir/scene_transform.json"
   mark_export_done "completed_export"
   log "Export .splat terminé : $world_splat"
   log "Marqueur export : $export_done_file"

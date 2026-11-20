@@ -182,7 +182,7 @@ elif stage == "map":
             command = [
                 sys.executable, str(ROOT / "run_sfm_filtered.py"), "--dataset", str(dataset),
                 "--output", str(output), "--spirula-bin", str(spirula), "--max-distance", "30",
-                "--matcher", "bruteforce", "--threads", "4",
+                "--matcher", "bruteforce", "--threads", "4", "--min-tri-angle", "3",
                 "--feature-masks", str(masks),
             ]
             env = dict(os.environ, COMMAND_LOG=str(log), MATCHES_FIXTURE=str(fixture))
@@ -204,7 +204,11 @@ elif stage == "map":
             self.assertEqual(commands[1][commands[1].index("--min-inliers") + 1], "30")
             for flag, value in (("--max-error", "2"), ("--min-tri-angle", "3"),
                                 ("--ba-loss", "huber"), ("--ba-loss-param", "2")):
-                self.assertEqual(commands[2][commands[2].index(flag) + 1], value)
+                actual = commands[2][commands[2].index(flag) + 1]
+                if flag == "--ba-loss":
+                    self.assertEqual(actual, value)
+                else:
+                    self.assertEqual(float(actual), float(value))
             self.assertEqual(commands[2][2], str(output / "matches-gps.bin"))
             # Rewriting identical metadata does not invalidate reuse.
             metadata(dataset / "metadata")

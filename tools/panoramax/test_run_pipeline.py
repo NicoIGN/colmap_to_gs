@@ -225,9 +225,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  assert get('--distraction-robustness')=='mild', args\n"
                 "  assert get('--num-iterations')=='3', args\n"
                 "  assert (get('--growth-factor'),get('--refine-stop-iter'),get('--refine-stop-num-iter'),get('--floater-suppression'))==('1.03','2','1','mild'), args\n"
-                "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); splats=os.path.join(root,name); ckpt=os.path.join(splats,f'step-{n:09d}.ckpt'); os.makedirs(ckpt,exist_ok=True)\n"
-                "  open(os.path.join(ckpt,'splat.ply'),'wb').write(b'ply')\n"
-                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(splats,'scene_transform.json'),'w'))\n"
+                "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); chkpt=os.path.join(root,name); os.makedirs(chkpt,exist_ok=True)\n"
+                "  open(os.path.join(chkpt,f'chkpt_step-{n:09d}.ply'),'wb').write(b'ply')\n"
+                "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(chkpt,'scene_transform.json'),'w'))\n"
             )
             spirula.chmod(0o755)
             config = root / "dataset.sh"

@@ -70,10 +70,12 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
             without_device(previous_settings) == without_device(sfm)):
         print("[masques] Signature SfM héritée acceptée (migration unique vers SHA-256).", flush=True)
         compatible.add(previous.get("signature"))
-    # These generator updates change only consent forwarding and diagnostics.
+    # These generator updates change only consent forwarding, diagnostics, or the
+    # speed of dilation (distance transform gives identical masks, commit f039271).
     if generator_hash in (
             "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
-            "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896"):
+            "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896",
+            "16bc0e17e25fb01933fbd907941c1ea8b01e48084b857a17b0fffe1748d42437"):
         if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
             compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379",
                                        previous_settings))
