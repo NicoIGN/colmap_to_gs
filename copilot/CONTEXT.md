@@ -8,6 +8,7 @@ préparation des données, reconstruction COLMAP, entraînement et export. Conne
 Cette note contient les conventions, les points d'entrée et les pièges à connaître. 
 Utilise GIT_ROOT pour les chemins du projet sans chemins absolus dans les réponses. 
 Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
+Avant tout test, active le venv ~/.venvs/colmap_to_gs (voir copilot/CONTEXT.md, « Dépendances Python ») : sans lui, les tests échouent sur numpy/pyproj, ce n'est pas une régression.
 ```
 
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
@@ -67,7 +68,13 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
 
 ## Lancer les tests
-Depuis la racine du dépôt, venv activé :
+Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier les imports :
+
+```bash
+python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
+```
+
+Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_spirula_blocks.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
 
 ```bash
 python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_spirula_blocks.py   # ~4 min, 109 tests
