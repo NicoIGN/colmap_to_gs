@@ -2,6 +2,7 @@ import * as pc from "playcanvas";
 import { getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
+import { readGeojsonLayers } from "./geojson-geometry.js";
 
 export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
@@ -187,23 +188,31 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   async function loadFile(file) {
     if (disposed) return;
     if (file.size > MAX_FILE_BYTES) {
-      throw new Error("GeoPackage trop volumineux (limite : 512 Mio).");
+      throw new Error("Fichier trop volumineux (limite : 512 Mio).");
     }
 
     setStatus(`Lecture de ${file.name}…`);
-    const SQL = await loadSqlJs();
-    const db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
     let tables;
-    try {
-      tables = readGpkgLayers(db);
-    } finally {
-      db.close();
+    if (/\.geojson$/i.test(file.name)) {
+      try {
+        tables = readGeojsonLayers(await file.text(), file.name);
+      } catch (error) {
+        throw new Error(`GeoJSON invalide : ${error.message}`);
+      }
+    } else {
+      const SQL = await loadSqlJs();
+      const db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+      try {
+        tables = readGpkgLayers(db);
+      } finally {
+        db.close();
+      }
     }
     if (disposed) return;
 
     const drawable = tables.filter((t) => t.polylines.length > 0);
     if (!drawable.length) {
-      throw new Error("Aucune géométrie linéaire ou surfacique dans ce GeoPackage.");
+      throw new Error("Aucune géométrie linéaire ou surfacique dans ce fichier.");
     }
 
     const georef = getGeoref?.() ?? null;

@@ -77,6 +77,10 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   signale. Le nuage est sous-échantillonné à 2 millions de points au maximum,
   coloré par RVB si présent, sinon par classe ASPRS. Décodage via laz-perf
   (chargé depuis jsdelivr) ; limite : 1 Gio.
+- Un GeoJSON `.geojson` déposé seul est lu comme un GeoPackage (filaire, une
+  sous-couche par fichier). Sans membre `crs`, les coordonnées sont supposées en
+  WGS84 (EPSG:4326) ; sinon le code EPSG est lu dans `crs` (ex. `EPSG:2154`).
+  Un `.json` n'est pas pris en charge ici, car il sert au géoréférencement.
 - Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
   en données 3D filaires : chaque table d'entités devient une sous-couche de
   lignes (polylignes et contours de polygones ; points ignorés). Il suit le même

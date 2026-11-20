@@ -879,9 +879,9 @@ async function handleDroppedFiles(fileList, items) {
       }
     }
 
-    const gpkgFile = files.find((f) => /\.gpkg$/i.test(f.name));
+    const gpkgFile = files.find((f) => /\.(gpkg|geojson)$/i.test(f.name));
     if (gpkgFile && files.length === 1) {
-      if (!gpkgLayer) throw new Error("L’importeur GeoPackage n’est pas initialisé.");
+      if (!gpkgLayer) throw new Error("L’importeur de données filaires n’est pas initialisé.");
       await gpkgLayer.loadFile(gpkgFile);
       return;
     }
