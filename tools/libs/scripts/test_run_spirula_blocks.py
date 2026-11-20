@@ -245,12 +245,10 @@ class BlockPipelineTest(unittest.TestCase):
                 "  iterations = int(args[args.index('--num-iterations') + 1])\n"
                 "  chkpt = os.path.join(prefix, name)\n"
                 "  os.makedirs(chkpt, exist_ok=True)\n"
-                "  if os.environ.get('TEST_SPIRULA_FINAL_WITHOUT_STEP'):\n"
-                "    open(os.path.join(chkpt, name + '.ply'), 'wb').write(b'ply')\n"
-                "  else:\n"
-                "    for step in (100, 200):\n"
-                "      open(os.path.join(chkpt, 'chkpt_step-%09d.ply' % step), 'wb').write(b'ply')\n"
-                "      open(os.path.join(chkpt, 'chkpt_step-%09d.tar' % step), 'wb').write(b'tar')\n"
+                "  for step in (100, 200):\n"
+                "    d = os.path.join(chkpt, 'step-%09d.ckpt' % step); os.makedirs(d, exist_ok=True)\n"
+                "    open(os.path.join(d, 'splat.ply'), 'wb').write(b'ply')\n"
+                "    open(os.path.join(d, 'state.tar'), 'wb').write(b'tar')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}}, open(os.path.join(chkpt, 'scene_transform.json'), 'w'))\n"
                 "  print('Entraînement terminé', flush=True)\n"
             )
@@ -277,19 +275,21 @@ class BlockPipelineTest(unittest.TestCase):
 
             return root, data, sparse, env, log, execute
 
-    def test_final_ply_without_step_suffix_is_published(self):
+    def test_final_splat_comes_from_latest_step_and_is_published_to_splats(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
-            env["TEST_SPIRULA_FINAL_WITHOUT_STEP"] = "1"
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("PLY final", result.stdout + result.stderr)
             self.assertTrue(list(root.rglob("block_*.splat")), result.stdout + result.stderr)
+            splats = sorted(root.rglob("chkpt_step-000000200.ply"))
+            self.assertEqual(len(splats), 2, result.stdout + result.stderr)
+            self.assertTrue(all(p.parent.name == "splats" for p in splats))
+            self.assertFalse(list(root.rglob("step-000000100.ckpt")))
 
     def test_finished_training_is_not_retrained_when_resumed_before_done_marker(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
-            env["TEST_SPIRULA_FINAL_WITHOUT_STEP"] = "1"
             first = execute()
             self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
             for done in root.rglob(".train_done"):
@@ -712,7 +712,7 @@ class BlockPipelineTest(unittest.TestCase):
             for cmd in trains:
                 self.assertEqual(cmd[cmd.index("--steps-per-save") + 1], "500")
                 self.assertEqual(cmd[cmd.index("--save-only-latest-checkpoint") + 1], "0")
-            leftovers = sorted(p.name for p in root.rglob("chkpt_step-*"))
+            leftovers = sorted(p.name for p in root.rglob("step-*.ckpt"))
             self.assertTrue(leftovers)
             self.assertTrue(all("000000200" in name for name in leftovers), leftovers)
             env["TRAIN_SP_STEPS_PER_SAVE"] = "abc"

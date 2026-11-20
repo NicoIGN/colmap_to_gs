@@ -57,7 +57,7 @@ Usage:
 Important:
   - La visionneuse est désactivée.
   - Le checkpoint final attendu dépend de --num-iterations:
-      {output_dir}/splats/chkpt/<nom>.ply (dernier checkpoint Spirula en latest-only, réécrit à chaque save)
+      {output_dir}/splats/chkpt_step-<N>.ply (splat.ply du dernier step-<N>.ckpt de Spirula, publié dans splats/ en fin d'entraînement)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
       via tools/postprocess/export_ply.py et splats/scene_transform.json
@@ -374,6 +374,21 @@ prune_old_checkpoints() {
     done
   fi
   shopt -u nullglob
+  prune_old_step_checkpoints
+}
+# Spirula (save-full-checkpoint) écrit un dossier step-<N>.ckpt par sauvegarde : on ne garde que le
+# plus récent, et seulement une fois qu'il est complet, pour ne pas perdre la reprise.
+prune_old_step_checkpoints() {
+  local dirs=() i
+  shopt -s nullglob
+  dirs=("$chkpt_dir"/step-*.ckpt)
+  shopt -u nullglob
+  (( ${#dirs[@]} > 1 )) || return 0
+  local newest="${dirs[${#dirs[@]}-1]}"
+  [[ -s "$newest/splat.ply" && -s "$newest/state.tar" ]] || return 0
+  for ((i = 0; i < ${#dirs[@]} - 1; i++)); do
+    rm -rf -- "${dirs[i]}"
+  done
 }
 keep_latest_checkpoint_while_training() {
   while true; do
@@ -389,7 +404,9 @@ export_transform="$chkpt_dir/scene_transform.json"
 resolve_final_ply() {
   local plys=()
   shopt -s nullglob
-  plys=("$splats_dir"/*_step-*.ply)
+  # Zéro-padding : le dernier élément du glob est le step le plus récent.
+  plys=("$chkpt_dir"/step-*.ckpt/splat.ply)
+  (( ${#plys[@]} )) || plys=("$splats_dir"/*_step-*.ply)
   (( ${#plys[@]} )) || plys=("$chkpt_dir"/*_step-*.ply)
   # Spirula en latest-only écrit parfois un PLY final sans numéro de step (<nom>.ply).
   (( ${#plys[@]} )) || plys=("$chkpt_dir"/*.ply)
@@ -403,10 +420,15 @@ resolve_final_ply() {
   fi
 }
 publish_final_ply() {
-  if [[ "$(dirname -- "$final_ckpt")" == "$chkpt_dir" ]]; then
-    mv -f -- "$final_ckpt" "$splats_dir/"
-    final_ckpt="$splats_dir/$(basename -- "$final_ckpt")"
+  local target
+  [[ "$(dirname -- "$final_ckpt")" != "$splats_dir" ]] || return 0
+  if [[ "$(basename -- "$final_ckpt")" == splat.ply ]]; then
+    target="$splats_dir/chkpt_$(basename -- "$(dirname -- "$final_ckpt")" .ckpt).ply"
+  else
+    target="$splats_dir/$(basename -- "$final_ckpt")"
   fi
+  mv -f -- "$final_ckpt" "$target"
+  final_ckpt="$target"
 }
 resolve_final_ply
 
