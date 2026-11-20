@@ -10,6 +10,7 @@ function readEntryFile(entry) {
         webkitRelativePath: relativePath,
         blob: file,
         arrayBuffer: () => file.arrayBuffer(),
+        text: () => file.text(),
       });
     }, reject);
   });
