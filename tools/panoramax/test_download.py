@@ -20,6 +20,14 @@ download = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(download)
 
 
+def collection_files(output, kind, pattern):
+    return sorted(output.glob(f"*/{kind}/{pattern}"))
+
+
+# JPEG minimal avec SOF0 : 4 pixels de large, 3 de haut.
+PHOTO = b"\xff\xd8\xff\xc0\x00\x0b\x08\x00\x03\x00\x04\x01\x01\x11\x00\xff\xd9"
+
+
 class PictureTypeTest(unittest.TestCase):
     def test_360_detected_from_projection_metadata_without_type(self):
         gpano = {"properties": {"exif": {"Xmp.GPano.ProjectionType": "equirectangular"}}}
@@ -35,7 +43,7 @@ class PictureTypeTest(unittest.TestCase):
 
 class DownloadTest(unittest.TestCase):
     def test_jpeg_and_generic_binary_content_types(self):
-        photo = b"\xff\xd8test-image\xff\xd9"
+        photo = PHOTO
         for mime in ("image/jpeg", "application/octet-stream", "binary/octet-stream"):
             for payload in (photo, b"<html>not a JPEG</html>"):
                 with self.subTest(mime=mime, valid=payload == photo):
@@ -75,7 +83,7 @@ class DownloadTest(unittest.TestCase):
 
     def test_paginated_selection_resume_and_failure(self):
         requests = []
-        photo = b"\xff\xd8test-image\xff\xd9"
+        photo = PHOTO
         lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
 
         def feature(identifier, coordinates, assets=True):
@@ -130,9 +138,9 @@ class DownloadTest(unittest.TestCase):
                             "pages": 2, "available": 2, "available_is_exact": True,
                             "selected": 2, "downloaded": 2, "reused": 0, "failed": 0,
                         })
-                        self.assertEqual(len(list((output / "images").glob("*.jpg"))), 2)
+                        self.assertEqual(len(collection_files(output, "images", "*.jpg")), 2)
                         self.assertEqual(len(list((output / "pages").glob("*.json"))), 2)
-                        for image in (output / "images").glob("*.jpg"):
+                        for image in collection_files(output, "images", "*.jpg"):
                             self.assertEqual(image.read_bytes(), photo)
                         self.assertIn("bbox=", requests[0])
                         self.assertIn("datetime=", requests[0])
@@ -149,13 +157,13 @@ class DownloadTest(unittest.TestCase):
                         self.assertNotIn("[ERREUR]", errors.getvalue())
                         entries = [json.loads(line) for line in (output / "manifest.jsonl").read_text().splitlines()]
                         self.assertEqual(entries[-1]["status"], "failed")
-                        self.assertEqual(list((output / "images").glob("*.part")), [])
-                        next((output / "images").glob("*.jpg")).unlink()
+                        self.assertEqual(collection_files(output, "images", "*.part"), [])
+                        collection_files(output, "images", "*.jpg")[0].unlink()
                         photo = b"invalid-jpeg"
                         self.assertEqual(download.run(args), 0)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["failed"], 2)
-                        self.assertEqual(list((output / "images").glob("*.part")), [])
-                        for image in (output / "images").glob("*.jpg"):
+                        self.assertEqual(collection_files(output, "images", "*.part"), [])
+                        for image in collection_files(output, "images", "*.jpg"):
                             image.unlink()
                         self.assertEqual(download.run(args), 1)
                         self.assertEqual(json.loads((output / "summary.json").read_text())["failed"], 3)
@@ -177,7 +185,7 @@ class DownloadTest(unittest.TestCase):
 
     def test_image_max_stops_pagination_at_total_selection_limit(self):
         requests = []
-        photo = b"\xff\xd8test-image\xff\xd9"
+        photo = PHOTO
         lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
 
         def feature(identifier):
@@ -228,7 +236,7 @@ class DownloadTest(unittest.TestCase):
                     self.assertEqual(summary["selected"], 2)
                     self.assertEqual(summary["downloaded"], 2)
                     self.assertEqual(summary["pages"], 1)
-                    self.assertEqual(len(list((output / "images").glob("*.jpg"))), 2)
+                    self.assertEqual(len(collection_files(output, "images", "*.jpg")), 2)
                     from urllib.parse import parse_qs, urlsplit
                     search_query = parse_qs(urlsplit(requests[0]).query)
                     self.assertEqual(search_query["limit"], [str(download.SEARCH_LIMIT)])
@@ -274,7 +282,7 @@ class DownloadTest(unittest.TestCase):
         self.assertIn("Photos dans la bbox EPSG:2154 : 3\n", stdout.getvalue())
 
     def test_picture_type_filters_candidates(self):
-        photo = b"\xff\xd8test-image\xff\xd9"
+        photo = PHOTO
         lon, lat = Transformer.from_crs(2154, 4326, always_xy=True).transform(651500, 6861500)
 
         def feature(identifier, picture_type):
@@ -337,6 +345,49 @@ class DownloadTest(unittest.TestCase):
         self.assertFalse(download.item_matches_provider(feature, "IG"))
         self.assertFalse(download.item_matches_provider({"id": "none", "properties": {}}, "IGN"))
 
+    def test_collection_filters_and_id_folders(self):
+        feature = {"id": "p", "collection": "uuid-1", "properties": {
+            "geovisio:producer": "Immergis", "exif": "{\"Exif.Image.Software\": \"H19.03.02.02.00\"}",
+        }}
+        self.assertTrue(download.item_matches_filters(feature, [("geovisio:producer", ["immergis", "x"])]))
+        self.assertFalse(download.item_matches_filters(feature, [("geovisio:producer", ["overflorian"])]))
+        self.assertTrue(download.item_matches_filters(feature, [("Exif.Image.Software", ["h19.03.02.02.00"])]))
+        self.assertTrue(download.item_matches_filters(feature, [("collection", ["UUID-1"])]))
+        self.assertFalse(download.item_matches_filters(feature, [
+            ("geovisio:producer", ["immergis"]), ("Exif.Image.Software", ["VID2JPG"]),
+        ]))
+        self.assertEqual(download.parse_filter("geovisio:producer=immergis, overflorian ,"),
+                         ("geovisio:producer", ["immergis", "overflorian"]))
+        with self.assertRaises(Exception):
+            download.parse_filter("sans-egal")
+        self.assertEqual(download.collection_folder(feature), "uuid-1")
+
+    def test_place_by_size_splits_only_mixed_collections(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary)
+            located = []
+            for identifier, collection, size in [
+                ("a", "mixed", "4x3"), ("b", "mixed", "8x6"), ("c", "single", "4x3"), ("d", "single", "4x3"),
+            ]:
+                image = output / collection / "images" / f"{identifier}.jpg"
+                metadata = output / collection / "metadata" / f"{identifier}.json"
+                image.parent.mkdir(parents=True, exist_ok=True)
+                metadata.parent.mkdir(parents=True, exist_ok=True)
+                image.write_bytes(b"x")
+                metadata.write_text("{}", encoding="utf-8")
+                feature = {"id": identifier, "collection": collection, "properties": {}}
+                record = {"status": "downloaded", "size": size, "collection": collection,
+                          "image": str(image.relative_to(output)), "metadata": str(metadata.relative_to(output))}
+                located.append((feature, record))
+            self.assertTrue(download.place_by_size(located, output))
+            self.assertEqual(
+                sorted(path.relative_to(output).as_posix() for path in output.glob("*/images/*.jpg")),
+                ["mixed-4x3/images/a.jpg", "mixed-8x6/images/b.jpg",
+                 "single/images/c.jpg", "single/images/d.jpg"],
+            )
+            self.assertEqual(located[1][1]["metadata"], "mixed-8x6/metadata/b.json")
+            self.assertTrue((output / "mixed-8x6" / "metadata" / "b.json").is_file())
+
     def test_positions_geojson_in_bbox_crs_with_attributes(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         feature = {"id": "abc", "collection": "c1",
@@ -389,7 +440,7 @@ class DownloadTest(unittest.TestCase):
             )
 
             def save_image(url, destination, timeout):
-                destination.write_bytes(b"\xff\xd8test-image\xff\xd9")
+                destination.write_bytes(PHOTO)
 
             with patch.object(
                 download, "read_json",

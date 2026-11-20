@@ -22,6 +22,8 @@ from urllib.request import Request, urlopen
 from pyproj import Transformer
 from pyproj.exceptions import ProjError
 
+from dataset_layout import jpeg_size
+
 USER_AGENT = "colmap_to_gs-panoramax/1.0"
 SEARCH_LIMIT = 10000
 
@@ -163,6 +165,15 @@ def parse_positive_int(text):
     return value
 
 
+def parse_filter(text):
+    """Parse KEY=V1,V2 : une valeur de la liste suffit (OU) ; plusieurs --filter se cumulent (ET)."""
+    key, separator, values = text.partition("=")
+    names = [value.strip() for value in values.split(",") if value.strip()]
+    if not separator or not key.strip() or not names:
+        raise argparse.ArgumentTypeError(f"Filtre attendu KEY=VALEUR[,VALEUR] : {text!r}")
+    return key.strip(), names
+
+
 PICTURE_TYPES = {"all": None, "normal": "flat", "360": "equirectangular"}
 
 
@@ -188,6 +199,72 @@ def item_matches_provider(feature, provider):
         isinstance(entry, dict) and str(entry.get("name", "")).casefold() == provider.casefold()
         for entry in providers
     )
+
+
+def feature_value(feature, key):
+    """Valeur d'un filtre : propriété STAC (ex. geovisio:producer), sinon tag EXIF (ex. Exif.Image.Software)."""
+    if key == "collection":
+        return feature.get("collection")
+    properties = feature.get("properties", {})
+    if key in properties:
+        return properties[key]
+    exif = properties.get("exif") or {}
+    if isinstance(exif, str):
+        try:
+            exif = json.loads(exif)
+        except ValueError:
+            exif = {}
+    return exif.get(key)
+
+
+def item_matches_filters(feature, filters):
+    for key, names in filters:
+        value = feature_value(feature, key)
+        if value is None or str(value).casefold() not in {name.casefold() for name in names}:
+            return False
+    return True
+
+
+def collection_folder(feature):
+    identifier = str(feature.get("collection") or "sans-collection")
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", identifier).strip("._") or "sans-collection"
+
+
+def place_by_size(located, output):
+    """Range chaque collection dans <base>/ si elle n'a qu'une taille, sinon <base>-<WxH>/.
+
+    Retourne True si des fichiers ont été déplacés (le manifest doit alors être réécrit).
+    """
+    sizes = {}
+    for feature, record in located:
+        if record.get("status") in ("downloaded", "reused") and "size" in record:
+            sizes.setdefault(collection_folder(feature), set()).add(record["size"])
+    moved = False
+    vacated = set()
+    for feature, record in located:
+        if record.get("status") not in ("downloaded", "reused") or "size" not in record:
+            continue
+        base = collection_folder(feature)
+        folder = base if len(sizes[base]) == 1 else f"{base}-{record['size']}"
+        image_source = output / record["image"]
+        metadata_source = output / record["metadata"]
+        if image_source.parent.parent.name == folder:
+            continue
+        target = output / folder
+        (target / "images").mkdir(parents=True, exist_ok=True)
+        (target / "metadata").mkdir(parents=True, exist_ok=True)
+        image_target = target / "images" / image_source.name
+        metadata_target = target / "metadata" / metadata_source.name
+        image_source.replace(image_target)
+        metadata_source.replace(metadata_target)
+        vacated.update({image_source.parent, metadata_source.parent, image_source.parent.parent})
+        record["image"] = str(image_target.relative_to(output))
+        record["metadata"] = str(metadata_target.relative_to(output))
+        moved = True
+    for folder in sorted(vacated, key=lambda path: len(path.parts), reverse=True):
+        if folder.is_dir() and not any(folder.iterdir()):
+            folder.rmdir()
+    return moved
 
 
 def item_in_bbox(feature, bbox, to_bbox_crs):
@@ -323,13 +400,13 @@ def run(args):
     dry_run = bool(getattr(args, "dry_run", False))
     output.mkdir(parents=True, exist_ok=True)
     if not dry_run:
-        for folder in ("images", "metadata", "pages"):
-            (output / folder).mkdir(parents=True, exist_ok=True)
+        (output / "pages").mkdir(parents=True, exist_ok=True)
     picture_type = getattr(args, "picture_type", "all")
     if picture_type not in PICTURE_TYPES:
         raise ValueError("Le type d'image doit être all, normal ou 360.")
     stac_type = PICTURE_TYPES[picture_type]
     provider = getattr(args, "provider", None) or None
+    filters = getattr(args, "filters", None) or None
     api_limit = SEARCH_LIMIT
     atomic_json(output / "request.json", {
         "bbox_epsg": bbox_epsg, "bbox_crs": f"EPSG:{bbox_epsg}",
@@ -339,6 +416,7 @@ def run(args):
         "image_max": image_max,
         "picture_type": stac_type,
         "provider": provider,
+        "filters": [{"key": key, "values": names} for key, names in filters] if filters else None,
         "api_limit": api_limit,
         "dry_run": dry_run,
     })
@@ -374,6 +452,8 @@ def run(args):
                 if stac_type is not None and picture_type_of(feature) != stac_type:
                     continue
                 if provider is not None and not item_matches_provider(feature, provider):
+                    continue
+                if filters is not None and not item_matches_filters(feature, filters):
                     continue
                 after_filters += 1
                 if item_in_bbox(feature, args.bbox, to_bbox_crs):
@@ -412,12 +492,13 @@ def run(args):
 
     located = []
     manifest_path = output / "manifest.jsonl"
+    known = {path.stem: path for path in output.glob("*/metadata/*.json")}
     with (contextlib.nullcontext() if dry_run else manifest_path.open("w", encoding="utf-8")) as manifest:
         for feature, source_url, key in selected:
             counts["selected"] += 1
             name = hashlib.sha256(key.encode("utf-8")).hexdigest()
-            image = output / "images" / f"{name}.jpg"
-            metadata = output / "metadata" / f"{name}.json"
+            metadata = known.get(name) or output / collection_folder(feature) / "metadata" / f"{name}.json"
+            image = metadata.parent.parent / "images" / f"{name}.jpg"
             record = {
                 "id": feature["id"], "collection": feature.get("collection"),
                 "image": str(image.relative_to(output)),
@@ -445,12 +526,15 @@ def run(args):
                     size = image.stat().st_size
                     record["status"] = "reused"
                 else:
+                    image.parent.mkdir(parents=True, exist_ok=True)
+                    metadata.parent.mkdir(parents=True, exist_ok=True)
                     fd, temporary_name = tempfile.mkstemp(dir=image.parent, suffix=".part")
                     os.close(fd)
                     temporary = Path(temporary_name)
                     size = download_image(asset_url, temporary, args.timeout)
                     os.replace(temporary, image)
                     record["status"] = "downloaded"
+                record["size"] = "x".join(str(value) for value in jpeg_size(image))
                 atomic_json(metadata, {
                     "feature": feature, "source_page": source_url,
                     "download": {"url": asset_url, "quality": args.quality, "bytes": size},
@@ -470,6 +554,10 @@ def run(args):
             manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
             manifest.flush()
     progress.finish(counts)
+    if not dry_run and place_by_size(located, output):
+        with manifest_path.open("w", encoding="utf-8") as manifest:
+            for _, record in located:
+                manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
     if getattr(args, "geojson", True):
         atomic_json(
             output / "positions.geojson",
@@ -521,6 +609,14 @@ def main():
     parser.add_argument(
         "--provider",
         help="Nom exact du provider STAC (properties.providers[].name), insensible à la casse",
+    )
+    parser.add_argument(
+        "--filter", dest="filters", action="append", type=parse_filter, metavar="KEY=VALEURS",
+        help=(
+            "Filtre répétable sur une propriété STAC (ex. geovisio:producer) ou un tag EXIF "
+            "(ex. Exif.Image.Software), valeurs séparées par des virgules, insensible à la casse. "
+            "Exemple : --filter geovisio:producer=immergis,overflorian --filter Exif.Image.Software=H19.03.02.02.00"
+        ),
     )
     parser.add_argument(
         "--dry-run", action="store_true",

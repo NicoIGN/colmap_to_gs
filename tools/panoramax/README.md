@@ -94,12 +94,28 @@ vue dans la bbox et son système d'origine.
 
 ```text
 output-dir/
-├── images/<identifiant-haché>.jpg
-├── metadata/<identifiant-haché>.json
+├── <id-collection-stac>/images/<identifiant-haché>.jpg
+├── <id-collection-stac>/metadata/<identifiant-haché>.json
+├── <id-collection-stac>-<LARGEURxHAUTEUR>/...   # seulement si la collection mélange plusieurs tailles
 ├── pages/page-000001.json
 ├── manifest.jsonl
-├── request.json               # bbox, code EPSG d'entrée et requête API
+├── request.json               # bbox, code EPSG d'entrée, requête API et filtres
 └── summary.json
+```
+
+Chaque collection STAC a son dossier (identifiant STAC). Si une collection contient
+plusieurs tailles d'image, ses photos sont réparties dans `<id>-<LxH>/` pour garantir
+une taille unique par dossier.
+
+Filtres répétables `--filter KEY=VALEURS` : KEY est une propriété STAC (ex.
+`geovisio:producer`) ou un tag EXIF (ex. `Exif.Image.Software`) ; les valeurs
+séparées par des virgules sont en OU, les filtres successifs en ET, sans tenir
+compte de la casse :
+
+```bash
+python tools/panoramax/download.py ... \
+  --filter geovisio:producer=immergis,overflorian \
+  --filter Exif.Image.Software=H19.03.02.02.00
 ```
 
 Les métadonnées conservent le Feature STAC complet : coordonnées, date, séquence,
@@ -447,7 +463,7 @@ Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final 
 il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
 calcul existant, déplacer le workspace `panoramax/sfm/` **et**
 les entraînements `panoramax/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/` en sauvegarde,
-puis relancer la préparation et les blocs ; garder `images/` et `metadata/`
+puis relancer la préparation et les blocs ; garder les dossiers `<id-collection>*/` (images et metadata)
 pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
 la signature ne correspond pas au rayon, aux paramètres et aux entrées.
 À paramètres identiques, un SfM filtré terminé est réutilisé ; après un échec

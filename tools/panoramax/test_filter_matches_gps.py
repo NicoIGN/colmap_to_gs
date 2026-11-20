@@ -68,9 +68,10 @@ class GpsMatchesTest(unittest.TestCase):
                 self.assertEqual(target.read_bytes(), prefix + struct.pack("<I", 3) +
                                  records[0] + records[2] + records[3] + tail)
                 self.assertEqual(source.read_bytes(), original)
+                index = gps.json_index(root / "metadata")
                 boundary = Geod(ellps="WGS84").inv(
-                    *gps.position(root / "metadata", "a"),
-                    *gps.position(root / "metadata", "b"),
+                    *gps.position(index, "a"),
+                    *gps.position(index, "b"),
                 )[2]
                 with contextlib.redirect_stderr(io.StringIO()), contextlib.redirect_stdout(io.StringIO()):
                     counts = gps.filter_matches(source, target, root / "metadata", boundary)

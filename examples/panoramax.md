@@ -13,9 +13,37 @@ bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax"
 ```
 
-Les images et leurs métadonnées sont enregistrées dans `$DATA_ROOT/panoramax/`. Un accès
-réseau et les dépendances de
+Les images et leurs métadonnées sont enregistrées dans un dossier par collection STAC,
+`$DATA_ROOT/panoramax/<id-collection>/images/` et `.../metadata/`. Si une collection
+mélange plusieurs tailles d'image, elle est répartie dans `<id-collection>-<LxH>/`.
+Un accès réseau et les dépendances de
 [`requirements.txt`](../tools/panoramax/requirements.txt) sont nécessaires.
+
+## Filtrer par producteur ou par logiciel EXIF
+
+`--filter KEY=VALEURS` est répétable. Les valeurs séparées par des virgules sont en OU,
+les filtres successifs en ET, sans tenir compte de la casse. `KEY` peut être une propriété
+STAC (`geovisio:producer`, `collection`) ou un tag EXIF (`Exif.Image.Software`).
+
+```bash
+bash "$GIT_ROOT/tools/panoramax/download.sh" \
+  --bbox "651000,6861000,652000,6862000" \
+  --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax" \
+  --filter geovisio:producer=immergis,overflorian \
+  --filter Exif.Image.Software=H19.03.02.02.00
+```
+
+Pour ne garder qu'une collection précise, utiliser son identifiant STAC :
+
+```bash
+bash "$GIT_ROOT/tools/panoramax/download.sh" \
+  --bbox "651000,6861000,652000,6862000" \
+  --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax" \
+  --filter collection=<uuid-collection>
+```
+
+Les filtres sont enregistrés dans `request.json`. Pour lister les valeurs disponibles avant de
+filtrer, consulter les `properties` des métadonnées téléchargées.
 
 ## Lancer le pipeline complet
 

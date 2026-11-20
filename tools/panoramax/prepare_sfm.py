@@ -22,38 +22,9 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+from dataset_layout import jpeg_size
+
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
-SOF_MARKERS = {0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7, 0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF}
-
-
-def jpeg_size(path):
-    with path.open("rb") as stream:
-        if stream.read(2) != b"\xff\xd8":
-            raise ValueError("pas un JPEG")
-        while True:
-            byte = stream.read(1)
-            if not byte:
-                raise ValueError("en-tête SOF introuvable")
-            if byte != b"\xff":
-                continue
-            marker = stream.read(1)
-            while marker == b"\xff":
-                marker = stream.read(1)
-            if not marker:
-                raise ValueError("en-tête SOF introuvable")
-            code = marker[0]
-            if code in (0x01, 0xD8) or 0xD0 <= code <= 0xD7:
-                continue
-            length_bytes = stream.read(2)
-            if len(length_bytes) != 2:
-                raise ValueError("segment JPEG tronqué")
-            length = int.from_bytes(length_bytes, "big")
-            if code in SOF_MARKERS:
-                data = stream.read(5)
-                if len(data) != 5:
-                    raise ValueError("segment SOF tronqué")
-                return int.from_bytes(data[3:5], "big"), int.from_bytes(data[1:3], "big")
-            stream.seek(length - 2, os.SEEK_CUR)
 
 
 def resolve_inputs(dataset):
