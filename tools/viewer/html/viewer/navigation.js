@@ -575,6 +575,7 @@ export function createNavigationSystem({
         mode = "look";
       } else if (event.button === 2 && event.shiftKey) {
         mode = "roll";
+        setStatus("Rotation de la vue autour de l'axe caméra → centre (Shift + clic droit).");
       } else if (
         event.button === lookBinding.button &&
         (!lookBinding.modifier || event[lookBinding.modifier])
