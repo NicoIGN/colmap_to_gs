@@ -135,6 +135,22 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(values["focal"], "")
             self.assertNotIn("Spirula estime", err)
 
+    def test_per_collection_layout_ignores_sfm_workspace_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            dataset = Path(tmp) / "panoramax"
+            collection = dataset / "immergis"
+            (collection / "images").mkdir(parents=True)
+            (collection / "metadata").mkdir()
+            (dataset / "sfm" / "images").mkdir(parents=True)
+            for name in ("a0", "a1"):
+                (collection / "images" / f"{name}.jpg").write_bytes(fake_jpeg(4096, 2160))
+                (collection / "metadata" / f"{name}.json").write_text(json.dumps({"download": {}}))
+            (dataset / "sfm" / "images" / "stale.jpg").write_bytes(fake_jpeg(4096, 2160))
+            work = Path(tmp) / "work"
+            out, _ = self.run_main("--dataset", str(dataset), "--output-dir", str(work), "--shell")
+            self.assertEqual(sorted(p.name for p in (work / "images").iterdir()), ["a0.jpg", "a1.jpg"])
+            self.assertIn("focal=", out)
+
 
 if __name__ == "__main__":
     unittest.main()

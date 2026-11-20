@@ -10,18 +10,19 @@ import shlex
 import subprocess
 import sys
 
+from dataset_layout import image_files, metadata_index
 from filter_matches_gps import filter_matches
 from prepare_sfm import main as prepare_images
 
 
-def signature(args, images):
+def signature(args, images, metadata):
     files = [
-        (str(p.relative_to(images)), p.stat().st_size, p.stat().st_mtime_ns)
-        for p in sorted(images.rglob("*")) if p.is_file()
+        (str(p.relative_to(args.dataset)), p.stat().st_size, p.stat().st_mtime_ns)
+        for p in images
     ]
-    metadata = [
-        (str(p.relative_to(args.dataset / "metadata")), hashlib.sha256(p.read_bytes()).hexdigest())
-        for p in sorted((args.dataset / "metadata").rglob("*.json"))
+    metadata_hashes = [
+        (str(p.relative_to(args.dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
+        for p in sorted(metadata.values())
     ]
     settings = {key: str(value) for key, value in vars(args).items()
                 if key != "feature_masks" or value is not None}
@@ -35,7 +36,7 @@ def signature(args, images):
         report = args.feature_masks / "masks.json"
         if report.is_file():
             masks.append(("settings", json.loads(report.read_text())["settings"]))
-    fingerprint = [settings, files, metadata]
+    fingerprint = [settings, files, metadata_hashes]
     if args.feature_masks:
         fingerprint.append(masks)
     return hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
@@ -56,10 +57,11 @@ def run(args):
     args.dataset = args.dataset.resolve()
     args.output = args.output.resolve()
     marker = args.output / "gps_filter_run.json"
-    source_images = args.dataset / "images"
-    if not source_images.is_dir() or not (args.dataset / "metadata").is_dir():
+    images = [p for p in image_files(args.dataset) if p.suffix.lower() in (".jpg", ".jpeg", ".png")]
+    metadata = metadata_index(args.dataset)
+    if not images or not metadata:
         raise ValueError("Le SfM filtré nécessite un dataset Panoramax avec images/ et metadata/")
-    fingerprint = signature(args, source_images)
+    fingerprint = signature(args, images, metadata)
     sparse = args.output / "sparse" / "0"
     completed = all((sparse / name).is_file() and (sparse / name).stat().st_size
                     for name in ("cameras.bin", "images.bin", "points3D.bin"))
@@ -118,7 +120,7 @@ def run(args):
     for stage, command in (("extraction", extract), ("appariement", match)):
         print(f"[SFM GPS] {stage} : {shlex.join(command)}", flush=True)
         subprocess.run(command, check=True)
-    counts = filter_matches(original, filtered, args.dataset / "metadata", args.max_distance)
+    counts = filter_matches(original, filtered, metadata, args.max_distance)
     (args.output / "gps_filter_summary.json").write_text(json.dumps(counts, indent=2) + "\n")
     if not counts["kept_pairs"]:
         raise ValueError("Aucune paire après filtrage GPS ; augmenter SFM_SP_PAIR_MAX_DISTANCE")

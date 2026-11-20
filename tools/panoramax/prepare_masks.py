@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 
+from dataset_layout import image_files, metadata_index
 from prepare_sfm import main as prepare_images
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import enabled, generate, policy
@@ -29,9 +30,9 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
     # silently reused after its extraction mask policy or inputs have changed.
     # Content hashes keep a re-download of identical photos from invalidating the SfM.
     inputs = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
-              for p in sorted((dataset / "images").rglob("*")) if p.is_file()]
+              for p in image_files(dataset)]
     metadata = [(str(p.relative_to(dataset)), hashlib.sha256(p.read_bytes()).hexdigest())
-                for p in sorted((dataset / "metadata").rglob("*.json"))]
+                for p in sorted(metadata_index(dataset).values())]
     model = Path(sfm["model"])
     model_files = [model] if model.is_file() else sorted(model.rglob("*"))
     weights = [(str(p), p.stat().st_size, p.stat().st_mtime_ns)

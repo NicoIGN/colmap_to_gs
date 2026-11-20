@@ -22,16 +22,20 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-from dataset_layout import jpeg_size
+from dataset_layout import image_files, jpeg_size, metadata_index
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
 
 
 def resolve_inputs(dataset):
+    """Retourne les images (toutes collections confondues) et l'index {nom: JSON} des métadonnées."""
     dataset = Path(dataset).resolve()
-    images_dir = dataset / "images" if (dataset / "images").is_dir() else dataset
-    metadata_dir = images_dir.parent / "metadata"
-    return images_dir, metadata_dir if metadata_dir.is_dir() else None
+    images = [path for path in image_files(dataset) if path.suffix.lower() in IMAGE_EXTENSIONS]
+    if images:
+        return images, metadata_index(dataset) or None
+    # Ancien appel : dossier d'images nu, métadonnées dans le dossier parent.
+    images = [path for path in sorted(dataset.glob("*")) if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS]
+    return images, metadata_index(dataset.parent) or None
 
 
 def parse_size(text):
@@ -110,25 +114,23 @@ def main(argv=None):
     parser.add_argument("--shell", action="store_true", help="Écrire images_dir= et focal= sur stdout")
     args = parser.parse_args(argv)
 
-    images_dir, metadata_dir = resolve_inputs(args.dataset)
-    if not images_dir.is_dir():
-        raise SystemExit(f"Dossier d'images introuvable : {images_dir}")
+    images, metadata_dir = resolve_inputs(args.dataset)
+    if not images:
+        raise SystemExit(f"Aucune image dans les dossiers images/ de {args.dataset}")
     output_dir = Path(args.output_dir).resolve()
     target_dir = output_dir / "images"
-    if target_dir.resolve() == images_dir:
+    if any(path.parent.resolve() == target_dir.resolve() for path in images):
         raise SystemExit("Le workspace ne doit pas contenir le dossier d'images source")
 
     log = lambda message: print(f"[prepare] {message}", file=sys.stderr)
     sizes = {}
-    for path in sorted(images_dir.iterdir()):
-        if path.suffix.lower() not in IMAGE_EXTENSIONS or not path.is_file():
-            continue
+    for path in sorted(images):
         try:
             sizes[path] = jpeg_size(path)
         except (OSError, ValueError) as exc:
             log(f"ignorée {path.name} : {exc}")
     if not sizes:
-        raise SystemExit(f"Aucune image JPEG dans {images_dir}")
+        raise SystemExit(f"Aucune image JPEG dans {args.dataset}")
 
     counts = Counter(sizes.values())
     for (width, height), count in counts.most_common():
@@ -161,7 +163,7 @@ def main(argv=None):
     }
 
     equirectangular = [
-        bool(metadata_dir) and is_equirectangular(metadata_dir / f"{path.stem}.json") for path in selected
+        path.stem in (metadata_dir or {}) and is_equirectangular(metadata_dir[path.stem]) for path in selected
     ]
     camera_model = None
     if equirectangular and all(equirectangular):
@@ -181,7 +183,9 @@ def main(argv=None):
         values = []
         if metadata_dir:
             for path in paths:
-                focal = focal_from_metadata(metadata_dir / f"{path.stem}.json", size[0])
+                if path.stem not in metadata_dir:
+                    continue
+                focal = focal_from_metadata(metadata_dir[path.stem], size[0])
                 if focal:
                     values.append(focal)
         samples[size] = len(values)
@@ -207,7 +211,7 @@ def main(argv=None):
         (output_dir / "selection.json").write_text(
             json.dumps(
                 {
-                    "source_images": str(images_dir),
+                    "source_images": str(Path(args.dataset).resolve()),
                     "multi_cam": multi_cam,
                     "size": list(keep) if keep else None,
                     "sizes": {f"{w}x{h}": len(paths) for (w, h), paths in groups.items()},

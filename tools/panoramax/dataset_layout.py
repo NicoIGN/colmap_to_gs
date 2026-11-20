@@ -41,16 +41,21 @@ def jpeg_size(path):
             stream.seek(length - 2, os.SEEK_CUR)
 
 
-def _subdirs(dataset, name):
+def _subdirs(dataset, name, partner):
+    """Dossier racine `name`, sinon dossiers `<coll>/name` ayant aussi `<coll>/partner` (exclut sfm/images)."""
     dataset = Path(dataset)
     if (dataset / name).is_dir():
         return [dataset / name]
-    return sorted(path / name for path in dataset.iterdir() if (path / name).is_dir())
+    return sorted(
+        path / name for path in dataset.iterdir()
+        if (path / name).is_dir() and (path / partner).is_dir()
+    )
 
 
 def image_files(dataset):
     return sorted(
-        path for folder in _subdirs(dataset, "images") for path in folder.rglob("*") if path.is_file()
+        path for folder in _subdirs(dataset, "images", "metadata")
+        for path in folder.rglob("*") if path.is_file()
     )
 
 
@@ -65,7 +70,7 @@ def json_index(folder):
 
 def metadata_index(dataset):
     index = {}
-    for folder in _subdirs(dataset, "metadata"):
+    for folder in _subdirs(dataset, "metadata", "images"):
         for name, path in json_index(folder).items():
             if name in index:
                 raise ValueError(f"Métadonnées en double pour {name} : {index[name]} et {path}")

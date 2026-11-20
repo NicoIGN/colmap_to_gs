@@ -276,9 +276,15 @@ PY
     die "Lecture impossible de $DATASET_DIR/request.json (code $request_status)."
   fi
 
-  if [[ ! -e "$DATASET_DIR/request.json" && -d "$DATASET_DIR/images" ]] &&
-     [[ -n "$(ls -A "$DATASET_DIR/images" 2>/dev/null)" ]]; then
-    die "$DATASET_DIR/images contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
+  stray_photos=""
+  for images_dir in "$DATASET_DIR/images" "$DATASET_DIR"/*/images; do
+    [[ -d "$images_dir" ]] || continue
+    [[ "$images_dir" == "$DATASET_DIR/images" || -d "${images_dir%/images}/metadata" ]] || continue
+    stray_photos="$(find "$images_dir" -type f -print -quit 2>/dev/null)"
+    [[ -z "$stray_photos" ]] || break
+  done
+  if [[ ! -e "$DATASET_DIR/request.json" && -n "$stray_photos" ]]; then
+    die "$DATASET_DIR contient des photos sans request.json ; choisir un OUTPUT_DIR neuf."
   fi
 
   bbox_args=(--bbox "$PANORAMAX_BBOX" --crs "EPSG:$PANORAMAX_BBOX_EPSG" \
@@ -319,12 +325,15 @@ PY
   # The downloader retains old files for manual resume. The dedicated pipeline
   # directory must contain exactly this run's successful/reused manifest images.
   set_pipeline_stage "validation des photos téléchargées"
-  "$PYTHON_BIN" - "$DATASET_DIR" <<'PY'
+  "$PYTHON_BIN" - "$DATASET_DIR" "$script_dir" <<'PY'
 import json
 import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+sys.path.insert(0, sys.argv[2])
+from dataset_layout import image_files
+
 manifest = root / "manifest.jsonl"
 if not manifest.is_file():
     raise SystemExit(f"Manifeste absent après téléchargement : {manifest}")
@@ -333,11 +342,10 @@ for line in manifest.read_text(encoding="utf-8").splitlines():
     item = json.loads(line)
     if item.get("status") in ("downloaded", "reused"):
         expected.add(item["image"])
-images = root / "images"
 stale = sorted(
-    str(path.relative_to(root))
-    for path in images.glob("*.jpg")
-    if str(path.relative_to(root)) not in expected
+    path.relative_to(root).as_posix()
+    for path in image_files(root)
+    if path.relative_to(root).as_posix() not in expected
 )
 if stale:
     raise SystemExit(
@@ -502,7 +510,11 @@ set_pipeline_stage "copie des références de géoréférencement"
 mkdir -p "$GEOREF_DIR"
 cp "$DATASET_DIR/request.json" "$DATASET_DIR/summary.json" \
   "$DATASET_DIR/manifest.jsonl" "$GEOREF_DIR/"
-cp -R "$DATASET_DIR/metadata" "$GEOREF_DIR/"
+mkdir -p "$GEOREF_DIR/metadata"
+for metadata_dir in "$DATASET_DIR/metadata" "$DATASET_DIR"/*/metadata; do
+  [[ -d "$metadata_dir" ]] || continue
+  cp -R "$metadata_dir/." "$GEOREF_DIR/metadata/"
+done
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
