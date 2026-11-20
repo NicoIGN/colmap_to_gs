@@ -52,6 +52,8 @@ const NAVIGATION_INPUT_BINDINGS = {
 
 const sceneBox = new THREE.Box3();
 const colmapBox = new THREE.Box3();
+const lidarBox = new THREE.Box3();
+const hasFreeData = () => !colmapBox.isEmpty() || !lidarBox.isEmpty();
 const sceneCenter = new THREE.Vector3();
 
 const principalAxes = {
@@ -126,7 +128,7 @@ function uiIsBlocked() {
 const canDefineVertical = () =>
   !!app &&
   !disposed &&
-  (sceneReady || !colmapBox.isEmpty()) &&
+  (sceneReady || hasFreeData()) &&
   !uiIsBlocked();
 
 const canNavigate = () =>
@@ -524,6 +526,26 @@ function canStartLoad() {
   return !!app && !disposed && !uiIsBlocked();
 }
 
+// Données sans splat (COLMAP, LiDAR) : la vue suit leur emprise.
+function applyFreeBounds(box, bounds, frame) {
+  box.makeEmpty();
+  if (bounds) {
+    box.set(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max));
+  }
+  if (!splatLayers.length) {
+    navigation.clearNavigation();
+    if (hasFreeData()) {
+      computeSceneBounds();
+      if (frame && bounds) navigation.fitToView(sceneBox);
+    } else {
+      sceneBox.makeEmpty();
+      sceneCenter.set(0, 0, 0);
+      sceneRadius = 1;
+    }
+  }
+  refreshUI();
+}
+
 function computeSceneBounds() {
   const coordinates = [[], [], []];
   const point = new THREE.Vector3();
@@ -548,8 +570,9 @@ function computeSceneBounds() {
   }
 
   const valid = coordinates[0].length;
-  if (!splatLayers.length && !colmapBox.isEmpty()) {
-    sceneBox.copy(colmapBox);
+  if (!splatLayers.length && hasFreeData()) {
+    sceneBox.copy(colmapBox.isEmpty() ? lidarBox : colmapBox);
+    if (!colmapBox.isEmpty() && !lidarBox.isEmpty()) sceneBox.union(lidarBox);
   } else if (!valid) {
     sceneBox.set(
       new THREE.Vector3(-1, -1, -1),
@@ -754,6 +777,8 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
         });
         sceneReady = true;
         if (collisionIsEnabled()) await prepareCollision();
+      } else if (hasFreeData()) {
+        sceneImporter.dispose();
       } else {
         sceneImporter.dispose();
         releaseScene();
@@ -823,7 +848,7 @@ async function loadFile(file) {
 }
 
 async function appendScene(source, name) {
-  if (!sceneReady) {
+  if (!sceneReady && !hasFreeData()) {
     await resetAndLoad(source, name);
     return;
   }
@@ -1667,27 +1692,7 @@ async function initialize() {
         pixelScaleAt,
         registerLayer: (layer) => layerManager.add(layer),
         registerGroup: (group) => layerManager.addGroup(group),
-        onBoundsChanged: (bounds, frame) => {
-          colmapBox.makeEmpty();
-          if (bounds) {
-            colmapBox.set(
-              new THREE.Vector3(...bounds.min),
-              new THREE.Vector3(...bounds.max)
-            );
-          }
-          if (!splatLayers.length) {
-            navigation.clearNavigation();
-            if (bounds) {
-              computeSceneBounds();
-              if (frame) navigation.fitToView(sceneBox);
-            } else {
-              sceneBox.makeEmpty();
-              sceneCenter.set(0, 0, 0);
-              sceneRadius = 1;
-            }
-          }
-          refreshUI();
-        },
+        onBoundsChanged: (bounds, frame) => applyFreeBounds(colmapBox, bounds, frame),
       });
 
       console.info("[APP] COLMAP initialisé.");
@@ -1703,6 +1708,7 @@ async function initialize() {
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
+        onBoundsChanged: (bounds, frame) => applyFreeBounds(lidarBox, bounds, frame),
       });
 
       gpkgLayer = createGpkgLayer({
