@@ -325,6 +325,11 @@ case "$prepare" in
     [[ -n "$prepared_images" ]] || die "La préparation n'a pas indiqué de dossier d'images"
     dataset="$prepared_images"
     for ((i = 0; i < ${#option_names[@]}; i++)); do
+      if [[ "${option_names[$i]}" == camera-model && "$prepared_camera_model" == equirectangular && "$camera_model_explicit" == true && "${option_values[$i]}" != equirectangular ]]; then
+        die "Images 360 détectées mais --camera-model ${option_values[$i]} demandé : utiliser equirectangular ou retirer SFM_CAMERA_MODEL."
+      fi
+    done
+    for ((i = 0; i < ${#option_names[@]}; i++)); do
       if [[ "${option_names[$i]}" == focal && -z "${option_values[$i]}" ]]; then
         option_values[$i]="$prepared_focal"
       fi

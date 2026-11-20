@@ -170,7 +170,10 @@ def main(argv=None):
         camera_model = "equirectangular"
         log("images 360 : modèle de caméra equirectangular, focale non transmise")
     elif any(equirectangular):
-        log("AVERTISSEMENT : images 360 et perspectives mélangées ; modèle de caméra non modifié")
+        raise SystemExit(
+            "images 360 et perspectives mélangées : un seul modèle de caméra ne peut pas les décrire. "
+            "Utiliser PANORAMAX_PICTURE_TYPE=360 ou normal."
+        )
 
     groups = {}
     for path in selected:
