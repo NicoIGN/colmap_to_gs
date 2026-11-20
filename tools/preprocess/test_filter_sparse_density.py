@@ -97,9 +97,9 @@ class SparseDensityTest(unittest.TestCase):
                      "--input", str(source), "--output", str(output), *options],
                     capture_output=True, text=True, check=True,
                 )
-                report = json.loads(result.stdout)
-                self.assertEqual(report["points_removed"], 1)
                 if name == "progress":
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["points_removed"], 1)
                     for message in ("Lecture points 3D", "Lecture images",
                                     "Analyse densité", "Écriture sparse",
                                     "progress_clean", "progress_rejected",
@@ -107,6 +107,8 @@ class SparseDensityTest(unittest.TestCase):
                         self.assertIn(message, result.stderr)
                 else:
                     self.assertEqual(result.stderr, "")
+                    self.assertIn("Supprimés : 1 (4.8%)", result.stdout)
+                    self.assertIn("ignorés (non évaluables)", result.stdout)
                 results.append(output)
             for suffix in ("_clean", "_rejected"):
                 for filename in ("cameras.bin", "images.bin", "points3D.bin"):

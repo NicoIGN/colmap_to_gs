@@ -477,7 +477,9 @@ def filter_sparse_model(
         "points_kept": int((~rejected).sum()),
         "points_removed": int(rejected.sum()),
         "points_with_enough_views": int((evaluable >= min_views).sum()),
-        "points_not_evaluable_removed": int(not_evaluable.sum()),
+        "points_ignored": int(not_evaluable.sum()),
+        "points_suspicious": int((suspicious > 0).sum()),
+        "points_removed_by_votes": int((rejected & ~not_evaluable).sum()),
         "removed_points": [
             {
                 "point3D_id": int(point_ids[index]),
@@ -563,7 +565,26 @@ def main():
         )
     except (OSError, ValueError) as error:
         parser.error(str(error))
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if args.verbose:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(format_summary(report))
+
+
+def format_summary(report):
+    total = report["points_total"]
+
+    def share(count):
+        return f"{count} ({count / total:.1%})" if total else "0 (0.0%)"
+
+    return "\n".join((
+        f"Points : {total}",
+        f"Supprimés : {share(report['points_removed'])}",
+        f"  - par vote suspect : {share(report['points_removed_by_votes'])}",
+        f"  - ignorés (non évaluables) : {share(report['points_ignored'])}",
+        f"Suspects (au moins un vote) : {share(report['points_suspicious'])}",
+        f"Rapport : {Path(report['output_clean']) / 'density_report.json'}",
+    ))
 
 
 if __name__ == "__main__":
