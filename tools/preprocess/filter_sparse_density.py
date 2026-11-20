@@ -283,7 +283,7 @@ def density_votes(
     *,
     neighbors=128,
     max_angle_deg=5.0,
-    min_neighbors=12,
+    min_neighbors=6,
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
@@ -398,7 +398,7 @@ def filter_sparse_model(
     *,
     neighbors=128,
     max_angle_deg=5.0,
-    min_neighbors=12,
+    min_neighbors=6,
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
@@ -482,15 +482,6 @@ def filter_sparse_model(
         "points_ignored": int(not_evaluable.sum()),
         "points_suspicious": int((suspicious > 0).sum()),
         "points_removed_by_votes": int((rejected & ~dropped_unevaluable).sum()),
-        "removed_points": [
-            {
-                "point3D_id": int(point_ids[index]),
-                "xyz": positions[index].tolist(),
-                "evaluable_views": int(evaluable[index]),
-                "suspicious_views": int(suspicious[index]),
-            }
-            for index in np.flatnonzero(rejected)
-        ],
         "parameters": {
             "neighbors": neighbors,
             "max_angle_deg": max_angle_deg,
@@ -526,8 +517,8 @@ def main():
                         help="Nombre maximal de voisins angulaires (défaut : 128).")
     parser.add_argument("--max-angle-deg", type=float, default=5.0,
                         help="Ouverture du voisinage directionnel en degrés (défaut : 5).")
-    parser.add_argument("--min-neighbors", type=int, default=12,
-                        help="Voisins minimums pour évaluer une vue (défaut : 12).")
+    parser.add_argument("--min-neighbors", type=int, default=6,
+                        help="Voisins minimums pour évaluer une vue (défaut : 6).")
     parser.add_argument("--min-cluster-points", type=int, default=5,
                         help="Support absolu minimum d'un paquet (défaut : 5).")
     parser.add_argument("--min-cluster-fraction", type=float, default=0.05,
