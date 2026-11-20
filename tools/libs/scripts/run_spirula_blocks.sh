@@ -181,7 +181,15 @@ case "${1:-}" in
 esac
 [[ -n "$DIR" ]] || { usage >&2; die "Définir DIR avec le chemin du dataset Panoramax."; }
 [[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
-[[ -d "$DIR/images" ]] || die "Dossier d'images introuvable : $DIR/images"
+has_images=false
+for images_dir in "$DIR/images" "$DIR"/*/images; do
+  [[ -d "$images_dir" ]] || continue
+  if [[ "$images_dir" == "$DIR/images" || -d "${images_dir%/images}/metadata" ]]; then
+    has_images=true
+    break
+  fi
+done
+[[ "$has_images" == true ]] || die "Aucun dossier d'images Panoramax dans : $DIR (attendu : images/ ou <collection>/images avec metadata/)"
 if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" != EQUIRECTANGULAR ]]; then
   die "HLOC Panoramax exige HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
 fi
