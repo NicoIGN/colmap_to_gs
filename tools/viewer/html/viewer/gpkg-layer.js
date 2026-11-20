@@ -1,5 +1,5 @@
 import * as pc from "playcanvas";
-import { getOverlayLayer } from "./colmap.js";
+import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
 import { readGeojsonLayers } from "./geojson-geometry.js";
@@ -87,32 +87,102 @@ function makeUnlitMaterial(color) {
   return mat;
 }
 
+// Icosaèdre unitaire : 12 sommets, 20 faces, un petit octaèdre suffirait mais paraît moins rond.
+const PHI = (1 + Math.sqrt(5)) / 2;
+const ICO_VERTICES = [
+  [-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0],
+  [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI],
+  [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1],
+].map(([x, y, z]) => {
+  const n = Math.hypot(x, y, z);
+  return [x / n, y / n, z / n];
+});
+const ICO_FACES = [
+  [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+  [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+  [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+  [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+];
+const SPHERE_VERTICES = ICO_VERTICES.length;
+// Rayon des sphères en proportion de l'emprise de la couche (unités des données).
+const POINT_RADIUS_RATIO = 0.004;
+const POINT_RADIUS_DEFAULT = 0.5;
+// Valeur par défaut du curseur « Taille des points » ; les sphères grossissent ou rétrécissent proportionnellement.
+export const DEFAULT_POINT_SIZE = 2;
+
 // Emprise et positions relatives au centre, en float64 puis float32 (comme le LiDAR).
-function buildSource(name, epsg, polylines) {
+function buildSource(name, epsg, polylines, points) {
   const segments = polylinesToSegments(polylines);
   const vertexCount = segments.length / 3;
+  const pointCount = points.length / 3;
   const min = [Infinity, Infinity, Infinity];
   const max = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < segments.length; i++) {
-    const axis = i % 3;
-    if (segments[i] < min[axis]) min[axis] = segments[i];
-    if (segments[i] > max[axis]) max[axis] = segments[i];
-  }
-  const centre = vertexCount ? min.map((v, axis) => (v + max[axis]) / 2) : [0, 0, 0];
+  const extend = (values) => {
+    for (let i = 0; i < values.length; i++) {
+      const axis = i % 3;
+      if (values[i] < min[axis]) min[axis] = values[i];
+      if (values[i] > max[axis]) max[axis] = values[i];
+    }
+  };
+  extend(segments);
+  extend(points);
+  const hasData = vertexCount + pointCount > 0;
+  const centre = hasData ? min.map((v, axis) => (v + max[axis]) / 2) : [0, 0, 0];
   const rel = new Float32Array(segments.length);
   for (let i = 0; i < segments.length; i++) rel[i] = segments[i] - centre[i % 3];
-  return { name, epsg, centre, rel, count: vertexCount };
+  const pointRel = new Float32Array(points.length);
+  for (let i = 0; i < points.length; i++) pointRel[i] = points[i] - centre[i % 3];
+  const span = hasData ? Math.max(...min.map((v, axis) => max[axis] - v)) : 0;
+  const radius = span > 0 ? span * POINT_RADIUS_RATIO : POINT_RADIUS_DEFAULT;
+  return { name, epsg, centre, rel, count: vertexCount, pointRel, pointCount, radius };
 }
 
-export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup }) {
+// Un icosaèdre centré sur chaque point, en coordonnées monde (même transformation que les lignes).
+function buildSphereMesh(app, source, placement, radius) {
+  const centres = worldPositions({ rel: source.pointRel, count: source.pointCount }, placement);
+  const n = source.pointCount;
+  const positions = new Float32Array(n * SPHERE_VERTICES * 3);
+  const indices = new Uint32Array(n * ICO_FACES.length * 3);
+  for (let p = 0; p < n; p++) {
+    for (let v = 0; v < SPHERE_VERTICES; v++) {
+      const o = (p * SPHERE_VERTICES + v) * 3;
+      for (let k = 0; k < 3; k++) {
+        positions[o + k] = centres[p * 3 + k] + ICO_VERTICES[v][k] * radius;
+      }
+    }
+    for (let f = 0; f < ICO_FACES.length; f++) {
+      for (let j = 0; j < 3; j++) {
+        indices[(p * ICO_FACES.length + f) * 3 + j] = p * SPHERE_VERTICES + ICO_FACES[f][j];
+      }
+    }
+  }
+  const mesh = new pc.Mesh(app.graphicsDevice);
+  mesh.setPositions(positions);
+  mesh.setIndices(indices);
+  mesh.update(pc.PRIMITIVE_TRIANGLES, true);
+  return mesh;
+}
+
+export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
   let wireColor = new pc.Color().fromString(DEFAULT_WIRE_COLOR);
+  let pointSize = DEFAULT_POINT_SIZE;
   const layers = new Map();
 
+  function emitBounds(frame) {
+    const boxes = [...layers.values()]
+      .flatMap((layer) => layer.children.map((child) => child.bounds))
+      .filter(Boolean);
+    const bounds = boxes.length
+      ? colmapBounds(boxes.flatMap((box) => [box.min, box.max]), Boolean(getFlipUp?.()))
+      : null;
+    onBoundsChanged?.(bounds, frame);
+  }
+
   function destroyRender(child) {
-    child.resource?.mesh?.destroy?.();
+    for (const mesh of child.resource?.meshes ?? []) mesh.destroy?.();
     child.resource?.material?.destroy?.();
     for (const material of child.resource?.highlightMaterials ?? []) material.destroy?.();
     child.resource = null;
@@ -137,26 +207,43 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     destroyRender(child);
     const placement = placementFor(child.source, georef);
     child.placement = placement;
-    if (!child.source.count) return placement;
+    child.bounds = null;
+    const hasLines = child.source.count > 0;
+    const hasPoints = child.source.pointCount > 0;
+    if (!hasLines && !hasPoints) return placement;
 
-    const mesh = new pc.Mesh(app.graphicsDevice);
-    mesh.setPositions(worldPositions(child.source, placement));
-    mesh.update(pc.PRIMITIVE_LINES, true);
+    const positionSets = [];
+    const meshes = [];
+    if (hasLines) {
+      const linePositions = worldPositions(child.source, placement);
+      positionSets.push(linePositions);
+      const lineMesh = new pc.Mesh(app.graphicsDevice);
+      lineMesh.setPositions(linePositions);
+      lineMesh.update(pc.PRIMITIVE_LINES, true);
+      meshes.push(lineMesh);
+    }
+    if (hasPoints) {
+      positionSets.push(worldPositions({ rel: child.source.pointRel, count: child.source.pointCount }, placement));
+      const radius = (child.source.radius * pointSize) / DEFAULT_POINT_SIZE;
+      meshes.push(buildSphereMesh(app, child.source, placement, radius));
+    }
+    child.bounds = colmapBounds(positionSets, false);
+
     const material = makeUnlitMaterial(wireColor);
     const highlightMaterials = HIGHLIGHT_OFFSETS.map(makeHighlightMaterial);
-    child.resource = { mesh, material, highlightMaterials };
+    child.resource = { meshes, material, highlightMaterials };
 
     child.lineEntity = new pc.Entity(`GPKG lignes · ${child.source.name}`);
     child.lineEntity.addComponent("render", {
       type: "asset",
-      meshInstances: [new pc.MeshInstance(mesh, material)],
+      meshInstances: meshes.map((mesh) => new pc.MeshInstance(mesh, material)),
       layers: [getOverlayLayer(app).id],
     });
 
     child.highlightEntity = new pc.Entity(`GPKG surbrillance · ${child.source.name}`);
     child.highlightEntity.addComponent("render", {
       type: "asset",
-      meshInstances: highlightMaterials.map((m) => new pc.MeshInstance(mesh, m)),
+      meshInstances: highlightMaterials.flatMap((m) => meshes.map((mesh) => new pc.MeshInstance(mesh, m))),
       layers: [getOverlayLayer(app).id],
     });
 
@@ -183,6 +270,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     for (const layer of layers.values()) {
       for (const child of layer.children) render(child, georef);
     }
+    emitBounds(false);
   }
 
   async function loadFile(file) {
@@ -210,9 +298,9 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     }
     if (disposed) return;
 
-    const drawable = tables.filter((t) => t.polylines.length > 0);
+    const drawable = tables.filter((t) => t.polylines.length > 0 || t.points.length > 0);
     if (!drawable.length) {
-      throw new Error("Aucune géométrie linéaire ou surfacique dans ce fichier.");
+      throw new Error("Aucune géométrie linéaire, surfacique ou ponctuelle dans ce fichier.");
     }
 
     const georef = getGeoref?.() ?? null;
@@ -223,16 +311,26 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     let vertexBudget = MAX_VERTICES;
 
     for (const table of drawable) {
-      const source = buildSource(table.name, table.epsg, table.polylines);
-      const kept = Math.min(source.count, vertexBudget);
-      if (kept < source.count) {
+      const source = buildSource(table.name, table.epsg, table.polylines, table.points);
+      const keptLines = Math.min(source.count, vertexBudget);
+      if (keptLines < source.count) {
         truncated = true;
-        source.rel = source.rel.subarray(0, kept * 3);
-        source.count = kept;
+        source.rel = source.rel.subarray(0, keptLines * 3);
+        source.count = keptLines;
       }
-      vertexBudget -= kept;
+      vertexBudget -= keptLines;
+      const keptPoints = Math.min(source.pointCount, Math.floor(vertexBudget / SPHERE_VERTICES));
+      if (keptPoints < source.pointCount) {
+        truncated = true;
+        source.pointRel = source.pointRel.subarray(0, keptPoints * 3);
+        source.pointCount = keptPoints;
+      }
+      vertexBudget -= keptPoints * SPHERE_VERTICES;
+      const parts = [];
+      if (source.count) parts.push(`${(source.count / 2).toLocaleString("fr-FR")} segments`);
+      if (source.pointCount) parts.push(`${source.pointCount.toLocaleString("fr-FR")} points`);
       const child = {
-        name: `${table.name} · ${(source.count / 2).toLocaleString("fr-FR")} segments`,
+        name: `${table.name} · ${parts.join(" · ")}`,
         source,
         visible: true,
         highlighted: false,
@@ -246,6 +344,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       render(child, georef);
     }
     layers.set(id, layer);
+    emitBounds(true);
 
     const unregister = registerGroup?.({
       id,
@@ -266,6 +365,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         unregister?.();
         for (const child of layer.children) destroyRender(child);
         layers.delete(id);
+        emitBounds(false);
       },
     }) ?? null;
 
@@ -279,6 +379,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       for (const child of layer.children) destroyRender(child);
     }
     layers.clear();
+    emitBounds(false);
   }
 
   return {
@@ -301,6 +402,15 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
           material.emissive.copy(wireColor);
           material.diffuse.copy(wireColor);
           material.update();
+        }
+      }
+    },
+
+    setPointSize(size) {
+      pointSize = size;
+      for (const layer of layers.values()) {
+        for (const child of layer.children) {
+          if (child.source.pointCount) render(child, lastGeoref);
         }
       }
     },

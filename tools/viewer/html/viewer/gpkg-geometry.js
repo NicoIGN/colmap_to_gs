@@ -20,7 +20,7 @@ function wkbOffset(bytes) {
 }
 
 // Lit une géométrie WKB (ou EWKB / ISO Z, M, ZM) et ajoute ses polylignes à `out`.
-function readWkb(view, offset, out) {
+function readWkb(view, offset, out, points) {
   const little = view.getUint8(offset) === 1;
   let code = view.getUint32(offset + 1, little);
   offset += 5;
@@ -53,7 +53,7 @@ function readWkb(view, offset, out) {
   };
 
   if (type === WKB_POINT) {
-    offset += coordSize;
+    points.push(...readLine(1));
   } else if (type === WKB_LINESTRING) {
     out.push(readLine(readCount()));
   } else if (type === WKB_POLYGON) {
@@ -66,22 +66,22 @@ function readWkb(view, offset, out) {
     type === WKB_COLLECTION
   ) {
     const parts = readCount();
-    for (let p = 0; p < parts; p++) offset = readWkb(view, offset, out);
+    for (let p = 0; p < parts; p++) offset = readWkb(view, offset, out, points);
   } else {
     throw new Error(`Type de géométrie WKB non pris en charge : ${type}`);
   }
   return offset;
 }
 
-// Polylignes (tableaux plats x, y, z) d'une géométrie GeoPackage ; les points sont ignorés.
-export function readGpkgGeometry(bytes) {
+// Polylignes (tableaux plats x, y, z) d'une géométrie GeoPackage ; les points sont ajoutés à `points` (x, y, z à plat).
+export function readGpkgGeometry(bytes, points = []) {
   const polylines = [];
   if (!bytes || bytes.length < 8) return polylines;
   const flags = bytes[3];
   if (flags & 0x10) return polylines;
   const offset = wkbOffset(bytes);
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  readWkb(view, offset, polylines);
+  readWkb(view, offset, polylines, points);
   return polylines;
 }
 
@@ -132,10 +132,11 @@ const quote = (identifier) => `"${String(identifier).replaceAll('"', '""')}"`;
 export function readGpkgLayers(db) {
   return listGpkgFeatureTables(db).map((table) => {
     const polylines = [];
+    const points = [];
     const [result] = db.exec(`SELECT ${quote(table.column)} FROM ${quote(table.name)}`);
     for (const [blob] of result?.values ?? []) {
-      if (blob) polylines.push(...readGpkgGeometry(blob));
+      if (blob) polylines.push(...readGpkgGeometry(blob, points));
     }
-    return { ...table, polylines };
+    return { ...table, polylines, points };
   });
 }

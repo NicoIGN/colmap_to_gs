@@ -53,7 +53,8 @@ const NAVIGATION_INPUT_BINDINGS = {
 const sceneBox = new THREE.Box3();
 const colmapBox = new THREE.Box3();
 const lidarBox = new THREE.Box3();
-const hasFreeData = () => !colmapBox.isEmpty() || !lidarBox.isEmpty();
+const wireBox = new THREE.Box3();
+const hasFreeData = () => !colmapBox.isEmpty() || !lidarBox.isEmpty() || !wireBox.isEmpty();
 const sceneCenter = new THREE.Vector3();
 
 const principalAxes = {
@@ -571,8 +572,10 @@ function computeSceneBounds() {
 
   const valid = coordinates[0].length;
   if (!splatLayers.length && hasFreeData()) {
-    sceneBox.copy(colmapBox.isEmpty() ? lidarBox : colmapBox);
-    if (!colmapBox.isEmpty() && !lidarBox.isEmpty()) sceneBox.union(lidarBox);
+    sceneBox.makeEmpty();
+    for (const box of [colmapBox, lidarBox, wireBox]) {
+      if (!box.isEmpty()) sceneBox.union(box);
+    }
   } else if (!valid) {
     sceneBox.set(
       new THREE.Vector3(-1, -1, -1),
@@ -1346,6 +1349,7 @@ function installUI() {
 
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
+  $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1717,8 +1721,13 @@ async function initialize() {
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
+        onBoundsChanged: (bounds, frame) => {
+          const framed = frame && !hasFreeData() && !splatLayers.length;
+          applyFreeBounds(wireBox, bounds, framed);
+        },
       });
       gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
+      gpkgLayer.setPointSize(Number($("colmapPointSize").value));
 
       installUI();
       installDnD();

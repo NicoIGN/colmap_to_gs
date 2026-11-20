@@ -34,3 +34,16 @@ test("le membre crs fixe le code EPSG", () => {
 test("un JSON invalide lève une erreur", () => {
   assert.throws(() => readGeojsonLayers("{not json", "x.geojson"));
 });
+
+test("Point et MultiPoint deviennent des points, sans polylignes", () => {
+  const text = JSON.stringify({
+    type: "FeatureCollection",
+    features: [
+      { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [1, 2] } },
+      { type: "Feature", properties: {}, geometry: { type: "MultiPoint", coordinates: [[3, 4, 5], [6, 7]] } },
+    ],
+  });
+  const [layer] = readGeojsonLayers(text, "pts.geojson");
+  assert.deepEqual(layer.polylines, []);
+  assert.deepEqual(layer.points, [1, 2, 0, 3, 4, 5, 6, 7, 0]);
+});

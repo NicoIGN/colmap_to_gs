@@ -70,3 +70,12 @@ test("polylinesToSegments yields one 6-value segment per consecutive vertex pair
 test("readGpkgGeometry rejects a blob without the GP magic", () => {
   assert.throws(() => readGpkgGeometry(new Uint8Array([0, 0, 0, 1, 0, 0, 0, 0, 1])), /invalide/);
 });
+
+test("readGpkgGeometry collects Point and MultiPoint coordinates as points", () => {
+  const points = [];
+  assert.deepEqual(readGpkgGeometry(gpkgBlob(1, coords([[3, 4]])), points), []);
+  assert.deepEqual(points, [3, 4, 0]);
+  const multi = gpkgBlob(4, concat(u32(2), gpkgBlob(1, coords([[5, 6]])).subarray(8), gpkgBlob(1, coords([[7, 8]])).subarray(8)));
+  readGpkgGeometry(multi, points);
+  assert.deepEqual(points, [3, 4, 0, 5, 6, 0, 7, 8, 0]);
+});

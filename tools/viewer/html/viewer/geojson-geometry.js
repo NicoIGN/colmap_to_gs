@@ -1,4 +1,4 @@
-// Lecture d'un GeoJSON : géométries linéaires et surfaciques → polylignes, comme pour le GeoPackage.
+// Lecture d'un GeoJSON : points, lignes et surfaces → points et polylignes, comme pour le GeoPackage.
 
 // RFC 7946 : sans membre "crs", les coordonnées sont en WGS84.
 const DEFAULT_EPSG = 4326;
@@ -10,8 +10,8 @@ function epsgOf(geojson) {
   return match ? Number(match[1]) : DEFAULT_EPSG;
 }
 
-// Ajoute à `out` les polylignes (tableaux plats x, y, z) d'une géométrie GeoJSON.
-function collectGeometry(geometry, out) {
+// Ajoute à `out` les polylignes (tableaux plats x, y, z) et à `points` les points (x, y, z à plat).
+function collectGeometry(geometry, out, points) {
   if (!geometry) return;
   const { type, coordinates } = geometry;
   const line = (positions) => {
@@ -19,14 +19,19 @@ function collectGeometry(geometry, out) {
     for (const [x, y, z = 0] of positions) flat.push(x, y, z);
     if (flat.length >= 6) out.push(flat);
   };
-  if (type === "LineString") {
+  if (type === "Point") {
+    const [x, y, z = 0] = coordinates;
+    points.push(x, y, z);
+  } else if (type === "MultiPoint") {
+    for (const [x, y, z = 0] of coordinates) points.push(x, y, z);
+  } else if (type === "LineString") {
     line(coordinates);
   } else if (type === "MultiLineString" || type === "Polygon") {
     for (const part of coordinates) line(part);
   } else if (type === "MultiPolygon") {
     for (const polygon of coordinates) for (const ring of polygon) line(ring);
   } else if (type === "GeometryCollection") {
-    for (const part of geometry.geometries) collectGeometry(part, out);
+    for (const part of geometry.geometries) collectGeometry(part, out, points);
   }
 }
 
@@ -35,12 +40,13 @@ export function readGeojsonLayers(text, name) {
   const geojson = JSON.parse(text);
   const epsg = epsgOf(geojson);
   const polylines = [];
+  const points = [];
   if (geojson.type === "FeatureCollection") {
-    for (const feature of geojson.features ?? []) collectGeometry(feature.geometry, polylines);
+    for (const feature of geojson.features ?? []) collectGeometry(feature.geometry, polylines, points);
   } else if (geojson.type === "Feature") {
-    collectGeometry(geojson.geometry, polylines);
+    collectGeometry(geojson.geometry, polylines, points);
   } else {
-    collectGeometry(geojson, polylines);
+    collectGeometry(geojson, polylines, points);
   }
-  return [{ name, epsg, polylines }];
+  return [{ name, epsg, polylines, points }];
 }

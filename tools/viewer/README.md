@@ -85,7 +85,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   en données 3D filaires : chaque table d'entités devient une sous-couche de
   lignes (polylignes et contours de polygones ; points ignorés). Il suit le même
   géoréférencement / CRS (EPSG) que le LiDAR. La couleur se règle dans
-  « Options » (« Couleur des données filaires »). Décodage SQLite via sql.js
+  « Options » (« Données vecteur »). Décodage SQLite via sql.js
   (chargé depuis jsdelivr) ; limite : 512 Mio, 4 millions de sommets affichés.
   Le bouton ◎ à côté de chaque couche la met en évidence en jaune et plus épaisse.
 - Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.

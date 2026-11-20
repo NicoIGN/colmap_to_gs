@@ -899,7 +899,7 @@ export function createColmapLayer({
   function refreshUI() {
     const ready = models.size > 0;
 
-    if (pointSize) pointSize.disabled = !ready;
+    if (pointSize) pointSize.disabled = false;
     if (cameraSize) cameraSize.disabled = !ready;
     if (panoramaModeRow) {
       const hasPanorama = [...models.values()].some((model) =>
