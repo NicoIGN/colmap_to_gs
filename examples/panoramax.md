@@ -21,9 +21,27 @@ Un accès réseau et les dépendances de
 
 ## Filtrer par producteur ou par logiciel EXIF
 
-`--filter KEY=VALEURS` est répétable. Les valeurs séparées par des virgules sont en OU,
-les filtres successifs en ET, sans tenir compte de la casse. `KEY` peut être une propriété
-STAC (`geovisio:producer`, `collection`) ou un tag EXIF (`Exif.Image.Software`).
+`--filter KEY=VALEURS` est répétable. La logique est la suivante :
+
+- **OU dans une valeur liste** : `KEY=A,B` garde une photo dont `KEY` vaut `A` **ou** `B`.
+- **ET entre filtres** : `--filter K1=A --filter K2=B` garde une photo qui vérifie
+  `K1=A` **et** `K2=B`.
+- Une photo sans la propriété `KEY` est exclue. La casse est ignorée.
+- `KEY` peut être une propriété STAC (`geovisio:producer`, `collection`) ou un tag EXIF
+  (`Exif.Image.Software`).
+
+Exemple, avec les filtres suivants :
+
+| Photo | `geovisio:producer` | `Exif.Image.Software` | Gardée ? |
+|---|---|---|---|
+| 1 | `immergis` | `H19.03.02.02.00` | oui (producteur OU, logiciel ET) |
+| 2 | `overflorian` | `H19.03.02.02.00` | oui |
+| 3 | `immergis` | `imajview 5` | non (logiciel ne correspond pas) |
+| 4 | `benoitdd` | `H19.03.02.02.00` | non (producteur ne correspond pas) |
+
+Piège : répéter la **même** clé combine les filtres en ET. `--filter geovisio:producer=immergis
+--filter geovisio:producer=overflorian` ne garde aucune photo, car une photo n'a qu'un seul
+producteur. Pour un OU sur une même clé, mettre les valeurs dans une seule liste.
 
 ```bash
 bash "$GIT_ROOT/tools/panoramax/download.sh" \
@@ -58,11 +76,16 @@ Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](pipelines.md
 
 Pour filtrer les photos du pipeline complet, utiliser `PANORAMAX_FILTERS` :
 `;` sépare les propriétés (ET), `,` sépare les valeurs d'une propriété (OU), la
-comparaison est insensible à la casse :
+comparaison est insensible à la casse. La syntaxe ci-dessous garde donc les photos
+`immergis` **ou** `overflorian`, **et** dont le logiciel EXIF est `H19.03.02.02.00` :
 
 ```bash
 PANORAMAX_FILTERS="geovisio:producer=immergis,overflorian;Exif.Image.Software=H19.03.02.02.00"
 ```
+
+Équivalent en ligne de commande : `--filter geovisio:producer=immergis,overflorian
+--filter Exif.Image.Software=H19.03.02.02.00`. Une même clé ne peut pas apparaître deux fois
+dans `PANORAMAX_FILTERS` pour exprimer un OU ; utiliser la liste `,` à la place.
 
 Ce filtre est transmis à `download.py` sous forme de `--filter` répétés et enregistré dans
 `request.json` ; changer `PANORAMAX_FILTERS` sur un `OUTPUT_DIR` existant est refusé.
