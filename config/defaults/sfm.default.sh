@@ -24,6 +24,7 @@ SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
 
 # --- COLMAP_METHOD=colmap uniquement ---
 SFM_COLMAP_BIN="colmap"
+# true | false : GPU pour l'extraction et le matching COLMAP (exige un build CUDA).
 SFM_COLMAP_USE_GPU="true"
 # --- Matching COLMAP direct / ns-process-data ---
 SFM_COLMAP_MATCHING="exhaustive"          # exhaustive | sequential
@@ -31,6 +32,7 @@ SFM_COLMAP_MATCHING="exhaustive"          # exhaustive | sequential
 SFM_NS_PROCESS_DATA_BIN="ns-process-data"
 # Mode orientations : poses caméra JSON explicites et PLY coloré dans les mêmes coordonnées.
 ORIENTATIONS_JSON=""
+# Chemin d'un PLY LiDAR aligné sur le SfM ; vide = non utilisé.
 LIDAR_PLY=""
 
 # ============================================================================
@@ -40,6 +42,7 @@ LIDAR_PLY=""
 # (Spirula ou COLMAP direct). Les options spécifiques sont dans les groupes
 # SFM_SP_*, SFM_COLMAP_* et SFM_NS_*.
 SFM_MAX_IMAGE_SIZE="4096"
+# Nombre maximal de points extraits par image (entier > 0), ALIKED.
 SFM_ALIKED_MAX_FEATURES="8192"
 # Seuils géométriques partagés avec COLMAP direct ; le SfM Nerfstudio garde
 # ses propres seuils. Plus strict = moins de parasites, mais couverture réduite.
@@ -48,7 +51,9 @@ SFM_MIN_INLIERS="30"      # entier [4,1000000] par paire, pas par point 3D
 SFM_MIN_TRI_ANGLE="6"     # ]0,90] degrés ; augmente = moins de faible parallaxe
 
 # --- COLMAP_METHOD=spirula uniquement ---
+# Extracteur de points : sift | aliked-n16rot | aliked-n32 | loma-b128 | loma-b.
 SFM_SP_FEATURES="aliked-n16rot"
+# Appariement : bruteforce | lightglue | loma-b128 | loma-b | loma-r | loma-l | loma-g.
 SFM_SP_MATCHER="bruteforce"
 # prefilter|auto|exhaustive|sequential ; exhaustive est coûteux.
 # sequential : noms triés dans l'ordre de la vidéo, SFM_CAMERA_SPLIT=false.
@@ -73,6 +78,7 @@ SFM_CAMERA_MODE="folder"
 # Avec PIPELINE_RESUME=true, les sorties dérivées de l'ancien SfM sont archivées
 # dans camera-split-backups/. Spirula uniquement, pas avec SFM_CAMERA_MODE=image.
 SFM_CAMERA_SPLIT="false"
+# Entier > 0 : taille minimale d'un modèle caméra pour déclencher le découpage.
 SFM_CAMERA_SPLIT_MIN_IMAGES=50
 # SFM_CAMERA_MODEL non défini : détection automatique (360° -> equirectangular, sinon opencv).
 # Le définir explicitement force le modèle.
@@ -87,7 +93,9 @@ SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"  # ]0,1]
 # Nécessite un COLMAP compilé avec CUDA (usage prévu : Slurm). Les points denses
 # remplacent le sparse en entrée du 3DGS ; incompatible avec GEOREF_GPX_FILE.
 COLMAP_USE_MVS="${COLMAP_USE_MVS:-false}"
+# Entier > 0 : plus grand côté (px) des images passées à la densification MVS.
 MVS_MAX_IMAGE_SIZE="${MVS_MAX_IMAGE_SIZE:-2000}"
+# Entier >= 0 : index du GPU CUDA utilisé par MVS (0 = premier GPU).
 MVS_GPU_INDEX="${MVS_GPU_INDEX:-0}"
 # Photos individuelles, sans séquence.
 # Sans GPX, les GPS EXIF de plusieurs images géoréférencent automatiquement le SfM.
