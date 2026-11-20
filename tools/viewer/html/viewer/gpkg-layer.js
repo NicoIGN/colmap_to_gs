@@ -7,6 +7,9 @@ export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
 export const MAX_VERTICES = 4_000_000;
 export const DEFAULT_WIRE_COLOR = "#00e5ff";
+const HIGHLIGHT_COLOR = [1.0, 0.92, 0.0, 1.0];
+// Les lignes WebGL ont une épaisseur fixe : la surbrillance superpose des copies décalées de 1 px.
+const HIGHLIGHT_OFFSETS = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
 
 let sqlJsPromise = null;
 
@@ -32,6 +35,42 @@ function loadSqlJs() {
     });
   }
   return sqlJsPromise;
+}
+
+function makeHighlightMaterial([dx, dy]) {
+  const pixelRatio = window.devicePixelRatio || 1;
+  const material = new pc.ShaderMaterial({
+    uniqueName: "GpkgHighlightLinesMaterial",
+    attributes: { vertex_position: pc.SEMANTIC_POSITION },
+    vertexGLSL: `
+      attribute vec3 vertex_position;
+      uniform mat4 matrix_model;
+      uniform mat4 matrix_viewProjection;
+      uniform vec2 uOffsetPx;
+      uniform vec2 uViewport;
+      void main(void) {
+        vec4 clip = matrix_viewProjection * matrix_model * vec4(vertex_position, 1.0);
+        clip.xy += uOffsetPx * 2.0 / uViewport * clip.w;
+        gl_Position = clip;
+      }
+    `,
+    fragmentGLSL: `
+      precision highp float;
+      uniform vec4 uColor;
+      void main(void) {
+        gl_FragColor = uColor;
+      }
+    `,
+  });
+  material.setParameter("uOffsetPx", [dx * pixelRatio, dy * pixelRatio]);
+  material.setParameter("uViewport", [1, 1]);
+  material.setParameter("uColor", HIGHLIGHT_COLOR);
+  material.cull = pc.CULLFACE_NONE;
+  material.depthTest = false;
+  material.depthWrite = false;
+  material.blendType = pc.BLEND_NORMAL;
+  material.update();
+  return material;
 }
 
 function makeUnlitMaterial(color) {
@@ -74,9 +113,23 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   function destroyRender(child) {
     child.resource?.mesh?.destroy?.();
     child.resource?.material?.destroy?.();
+    for (const material of child.resource?.highlightMaterials ?? []) material.destroy?.();
     child.resource = null;
     child.root?.destroy?.();
     child.root = null;
+    child.lineEntity = null;
+    child.highlightEntity = null;
+  }
+
+  function applyHighlight(child) {
+    if (!child.root) return;
+    child.lineEntity.enabled = !child.highlighted;
+    child.highlightEntity.enabled = child.highlighted;
+    if (!child.highlighted) return;
+    const { width, height } = app.graphicsDevice;
+    for (const material of child.resource.highlightMaterials) {
+      material.setParameter("uViewport", [width, height]);
+    }
   }
 
   function render(child, georef) {
@@ -89,25 +142,40 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     mesh.setPositions(worldPositions(child.source, placement));
     mesh.update(pc.PRIMITIVE_LINES, true);
     const material = makeUnlitMaterial(wireColor);
-    child.resource = { mesh, material };
+    const highlightMaterials = HIGHLIGHT_OFFSETS.map(makeHighlightMaterial);
+    child.resource = { mesh, material, highlightMaterials };
 
-    const lineEntity = new pc.Entity(`GPKG lignes · ${child.source.name}`);
-    lineEntity.addComponent("render", {
+    child.lineEntity = new pc.Entity(`GPKG lignes · ${child.source.name}`);
+    child.lineEntity.addComponent("render", {
       type: "asset",
       meshInstances: [new pc.MeshInstance(mesh, material)],
       layers: [getOverlayLayer(app).id],
     });
 
+    child.highlightEntity = new pc.Entity(`GPKG surbrillance · ${child.source.name}`);
+    child.highlightEntity.addComponent("render", {
+      type: "asset",
+      meshInstances: highlightMaterials.map((m) => new pc.MeshInstance(mesh, m)),
+      layers: [getOverlayLayer(app).id],
+    });
+
     child.root = new pc.Entity(`GPKG · ${child.source.name}`);
-    child.root.addChild(lineEntity);
+    child.root.addChild(child.lineEntity);
+    child.root.addChild(child.highlightEntity);
     child.root.setLocalEulerAngles(getFlipUp() ? 180 : 0, 0, 0);
     child.root.enabled = child.visible;
     app.root.addChild(child.root);
+    applyHighlight(child);
     return placement;
   }
 
   function refreshPlacement() {
     if (disposed) return;
+    for (const layer of layers.values()) {
+      for (const child of layer.children) {
+        if (child.highlighted) applyHighlight(child);
+      }
+    }
     const georef = getGeoref?.() ?? null;
     if (georef === lastGeoref) return;
     lastGeoref = georef;
@@ -158,8 +226,11 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         name: `${table.name} · ${(source.count / 2).toLocaleString("fr-FR")} segments`,
         source,
         visible: true,
+        highlighted: false,
         root: null,
         resource: null,
+        lineEntity: null,
+        highlightEntity: null,
         placement: null,
       };
       layer.children.push(child);
@@ -176,6 +247,10 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         setVisible(visible) {
           child.visible = visible;
           if (child.root) child.root.enabled = visible;
+        },
+        setHighlight(on) {
+          child.highlighted = on;
+          applyHighlight(child);
         },
       })),
       onRemove: () => {

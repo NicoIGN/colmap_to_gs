@@ -83,6 +83,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   géoréférencement / CRS (EPSG) que le LiDAR. La couleur se règle dans
   « Options » (« Couleur des données filaires »). Décodage SQLite via sql.js
   (chargé depuis jsdelivr) ; limite : 512 Mio, 4 millions de sommets affichés.
+  Le bouton ◎ à côté de chaque couche la met en évidence en jaune et plus épaisse.
 - Dans une vue vide, le visualiseur cadre automatiquement le modèle COLMAP.
 - Le clic gauche-glisser orbite autour de la cible ; le clic droit-glisser ou
   milieu-glisser déplace la vue sans touche supplémentaire. Ctrl + clic
