@@ -2,68 +2,11 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
-**Entraînement.** Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
-Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
-d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
-obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
-par le [tool de segmentation](../segmentation_masks/README.md), avec
-Mask2Former ou SegFormer : `TRAIN_MASKS_BACKEND=segmentation`, modèle local
-dans `TRAIN_MASKS_MODEL`, `TRAIN_MASKS_LABELS=sky` et
-`TRAIN_MASKS_MODE=ignore`. Les PNG sont référencés dans le dataset Nerfstudio ;
-le mode `empty` n'est pas transposé.
-Les résultats Nerfstudio ont un suffixe `-nerfstudio` pour ne pas réutiliser
-les checkpoints Spirula. La fusion reste en coordonnées COLMAP originales.
-Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfacto.
-`TRAIN_NS_TRAIN_BIN`, `TRAIN_NS_EXPORT_BIN` et `TRAIN_NS_DOWNSCALE_FACTOR` règlent ce moteur.
+## 1. Objectif
 
-**Paramètres par backend.** Les variables `SFM_SP_*` pilotent le SfM Spirula
-de Panoramax, indépendamment de `TRAIN_BACKEND`. Le mode HLOC 360 ci-dessous
-utilise les réglages `HLOC_*` à la place.
-`SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
-`SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
-au SfM Spirula. HLOC conserve ses propres réglages et seuils pycolmap. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle Spirula est détecté (360° -> `equirectangular`,
-sans focale ; sinon `opencv`). Le définir force le modèle. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
-
-Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
-reste partagé. Les exemples et commentaires de
-[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh) et [`config.default.sh`](config.default.sh) regroupent ces paramètres par backend.
-
-**Panoramax 360 avec HLOC/pycolmap.** Utiliser un nouveau `OUTPUT_DIR` :
-
-```bash
-PANORAMAX_PICTURE_TYPE="360"
-COLMAP_METHOD="hloc"
-HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
-SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
-```
-
-Les panoramas complets 2:1 deviennent six vues pinhole de champ 110° avec
-recouvrement, utilisées pour le SfM et l'entraînement choisi par
-`TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
-les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
-d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
-`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
-pyproj et pycolmap sont requis dans `PYTHON_BIN`.
-
-Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
-Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
-CRS `PANORAMAX_BBOX_EPSG` (2154 par défaut). Le recalage exige au moins trois
-positions reconstruites et une trajectoire non rectiligne. Sans altitudes
-complètes, seul le plan horizontal est ancré : l'altitude locale est arbitraire
-et la verticale suppose les panoramas redressés. Contrôler les résidus dans
-`georef_stats.json` et vérifier visuellement ; les altitudes GPS brutes ne sont
-pas corrigées du géoïde. Les masques générés sont appliqués aux vues projetées.
-Le filtre `SFM_SP_PAIR_MAX_DISTANCE`, MVS et LiDAR ne sont pas disponibles dans
-ce mode. Les changements d'images ou de réglages exigent un nouveau workspace.
-
-**Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` concerne
-l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
-correction PPISP et la grille bilatérale à l'entraînement ; `no_crf` inclut le
-vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
-si ces métadonnées sont présentes. Ces options ne sont pas transmises à
-Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
-`SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
-[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh).
+Ce dossier propose deux niveaux : le téléchargement seul (`download.sh`) et le
+pipeline complet bbox → `.splat` (`scripts/panoramax_to_3dgs.sh`), détaillé
+en section 3.
 
 Ce lanceur télécharge les images HD disponibles dans une bbox depuis
 le catalogue fédéré Panoramax, sans compte utilisateur :
@@ -73,13 +16,13 @@ Bbox (EPSG indiqué) → recherche STAC/WGS84 → vérification des prises de vu
                 → pagination des résultats → téléchargement des images
 ```
 
-## 1. Objectif
-
 ```bash
 bash tools/panoramax/download.sh \
   --bbox "651000,6861000,652000,6862000" --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
+
+Les coordonnées de l'exemple sont illustratives, pas une garantie de présence de photos.
 
 ## 2. Entrées et sorties
 
@@ -112,6 +55,12 @@ Filtres répétables `--filter KEY=VALEURS` : KEY est une propriété STAC (ex.
 séparées par des virgules sont en OU, les filtres successifs en ET, sans tenir
 compte de la casse :
 
+```bash
+bash tools/panoramax/download.sh \
+  --bbox "651000,6861000,652000,6862000" --crs EPSG:2154 \
+  --output-dir /chemin/vers/panoramax \
+  --filter "geovisio:producer=immergis,overflorian" \
+  --filter "Exif.Image.Software=H19.03.02.02.00"
 ```
 
 Dans le pipeline complet, la même syntaxe s'écrit dans une seule variable :
@@ -125,6 +74,76 @@ collection + identifiant photo pour éviter collisions et noms dangereux.
 Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ## 3. Configuration et utilisation
+
+### Entraînement Spirula ou Nerfstudio
+
+Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
+Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
+d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
+obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
+par le [tool de segmentation](../segmentation_masks/README.md), avec
+Mask2Former ou SegFormer : `TRAIN_MASKS_BACKEND=segmentation`, modèle local
+dans `TRAIN_MASKS_MODEL`, `TRAIN_MASKS_LABELS=sky` et
+`TRAIN_MASKS_MODE=ignore`. Les PNG sont référencés dans le dataset Nerfstudio ;
+le mode `empty` n'est pas transposé.
+Les résultats Nerfstudio ont un suffixe `-nerfstudio` pour ne pas réutiliser
+les checkpoints Spirula. La fusion reste en coordonnées COLMAP originales.
+Les réglages Spirula de cap/croissance/qualité ne sont pas des budgets Splatfacto.
+`TRAIN_NS_TRAIN_BIN`, `TRAIN_NS_EXPORT_BIN` et `TRAIN_NS_DOWNSCALE_FACTOR` règlent ce moteur.
+
+### Paramètres par backend
+
+Les variables `SFM_SP_*` pilotent le SfM Spirula
+de Panoramax, indépendamment de `TRAIN_BACKEND`. Le mode HLOC 360 ci-dessous
+utilise les réglages `HLOC_*` à la place.
+`SFM_MAX_ERROR`, `SFM_MIN_INLIERS`, `SFM_MIN_TRI_ANGLE`, `SFM_MAX_IMAGE_SIZE`,
+`SFM_ALIKED_MAX_FEATURES`, `NUM_CPUS` et `SFM_CAMERA_MODEL` sont les paramètres communs exposés
+au SfM Spirula. HLOC conserve ses propres réglages et seuils pycolmap. Si `SFM_CAMERA_MODEL` n'est pas défini, le modèle Spirula est détecté (360° -> `equirectangular`,
+sans focale ; sinon `opencv`). Le définir force le modèle. Les options `TRAIN_SP_*` concernent uniquement l'entraînement
+Spirula ; `TRAIN_NS_*` ne concerne que Nerfstudio/Splatfacto. `TRAIN_NUM_ITER`
+reste partagé. Les exemples et commentaires de
+[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh) et [`config.default.sh`](config.default.sh) regroupent ces paramètres par backend.
+
+### Panoramas 360 avec HLOC/pycolmap
+
+Utiliser un nouveau `OUTPUT_DIR` :
+
+```bash
+PANORAMAX_PICTURE_TYPE="360"
+COLMAP_METHOD="hloc"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
+```
+
+Les panoramas complets 2:1 deviennent six vues pinhole de champ 110° avec
+recouvrement, utilisées pour le SfM et l'entraînement choisi par
+`TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
+les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
+d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
+`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
+pyproj et pycolmap sont requis dans `PYTHON_BIN`.
+
+Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
+Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
+CRS `PANORAMAX_BBOX_EPSG` (2154 par défaut). Le recalage exige au moins trois
+positions reconstruites et une trajectoire non rectiligne. Sans altitudes
+complètes, seul le plan horizontal est ancré : l'altitude locale est arbitraire
+et la verticale suppose les panoramas redressés. Contrôler les résidus dans
+`georef_stats.json` et vérifier visuellement ; les altitudes GPS brutes ne sont
+pas corrigées du géoïde. Les masques générés sont appliqués aux vues projetées.
+Le filtre `SFM_SP_PAIR_MAX_DISTANCE`, MVS et LiDAR ne sont pas disponibles dans
+ce mode. Les changements d'images ou de réglages exigent un nouveau workspace.
+
+### Corrections photométriques Spirula
+
+`SFM_SP_IMAGE_EXPOSURE` concerne
+l'analyse SfM et n'agit pas sur l'entraînement. Les `TRAIN_SP_*` règlent la
+correction PPISP et la grille bilatérale à l'entraînement ; `no_crf` inclut le
+vignettage, `no_crf_no_vig` l'omet, et l'initialisation EXIF ne fonctionne que
+si ces métadonnées sont présentes. Ces options ne sont pas transmises à
+Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
+`SFM_SP_PAIR_MAX_DISTANCE`. Valeurs et défauts dans
+[`config/defaults/train.default.sh`](../../config/defaults/train.default.sh).
 
 ### Paramètres SfM exposés
 
@@ -478,6 +497,8 @@ bash scripts/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
 
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
 
+#### Récupération après SIGSEGV
+
 Si `sfm auto` termine avec SIGSEGV après l'export, le wrapper vérifie que les
 trois fichiers binaires de `sparse/0` ont été créés pendant cette exécution,
 se lisent entièrement et contiennent des caméras, images et points. Si ces
@@ -485,8 +506,12 @@ conditions sont satisfaites, il poursuit avec un avertissement explicite.
 Des fichiers préexistants, absents, vides ou tronqués restent bloquants.
 Cette récupération ne corrige pas le crash et ne certifie pas la qualité du
 modèle ; les codes d'erreur de qualité ou de géoréférencement restent propagés.
+#### Ressources CPU
+
 `NUM_CPUS` (défaut `2`) limite les CPU utilisés par SfM, les masques et les
 processus parallèles ; sous Slurm, il sert aussi à `--cpus-per-task`.
+
+#### Étapes séparées
 
 Les étapes sont également accessibles individuellement, avec la même config :
 
@@ -499,6 +524,8 @@ bash scripts/panoramax_to_3dgs.sh config.sh merge
 Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifie
 que sa sortie. `merge` exige tous les splats et ne relance aucun entraînement.
 Sans argument d'étape, le pipeline local reste séquentiel et complet.
+
+#### Préparation SfM (prepare_sfm.py)
 
 Le préréglage lance d'abord `prepare_sfm.py` :
 
@@ -555,11 +582,16 @@ peut recaler la reconstruction sur une trajectoire GPS au format GPX.
 
 ## 5. Notes et informations complémentaires
 
-Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel :
+### Mode Clean-GS adapté
+
+Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel.
+Voir [tools/clean_gs](../clean_gs/README.md).
 
 
 
-Elle contrôle les choix SfM/entraînement, entiers, rayons, recouvrement,
+### Validation de la configuration
+
+La validation contrôle les choix SfM/entraînement, entiers, rayons, recouvrement,
 booléens, bbox ordonnée, URL et nom de sortie, ainsi que la syntaxe des
 ressources Slurm en mode `slurm`. Elle n'exécute pas Spirula, ne vérifie pas
 la disponibilité des partitions/ressources du cluster et ne garantit pas
@@ -577,9 +609,7 @@ de confiance et est sourcé, même en validation seule.
 
 
 
-Les coordonnées de l'exemple sont illustratives, pas une garantie de présence de photos.
-
-
+### Reprise et manifeste
 
 Relancer la même commande reprend les images dont l'URL et la taille correspondent
 aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
@@ -593,14 +623,20 @@ sont acceptés ; la signature JPEG et la taille téléchargée restent vérifié
 Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
 restent présents, donc utiliser un dossier distinct pour une autre sélection.
 
+### Limites de l'API
+
 Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
 HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
 par une petite zone et respecter les conditions d'utilisation et d'attribution
 des instances et des photos.
 
+### Progression
+
 Dans un terminal interactif, une barre de progression affiche les photos
 téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
 trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+
+### Recherche et comptage
 
 Le script demande les métadonnées à l'API (sans télécharger les images à cette
 étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
@@ -617,6 +653,8 @@ sans réduire le comptage : par exemple, `--image-max 400` affiche le total
 disponible dans la bbox et en traite au plus 400.
 
 
+
+### Robustesse SfM
 
 La perte Huber reste robuste ; le seuil de reprojection et l'angle plus stricts
 visent les appariements incohérents et les profondeurs à faible parallaxe.

@@ -2,25 +2,6 @@
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
-## Vidéo sur Slurm
-
-La configuration, les commandes et les options (`VIDEO`, `NUM_FRAMES`,
-`--wait`, `--prepare-only`) sont décrites dans
-[l'exemple vidéo](../../examples/pipelines.md#vidéo--images--3dgs) et le
-[guide Bash / Slurm](../../doc/lancement_bash_slurm.md).
-
-`scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des
-frames dans un job Slurm, puis appel du lanceur `scripts/launch_images_to_3dgs.sh`
-après réussite de l'extraction. Le terminal attend la fin de l'extraction avant
-de soumettre les jobs images. Les ressources `SLURM_*` et `SLURM_ENV_SETUP`
-s'appliquent aussi à l'extraction. La sélection conserve la couverture
-temporelle et utilise la pondération de netteté par défaut de l'extracteur (0,7).
-Les frames existantes ne sont pas écrasées : utiliser un nouveau dossier
-pour réextraire, ou appeler directement `launch_images_to_3dgs.sh` pour
-reprendre à partir des frames déjà extraites.
-Les journaux d'extraction sont dans `OUTPUT_DIR/logs/video-frames-%j.out`
-et `.err`.
-
 ## 1. Objectif
 
 Pipeline configurable pour produire un Gaussian Splat `.splat` à partir d’images,
@@ -35,109 +16,6 @@ Images
 
 Les [masques](../segmentation_masks/README.md) et le
 [recalage sur une trajectoire GPS](../preprocess/README.md) sont optionnels.
-
-**Préparation.** L'[outil images vers COLMAP](../images_to_colmap/README.md)
-est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
-`colmap`, `nerfstudio` (`ns-process-data`), `orientations` (poses + LiDAR) ou `hloc`
-(SfM Hierarchical-Localization, `HLOC_*`).
-Il peut être lancé seul ; les résultats compatibles sont réutilisés.
-
-**Panoramas 360 avec HLOC.** Pour les photos ou images extraites de vidéos
-équirectangulaires complètes (rapport 2:1), activer :
-
-```bash
-COLMAP_METHOD="hloc"
-HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
-SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
-GEOREF_EPSG="2154"
-```
-
-Remplacer l'ancien `SFM_EQUIRECTANGULAR_VIEWS=true` par
-`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les espaces de travail compatibles restent réutilisables.
-
-Chaque panorama devient six images carrées pinhole de champ 110° avec
-recouvrement. HLOC extrait et apparie les points, puis pycolmap reconstruit ;
-les mêmes vues sont utilisées pour l'entraînement choisi par `TRAIN_BACKEND`.
-`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ; les vues sont
-reconstruites en `PINHOLE` avec leur focale connue fixée. Les vues issues d'un
-panorama ne sont pas contraintes en rig : leur
-centre peut différer après reconstruction. Prévoir davantage de temps et de
-stockage. Installer HLOC avec `bash $GIT_ROOT/tools/colmap/install-hloc.sh`
-et disposer de numpy, OpenCV, Pillow, scipy et pyproj dans `PYTHON_BIN`.
-HLOC utilise ses propres seuils pycolmap, pas les seuils `SFM_MAX_ERROR`,
-`SFM_MIN_INLIERS` et `SFM_MIN_TRI_ANGLE` du SfM Spirula/COLMAP direct.
-
-Les GPS EXIF sont conservés dans `gps_georef/0/gps_positions.json`. Au moins
-trois panoramas reconstruits et une trajectoire non rectiligne sont nécessaires
-pour recaler le modèle en ENU local métrique ; `GEOREF_EPSG` décrit l'origine
-projetée du repère (Lambert-93 par défaut), pas les coordonnées du modèle.
-Sans assez de GPS, un avertissement est émis et le modèle reste dans son repère
-SfM non métrique. Sans altitudes complètes, seul le plan horizontal est ancré :
-l'altitude reste arbitraire et la verticale suppose des panoramas redressés.
-Les coordonnées GPS et les hauteurs sont approximatives, sans correction de
-géoïde ; vérifier le rapport `gps_georef/0/georef_stats.json` et le résultat.
-L'extracteur vidéo ne garantit pas la conservation de GPS dans les images.
-Changer les images ou paramètres nécessite un nouveau `OUTPUT_DIR`. Les masques
-générés restent disponibles ; les masques externes, GPX, MVS et LiDAR ne sont
-pas pris en charge avec ce mode.
-
-**Entraînement.** `TRAIN_BACKEND=spirula|nerfstudio` choisit le moteur sans
-changer le modèle COLMAP. Nerfstudio exige PyTorch et un GPU NVIDIA utilisable
-via CUDA ; sinon le calcul est refusé avant l'entraînement, sans repli CPU.
-Les résultats sont séparés dans `gs/` et `gs-nerfstudio/`.
-Le recadrage et la fusion utilisent des exports dans les coordonnées COLMAP
-originales, après inversion de la transformation de chaque entraînement.
-
-**Corrections photométriques Spirula.** `SFM_SP_IMAGE_EXPOSURE` ajuste
-l'exposition utilisée pendant l'analyse SfM ; ce réglage n'agit pas sur
-l'entraînement. Les paramètres `TRAIN_SP_*` pilotent la correction PPISP et la
-grille bilatérale pendant l'entraînement. `no_crf` inclut la correction du
-vignettage, contrairement à `no_crf_no_vig`. `TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF`
-peut initialiser la correction depuis les balises EXIF disponibles. Ces options
-ne sont pas transmises à Nerfstudio. Les valeurs vides conservent les défauts
-de Spirula installée ; voir [`config/defaults/train.default.sh`](../../config/defaults/train.default.sh).
-
-**Paramètres par backend.** Le fichier d'exemple regroupe les réglages SfM
-communs (`SFM_MAX_*`, seuils géométriques et threads), puis les options
-`SFM_SP_*`, `SFM_COLMAP_*` et `SFM_NS_*` selon le producteur sélectionné par
-`COLMAP_METHOD`. Les réglages `TRAIN_SP_*` ne s'appliquent qu'à
-`TRAIN_BACKEND=spirula` ; `TRAIN_NS_*` ne s'appliquent qu'à
-`TRAIN_BACKEND=nerfstudio`. `TRAIN_NUM_ITER` et `TRAIN_CLEAN` sont communs.
-Les options SfM `SFM_SP_*` non applicables à la méthode sélectionnée sont
-refusées ; les options d'entraînement `TRAIN_SP_*` n'affectent pas Nerfstudio
-et ne lui sont pas transmises.
-
-**Masques Nerfstudio.** Ils sont générés par
-[`tools/segmentation_masks`](../segmentation_masks/README.md), avec
-**Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et
-`TRAIN_MASKS_MODEL` pointant vers le modèle local). Définir explicitement
-`TRAIN_MASKS_MODE=ignore`. Le worker renseigne `mask_path` dans chaque vue
-du `transforms.json` transmis à Nerfstudio.
-Le mode `empty` de Spirula n'est pas transposé. Les paramètres Spirula de cap,
-qualité, croissance, flottants et distractions ne sont pas appliqués à Splatfacto ;
-`TRAIN_NUM_ITER` reste commun. `TRAIN_NS_DOWNSCALE_FACTOR` règle la réduction des images.
-`TRAIN_NS_TRAIN_BIN` et `TRAIN_NS_EXPORT_BIN` choisissent les exécutables de l'environnement
-correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
-
-**Exemple Nerfstudio.** Le fichier
-[`param.nerfstudio.default.sh`](param.nerfstudio.default.sh) montre une
-configuration avec masques sémantiques pour le SfM et l'entraînement.
-Les modèles ADE20K/Mapillary ont le label `sky`, pas de label `cloud` distinct.
-Les masques SfM peuvent aussi garder une politique indépendante.
-
-Exemple d’invocation :
-
-```bash
-bash scripts/images_to_3dgs.sh /chemin/config.sh
-```
-
-Depuis des vidéos, `scripts/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
-
-```bash
-bash scripts/videos_to_3dgs.sh /chemin/config.sh --video a.mp4 --video b.mp4 --num-frames 200 [--width 1920 --height 1080] [--frames-dir DOSSIER] [--phase prepare]
-```
-
-Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côté de la première vidéo) et régénérées à chaque appel.
 
 ## 2. Entrées et sorties
 
@@ -185,6 +63,144 @@ bash scripts/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 
 Les ressources, le parallélisme, l'environnement des nœuds et le suivi des jobs
 sont décrits dans le [guide de lancement Bash / Slurm](../../doc/lancement_bash_slurm.md).
+
+### Vidéo sur Slurm
+
+La configuration, les commandes et les options (`VIDEO`, `NUM_FRAMES`,
+`--wait`, `--prepare-only`) sont décrites dans
+[l'exemple vidéo](../../examples/pipelines.md#vidéo--images--3dgs) et le
+[guide Bash / Slurm](../../doc/lancement_bash_slurm.md).
+
+`scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des
+frames dans un job Slurm, puis appel du lanceur `scripts/launch_images_to_3dgs.sh`
+après réussite de l'extraction. Le terminal attend la fin de l'extraction avant
+de soumettre les jobs images. Les ressources `SLURM_*` et `SLURM_ENV_SETUP`
+s'appliquent aussi à l'extraction. La sélection conserve la couverture
+temporelle et utilise la pondération de netteté par défaut de l'extracteur (0,7).
+Les frames existantes ne sont pas écrasées : utiliser un nouveau dossier
+pour réextraire, ou appeler directement `launch_images_to_3dgs.sh` pour
+reprendre à partir des frames déjà extraites.
+Les journaux d'extraction sont dans `OUTPUT_DIR/logs/video-frames-%j.out`
+et `.err`.
+
+### Préparation COLMAP
+
+L'[outil images vers COLMAP](../images_to_colmap/README.md)
+est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
+`colmap`, `nerfstudio` (`ns-process-data`), `orientations` (poses + LiDAR) ou `hloc`
+(SfM Hierarchical-Localization, `HLOC_*`).
+Il peut être lancé seul ; les résultats compatibles sont réutilisés.
+
+### Panoramas 360 avec HLOC
+
+Pour les photos ou images extraites de vidéos
+équirectangulaires complètes (rapport 2:1), activer :
+
+```bash
+COLMAP_METHOD="hloc"
+HLOC_CAMERA_MODEL="EQUIRECTANGULAR"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="1024"
+GEOREF_EPSG="2154"
+```
+
+Remplacer l'ancien `SFM_EQUIRECTANGULAR_VIEWS=true` par
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les espaces de travail compatibles restent réutilisables.
+
+Chaque panorama devient six images carrées pinhole de champ 110° avec
+recouvrement. HLOC extrait et apparie les points, puis pycolmap reconstruit ;
+les mêmes vues sont utilisées pour l'entraînement choisi par `TRAIN_BACKEND`.
+`HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ; les vues sont
+reconstruites en `PINHOLE` avec leur focale connue fixée. Les vues issues d'un
+panorama ne sont pas contraintes en rig : leur
+centre peut différer après reconstruction. Prévoir davantage de temps et de
+stockage. Installer HLOC avec `bash $GIT_ROOT/tools/colmap/install-hloc.sh`
+et disposer de numpy, OpenCV, Pillow, scipy et pyproj dans `PYTHON_BIN`.
+HLOC utilise ses propres seuils pycolmap, pas les seuils `SFM_MAX_ERROR`,
+`SFM_MIN_INLIERS` et `SFM_MIN_TRI_ANGLE` du SfM Spirula/COLMAP direct.
+
+Les GPS EXIF sont conservés dans `gps_georef/0/gps_positions.json`. Au moins
+trois panoramas reconstruits et une trajectoire non rectiligne sont nécessaires
+pour recaler le modèle en ENU local métrique ; `GEOREF_EPSG` décrit l'origine
+projetée du repère (Lambert-93 par défaut), pas les coordonnées du modèle.
+Sans assez de GPS, un avertissement est émis et le modèle reste dans son repère
+SfM non métrique. Sans altitudes complètes, seul le plan horizontal est ancré :
+l'altitude reste arbitraire et la verticale suppose des panoramas redressés.
+Les coordonnées GPS et les hauteurs sont approximatives, sans correction de
+géoïde ; vérifier le rapport `gps_georef/0/georef_stats.json` et le résultat.
+L'extracteur vidéo ne garantit pas la conservation de GPS dans les images.
+Changer les images ou paramètres nécessite un nouveau `OUTPUT_DIR`. Les masques
+générés restent disponibles ; les masques externes, GPX, MVS et LiDAR ne sont
+pas pris en charge avec ce mode.
+
+### Entraînement
+
+`TRAIN_BACKEND=spirula|nerfstudio` choisit le moteur sans
+changer le modèle COLMAP. Nerfstudio exige PyTorch et un GPU NVIDIA utilisable
+via CUDA ; sinon le calcul est refusé avant l'entraînement, sans repli CPU.
+Les résultats sont séparés dans `gs/` et `gs-nerfstudio/`.
+Le recadrage et la fusion utilisent des exports dans les coordonnées COLMAP
+originales, après inversion de la transformation de chaque entraînement.
+
+### Corrections photométriques Spirula
+
+`SFM_SP_IMAGE_EXPOSURE` ajuste
+l'exposition utilisée pendant l'analyse SfM ; ce réglage n'agit pas sur
+l'entraînement. Les paramètres `TRAIN_SP_*` pilotent la correction PPISP et la
+grille bilatérale pendant l'entraînement. `no_crf` inclut la correction du
+vignettage, contrairement à `no_crf_no_vig`. `TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF`
+peut initialiser la correction depuis les balises EXIF disponibles. Ces options
+ne sont pas transmises à Nerfstudio. Les valeurs vides conservent les défauts
+de Spirula installée ; voir [`config/defaults/train.default.sh`](../../config/defaults/train.default.sh).
+
+### Paramètres par backend
+
+Le fichier d'exemple regroupe les réglages SfM
+communs (`SFM_MAX_*`, seuils géométriques et threads), puis les options
+`SFM_SP_*`, `SFM_COLMAP_*` et `SFM_NS_*` selon le producteur sélectionné par
+`COLMAP_METHOD`. Les réglages `TRAIN_SP_*` ne s'appliquent qu'à
+`TRAIN_BACKEND=spirula` ; `TRAIN_NS_*` ne s'appliquent qu'à
+`TRAIN_BACKEND=nerfstudio`. `TRAIN_NUM_ITER` et `TRAIN_CLEAN` sont communs.
+Les options SfM `SFM_SP_*` non applicables à la méthode sélectionnée sont
+refusées ; les options d'entraînement `TRAIN_SP_*` n'affectent pas Nerfstudio
+et ne lui sont pas transmises.
+
+### Masques Nerfstudio
+
+Ils sont générés par
+[`tools/segmentation_masks`](../segmentation_masks/README.md), avec
+**Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et
+`TRAIN_MASKS_MODEL` pointant vers le modèle local). Définir explicitement
+`TRAIN_MASKS_MODE=ignore`. Le worker renseigne `mask_path` dans chaque vue
+du `transforms.json` transmis à Nerfstudio.
+Le mode `empty` de Spirula n'est pas transposé. Les paramètres Spirula de cap,
+qualité, croissance, flottants et distractions ne sont pas appliqués à Splatfacto ;
+`TRAIN_NUM_ITER` reste commun. `TRAIN_NS_DOWNSCALE_FACTOR` règle la réduction des images.
+`TRAIN_NS_TRAIN_BIN` et `TRAIN_NS_EXPORT_BIN` choisissent les exécutables de l'environnement
+correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
+
+### Exemple Nerfstudio
+
+Le fichier
+[`param.nerfstudio.default.sh`](param.nerfstudio.default.sh) montre une
+configuration avec masques sémantiques pour le SfM et l'entraînement.
+Les modèles ADE20K/Mapillary ont le label `sky`, pas de label `cloud` distinct.
+Les masques SfM peuvent aussi garder une politique indépendante.
+
+### Exemples de lancement
+
+Exemple d’invocation :
+
+```bash
+bash scripts/images_to_3dgs.sh /chemin/config.sh
+```
+
+Depuis des vidéos, `scripts/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
+
+```bash
+bash scripts/videos_to_3dgs.sh /chemin/config.sh --video a.mp4 --video b.mp4 --num-frames 200 [--width 1920 --height 1080] [--frames-dir DOSSIER] [--phase prepare]
+```
+
+Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côté de la première vidéo) et régénérées à chaque appel.
 
 ### Masques
 
@@ -399,7 +415,7 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 
 ## 5. Notes et informations complémentaires
 
-#### Filtrage optionnel du sparse
+### Filtrage optionnel du sparse
 
 ```bash
 SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
@@ -421,7 +437,7 @@ ce filtre reste expérimental. Changer ce réglage après découpage/entraîneme
 nécessite un nouvel `OUTPUT_DIR` ; `TRAIN_CLEAN` ne redécoupe pas les blocs.
 Le défaut `false` reste compatible avec les signatures antérieures.
 
-#### Réutilisation du workspace
+### Réutilisation du workspace
 
 Le pipeline conserve `inputs.json` (sélection, tailles/dates, paramètres SfM,
 masques et découpage). Une modification incompatible est refusée : choisir un
@@ -434,7 +450,7 @@ partielles Spirula sont reprises depuis un checkpoint complet si disponible ;
 sinon, les artefacts sont archivés et seul le bloc incomplet redémarre.
 L'exemple ne supprime jamais les images source.
 
-#### Masques terminés, SfM interrompu
+### Masques terminés, SfM interrompu
 
 Pour reprendre un workspace partiel, activer explicitement dans la configuration :
 
