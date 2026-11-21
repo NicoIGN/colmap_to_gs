@@ -155,13 +155,7 @@ python3 tools/splat_to_3dtiles/convert.py \
 bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
 ```
 
-Sans `--georef-summary`, le convertisseur cherche `georef/georef_summary.json`
-puis `georef_summary.json` dans le dossier du `.splat`. Il est donc prévu de
-convertir depuis le dossier de calcul. Indique `--georef-summary` si le résumé
-est ailleurs. Le dossier `scene_tiles` ne doit pas exister, sauf avec `--overwrite`.
-
-Détails et options : [conversion 3D Tiles](tools/splat_to_3dtiles/README.md) et
-[visualisation](tools/viewer/README.md).
+Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/splat_to_3dtiles/README.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
 
 ### Documentation des outils
 

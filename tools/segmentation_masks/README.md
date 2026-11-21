@@ -152,22 +152,14 @@ Un changement de moteur ou de paramètres de génération invalide les masques e
 ### Variables de configuration du pipeline
 
 
-À ajouter dans le fichier de configuration du [pipeline Panoramax](../panoramax/README.md). Ces variables sont consommées par l'orchestration du pipeline, qui les transmet au script sous forme d'options de ligne de commande :
-
-```bash
-TRAIN_MASKS="on"                    # off par défaut
-TRAIN_MASKS_BACKEND="segmentation"  # segmentation ou spirula
-TRAIN_MASKS_PYTHON="/chemin/partage/segmentation-masks/venv/bin/python"
-TRAIN_MASKS_MODEL="/chemin/partage/segmentation-masks/models/facebook--mask2former-swin-large-mapillary-vistas-semantic"
-TRAIN_MASKS_LABELS="sky"            # ex. "sky,person,car,bicycle"
-TRAIN_MASKS_MODE="auto"             # auto, ignore ou empty
-TRAIN_MASKS_CONFIDENCE="0"          # seuil complémentaire ; 0 = aucune filtration supplémentaire
-TRAIN_MASKS_DILATE="auto"           # auto ou fraction de la diagonale image
-TRAIN_MASKS_MAX_FRACTION="0.95"     # au-delà, l'image n'est pas masquée
-TRAIN_MASKS_DEVICE="cpu"            # auto, cuda, cuda:N, mps ou cpu
-```
-
-`TRAIN_MASKS_PYTHON` et les chemins des modèles sont affichés par l'installateur. Pour sélectionner Mapillary dans le pipeline, `TRAIN_MASKS_MODEL` doit pointer vers son dossier local `facebook--mask2former-swin-large-mapillary-vistas-semantic` (ou vers le chemin effectivement utilisé lors de l'installation). Pour ADE20K, utiliser le dossier `nvidia--segformer-b5-finetuned-ade-640-640`.
+Les variables `TRAIN_MASKS_*` (backend, Python, modèle, labels, mode, dilatation,
+seuils, périphérique) sont décrites et commentées avec leurs défauts dans
+[`config/defaults/masques.default.sh`](../../config/defaults/masques.default.sh).
+Elles s'ajoutent à la configuration du [pipeline Panoramax](../panoramax/README.md)
+ou des images, et `TRAIN_MASKS_PYTHON` et les chemins des modèles sont affichés par l'installateur.
+Pour Mapillary, `TRAIN_MASKS_MODEL` pointe vers le dossier
+`facebook--mask2former-swin-large-mapillary-vistas-semantic` ; pour ADE20K,
+`nvidia--segformer-b5-finetuned-ade-640-640`.
 
 Sur le Mac utilisé pour les tests Mapillary, conserver `TRAIN_MASKS_DEVICE="cpu"` : le mode `auto` sélectionne MPS et le test observé sur MPS ne détectait pas la classe `Sky`. Sur une machine Linux avec CUDA, `auto` sélectionne CUDA si PyTorch le détecte.
 

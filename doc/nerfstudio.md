@@ -502,7 +502,9 @@ Ces quatre chemins sont fournis explicitement au lanceur ; `run.sh` les prépare
 
 ### Fonctionnement de SLURM
 
-`environment/ign.slurm/launch.sh` soumet `launch.slurm` avec `sbatch`, affiche les logs en direct jusqu'à la fin du job et renvoie `0` si l'état final est `COMPLETED`, `1` sinon. Le job active l'environnement conda `gsplat`, puis lance `run.sh` avec `--skip-conda`.
+Le fonctionnement du lanceur (suivi des journaux, codes de retour, environnement
+`gsplat`) est décrit dans la [section Nerfstudio du guide Bash / Slurm](lancement_bash_slurm.md#pipeline-nerfstudio--splatfacto).
+Le job lance `run.sh` avec `--skip-conda`.
 
 ## 5. Notes et informations complémentaires
 
