@@ -418,7 +418,7 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 ### Filtrage optionnel du sparse
 
 ```bash
-SFM_FILTER_DENSITY=true  # false par défaut ; local et Slurm
+SFM_FILTER_DENSITY=true  # false par défaut ; local, Slurm et Panoramax (même étape partagée : libs/scripts/sparse_density.sh)
 SFM_DENSITY_VOTE_FRACTION=0.75  # ]0,1[ ; baisser = plus strict
 SFM_DENSITY_FAR_SUPPORT_RATE=0.25  # ]0,1] ; monter = plus strict
 ```

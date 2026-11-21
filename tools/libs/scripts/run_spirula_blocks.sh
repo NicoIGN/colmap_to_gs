@@ -160,11 +160,6 @@ SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
 EOF
 }
 
-die() {
-  printf '[ERREUR] %s\n' "$*" >&2
-  exit 1
-}
-
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0

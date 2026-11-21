@@ -1,4 +1,5 @@
 # Fonctions partagées par les lanceurs Spirula ; à sourcer, pas à exécuter.
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/shell_helpers.sh"
 
 # Exécutable Spirula par défaut, indépendant du dossier courant :
 # `spirula` dans le PATH, sinon ../spirula-studio/build/spirula à côté du dépôt.

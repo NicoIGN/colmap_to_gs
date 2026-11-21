@@ -19,28 +19,10 @@ only one prepared zero-based block; merge requires every block to be exported.
 EOF
 }
 
-die() {
-  printf '[ERREUR] %s\n' "$*" >&2
-  exit 1
-}
+source "$repo_root/tools/libs/scripts/spirula_common.sh"
 
 # Résout SPIRULA_DEVICE=auto une seule fois : premier GPU « ok » discret, puis intégré.
 # Colonnes de `spirula sam devices` : no, nom (espaces possibles), type, VRAM (2 mots), uuid, état.
-resolve_spirula_device() {
-  local requested="$1" out kind idx
-  [[ "$requested" == auto ]] || { printf '%s' "$requested"; return; }
-  out="$("$SPIRULA_BIN" sam devices 2>&1)" \
-    || die "spirula sam devices a échoué ; définir SPIRULA_DEVICE (index, nom ou uuid)"
-  for kind in discrete integrated; do
-    idx="$(awk -v k="$kind" '$1 ~ /^[0-9]+$/ && $NF == "ok" && $(NF-4) == k { print $1; exit }' <<<"$out")"
-    if [[ -n "$idx" ]]; then
-      printf '%s' "$idx"
-      return
-    fi
-  done
-  die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
-}
-
 pipeline_stage="configuration et validation des paramètres"
 pipeline_error() {
   local status="$1" line="$2"
@@ -379,7 +361,9 @@ if [[ "$phase" != merge ]]; then
         ( "${COLMAP_METHOD:-spirula}" == spirula || "$TRAIN_BACKEND" == spirula ||
           ( "${SFM_MASKS:-off}" == on && "${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" == spirula ) ||
           ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ) ]]; then
-    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
+    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_BIN" "$SPIRULA_DEVICE")"
+    [[ "$SPIRULA_DEVICE" != auto ]] ||
+      die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
     printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
   fi
   DIR="$DATASET_DIR" \

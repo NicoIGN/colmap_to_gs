@@ -98,12 +98,7 @@ Options:
 EOF
 }
 
-die(){ echo "[ERREUR] $*" >&2; exit 1; }
 log(){ echo "[run_spirula_block] $*"; }
-need_arg(){ [[ $# -ge 2 && -n "${2:-}" ]] || die "Valeur manquante pour $1"; }
-is_positive_integer(){ [[ "$1" =~ ^[1-9][0-9]*$ ]]; }
-is_nonnegative_integer(){ [[ "$1" =~ ^[0-9]+$ ]]; }
-is_number(){ [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]]; }
 
 canonical_path() {
   python3 - "$1" <<'PY'

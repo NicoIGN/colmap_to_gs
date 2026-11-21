@@ -3,12 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
+source "$repo_root/tools/libs/scripts/shell_helpers.sh"
 source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
-
-die() {
-  printf '[ERREUR] %s\n' "$*" >&2
-  exit 1
-}
 
 usage() {
   cat <<'EOF'

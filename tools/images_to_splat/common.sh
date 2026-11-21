@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Shared configuration for local execution and Slurm submission.
-die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
-# realpath -e/-m n'existe pas sur macOS : Python est portable.
-resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../libs/scripts" && pwd)/shell_helpers.sh"
 
 # Modèle SAM 3 par défaut : models/ de spirula-studio (SPIRULA_ROOT, sinon
 # dépôt adjacent au projet, puis parent du dossier de SPIRULA_BIN).

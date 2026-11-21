@@ -46,7 +46,7 @@ print_step_time() {
   echo ""
 }
 
-die() { echo "❌ $*" >&2; exit 1; }
+source "$SCRIPT_DIR/shell_helpers.sh"
 
 show_help() {
   cat << EOF
