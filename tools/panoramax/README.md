@@ -116,6 +116,7 @@ compte de la casse :
 
 Dans le pipeline complet, la même syntaxe s'écrit dans une seule variable :
 `PANORAMAX_FILTERS="geovisio:producer=immergis,overflorian;Exif.Image.Software=H19.03.02.02.00"`.
+Exemples commentés et `PANORAMAX_PROVIDER` : [filtrer par producteur ou par logiciel EXIF](../../examples/panoramax.md#filtrer-par-producteur-ou-par-logiciel-exif).
 
 Les métadonnées conservent le Feature STAC complet : coordonnées, date, séquence,
 propriétés, assets, liens de provenance et informations de licence/attribution
@@ -476,7 +477,7 @@ les dépendances et le suivi des jobs.
 
 ```bash
 # Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
-bash script/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
+bash scripts/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
 ```
 
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.

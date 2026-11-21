@@ -49,7 +49,7 @@ pas fournir un résultat géoréférencé à partir des EXIF.
 
 **Réutilisation.** `inputs.json` protège les images, la méthode et les données
 d'orientation/LiDAR. Une méthode différente exige un nouveau workspace.
-Le pipeline `script/images_to_3dgs.sh` appelle ce même outil avant de découper
+Le pipeline `scripts/images_to_3dgs.sh` appelle ce même outil avant de découper
 et entraîner ; il réutilise donc une préparation compatible déjà effectuée.
 Une sortie COLMAP direct ou Nerfstudio partielle doit être sauvegardée/déplacée ;
 elle n'est pas reprise implicitement.

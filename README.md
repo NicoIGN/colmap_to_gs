@@ -71,7 +71,7 @@ Les moteurs d'entraînement proposés sont :
 
 ### Pipelines complets
 
-Deux pipelines dans `script/` enchaînent les étapes depuis les images jusqu'à
+Deux pipelines dans `scripts/` enchaînent les étapes depuis les images jusqu'à
 l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
 
 - **Bbox + flux Panoramax → splat** :
@@ -106,7 +106,7 @@ paramètres `SLURM_*` :
 
 ```bash
 # Images locales → 3DGS
-bash script/images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
 bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
@@ -122,13 +122,15 @@ la soumission Slurm.
 
 ```bash
 # Images locales → 3DGS
-bash script/launch_images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/launch_images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
-bash script/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
+bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
-Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
+Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md) et les
+[exemples de configuration complète](examples/pipelines.md) pour les paramètres
+commentés de chaque pipeline.
 
 Les installations, données attendues, paramètres et sorties sont décrits dans
 le README du pipeline choisi.

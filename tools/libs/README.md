@@ -10,6 +10,6 @@
 - `scripts/pipeline_slurm.sh` : soumission des étapes Slurm dépendantes.
 - `python/nerfstudio_runtime.py` : refus explicite sans PyTorch ou GPU NVIDIA/CUDA.
 
-**Orchestration.** Les pipelines globaux sont dans `script/` à la racine.
+**Orchestration.** Les pipelines globaux sont dans `scripts/` à la racine.
 `scripts/run.sh` entraîne une scène unique avec Nerfstudio, sans découpage
 en blocs ni fusion.

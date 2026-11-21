@@ -138,7 +138,7 @@ Les masques SfM peuvent aussi garder une politique indépendante.
 Exemple d’invocation :
 
 ```bash
-bash script/images_to_3dgs.sh /chemin/config.sh
+bash scripts/images_to_3dgs.sh /chemin/config.sh
 ```
 
 Depuis des vidéos, `scripts/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
@@ -184,13 +184,13 @@ Depuis la racine du dépôt :
 
 ```bash
 # Exécution directe dans le shell : tous les blocs s'exécutent successivement.
-bash script/images_to_3dgs.sh /chemin/config.sh
+bash scripts/images_to_3dgs.sh /chemin/config.sh
 
 # Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
-bash script/launch_images_to_3dgs.sh /chemin/config.sh
+bash scripts/launch_images_to_3dgs.sh /chemin/config.sh
 
 # Slurm : recalculer seulement le SfM et les blocs COLMAP.
-bash script/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
+bash scripts/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 ```
 
 Les ressources, le parallélisme, l'environnement des nœuds et le suivi des jobs
@@ -326,7 +326,7 @@ Le recalage utilise une trajectoire GPS fournie au format GPX. Pour l'activer,
 renseigner `GEOREF_GPX_FILE` dans le fichier de configuration :
 
 # Refaire seulement le SfM et le découpage sur Slurm :
-bash script/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
+bash scripts/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 ```bash
 GEOREF_GPX_FILE="/chemin/absolu/parcours.gpx"
 GEOREF_VIEW_PREFIX="h00_y0"  # vide : sélection automatique du dossier
@@ -528,9 +528,9 @@ résolus et les dates des fichiers entrent aussi dans la comparaison.
 Ne pas supprimer `inputs.json` pour contourner ce diagnostic.
 
 ```bash
-bash script/images_to_3dgs.sh /chemin/config.sh --phase prepare
-bash script/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
-bash script/images_to_3dgs.sh /chemin/config.sh --phase merge
+bash scripts/images_to_3dgs.sh /chemin/config.sh --phase prepare
+bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
+bash scripts/images_to_3dgs.sh /chemin/config.sh --phase merge
 ```
 
 La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers

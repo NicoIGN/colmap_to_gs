@@ -44,7 +44,7 @@ Une fois les données COLMAP disponibles, choisir le moteur d'entraînement :
 Dans ce dépôt, les points d'entrée correspondants sont :
 
 - **Pipeline commun** : `TRAIN_BACKEND=spirula|nerfstudio` dans la configuration
-  de `script/images_to_3dgs.sh` ou `script/panoramax_to_3dgs.sh`.
+  de `scripts/images_to_3dgs.sh` ou `scripts/panoramax_to_3dgs.sh`.
   Le modèle COLMAP et le découpage restent communs ; chaque moteur dispose
   de ses sorties d'entraînement. Nerfstudio exige PyTorch et NVIDIA/CUDA,
   sans repli CPU/Metal. Ses masques sont en mode `ignore`, pas `empty`.
@@ -67,7 +67,7 @@ est décrit dans le [README du post-traitement](../tools/postprocess/README.md).
 
 ### 2.3. Utiliser un pipeline complet
 
-Deux pipelines dans `script/` enchaînent la production des données COLMAP,
+Deux pipelines dans `scripts/` enchaînent la production des données COLMAP,
 l'entraînement et l'export. Spirula reste le moteur par défaut ; Nerfstudio
 peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 
