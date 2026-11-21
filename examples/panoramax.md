@@ -104,6 +104,16 @@ dans `PANORAMAX_FILTERS` pour exprimer un OU ; utiliser la liste `,` à la place
 Ce filtre est transmis à `download.py` sous forme de `--filter` répétés et enregistré dans
 `request.json` ; changer `PANORAMAX_FILTERS` sur un `OUTPUT_DIR` existant est refusé.
 
+Pour ne garder que les photos d'un provider STAC (`properties.providers[].name`,
+insensible à la casse), utiliser `PANORAMAX_PROVIDER` :
+
+```bash
+PANORAMAX_PROVIDER="gaelle.gabriel@paris.fr"
+```
+
+Équivalent en ligne de commande : `--provider gaelle.gabriel@paris.fr`. Sur les photos
+ayant un seul provider, cela revient à `PANORAMAX_FILTERS="geovisio:producer=gaelle.gabriel@paris.fr"`.
+
 Pour les panoramas 360 avec HLOC, ajouter à la configuration
 `PANORAMAX_PICTURE_TYPE=360`, `COLMAP_METHOD=hloc` et
 `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les prérequis de reconstruction et
