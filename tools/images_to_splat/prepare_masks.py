@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Prepare local-image mask directories using shared segmentation policies."""
 
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -9,6 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import generate, policy
+from mask_preparation import read_report, write_json
 from resume import MissingMaskError, validate_masks
 
 
@@ -37,9 +37,9 @@ def prepare(policy_only=None):
         if external:
             source = Path(external)
             report_path = source / "masks.json"
-            if report_path.is_file():
-                report = json.loads(report_path.read_text())
-                if not isinstance(report, dict) or report.get("status") != "complete":
+            report = read_report(report_path)
+            if report is not None:
+                if report.get("status") != "complete":
                     raise ValueError(f"Rapport de masques externe incomplet : {report_path}")
             validate_masks(images, source)
             if directory.exists() or directory.is_symlink():
@@ -56,10 +56,10 @@ def prepare(policy_only=None):
         report_path = directory / "masks.json"
 
         def verify_report(strict):
-            if not report_path.is_file():
+            report = read_report(report_path)
+            if report is None:
                 return None
-            report = json.loads(report_path.read_text())
-            if not isinstance(report, dict) or not isinstance(report.get("settings"), dict):
+            if not isinstance(report.get("settings"), dict):
                 raise ValueError(f"Rapport de masques invalide : {report_path}")
             recorded = report["settings"]
 
@@ -126,9 +126,7 @@ def prepare(policy_only=None):
                     },
                     "validation": "PNG monochrome 0/255, dimensions et couverture vérifiées",
                 }
-                temporary = directory / ".masks.resume.json.tmp"
-                temporary.write_text(json.dumps(report, indent=2) + "\n")
-                temporary.replace(report_path)
+                write_json(report_path, report)
             print(
                 f"[AVERTISSEMENT] Reprise des masques existants : {directory}. "
                 "Leur politique d'origine doit être conservée.",

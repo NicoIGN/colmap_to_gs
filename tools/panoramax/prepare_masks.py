@@ -14,13 +14,7 @@ from dataset_layout import image_files, metadata_index
 from prepare_sfm import main as prepare_images
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import enabled, generate, policy
-
-
-def without_device(settings):
-    # The device selects where SAM runs, not which masks are produced.
-    if not settings:
-        return settings
-    return {key: value for key, value in settings.items() if key != "device"}
+from mask_preparation import read_report, without_device, write_json
 
 
 def prepare(dataset, workspace, check_only=False, perspective=False):
@@ -53,7 +47,7 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
 
     signature = fingerprint(generator_hash, without_device(sfm))
     marker = workspace / "sfm_mask_policy.json"
-    previous = json.loads(marker.read_text()) if marker.is_file() else {}
+    previous = read_report(marker) or {}
     if not isinstance(previous, dict):
         raise ValueError(f"Signature de masques invalide : {marker}")
     artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
@@ -110,7 +104,7 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
         prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
     record = {"signature": signature, "input_digest": "sha256", "settings": sfm, "training_settings": train,
               "shared_with_training": shared, "status": "partial"}
-    marker.write_text(json.dumps(record, indent=2) + "\n")
+    write_json(marker, record)
     if features.is_symlink():
         preserve = (not shared and previous.get("shared_with_training") and
                     features.resolve() == training and training.is_dir())
@@ -126,7 +120,7 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
     else:
         generate(sfm, images, features)
     record["status"] = "complete"
-    marker.write_text(json.dumps(record, indent=2) + "\n")
+    write_json(marker, record)
 
 
 if __name__ == "__main__":
