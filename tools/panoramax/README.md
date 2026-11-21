@@ -4,23 +4,57 @@
 
 ## 1. Objectif
 
-Ce dossier propose deux niveaux : le téléchargement seul (`download.sh`) et le
-pipeline complet bbox → `.splat` (`scripts/panoramax_to_3dgs.sh`), détaillé
-en section 3.
+Ce dossier transforme les photos Panoramax d'une bbox en un fichier `.splat`
+3D Gaussian Splatting. Il propose deux niveaux : le pipeline complet
+(`scripts/panoramax_to_3dgs.sh`) et le téléchargement seul (`download.sh`).
 
-Ce lanceur télécharge les images HD disponibles dans une bbox depuis
-le catalogue fédéré Panoramax, sans compte utilisateur :
+### Pipeline complet bbox → `.splat`
+
+`scripts/panoramax_to_3dgs.sh` exécute :
 
 ```text
-Bbox (EPSG indiqué) → recherche STAC/WGS84 → vérification des prises de vue
-                → pagination des résultats → téléchargement des images
+Bbox + configuration
+        ↓
+Téléchargement Panoramax → préparation des images
+        ↓
+[masques SfM optionnels] → [filtre optionnel des paires GPS]
+        ↓
+SfM géoréférencé par EXIF → découpage COLMAP
+        ↓
+Entraînement Spirula par bloc → recadrage bbox des blocs
+        ↓
+Fusion voxelisée → filtre contextuel (diagnostic par défaut)
+        ↓
+.splat + références .georef/
 ```
+
+Les splats alignés des blocs sont fusionnés en un unique fichier final. La
+configuration est décrite en section 3.
+
+### Téléchargement seul (`download.sh`)
+
+Le lanceur télécharge les images HD disponibles dans une bbox depuis le
+catalogue fédéré Panoramax, sans compte utilisateur. La bbox est transformée
+en WGS84 pour la recherche STAC, puis chaque point de prise de vue est vérifié
+dans la bbox d'origine.
 
 ```bash
 bash tools/panoramax/download.sh \
   --bbox "651000,6861000,652000,6862000" --crs EPSG:2154 \
   --output-dir /chemin/vers/panoramax
 ```
+
+| Option | Description |
+|---|---|
+| `--bbox "xmin,ymin,xmax,ymax"` | Zone de recherche, dans le système indiqué par `--crs` |
+| `--output-dir DOSSIER` | Dossier de sortie (images, métadonnées, manifeste, `summary.json`) |
+| `--crs EPSG:2154` | Système de coordonnées de `--bbox` ; défaut `EPSG:2154` (Lambert-93) |
+| `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
+| `--filter KEY=VALEURS` | Filtre répétable sur les propriétés STAC ou les tags EXIF (voir section 2) |
+| `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
+| `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
+| `--api-url https://une-instance/api` | Autre API compatible ; défaut : catalogue fédéré `explore.panoramax.fr` |
+| `--timeout 120` | Délai réseau par requête, en secondes |
 
 Les coordonnées de l'exemple sont illustratives, pas une garantie de présence de photos.
 
@@ -174,25 +208,8 @@ python3 -m pip install -r tools/panoramax/requirements.txt
 
 ### Utilisation
 
-Depuis la racine du dépôt :
-
-```bash
-bash tools/panoramax/download.sh \
-  --bbox "651000,6861000,652000,6862000" \
-  --crs EPSG:2154 \
-  --output-dir /chemin/vers/panoramax
-```
-
-Options :
-
-| Option | Description |
-|---|---|
-| `--crs EPSG:2154` | Système de coordonnées de `--bbox` ; défaut `EPSG:2154` (Lambert-93) |
-| `--datetime "2026-01-01T00:00:00Z/2026-10-31T23:59:59Z"` | Intervalle de prise de vue, transmis à l'API |
-| `--image-max 400` | Limite le nombre total de photos sélectionnées, toutes les pages confondues |
-| `--quality sd` | Résolution SD ; valeurs : `hd` (défaut), `sd`, `thumb` |
-| `--api-url https://une-instance/api` | Autre API compatible ; défaut : catalogue fédéré `explore.panoramax.fr` |
-| `--timeout 120` | Délai réseau par requête, en secondes |
+Les options du téléchargement sont décrites en section 1, dans
+« Téléchargement seul ».
 
 ### Reconstruction Spirula géoréférencée par l'EXIF
 
@@ -213,27 +230,8 @@ séquence (les noms de fichiers sont des empreintes), `--metric-gps full` et
 `--sensor-pairs --sensor-pair-radius 30`. Un code de sortie 4 signifie que le
 modèle a été écrit sans le repère métrique demandé.
 
-### Pipeline complet bbox → `.splat`
+### Configuration du pipeline complet
 
-- `scripts/panoramax_to_3dgs.sh` exécute :
-
-```text
-Bbox + configuration
-        ↓
-Téléchargement Panoramax → préparation des images
-        ↓
-[masques SfM optionnels] → [filtre optionnel des paires GPS]
-        ↓
-SfM géoréférencé par EXIF → découpage COLMAP
-        ↓
-Entraînement Spirula par bloc → recadrage bbox des blocs
-        ↓
-Fusion voxelisée → filtre contextuel (diagnostic par défaut)
-        ↓
-.splat + références .georef/
-```
-
-- Sortie : les splats alignés des blocs sont fusionnés en un unique fichier final.
 - Variante : le [nettoyage expérimental Clean-GS](../clean_gs/README.md) peut remplacer le filtre
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
