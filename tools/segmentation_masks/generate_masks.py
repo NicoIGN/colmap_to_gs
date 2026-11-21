@@ -57,13 +57,16 @@ INVERSE_ORIENTATION = {2: 0, 3: 3, 4: 1, 5: 5, 6: 2, 7: 6, 8: 4}
 SPIRULA_IMAGE_LINE = re.compile(r"^image (\d+) : (\S+) -- ")
 
 
-def relay_spirula_output(stream, names):
-    """Print Spirula's per-image lines with the final frame index and image name."""
+def relay_spirula_output(stream, names, verbose=False):
+    """Print Spirula's output; per-image lines only in verbose mode, with the final frame index."""
     for line in stream:
         match = SPIRULA_IMAGE_LINE.match(line)
-        if match and match.group(2) in names:
-            index, source = names[match.group(2)]
-            line = f"image {index} : {source} -- " + line[match.end():]
+        if match:
+            if not verbose:
+                continue
+            if match.group(2) in names:
+                index, source = names[match.group(2)]
+                line = f"image {index} : {source} -- " + line[match.end():]
         print(line, end="", flush=True)
 
 
@@ -291,7 +294,7 @@ class SpirulaSegmenter:
                 process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True,
                                            encoding="utf-8", errors="replace")
                 threading.Thread(target=relay_spirula_output,
-                                 args=(process.stdout, shard_names[shard]),
+                                 args=(process.stdout, shard_names[shard], self.args.verbose),
                                  daemon=True).start()
                 running[shard] = process
             while running:
