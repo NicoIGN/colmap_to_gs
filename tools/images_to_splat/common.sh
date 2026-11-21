@@ -85,6 +85,7 @@ load_config() {
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   REMOVE_LOCKS="${REMOVE_LOCKS:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+  SFM_PREPARE_IMAGES="${SFM_PREPARE_IMAGES:-false}"
   SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"
   SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
@@ -216,6 +217,10 @@ load_config() {
     config_error "REMOVE_LOCKS=true exige PIPELINE_RESUME=true."
   fi
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
+  config_choice SFM_PREPARE_IMAGES "$SFM_PREPARE_IMAGES" 'true|false'
+  if [[ "$SFM_PREPARE_IMAGES" == true && "$COLMAP_METHOD" != spirula ]]; then
+    config_error "SFM_PREPARE_IMAGES=true exige COLMAP_METHOD=spirula."
+  fi
   if ! awk -v v="$SFM_DENSITY_VOTE_FRACTION" 'BEGIN { exit !(v > 0 && v < 1) }'; then
     config_error "SFM_DENSITY_VOTE_FRACTION='$SFM_DENSITY_VOTE_FRACTION' doit être dans ]0,1[."
   fi

@@ -927,6 +927,28 @@ if "--wait" in args:
         self.assertIn("SFM_SP_IMAGE_EXPOSURE est propre", result.stdout + result.stderr)
         self.assertEqual(len(self.commands()), before)
 
+    def test_prepare_images_switches_spirula_preparation(self):
+        result = self.run_pipeline("--phase", "prepare")
+        self.assert_ok(result)
+        sfm = next(cmd for cmd in self.commands() if cmd[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[3], str(self.root / "output with spaces" / "images"))
+        self.assertNotIn("[prepare]", result.stdout + result.stderr)
+
+        before = len(self.commands())
+        self.append(f'OUTPUT_DIR="{self.root / "prepared"}"\nSFM_PREPARE_IMAGES="true"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assert_ok(result)
+        self.assertIn("[prepare]", result.stdout + result.stderr)
+        sfm = next(cmd for cmd in self.commands()[before:] if cmd[:2] == ["spirula", "sfm"])
+        self.assertTrue(sfm[3].endswith(os.path.join("sfm", "images")), sfm[3])
+
+        before = len(self.commands())
+        self.append('SFM_PREPARE_IMAGES="maybe"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_PREPARE_IMAGES", result.stdout + result.stderr)
+        self.assertEqual(len(self.commands()), before)
+
     def test_strict_geometry_defaults_and_overrides_local_and_slurm(self):
         variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
                      "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM")

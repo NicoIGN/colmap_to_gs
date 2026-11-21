@@ -16,6 +16,8 @@ fi
 
 case "$COLMAP_METHOD" in
   spirula)
+    prepare_args=(--no-prepare)
+    [[ "${SFM_PREPARE_IMAGES:-false}" != true ]] || prepare_args=(--prepare)
     exposure_args=()
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       exposure_args=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
@@ -36,7 +38,7 @@ case "$COLMAP_METHOD" in
     fi
     bash "$repo_root/tools/libs/scripts/run_spirula_sfm.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
-      --preset video --no-prepare "${sequence_args[@]}" \
+      --preset video "${prepare_args[@]}" "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
