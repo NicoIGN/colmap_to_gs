@@ -22,6 +22,7 @@ lock_helper="$repo_root/tools/libs/python/pipeline_lock.py"
 "$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --resume "$PIPELINE_RESUME" --ignore "$REMOVE_LOCKS" --workspace "$OUTPUT_DIR"
 trap '"$PYTHON_BIN" "$lock_helper" "$lock" --pid "$$" --release' EXIT
 source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+source "$repo_root/tools/libs/scripts/sparse_density.sh"
 pipeline_report_start "$OUTPUT_DIR" "images_to_colmap"
 colmap_exit() {
   local status=$?
@@ -54,10 +55,6 @@ if [[ "$COLMAP_USE_MVS" == true ]]; then
 fi
 filter_input="$sparse"
 [[ "$SFM_FILTER_DENSITY" != true ]] || sparse="$OUTPUT_DIR/sparse_clean"
-check_filtered_sparse() {
-  [[ -f "$sparse/.density_done" && -s "$sparse/density_report.json" ]] || die "Filtrage sparse incomplet."
-  "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-}
 sparse_ready() {
   if [[ "$PIPELINE_RESUME" == true ]]; then
     local status=0
@@ -153,29 +150,8 @@ prepare() {
   fi
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
     begin_stage "filtrage du sparse par densité"
-    density_filter="$repo_root/tools/preprocess/filter_sparse_density.py"
-    density_version="$("$PYTHON_BIN" "$density_filter" --version)"
-    [[ "$density_version" =~ ^[0-9]+$ ]] ||
-      die "Version du filtre de densité invalide : $density_version"
-    cached_density_version=""
-    density_key="$density_version $SFM_DENSITY_VOTE_FRACTION $SFM_DENSITY_FAR_SUPPORT_RATE"
-    cached_density_version=""
-    if [[ -f "$sparse/.density_done" ]]; then
-      IFS= read -r cached_density_version < "$sparse/.density_done" || true
-    fi
-    if [[ "$cached_density_version" != "$density_key" ]]; then
-      [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" && ! -e "$OUTPUT_DIR/gs-nerfstudio" ]] ||
-        die "Réglages ou version du filtre de densité modifiés : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
-      "$PYTHON_BIN" "$density_filter" \
-        --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
-        --vote-fraction "$SFM_DENSITY_VOTE_FRACTION" \
-        --far-support-rate "$SFM_DENSITY_FAR_SUPPORT_RATE" \
-        --workers "$NUM_CPUS" --verbose
-      "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-      printf '%s\n' "$density_key" > "$sparse/.density_done"
-    else
-      check_filtered_sparse
-    fi
+    sparse_density_stage "$filter_input" "$OUTPUT_DIR/sparse" \
+      "$blocks" "$OUTPUT_DIR/gs" "$OUTPUT_DIR/gs-nerfstudio"
   fi
 }
 begin_stage "initialisation"

@@ -6,6 +6,7 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
+source "$repo_root/tools/libs/scripts/sparse_density.sh"
 config_errors=0
 reject_legacy_config || exit 1
 
@@ -528,6 +529,11 @@ prepare_blocks() {
       die "Génération des masques d’entraînement échouée."
   fi
 
+  local split_input="$SPARSE_DIR"
+  if [[ "${SFM_FILTER_DENSITY:-false}" == true ]]; then
+    sparse_density_stage "$SPARSE_DIR" "$SFM_DIR/sparse" "$BLOCKS_DIR" "$GS_ROOT"
+    split_input="$SFM_DIR/sparse_clean"
+  fi
   pipeline_report_phase "découpage COLMAP"
   if [[ -s "$BLOCKS_DIR/manifest.json" ]]; then
     block_count="$("$PYTHON_BIN" - "$BLOCKS_DIR/manifest.json" <<'PY'
@@ -554,9 +560,9 @@ PY
     if [[ -e "$BLOCKS_DIR" ]] && [[ -n "$(ls -A "$BLOCKS_DIR" 2>/dev/null)" ]]; then
       die "Sortie de découpage non vide sans manifest valide : $BLOCKS_DIR. Déplacer ou renommer ce dossier avant de relancer."
     fi
-    printf '[pipeline] Découpage de %s en %s blocs.\n' "$SPARSE_DIR" "$SPLIT_NUM_BLOCKS"
+    printf '[pipeline] Découpage de %s en %s blocs.\n' "$split_input" "$SPLIT_NUM_BLOCKS"
     "$PYTHON_BIN" "$SPLITTER" \
-      --input "$SPARSE_DIR" \
+      --input "$split_input" \
       --output "$BLOCKS_DIR" \
       --num-blocks "$SPLIT_NUM_BLOCKS" \
       --export-binary \
