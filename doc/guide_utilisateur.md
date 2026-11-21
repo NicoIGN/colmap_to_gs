@@ -77,6 +77,10 @@ peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 - **Images locales → splat** : sélection des images, reconstruction,
   entraînement par blocs et fusion ; voir le
   [pipeline images locales](../tools/images_to_splat/README.md).
+- **Vidéo → splat** : extraction des images d'une vidéo, puis même chaîne que
+  le pipeline images (reconstruction, entraînement par blocs et fusion) ; voir
+  la section « Vidéo sur Slurm » du
+  [pipeline images locales](../tools/images_to_splat/README.md#vidéo-sur-slurm).
 
 ## 3. Préparer les données et lancer un calcul
 
