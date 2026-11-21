@@ -17,6 +17,9 @@ from mask_policies import enabled, generate, policy
 from mask_preparation import read_report, without_device, write_json
 
 
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+
+
 def prepare(dataset, workspace, check_only=False, perspective=False):
     sfm = policy("SFM_MASKS")
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
@@ -98,10 +101,26 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
         raise ValueError(f"{training} est un lien symbolique : refuser de modifier sa cible")
     if shared and features.exists() and not features.is_symlink():
         raise ValueError(f"{features} est un dossier réel : choisir un nouveau workspace pour partager les masques")
-    if not previous and any((p / "masks.json").exists() for p in (features, training)):
-        raise ValueError("Masques préexistants sans signature : choisir un nouveau workspace")
     if not perspective:
         prepare_images(["--dataset", str(dataset), "--output-dir", str(workspace)])
+    # Validate copied masks before the partial marker exists: a rejected adoption must not
+    # leave a marker that would make the next run regenerate the user's masks.
+    adoptable = set()
+    if not previous:
+        for name, directory in (("training", training if train is not None else None),
+                                ("features", None if shared else features)):
+            if directory is None or not (directory / "masks.json").is_file():
+                continue
+            report = read_report(directory / "masks.json") or {}
+            if report.get("status") != "complete":
+                raise ValueError(f"Masques incomplets sans signature : {directory}")
+            for source in images.rglob("*"):
+                if source.is_file() and source.suffix.lower() in IMAGE_SUFFIXES:
+                    mask = directory / (source.relative_to(images).as_posix() + ".png")
+                    if not mask.is_file():
+                        raise ValueError(f"Masque attendu absent : {mask}")
+            adoptable.add(name)
+    adopted = []
     record = {"signature": signature, "input_digest": "sha256", "settings": sfm, "training_settings": train,
               "shared_with_training": shared, "status": "partial"}
     write_json(marker, record)
@@ -112,13 +131,22 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
         if preserve:
             # Keep the masks used for extraction before changing training labels.
             shutil.copytree(training, features)
+    def adopt_or_generate(name, settings, output):
+        # Masks copied into the workspace were validated above: sign them, do not regenerate.
+        if name in adoptable:
+            adopted.append(output.name)
+            print(f"[masques] Masques existants validés et signés : {output}", flush=True)
+            return
+        generate(settings, images, output)
+
     if train is not None:
-        generate(train, images, training)
+        adopt_or_generate("training", train, training)
     if shared:
         features.symlink_to(training, target_is_directory=True)
         print(f"[masques] Politiques identiques : {features} -> {training}", flush=True)
     else:
-        generate(sfm, images, features)
+        adopt_or_generate("features", sfm, features)
+    record["adopted_masks"] = adopted
     record["status"] = "complete"
     write_json(marker, record)
 

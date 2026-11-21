@@ -98,6 +98,34 @@ class PrepareMasksTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "dossier réel"):
             self.run_prepare()
 
+    def test_copied_complete_masks_are_signed_without_regeneration(self):
+        (self.workspace / "images").mkdir(parents=True)
+        (self.workspace / "images/a.jpg").write_bytes(b"jpeg")
+        train = self.workspace / "train_masks"
+        train.mkdir(parents=True)
+        (train / "masks.json").write_text(json.dumps({"status": "complete"}))
+        (train / "a.jpg.png").write_bytes(b"mask")
+        self.run_prepare()
+        self.assertEqual(self.calls, [])
+        marker = json.loads((self.workspace / "sfm_mask_policy.json").read_text())
+        self.assertEqual(marker["status"], "complete")
+        self.assertEqual(marker["adopted_masks"], ["train_masks"])
+        self.assertTrue((self.workspace / "feature_masks").is_symlink())
+
+    def test_copied_incomplete_masks_are_refused(self):
+        (self.workspace / "images").mkdir(parents=True)
+        (self.workspace / "images/a.jpg").write_bytes(b"jpeg")
+        train = self.workspace / "train_masks"
+        train.mkdir(parents=True)
+        (train / "masks.json").write_text(json.dumps({"status": "partial"}))
+        with self.assertRaisesRegex(ValueError, "incomplets sans signature"):
+            self.run_prepare()
+        self.assertEqual(self.calls, [])
+        (train / "masks.json").write_text(json.dumps({"status": "complete"}))
+        with self.assertRaisesRegex(ValueError, "Masque attendu absent"):
+            self.run_prepare()
+        self.assertEqual(self.calls, [])
+
     def test_training_policy_can_change_without_rebuilding_sfm(self):
         self.run_prepare()
         (self.workspace / "train_masks/a.jpg.png").write_bytes(b"original-mask")
