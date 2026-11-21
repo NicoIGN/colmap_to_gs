@@ -3,6 +3,8 @@ set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/georef_phase.sh"
+source "$repo_root/tools/libs/scripts/sparse_density.sh"
 
 usage() {
   echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
@@ -125,26 +127,28 @@ blocks="$OUTPUT_DIR/blocks"
 gs_root="$OUTPUT_DIR/gs"
 [[ "$TRAIN_BACKEND" != nerfstudio ]] || gs_root="$OUTPUT_DIR/gs-nerfstudio"
 selected="$OUTPUT_DIR/images"
-sparse="$sfm/sparse/0"
-if [[ -n "$GEOREF_GPX_FILE" ]]; then
-  sparse="$OUTPUT_DIR/georef/0"
-elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
-  sparse="$OUTPUT_DIR/gps_georef/0"
-fi
-if [[ "$COLMAP_USE_MVS" == true ]]; then
-  sparse="$sfm/mvs/sparse/0"
-fi
-filter_input="$sparse"
-if [[ "$SFM_FILTER_DENSITY" == true ]]; then
-  sparse="$OUTPUT_DIR/sparse_clean"
-fi
-lidar_input="$sparse"
-if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
-  sparse="$OUTPUT_DIR/colmap_lidar"
-  if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_COLMAP_GEOREF" ]]; then
-    export LIDAR_COLMAP_GEOREF="$OUTPUT_DIR/georef/0/georef_stats.json"
+sfm_model="$sfm/sparse/0"
+[[ "$COLMAP_USE_MVS" != true ]] || sfm_model="$sfm/mvs/sparse/0"
+# Modèle source du filtrage : géoréférencé si le recalage a réussi, sinon SfM.
+georef_input() {
+  if georef_applied; then
+    echo "$OUTPUT_DIR/georef/0"
+  else
+    echo "$sfm_model"
   fi
-fi
+}
+# Renseigne sparse (entrée du découpage et du recadrage) et lidar_input (entrée du recalage LiDAR).
+select_sparse() {
+  sparse="$(georef_input)"
+  if [[ "$SFM_FILTER_DENSITY" == true ]]; then
+    sparse="$OUTPUT_DIR/sparse_clean"
+  fi
+  lidar_input="$sparse"
+  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+    sparse="$OUTPUT_DIR/colmap_lidar"
+  fi
+}
+select_sparse
 
 check_filtered_sparse() {
   [[ -f "$lidar_input/.density_done" && -s "$lidar_input/density_report.json" ]] ||
@@ -155,6 +159,14 @@ check_filtered_sparse() {
 prepare() {
   set_stage "production COLMAP"
   bash "$repo_root/tools/images_to_colmap/run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  set_stage "géoréférencement"
+  georef_run "$sfm_model"
+  georef_lidar_env
+  if [[ "$SFM_FILTER_DENSITY" == true ]]; then
+    set_stage "filtrage de densité du sparse"
+    sparse_density_stage "$(georef_input)" "$OUTPUT_DIR/sparse" "$blocks" "$gs_root"
+  fi
+  select_sparse
   if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
     [[ ! -s "$blocks/manifest.json" || -f "$OUTPUT_DIR/lidar/colmap_inputs.json" ]] ||
       die "Activer LiDAR nécessite un nouveau workspace avant découpage."
@@ -201,13 +213,8 @@ else
   set_stage "vérification du workspace"
   "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
   "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
-  if [[ -n "$GEOREF_GPX_FILE" ]]; then
-    "$PYTHON_BIN" "$script_dir/georeference.py" check
-  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
-      --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \
-      --output "$OUTPUT_DIR/gps_georef/0" --epsg "$GEOREF_EPSG" --allow-missing --check
-  fi
+  georef_check "$sfm_model"
+  select_sparse
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
     check_filtered_sparse
   fi
@@ -261,24 +268,9 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
 done
 set_stage "fusion des blocs"
 merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
-if [[ -n "$GEOREF_GPX_FILE" ]]; then
-  set_stage "export de la référence géographique du splat"
-  "$PYTHON_BIN" "$script_dir/georeference.py" export
-elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
-  set_stage "export de la référence GPS du splat"
-  "$PYTHON_BIN" - "$OUTPUT_DIR/gps_georef/0/georef_stats.json" "$OUTPUT_DIR" "$EXPORT_SPLAT_NAME" <<'PY'
-import json, sys
-from pathlib import Path
-stats, output, splat = sys.argv[1:]
-data = json.loads(Path(stats).read_text())
-data["splat"] = Path(splat).name
-data["source_positions"] = "gps_georef/0/gps_positions.json"
-(Path(output) / (Path(splat).stem + ".georef.json")).write_text(json.dumps(data, indent=2) + "\n")
-PY
-fi
+set_stage "export de la référence géographique du splat"
+georef_export "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 set_stage "nettoyage LiDAR du splat final"
-if [[ -n "$GEOREF_GPX_FILE" && -z "$LIDAR_CLEAN_GEOREF" && "$LIDAR_COLMAP_ALIGN" != true ]]; then
-  export LIDAR_CLEAN_GEOREF="$OUTPUT_DIR/georef/0/georef_stats.json"
-fi
+georef_lidar_env
 lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

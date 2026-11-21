@@ -410,6 +410,13 @@ if "--wait" in args:
         self.assertEqual(gps["altitude_images"], 3)
         self.assertEqual(gps["metric_gps"], "full")
 
+    def test_georef_from_exif_can_be_disabled(self):
+        self.add_gps(altitude_images=(0, 1, 2))
+        self.append("GEOREF_FROM_EXIF=false")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual((self.output / ".georef_mode").read_text().strip(), "none")
+        self.assertFalse((self.output / "georef").exists())
+
     def test_nerfstudio_missing_torch_stops_before_preparation(self):
         (self.root / "torch.py").write_text('raise ImportError("test: torch absent")\n')
         self.env["PYTHONPATH"] = str(self.root)

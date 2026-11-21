@@ -103,8 +103,20 @@ def horizontal_fit(local, target, ups):
     return scale, rotation, translation
 
 
-def run(projection_path, sparse, output, epsg, metadata_dir=None, allow_missing=False, check=False):
-    projection_file = json.loads(projection_path.read_text())
+def identity_projection(sparse, images):
+    model = pycolmap.Reconstruction(sparse)
+    names = sorted(image.name for image in model.images.values())
+    return {"status": "complete",
+            "inputs": {"source": str(images), "images": [{"name": name} for name in names],
+                       "views": {name: name for name in names}}}
+
+
+def run(projection_path, sparse, output, epsg, metadata_dir=None, allow_missing=False, check=False,
+        images=None):
+    if projection_path is None:
+        projection_file = identity_projection(sparse, images)
+    else:
+        projection_file = json.loads(projection_path.read_text())
     if projection_file.get("status") != "complete":
         raise ValueError("Projection incomplète.")
     projection = projection_file["inputs"]
@@ -161,8 +173,8 @@ def run(projection_path, sparse, output, epsg, metadata_dir=None, allow_missing=
         original = projection["views"][image.name]
         centers.setdefault(original, []).append(image.projection_center())
         face = image.name.split("/", 1)[0]
-        axis = {"front": (0, -1, 0), "right": (0, -1, 0), "back": (0, -1, 0),
-                "left": (0, -1, 0), "up": (0, 0, 1), "down": (0, 0, -1)}[face]
+        # Images perspectives : l'axe vertical est supposé être -Y caméra (caméra à l'horizontale).
+        axis = {"up": (0, 0, 1), "down": (0, 0, -1)}.get(face, (0, -1, 0))
         up_vectors.setdefault(original, []).append(image.cam_from_world().rotation.matrix().T @ axis)
     names = sorted(name for name in centers if gps.get(name) is not None)
     output.mkdir(parents=True, exist_ok=True)
@@ -234,7 +246,9 @@ def run(projection_path, sparse, output, epsg, metadata_dir=None, allow_missing=
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--projection", type=Path, required=True)
+    parser.add_argument("--projection", type=Path,
+                        help="Projection équirectangulaire ; sans ce fichier, les images sont traitées en perspective.")
+    parser.add_argument("--images", type=Path, help="Dossier des images, requis sans --projection.")
     parser.add_argument("--sparse", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--epsg", type=int, default=2154)
@@ -242,9 +256,11 @@ def main():
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
+    if args.projection is None and args.images is None:
+        parser.error("--images est requis sans --projection")
     try:
         run(args.projection, args.sparse, args.output, args.epsg, args.metadata,
-            args.allow_missing, args.check)
+            args.allow_missing, args.check, args.images)
     except (OSError, ValueError, KeyError, TypeError) as error:
         sys.exit(f"[ERREUR] Géoréférencement GPS : {error}")
 

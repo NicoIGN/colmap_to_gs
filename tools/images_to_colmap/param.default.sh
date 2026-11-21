@@ -29,3 +29,4 @@ export SS_NN_LOG=1
 ORIENTATIONS_JSON="/chemin/orientations.json"
 LIDAR_PLY="/chemin/points.ply"
 GEOREF_GPX_FILE="" # prioritaire sur EXIF ; noms _fXXXXX requis par le recalage GPX
+GEOREF_FROM_EXIF="true" # géoréférencer depuis les coordonnées EXIF si présentes et si aucun GPX n'est donné

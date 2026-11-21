@@ -118,7 +118,7 @@ et disposer de numpy, OpenCV, Pillow, scipy et pyproj dans `PYTHON_BIN`.
 HLOC utilise ses propres seuils pycolmap, pas les seuils `SFM_MAX_ERROR`,
 `SFM_MIN_INLIERS` et `SFM_MIN_TRI_ANGLE` du SfM Spirula/COLMAP direct.
 
-Les GPS EXIF sont conservés dans `gps_georef/0/gps_positions.json`. Au moins
+Les GPS EXIF sont conservés dans `georef/0/gps_positions.json`. Au moins
 trois panoramas reconstruits et une trajectoire non rectiligne sont nécessaires
 pour recaler le modèle en ENU local métrique ; `GEOREF_EPSG` décrit l'origine
 projetée du repère (Lambert-93 par défaut), pas les coordonnées du modèle.
@@ -126,7 +126,7 @@ Sans assez de GPS, un avertissement est émis et le modèle reste dans son repè
 SfM non métrique. Sans altitudes complètes, seul le plan horizontal est ancré :
 l'altitude reste arbitraire et la verticale suppose des panoramas redressés.
 Les coordonnées GPS et les hauteurs sont approximatives, sans correction de
-géoïde ; vérifier le rapport `gps_georef/0/georef_stats.json` et le résultat.
+géoïde ; vérifier le rapport `georef/0/georef_stats.json` et le résultat.
 L'extracteur vidéo ne garantit pas la conservation de GPS dans les images.
 Changer les images ou paramètres nécessite un nouveau `OUTPUT_DIR`. Les masques
 générés restent disponibles ; les masques externes, GPX, MVS et LiDAR ne sont

@@ -126,6 +126,7 @@ load_config() {
   SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
   SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
   GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
+  GEOREF_FROM_EXIF="${GEOREF_FROM_EXIF:-true}"
   GEOREF_VIEW_PREFIX="${GEOREF_VIEW_PREFIX:-}"
   GEOREF_EPSG="${GEOREF_EPSG:-2154}"
   GEOREF_ALLOW_UNCERTAIN="${GEOREF_ALLOW_UNCERTAIN:-false}"
@@ -277,6 +278,7 @@ load_config() {
     config_error "Nerfstudio : utiliser TRAIN_MASKS_BACKEND=segmentation avec Mask2Former ou SegFormer."
   fi
   config_choice GEOREF_ALLOW_UNCERTAIN "$GEOREF_ALLOW_UNCERTAIN" 'true|false'
+  config_choice GEOREF_FROM_EXIF "$GEOREF_FROM_EXIF" 'true|false'
   config_positive_integer GEOREF_EPSG "$GEOREF_EPSG"
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     [[ "$GEOREF_GPX_FILE" == /* && -f "$GEOREF_GPX_FILE" ]] ||
