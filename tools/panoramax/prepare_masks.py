@@ -20,6 +20,25 @@ from mask_preparation import read_report, without_device, write_json
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 
 
+def external_dir(key):
+    value = os.environ.get(key, "").strip()
+    return Path(value).expanduser().resolve() if value else None
+
+
+def copy_external(source, directory):
+    # The copy is validated and signed by the caller; it is never regenerated.
+    if source is None:
+        return
+    if not source.is_dir():
+        raise ValueError(f"Dossier de masques introuvable : {source}")
+    if directory.is_symlink() or directory.exists():
+        if directory.resolve() != source:
+            raise ValueError(f"{directory} existe déjà et ne provient pas de {source} : le sauvegarder avant de continuer")
+        return
+    shutil.copytree(source, directory)
+    print(f"[masques] Masques externes copiés (sans génération) : {source} -> {directory}", flush=True)
+
+
 def prepare(dataset, workspace, check_only=False, perspective=False):
     sfm = policy("SFM_MASKS")
     train = policy("TRAIN_MASKS") if enabled(os.environ["TRAIN_MASKS"]) else None
@@ -107,6 +126,14 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
     # leave a marker that would make the next run regenerate the user's masks.
     adoptable = set()
     if not previous:
+        train_source = external_dir("TRAIN_MASKS_DIR")
+        sfm_source = external_dir("SFM_MASKS_DIR")
+        if shared and train_source and sfm_source and train_source != sfm_source:
+            raise ValueError("Labels identiques : SFM_MASKS_DIR et TRAIN_MASKS_DIR doivent désigner le même dossier")
+        if train is not None:
+            copy_external(train_source or (sfm_source if shared else None), training)
+        if not shared:
+            copy_external(sfm_source, features)
         for name, directory in (("training", training if train is not None else None),
                                 ("features", None if shared else features)):
             if directory is None or not (directory / "masks.json").is_file():

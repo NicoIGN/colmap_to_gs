@@ -126,6 +126,28 @@ class PrepareMasksTest(unittest.TestCase):
             self.run_prepare()
         self.assertEqual(self.calls, [])
 
+    def test_external_shared_masks_are_copied_and_signed_without_regeneration(self):
+        (self.workspace / "images").mkdir(parents=True)
+        (self.workspace / "images/a.jpg").write_bytes(b"jpeg")
+        external = Path(self.temp.name) / "external_masks"
+        external.mkdir()
+        (external / "masks.json").write_text(json.dumps({"status": "complete"}))
+        (external / "a.jpg.png").write_bytes(b"mask")
+        os.environ["TRAIN_MASKS_DIR"] = str(external)
+        self.run_prepare()
+        self.assertEqual(self.calls, [])
+        self.assertTrue((self.workspace / "train_masks/a.jpg.png").is_file())
+        marker = json.loads((self.workspace / "sfm_mask_policy.json").read_text())
+        self.assertEqual(marker["adopted_masks"], ["train_masks"])
+
+    def test_missing_external_masks_directory_is_refused(self):
+        (self.workspace / "images").mkdir(parents=True)
+        (self.workspace / "images/a.jpg").write_bytes(b"jpeg")
+        os.environ["TRAIN_MASKS_DIR"] = "SFM_MASKS_DIR"
+        with self.assertRaisesRegex(ValueError, "introuvable"):
+            self.run_prepare()
+        self.assertEqual(self.calls, [])
+
     def test_training_policy_can_change_without_rebuilding_sfm(self):
         self.run_prepare()
         (self.workspace / "train_masks/a.jpg.png").write_bytes(b"original-mask")

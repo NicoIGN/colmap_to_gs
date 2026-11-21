@@ -510,18 +510,31 @@ prepare_blocks() {
     [[ "$TRAIN_MASKS_BACKEND" != spirula ]] || mask_model="$TRAIN_MASKS_SPIRULA_MODEL"
     [[ "$TRAIN_MASKS_BACKEND" != spirula || "$MASKS_ACCEPT_LICENSE" != true ]] ||
       license_args+=(--accept-spirula-license)
-    printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
-      "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
-    "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
-      --images "$SFM_DIR/images" --output "$MASKS_DIR" \
-      --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
-      --spirula-device "$SPIRULA_DEVICE" \
-      --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
-      --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
-      --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
-      --jobs "$NUM_CPUS" \
-      "${license_args[@]}" ||
-      die "Génération des masques d’entraînement échouée."
+    if [[ -n "${TRAIN_MASKS_DIR:-}" ]]; then
+      # Masques fournis : copie validée et signée, jamais régénérée.
+      [[ -d "$TRAIN_MASKS_DIR" ]] || die "Dossier de masques d’entraînement introuvable : $TRAIN_MASKS_DIR"
+      if [[ ! -e "$MASKS_DIR" ]]; then
+        cp -r "$TRAIN_MASKS_DIR" "$MASKS_DIR"
+      elif [[ "$(realpath "$MASKS_DIR")" != "$(realpath "$TRAIN_MASKS_DIR")" ]]; then
+        die "$MASKS_DIR existe déjà et ne provient pas de $TRAIN_MASKS_DIR : le sauvegarder avant de continuer."
+      fi
+      grep -q '"status": "complete"' "$MASKS_DIR/masks.json" 2>/dev/null ||
+        die "Masques d’entraînement fournis incomplets : $TRAIN_MASKS_DIR"
+      printf '[pipeline] Masques d’entraînement fournis (sans génération) : %s\n' "$TRAIN_MASKS_DIR"
+    else
+      printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
+        "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
+      "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
+        --images "$SFM_DIR/images" --output "$MASKS_DIR" \
+        --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
+        --spirula-device "$SPIRULA_DEVICE" \
+        --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
+        --confidence "$TRAIN_MASKS_CONFIDENCE" --dilate-fraction "$TRAIN_MASKS_DILATE" \
+        --max-masked-fraction "$TRAIN_MASKS_MAX_FRACTION" --device "$TRAIN_MASKS_DEVICE" \
+        --jobs "$NUM_CPUS" \
+        "${license_args[@]}" ||
+        die "Génération des masques d’entraînement échouée."
+    fi
   fi
 
   local split_input="$SPARSE_DIR"
