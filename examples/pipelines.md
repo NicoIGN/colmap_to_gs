@@ -77,19 +77,16 @@ bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" -
 Panoramax et leurs métadonnées, reconstruit la scène, puis entraîne et exporte
 un `.splat`. La préparation nécessite un accès réseau à Panoramax.
 
-Créer `config-panoramax.sh` dans `DATA_ROOT` et adapter l'emprise Lambert-93 et les chemins :
+Créer `config-panoramax.sh` dans `DATA_ROOT`. Une configuration minimale suffit : l'emprise
+Lambert-93 (`PANORAMAX_BBOX_EPSG` vaut `2154` par défaut) et le dossier de sortie ; les autres
+paramètres prennent leurs valeurs par défaut.
 
 ```bash
-OUTPUT_DIR="$DATA_ROOT/results/panoramax"
-PANORAMAX_BBOX="651000,6861000,652000,6862000"
-PANORAMAX_BBOX_EPSG="2154"
-SFM_MASKS="off"
-TRAIN_MASKS="off"
-SLURM_PARTITION="partition_du_cluster"
+OUTPUT_DIR="$DATA_ROOT/results/panoramax-test"
+PANORAMAX_BBOX="655500,6861900,655700,6862100"
 ```
 
-Les masques sont désactivés ici ; les outils SfM et d'entraînement restent
-nécessaires. Deux modes de lancement sont disponibles :
+Les outils SfM et d'entraînement restent nécessaires. Deux modes de lancement sont disponibles :
 
 ```bash
 # Direct : téléchargement et calcul sur la machine courante.
