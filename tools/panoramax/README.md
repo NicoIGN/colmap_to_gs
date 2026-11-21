@@ -448,8 +448,7 @@ des métadonnées Panoramax ; l'altitude n'intervient pas.
 Ce filtre retire des paires candidates ; il n'en ajoute aucune, contrairement
 au `--sensor-pairs` du mode auto non filtré. `SFM_SP_PAIRS` continue de choisir les
 candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
-réduit donc pas son coût et ne corrige pas un plantage LightGlue. En cas de
-plantage connu, configurer séparément `SFM_SP_MATCHER="bruteforce"`.
+réduit donc pas son coût.
 
 Le workspace `panoramax/sfm/` conserve `matches.bin` original,
 `matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
@@ -482,12 +481,6 @@ bash script/launch_panoramax_to_3dgs.sh /chemin/partage/config.sh
 
 - Sorties : le `.splat` fusionné et son dossier `.georef/` restent dans `OUTPUT_DIR`.
 
-Si Spirula plante dans LightGlue avec `gemm: weight is ... but out has ...`,
-il s'agit d'une incompatibilité de dimensions dans l'appariement, avant la
-reconstruction et l'entraînement des splats. Le code `139` indique un SIGSEGV,
-pas à lui seul un manque de mémoire GPU. Essayer `SFM_SP_MATCHER="bruteforce"`
-pour contourner LightGlue, ou mettre à jour Spirula ; aucun contournement
-automatique ne change la méthode de calcul à l'insu de l'utilisateur.
 Si `sfm auto` termine avec SIGSEGV après l'export, le wrapper vérifie que les
 trois fichiers binaires de `sparse/0` ont été créés pendant cette exécution,
 se lisent entièrement et contiennent des caméras, images et points. Si ces
