@@ -37,6 +37,26 @@ bash "$GIT_ROOT/scripts/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" "$DATA_ROOT/config-images.sh" --wait
 ```
 
+Configuration avec des paramètres supplémentaires :
+
+```bash
+SFM_IMAGES_DIR="$DATA_ROOT/images"
+OUTPUT_DIR="$DATA_ROOT/results/images-complet"
+SFM_MAX_IMAGE_SIZE="2048"
+SFM_ALIKED_MAX_FEATURES="2048"
+SFM_MASKS="off"
+TRAIN_MASKS="off"
+NUM_CPUS="2"
+```
+
+- `SFM_IMAGES_DIR` : dossier source des photos.
+- `OUTPUT_DIR` : dossier de sortie, distinct de `SFM_IMAGES_DIR`.
+- `SFM_MAX_IMAGE_SIZE="2048"` : résolution maximale des images pour le SfM (défaut `4096`
+  dans ce pipeline). Réduire cette valeur diminue fortement la mémoire GPU.
+- `SFM_ALIKED_MAX_FEATURES="2048"` : nombre maximal de points ALIKED par image (défaut `8192`).
+- `SFM_MASKS` et `TRAIN_MASKS="off"` : désactivent les masques, qui demandent des outils supplémentaires.
+- `NUM_CPUS="2"` : nombre de CPU utilisés par le SfM, les masques et les processus parallèles.
+
 ## Vidéo → images → 3DGS
 
 À partir d'une vidéo, ce pipeline extrait des images nettes réparties sur sa
@@ -71,6 +91,27 @@ bash "$GIT_ROOT/scripts/videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" \
 bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" --wait
 ```
 
+Configuration avec des paramètres supplémentaires :
+
+```bash
+VIDEO="$DATA_ROOT/video.mp4"
+NUM_FRAMES="200"
+SFM_IMAGES_DIR="$DATA_ROOT/results/video-frames-complet"
+OUTPUT_DIR="$DATA_ROOT/results/video-complet"
+SFM_MAX_IMAGE_SIZE="2048"
+SFM_ALIKED_MAX_FEATURES="2048"
+SFM_MASKS="off"
+TRAIN_MASKS="off"
+NUM_CPUS="2"
+```
+
+- `VIDEO` : vidéo source.
+- `NUM_FRAMES="200"` : nombre d'images nettes extraites, réparties sur la durée de la vidéo.
+- `SFM_IMAGES_DIR` : dossier où sont écrites les images extraites, distinct de `OUTPUT_DIR`.
+- `OUTPUT_DIR` : dossier de sortie du pipeline images.
+- `SFM_MAX_IMAGE_SIZE`, `SFM_ALIKED_MAX_FEATURES`, `SFM_MASKS`, `TRAIN_MASKS`, `NUM_CPUS` :
+  mêmes effets que dans le pipeline images ci-dessus.
+
 ## Panoramax → 3DGS
 
 À partir d'une emprise géographique, ce pipeline télécharge les photos
@@ -95,6 +136,32 @@ bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 # Slurm : téléchargement et calcul sur les nœuds du cluster.
 bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh" --wait
 ```
+
+Configuration avec des paramètres supplémentaires :
+
+```bash
+OUTPUT_DIR="$DATA_ROOT/results/panoramax-complet"
+PANORAMAX_BBOX="655500,6861900,655700,6862100"
+PANORAMAX_PICTURE_TYPE="360"
+PANORAMAX_FILTERS="geovisio:producer=gaelle.gabriel@paris.fr"
+PANORAMAX_REPLACE_REQUEST="true"
+SFM_MAX_IMAGE_SIZE="2048"
+SFM_ALIKED_MAX_FEATURES="2048"
+```
+
+- `OUTPUT_DIR` : dossier de sortie (photos, SfM, blocs et `.splat`).
+- `PANORAMAX_BBOX` : emprise en Lambert-93 (`PANORAMAX_BBOX_EPSG="2154"` par défaut).
+- `PANORAMAX_PICTURE_TYPE="360"` : ne garde que les photos équirectangulaires. Avec Spirula,
+  `SFM_CAMERA_MODEL` passe automatiquement à `equirectangular`.
+- `PANORAMAX_FILTERS` : ne garde que les photos dont `geovisio:producer` vaut `gaelle.gabriel@paris.fr`.
+- `PANORAMAX_REPLACE_REQUEST="true"` : si `OUTPUT_DIR` contient une autre requête, elle est
+  archivée (`panoramax.replaced-DATE`) puis retéléchargée. Avec `false`, le lancement s'arrête.
+- `SFM_MAX_IMAGE_SIZE="2048"` : résolution maximale des images pour le SfM (défaut `4096`).
+  Réduire cette valeur diminue fortement la mémoire GPU.
+- `SFM_ALIKED_MAX_FEATURES="2048"` : nombre maximal de points ALIKED par image (défaut `4096`).
+
+Modifier ces deux paramètres SfM sur un workspace existant impose de le reconstruire
+(voir `tools/panoramax/README.md`).
 
 ## Choisir le mode de lancement
 
