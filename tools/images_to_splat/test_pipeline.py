@@ -234,12 +234,23 @@ if args[0] == "sfm":
         (sparse / "cameras.bin").write_bytes(
             struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
         images = struct.pack("<Q", len(names))
+        points = [(0.0, 0.0, 10.0)]
+        if os.environ.get("TEST_DENSE_POINTS") == "1":
+            points = [(x * 0.2, y * 0.2, 10.0) for x in range(-3, 4) for y in range(-3, 4)]
         for index, image in enumerate(names, 1):
             images += struct.pack("<I7dI", index, 1, 0, 0, 0, 0, 0, 0, 1) + image.encode() + b"\0"
-            images += struct.pack("<Qddq", 1, 0.5, 0.5, 1) if index == 1 else struct.pack("<Q", 0)
+            if index == 1:
+                observations = [(0.5, 0.5, 1)] if len(points) == 1 else [
+                    (0.1 + 0.3 * (i % 7), 0.1 + 0.3 * (i // 7), i + 1) for i in range(len(points))]
+                images += struct.pack("<Q", len(observations)) + b"".join(
+                    struct.pack("<ddq", *observation) for observation in observations)
+            else:
+                images += struct.pack("<Q", 0)
         (sparse / "images.bin").write_bytes(images)
-        (sparse / "points3D.bin").write_bytes(
-            struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+        body = struct.pack("<Q", len(points))
+        for index, (x, y, z) in enumerate(points, 1):
+            body += struct.pack("<QdddBBBdQII", index, x, y, z, 120, 130, 140, 0.1, 1, 1, index - 1)
+        (sparse / "points3D.bin").write_bytes(body)
     sparse = Path(get("--output")) / "sparse/0"
     if split_pass:
         write_model(sparse, ["cam_00/root.jpg", "cam_00/h00/photo.jpg", "cam_01/h01/photo.jpg"])
@@ -258,17 +269,18 @@ else:
     assert get("--num-iterations") == "20000"
     assert get("--quality") == "ultra"
     output = Path(get("--output-dir-prefix"))
+    data = Path(get("--data"))
     if os.environ["TRAIN_MASKS"] == "on":
         assert get("--apply-loss-for-mask") == "1"
         expected = "masks" if (Path(os.environ["OUTPUT_DIR"]) / "masks").is_dir() else "train_masks"
-        assert (output / "masks").resolve() == Path(os.environ["OUTPUT_DIR"]) / expected
+        assert (data / "masks").resolve() == (Path(os.environ["OUTPUT_DIR"]) / expected).resolve()
     else:
         assert get("--load-masks") == "0"
         assert "--mask-dir" not in args
-    assert (output / "images").resolve() == Path(os.environ["OUTPUT_DIR"]) / "images"
-    if os.environ.get("TEST_FAIL_BLOCK") == output.name:
+    assert (data / "images").resolve() == (Path(os.environ["OUTPUT_DIR"]) / "images").resolve()
+    if os.environ.get("TEST_FAIL_BLOCK") == data.name:
         sys.exit(9)
-    splats = output / "splats"
+    splats = output / "chkpt"
     ckpt = splats / "step-000020000.ckpt"
     ckpt.mkdir(parents=True)
     (ckpt / "splat.ply").write_bytes(b"ply")
@@ -477,6 +489,7 @@ if "--wait" in args:
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
 
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
+        self.env["TEST_DENSE_POINTS"] = "1"
         self.append("SFM_FILTER_DENSITY=true\nNUM_CPUS=8")
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
@@ -744,7 +757,7 @@ if "--wait" in args:
         self.assertNotEqual(self.run_pipeline().returncode, 0)
         self.env.pop("TEST_FAIL_BLOCK")
         block = self.output / "gs/block_000"
-        splats = block / "splats"
+        splats = block / "splats" / "chkpt"
         checkpoint = splats / "step-000001000.ckpt"
         checkpoint.mkdir(parents=True)
         (splats / "config.json").write_text("{}")
@@ -1077,8 +1090,9 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         commands = self.commands()[before:]
         self.assertFalse(any(command[0] == "generate_masks.py" for command in commands))
-        self.assertTrue((new_output / "masks").is_symlink())
-        self.assertEqual((new_output / "masks").resolve(), source_masks.resolve())
+        self.assertTrue((new_output / "masks").is_dir())
+        self.assertFalse((new_output / "masks").is_symlink())
+        self.assertTrue(any((new_output / "masks").iterdir()))
         sfm = next(command for command in commands if command[:2] == ["spirula", "sfm"])
         self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(new_output / "masks"))
         self.assertEqual(sfm[sfm.index("--threads") + 1], "8")

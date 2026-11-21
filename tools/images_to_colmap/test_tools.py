@@ -124,7 +124,7 @@ class ConversionTest(unittest.TestCase):
         )
         for script, args in (
             (ROOT / "tools/images_to_colmap/run.sh", []),
-            (ROOT / "script/images_to_3dgs.sh", ["--phase", "prepare"]),
+            (ROOT / "scripts/images_to_3dgs.sh", ["--phase", "prepare"]),
         ):
             result = subprocess.run(["bash", str(script), str(config), *args],
                                     capture_output=True, text=True, timeout=30)

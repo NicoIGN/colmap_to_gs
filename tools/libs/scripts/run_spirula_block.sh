@@ -566,7 +566,7 @@ if [[ "$clean" == false ]]; then
       die "Masques modifiés depuis le checkpoint partiel ; reprise refusée."
     [[ ! -f "$photometric_signature_file" || "$(cat "$photometric_signature_file")" == "$photometric_signature" ]] ||
       die "Paramètres photométriques modifiés depuis le checkpoint partiel ; reprise refusée."
-    resume_checkpoint="$("$python_bin" "$script_dir/../../images_to_splat/resume.py" "$splats_dir" --training-checkpoint)"
+    resume_checkpoint="$("$python_bin" "$script_dir/../../images_to_splat/resume.py" "$chkpt_dir" --training-checkpoint)"
     if [[ -n "$resume_checkpoint" ]]; then
       log "Reprise du checkpoint : $resume_checkpoint"
     else
