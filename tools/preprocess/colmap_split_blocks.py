@@ -703,6 +703,44 @@ def spectral_partition(W, k, seed=0):
     )
 
 
+def normalized_cut(labels, W, k):
+    degree = np.asarray(W.sum(axis=1)).ravel()
+    total = 0.0
+    for label in range(k):
+        inside = labels == label
+        cut = W[inside][:, ~inside].sum()
+        volume = degree[inside].sum()
+        if volume > 0:
+            total += cut / volume
+    return total
+
+
+SPECTRAL_RESTARTS = 8
+
+
+def best_spectral_partition(W, k, seed=0, restarts=SPECTRAL_RESTARTS):
+    """Garde le partitionnement spectral de Ncut minimal sur plusieurs seeds.
+
+    Un seul seed peut produire des blocs déséquilibrés et étirés, que
+    l'équilibrage ne corrige pas proprement.
+    """
+    best_labels, best_cut = None, math.inf
+
+    for attempt in range(restarts):
+        try:
+            labels = spectral_partition(W, k, seed=seed + attempt)
+        except RuntimeError:
+            continue
+        cut = normalized_cut(labels, W, k)
+        if cut < best_cut:
+            best_labels, best_cut = labels, cut
+
+    if best_labels is None:
+        raise RuntimeError("Aucun partitionnement spectral valide.")
+
+    return best_labels
+
+
 def enforce_connectivity(labels, W):
     """
     Réparation heuristique compatible avec la version précédente.
@@ -1560,7 +1598,7 @@ def partition_into_blocks(args, images, points3D):
         )
 
     info(f"Spectral clustering into K={args.num_blocks}...")
-    labels = spectral_partition(W, args.num_blocks, seed=args.seed)
+    labels = best_spectral_partition(W, args.num_blocks, seed=args.seed)
 
     labels = enforce_connectivity(labels, W)
 

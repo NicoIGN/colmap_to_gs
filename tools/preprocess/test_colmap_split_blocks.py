@@ -199,5 +199,33 @@ class SoftBalanceTest(unittest.TestCase):
             self.assertEqual(sorted(points), [1])
 
 
+class SpectralRestartTest(unittest.TestCase):
+    def test_best_restart_has_minimal_normalized_cut(self):
+        side = 10
+        edges = []
+        for r in range(side):
+            for c in range(side):
+                node = r * side + c
+                if c + 1 < side:
+                    edges.append((node, node + 1, 1.0))
+                if r + 1 < side:
+                    edges.append((node, node + side, 1.0))
+        W = graph(side * side, edges)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            best = splitter.best_spectral_partition(W, 4, seed=0)
+            attempts = [
+                splitter.spectral_partition(W, 4, seed=seed)
+                for seed in range(splitter.SPECTRAL_RESTARTS)
+            ]
+
+        best_cut = splitter.normalized_cut(best, W, 4)
+        for labels in attempts:
+            self.assertLessEqual(
+                best_cut,
+                splitter.normalized_cut(labels, W, 4) + 1e-9,
+            )
+
+
 if __name__ == "__main__":
     unittest.main()
