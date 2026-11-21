@@ -231,12 +231,8 @@ arrondie à l'entier). La connexité prime : des tailles plus inégales sont
 acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
-```bash
-# /chemin/vers/paris.sh ne contient que les surcharges ; les défauts viennent de config/defaults/ et de config.default.sh.
-OUTPUT_DIR="/chemin/vers/resultats/paris"
-PANORAMAX_BBOX="655418.37,6860846.96,655918.37,6861346.96"
-bash scripts/panoramax_to_3dgs.sh /chemin/vers/paris.sh
-```
+Un exemple de configuration minimale et complète, avec la commande de lancement,
+est dans [l'exemple Panoramax](../../examples/pipelines.md#panoramax--3dgs).
 
 - Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
   avant toute soumission.

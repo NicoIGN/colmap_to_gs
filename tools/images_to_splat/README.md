@@ -4,27 +4,17 @@
 
 ## Vidéo sur Slurm
 
+La configuration, les commandes et les options (`VIDEO`, `NUM_FRAMES`,
+`--wait`, `--prepare-only`) sont décrites dans
+[l'exemple vidéo](../../examples/pipelines.md#vidéo--images--3dgs) et le
+[guide Bash / Slurm](../../doc/lancement_bash_slurm.md).
+
 `scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des
-frames dans un job Slurm, puis appel du lanceur existant
-`scripts/launch_images_to_3dgs.sh` après réussite de l'extraction. Le terminal
-attend la fin de l'extraction avant de soumettre les jobs images.
-
-Ajouter ces variables à une configuration images/Slurm :
-
-```bash
-VIDEO="/chemin/IMG_5017.MOV"
-NUM_FRAMES=900
-SFM_IMAGES_DIR="/chemin/nouveau-calcul/frames"
-```
-
-```bash
-bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" /chemin/config-video.sh
-```
-
-Les options `--prepare-only` et `--wait` sont transmises au lanceur images.
-Les ressources `SLURM_*` et `SLURM_ENV_SETUP` sont aussi utilisées pour
-l'extraction. La sélection conserve la couverture temporelle et utilise la
-pondération de netteté par défaut de l'extracteur (0,7).
+frames dans un job Slurm, puis appel du lanceur `scripts/launch_images_to_3dgs.sh`
+après réussite de l'extraction. Le terminal attend la fin de l'extraction avant
+de soumettre les jobs images. Les ressources `SLURM_*` et `SLURM_ENV_SETUP`
+s'appliquent aussi à l'extraction. La sélection conserve la couverture
+temporelle et utilise la pondération de netteté par défaut de l'extracteur (0,7).
 Les frames existantes ne sont pas écrasées : utiliser un nouveau dossier
 pour réextraire, ou appeler directement `launch_images_to_3dgs.sh` pour
 reprendre à partir des frames déjà extraites.
