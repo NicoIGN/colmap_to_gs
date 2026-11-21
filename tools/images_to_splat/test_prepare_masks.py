@@ -118,6 +118,21 @@ class MaskResumeTests(unittest.TestCase):
             prepare_masks.prepare()
         self.generate.assert_not_called()
 
+    def test_external_masks_are_copied_and_signed_without_generation(self):
+        external = self.output / "external"
+        external.mkdir()
+        for image in self.images.glob("*.jpg"):
+            Image.new("L", (2, 2), 255).save(external / (image.name + ".png"))
+        self.masks.rmdir()
+        self.policy.clear()
+        self.policy["external_dir"] = str(external)
+        prepare_masks.prepare()
+        self.generate.assert_not_called()
+        self.assertFalse(self.masks.is_symlink())
+        self.assertTrue((self.masks / "a.jpg.png").is_file())
+        report = json.loads((self.masks / "masks.json").read_text())
+        self.assertEqual(report["settings"]["external_dir"], str(external))
+
     def test_generation_failure_is_propagated(self):
         self.generate.side_effect = RuntimeError("license")
         with self.assertRaisesRegex(RuntimeError, "license"):

@@ -3,6 +3,7 @@
 
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -36,21 +37,34 @@ def prepare(policy_only=None):
         external = settings.get("external_dir")
         if external:
             source = Path(external)
-            report_path = source / "masks.json"
-            report = read_report(report_path)
-            if report is not None:
-                if report.get("status") != "complete":
-                    raise ValueError(f"Rapport de masques externe incomplet : {report_path}")
+            report = read_report(source / "masks.json")
+            if report is not None and report.get("status") != "complete":
+                raise ValueError(f"Rapport de masques externe incomplet : {source / 'masks.json'}")
             validate_masks(images, source)
-            if directory.exists() or directory.is_symlink():
+            if directory.is_symlink():
                 if directory.resolve() != source:
                     raise ValueError(
-                        f"Le dossier de sortie existe déjà et ne pointe pas vers "
-                        f"les masques externes : {directory}. Le sauvegarder avant de continuer."
+                        f"Lien de masques vers un autre dossier : {directory}. Le sauvegarder avant de continuer."
                     )
-            else:
-                directory.symlink_to(source, target_is_directory=True)
-            print(f"[masques] Réutilisation des masques externes : {source}", flush=True)
+                directory.unlink()
+            if directory.exists():
+                existing = read_report(directory / "masks.json") or {}
+                if (existing.get("settings") or {}).get("external_dir") != str(source):
+                    raise ValueError(
+                        "Le dossier de sortie existe déjà et ne provient pas des masques externes : "
+                        f"{directory}. Le sauvegarder avant de continuer."
+                    )
+                validate_masks(images, directory)
+                print(f"[masques] Masques externes déjà copiés et signés : {directory}", flush=True)
+                return
+            shutil.copytree(source, directory)
+            write_json(directory / "masks.json", {
+                "status": "complete",
+                "settings": {"source": "external", "external_dir": str(source), "requested_policy": settings},
+                "validation": "PNG monochrome 0/255, dimensions et couverture vérifiées",
+            })
+            validate_masks(images, directory)
+            print(f"[masques] Masques externes copiés et signés (sans génération) : {source}", flush=True)
             return
 
         report_path = directory / "masks.json"
