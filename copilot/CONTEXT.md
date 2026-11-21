@@ -99,6 +99,13 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
 - Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
 
+## Documentation (README et `doc/`)
+- Structure obligatoire, dans cet ordre : d'abord l'objectif de l'outil, du script ou du pipeline (une ou deux phrases, puis le pipeline ou le flux en bref), ensuite les entrées et sorties, la configuration, le fonctionnement interne et les notes. Les détails vont dans des sous-sections (`###`) après l'objectif, jamais avant.
+- Ne pas éparpiller une même notion (ex. paramètres de téléchargement) sur plusieurs sections : une section la décrit en entier, les autres renvoient vers elle.
+- Ne pas dupliquer : si une information existe déjà dans `doc/`, `examples/` ou le README d'un autre outil, mettre un lien relatif vers l'ancre existante au lieu de la recopier. Exemples : `doc/guide_utilisateur.md`, `examples/pipelines.md`, `doc/lancement_bash_slurm.md`.
+- Les commandes exécutables vont dans `examples/*.md`, pas dans les README d'outils.
+- Après une modification : vérifier que les liens et ancres existent, et que les blocs de code sont équilibrés.
+
 ## Conventions
 - Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
