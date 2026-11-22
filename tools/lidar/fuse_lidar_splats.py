@@ -183,9 +183,10 @@ def main():
                              "défaut : seulement retirer les splats hors bande Z")
     parser.add_argument("--z-margin", type=float, default=0.5,
                         help="Marge verticale autour de la bande Z LiDAR locale (m)")
-    parser.add_argument("--z-radius", type=float, default=1.0,
+    parser.add_argument("--z-radius", type=float, default=5.0,
                         help="Rayon XY de recherche de la bande Z LiDAR (m)")
-    parser.add_argument("--z-neighbours", type=int, default=16)
+    parser.add_argument("--z-neighbours", type=int, default=64,
+                        help="Nombre de points LiDAR XY pris pour la bande Z")
     parser.add_argument("--voxel", type=float, default=1.0,
                         help="Taille de voxel de comparaison de densité (m)")
     parser.add_argument("--density-ratio", type=float, default=1.0,
