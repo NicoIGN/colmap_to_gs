@@ -585,11 +585,11 @@ function keepPivotOnCenter(previousCenter, previousTarget) {
   syncCamera();
 }
 
-function computeSceneBounds() {
+function gatherSplatCoordinates(layers, keep = null) {
   const coordinates = [[], [], []];
   const point = new THREE.Vector3();
 
-  for (const layer of splatLayers) {
+  for (const layer of layers) {
     const count = layer.centers.length / 3;
     const stride = Math.max(1, Math.ceil(count / 100_000));
     const matrix = new THREE.Matrix4().fromArray(
@@ -602,13 +602,51 @@ function computeSceneBounds() {
         layer.centers[i * 3 + 2]
       ).applyMatrix4(matrix);
       if (![point.x, point.y, point.z].every(Number.isFinite)) continue;
+      if (keep && !keep(point)) continue;
       coordinates[0].push(point.x);
       coordinates[1].push(point.y);
       coordinates[2].push(point.z);
     }
   }
+  return coordinates;
+}
 
+// Boîte au 1er/99e percentile pour ignorer les points isolés.
+function percentileBox(coordinates, box) {
   const valid = coordinates[0].length;
+  const sorted = coordinates.map((values) => values.sort((a, b) => a - b));
+
+  const percentile = (values, q) =>
+    values[Math.min(valid - 1, Math.floor(valid * q))];
+
+  box.set(
+    new THREE.Vector3(...sorted.map((values) => percentile(values, 0.01))),
+    new THREE.Vector3(...sorted.map((values) => percentile(values, 0.99)))
+  );
+
+  const size = box.getSize(new THREE.Vector3());
+
+  box.expandByScalar(
+    Math.max(size.x, size.y, size.z, 1e-3) * 1e-3
+  );
+  return box;
+}
+
+// Centre du pivot de navigation : boîte des splats réellement affichés dans le frustum de la caméra.
+function getVisibleSceneCenter() {
+  camera.updateMatrixWorld(true);
+  const frustum = new THREE.Frustum().setFromProjectionMatrix(
+    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+  );
+  const visible = splatLayers.filter((layer) => layer.entity.enabledInHierarchy);
+  const coordinates = gatherSplatCoordinates(visible, (point) => frustum.containsPoint(point));
+  if (!coordinates[0].length) return sceneCenter;
+  return percentileBox(coordinates, new THREE.Box3()).getCenter(new THREE.Vector3());
+}
+
+function computeSceneBounds() {
+  const valid = gatherSplatCoordinates(splatLayers)[0].length;
+
   if (!splatLayers.length && hasFreeData()) {
     sceneBox.makeEmpty();
     for (const box of [colmapBox, lidarBox, wireBox]) {
@@ -620,25 +658,7 @@ function computeSceneBounds() {
       new THREE.Vector3(1, 1, 1)
     );
   } else {
-    const sorted = coordinates.map((values) => values.sort((a, b) => a - b));
-
-    const percentile = (values, q) =>
-      values[Math.min(valid - 1, Math.floor(valid * q))];
-
-    sceneBox.set(
-      new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, 0.01))
-      ),
-      new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, 0.99))
-      )
-    );
-
-    const size = sceneBox.getSize(new THREE.Vector3());
-
-    sceneBox.expandByScalar(
-      Math.max(size.x, size.y, size.z, 1e-3) * 1e-3
-    );
+    percentileBox(gatherSplatCoordinates(splatLayers), sceneBox);
   }
 
   sceneBox.getCenter(sceneCenter);
@@ -1644,7 +1664,7 @@ async function initialize() {
       target,
       inputBindings: NAVIGATION_INPUT_BINDINGS,
       getSceneRadius: () => sceneRadius,
-      getSceneCenter: () => sceneCenter,
+      getSceneCenter: getVisibleSceneCenter,
       getSceneBox: () => sceneBox,
       getCanNavigate: canNavigate,
       getCanDefineVertical: canDefineVertical,
