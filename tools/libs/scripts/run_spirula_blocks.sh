@@ -420,6 +420,11 @@ prepare_blocks() {
         ! -s "$RAW_SPARSE_DIR/images.bin" || ! -s "$RAW_SPARSE_DIR/points3D.bin" ) ]]; then
     die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
   fi
+  if [[ "$COLMAP_METHOD" != hloc && -z "$(find "$IMAGES_DIR" -type f -print -quit 2>/dev/null)" ]]; then
+    # Les masques sont validés contre les images : sélection prête avant la préparation des masques.
+    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
+      --dataset "$DIR" --output-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --shell >/dev/null
+  fi
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
