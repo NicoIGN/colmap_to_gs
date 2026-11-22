@@ -56,6 +56,7 @@ def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None, extent=None)
 
     extent (optional, per splat) is the vertical half-size of the splat support: the
     splat is removed when its bottom or top leaves the band, not only its centre.
+    The neighbourhood grows to the same reach (extent) so large splats still find LiDAR.
     """
     tree = cKDTree(lidar[:, :2])
     remove = np.zeros(len(xyz), dtype=bool)
@@ -63,13 +64,14 @@ def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None, extent=None)
     half = np.zeros(len(xyz)) if extent is None else extent
     for start in range(0, len(xyz), CHUNK):
         part = xyz[start:start + CHUNK]
-        dist, idx = tree.query(part[:, :2], k=neighbours, distance_upper_bound=radius)
-        valid = np.isfinite(dist)
+        h = half[start:start + len(part)]
+        reach = np.maximum(radius, h)
+        dist, idx = tree.query(part[:, :2], k=neighbours, distance_upper_bound=reach.max())
+        valid = np.isfinite(dist) & (dist <= reach[:, None])
         z = lidar[np.minimum(idx, len(lidar) - 1), 2]
         zmin = np.where(valid, z, np.inf).min(axis=1)
         zmax = np.where(valid, z, -np.inf).max(axis=1)
         has = valid.any(axis=1)
-        h = half[start:start + len(part)]
         outside = (part[:, 2] - h < zmin - margin) | (part[:, 2] + h > zmax + margin)
         end = start + len(part)
         evidence[start:end] = has

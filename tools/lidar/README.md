@@ -339,9 +339,10 @@ règle 1 s'applique, plus le nettoyage planimétrique :
    Z LiDAR locale, à `--z-margin` près, est retiré. Un grand splat de bord qui descend
    sous le LiDAR est donc retiré même si son centre reste dans la bande. La bande est
    le min/max des `--z-neighbours` points les plus proches en XY dans `--z-radius`
-   (par défaut 64 points dans 5 m). Un grand voisinage
-   évite de retirer les objets (bâtiments, végétation) à cause d'un LiDAR sol trop
-   étroit. Un splat sans LiDAR voisin est conservé. `--z-offset` ajoute un décalage
+   (par défaut 64 points dans 5 m), élargi au support horizontal du splat si celui-ci
+   est plus grand. Un grand voisinage évite de retirer les objets (bâtiments,
+   végétation) à cause d'un LiDAR sol trop étroit. Un splat sans LiDAR dans ce rayon
+   est conservé. `--z-offset` ajoute un décalage
    vertical aux splats pour ce test seulement (utile si le datum diffère du LAZ) ;
    le fichier de sortie garde les Z d'origine.
 2. Avec `--fill-holes`, dans chaque voxel `--voxel` où les splats sont moins nombreux que
