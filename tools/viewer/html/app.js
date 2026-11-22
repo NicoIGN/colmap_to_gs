@@ -218,6 +218,19 @@ function hexToColor(hex) {
   );
 }
 
+// Les matériaux splat sont créés par le moteur par caméra et par couche :
+// on réapplique l'option à chaque frame pour suivre leur recréation.
+function applySplatDepthWrite() {
+  const enabled = $("splatOcclusion").checked;
+  const director = app?.renderer?.gsplatDirector;
+  for (const cameraData of director?.camerasMap?.values() ?? []) {
+    for (const layerData of cameraData.layersMap?.values() ?? []) {
+      const material = layerData.gsplatManager?.material;
+      if (material && material.depthWrite !== enabled) material.depthWrite = enabled;
+    }
+  }
+}
+
 function applyBackgroundColor() {
   const hex = $("backgroundColor").value;
   document.body.style.background = hex;
@@ -1580,6 +1593,8 @@ async function initialize() {
     );
 
     app.scene.gsplatCentersEnabled = true;
+  app.on("update", applySplatDepthWrite);
+  $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
     layerManager = createLayerManager($("layerList"));
 
     cameraEntity = new pc.Entity("Camera");
