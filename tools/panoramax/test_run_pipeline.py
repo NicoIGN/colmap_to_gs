@@ -271,7 +271,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             request_metadata = json.loads((dataset / "request.json").read_text())
             self.assertEqual(request_metadata["bbox_epsg"], 4326)
             self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
-            self.assertFalse((dataset / "gs-3-blocks-2").exists())
+            self.assertFalse((output / "gs").exists())
             self.assertFalse((output / "test.splat").exists())
             sfm_calls = [json.loads(line) for line in (root / "bin/sfm-args.jsonl").read_text().splitlines()]
             def last_call(stage):
@@ -315,7 +315,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                              str(dataset.parent / "feature_masks"))
             result = execute("train-block", "0")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertFalse((dataset / "gs-3-blocks-2/block_001").exists())
+            self.assertFalse((output / "gs/block_001").exists())
             result = execute("merge")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Splat du bloc absent", result.stderr)
@@ -369,7 +369,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "filter_splats.py", "filter_splats.py",
                 "merge_splats.py", "filter_splats.py"])
             for index in range(2):
-                splats = dataset / f"gs-3-blocks-2/block_{index:03d}/splats"
+                splats = output / f"gs/block_{index:03d}/splats"
                 self.assertTrue((splats / f"block_{index:03d}.bbox.splat").is_file())
                 self.assertEqual((splats / f"block_{index:03d}.splat").read_bytes(),
                                  b"splat")

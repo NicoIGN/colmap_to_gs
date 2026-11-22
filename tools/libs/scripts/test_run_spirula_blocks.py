@@ -104,7 +104,7 @@ class BlockPipelineTest(unittest.TestCase):
             split_index = next(i for i, c in enumerate(commands) if c[0] == "split")
             self.assertLess(lidar_index, split_index)
             split = commands[split_index]
-            self.assertEqual(split[split.index("--input")+1], str(data/"panoramax"/"colmap_lidar"))
+            self.assertEqual(split[split.index("--input")+1], str(data/"colmap_lidar"))
             result = execute("--block", "0")
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -337,7 +337,7 @@ class BlockPipelineTest(unittest.TestCase):
                     self.assertAlmostEqual(800000 * factor ** 154, 8000000, delta=0.01)
                     self.assertLess(800000 * factor ** 153, 8000000)
                 self.assertIn("154 cycles avant le pas 16000", result.stdout)
-                command_file = data / "panoramax/gs-20000-blocks-2/block_000/train_command.sh"
+                command_file = data / "gs/block_000/train_command.sh"
                 self.assertIn("--growth-factor", command_file.read_text())
 
     def test_worker_growth_estimation_bounds_defaults_and_overrides(self):
@@ -448,8 +448,8 @@ class BlockPipelineTest(unittest.TestCase):
                                 if cmd[:2] == ["spirula", "train"]))
             self.assertTrue(all(cmd[cmd.index("--distraction-robustness") + 1] == "off"
                                 for cmd in commands if cmd[:2] == ["spirula", "train"]))
-            self.assertTrue((data / "panoramax/gs-3-blocks-2/block_000/splats/block_000.splat").is_file())
-            self.assertTrue((data / "panoramax/gs-3-blocks-2/block_001/splats/block_001.splat").is_file())
+            self.assertTrue((data / "gs/block_000/splats/block_000.splat").is_file())
+            self.assertTrue((data / "gs/block_001/splats/block_001.splat").is_file())
 
             second = execute()
             self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
@@ -495,7 +495,7 @@ class BlockPipelineTest(unittest.TestCase):
             train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
             self.assertEqual(train[train.index("--mask-dir") + 1], "masks")
             self.assertEqual(train[train.index("--apply-loss-for-mask") + 1], "1")
-            block = data / "panoramax" / "gs-3-blocks-1" / "block_000"
+            block = data / "gs" / "block_000"
             self.assertEqual((block / "masks").resolve(), masks_dir.resolve())
             self.assertIn("mode=empty", (block / "train_masks.txt").read_text())
 

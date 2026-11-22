@@ -81,9 +81,9 @@ DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
   sont inchangés (indépendant de `TRAIN_NUM_ITER`) ; sinon, lance
   la [reconstruction Panoramax](../panoramax/README.md).
 - **Découpage :** applique ce script à `sparse/0` et écrit les blocs dans
-  `blocks-SPLIT_NUM_BLOCKS/`.
+  `OUTPUT_DIR/blocks/`.
 - **Entraînement :** entraîne chaque bloc indépendamment dans
-  `DIR/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/block_NNN/`.
+  `OUTPUT_DIR/gs/block_NNN/` (`gs-nerfstudio/` avec Nerfstudio).
 - **Reprise :** réutilise le manifeste et les blocs COLMAP complets. Les sorties
   de découpage partielles ou incohérentes ne sont jamais supprimées automatiquement.
 - `SPLIT_NUM_BLOCKS` : nombre de blocs, défini par variable d'environnement.

@@ -327,7 +327,7 @@ SPARSE_DIR="$SFM_DIR/sparse/0"
 RAW_SPARSE_DIR="$SPARSE_DIR"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
-LIDAR_WORKSPACE="${LIDAR_WORKSPACE:-$DIR}"
+LIDAR_WORKSPACE="${LIDAR_WORKSPACE:-$OUTPUT_DIR}"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || SPARSE_DIR="$LIDAR_WORKSPACE/colmap_lidar"
 source "$repo_root/tools/libs/scripts/pipeline_report.sh"
 pipeline_report_start "$LIDAR_WORKSPACE" "run_3dgs_blocks:$mode:${block_index:-all}"
@@ -339,11 +339,11 @@ blocks_exit() {
 }
 trap blocks_exit EXIT
 pipeline_report_phase "validation de la configuration des blocs"
-BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
+BLOCKS_DIR="$OUTPUT_DIR/blocks"
 MASKS_DIR="$OUTPUT_DIR/train_masks"
-GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
+GS_ROOT="$OUTPUT_DIR/gs"
 if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
-  GS_ROOT="$GS_ROOT-nerfstudio"
+  GS_ROOT="$OUTPUT_DIR/gs-nerfstudio"
   if [[ "$mode" != prepare ]]; then
     "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
   fi
@@ -479,6 +479,12 @@ prepare_blocks() {
       sfm_args+=(--max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --metadata-dir "$DIR/metadata")
     fi
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
+    # Les blocs dérivent du SfM : un nouveau SfM ne doit pas réutiliser un découpage ancien.
+    if [[ -e "$BLOCKS_DIR" ]]; then
+      archive="$OUTPUT_DIR/blocks.replaced-$(date +%Y%m%d-%H%M%S)"
+      printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
+      mv -- "$BLOCKS_DIR" "$archive"
+    fi
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi
 

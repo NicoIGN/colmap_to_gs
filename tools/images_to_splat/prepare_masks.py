@@ -47,7 +47,7 @@ def guard_sfm(output, signature):
     marker = workspace / "sfm_mask_policy.json"
     previous = read_report(marker) or {}
     artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
-    artifacts = artifacts or any(output.glob("blocks-*"))
+    artifacts = artifacts or (output / "blocks").exists()
     if (artifacts or previous) and previous.get("signature") != signature:
         raise ValueError(
             "SfM existant/partiel avec une autre politique de masques (ou sans signature). "

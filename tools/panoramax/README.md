@@ -476,7 +476,7 @@ Si aucune paire ne subsiste, la reconstruction ne démarre pas.
 Un SfM existant ne peut pas être corrigé en filtrant son modèle COLMAP final :
 il faut le reconstruire. Pour activer, désactiver ou changer le rayon sur un
 calcul existant, déplacer le workspace `panoramax/sfm/` **et**
-les entraînements `panoramax/gs-TRAIN_NUM_ITER-blocks-SPLIT_NUM_BLOCKS/` en sauvegarde,
+les blocs `blocks/` et les entraînements `gs/` en sauvegarde,
 puis relancer la préparation et les blocs ; garder les dossiers `<id-collection>*/` (images et metadata)
 pour éviter de retélécharger. Le lanceur refuse de réutiliser un SfM dont
 la signature ne correspond pas au rayon, aux paramètres et aux entrées.
