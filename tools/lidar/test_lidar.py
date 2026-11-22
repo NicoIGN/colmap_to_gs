@@ -427,6 +427,13 @@ class LidarTests(unittest.TestCase):
             report = json.loads(aligned.with_suffix(".splat.json").read_text())
             self.assertLess(report["rmse_after"], 0.001)
 
+    def test_footprint_removes_splats_whose_support_misses_lidar(self):
+        from fuse_lidar_splats import footprint_mask
+        lidar = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        xyz = np.array([[0.5, 0.0, 0.0], [4.0, 0.0, 0.0]])
+        sigma = np.array([0.5, 0.5])
+        self.assertEqual(footprint_mask(xyz, sigma, lidar, 3.0).tolist(), [False, True])
+
     def test_z_offset_stats_reports_residual_to_local_lidar(self):
         from fuse_lidar_splats import z_offset_stats
         lidar = np.column_stack([np.random.rand(2000, 2) * 10, np.zeros(2000)])

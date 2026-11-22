@@ -96,6 +96,17 @@ def z_offset_stats(xyz, lidar, radius, neighbours):
                 residual_to_local_lidar_median=pct(residual))
 
 
+def footprint_mask(xyz, sigma, lidar, sigmas):
+    """Remove splats whose planimetric support (sigmas × sigma) does not reach LiDAR XY."""
+    tree = cKDTree(lidar[:, :2])
+    remove = np.zeros(len(xyz), dtype=bool)
+    for start in range(0, len(xyz), CHUNK):
+        end = start + CHUNK
+        dist = tree.query(xyz[start:end, :2], k=1)[0]
+        remove[start:end] = dist > sigmas * sigma[start:end]
+    return remove
+
+
 def voxel_keys(points, lo, size):
     return np.floor((points - lo) / size).astype(np.int64)
 
@@ -152,7 +163,7 @@ def colour_from_neighbours(kept_xyz, kept_dc, points, neighbours, radius):
 
 
 def run(args, scene):
-    xyz, _ = scene.geometry(slice(0, scene.count))
+    xyz, log_size = scene.geometry(slice(0, scene.count))
     origin = vector(args.origin)
     classes = None
     if args.lidar_classes:
@@ -160,9 +171,14 @@ def run(args, scene):
     lidar = load_lidar(args.lidar, origin, args.lidar_stride, classes=classes,
                        max_points=MAX_LIDAR_POINTS)
 
-    remove, evidence = z_band_mask(xyz + np.array([0.0, 0.0, args.z_offset]), lidar,
-                                   args.z_radius, args.z_neighbours, args.z_margin,
-                                   label="bande Z")
+    remove_z, evidence = z_band_mask(xyz + np.array([0.0, 0.0, args.z_offset]), lidar,
+                                     args.z_radius, args.z_neighbours, args.z_margin,
+                                     label="bande Z")
+    if args.footprint_sigmas > 0:
+        outside_footprint = footprint_mask(xyz, np.exp(log_size), lidar, args.footprint_sigmas)
+    else:
+        outside_footprint = np.zeros(len(xyz), dtype=bool)
+    remove = remove_z | outside_footprint
     keep = ~remove
     if not keep.any():
         raise ValueError("Aucun splat conservé après filtrage par la bande Z LiDAR")
@@ -193,7 +209,8 @@ def run(args, scene):
         input=str(args.input), output=str(args.output), lidar=str(args.lidar),
         origin=origin.tolist(), lidar_points=len(lidar), input_splats=scene.count,
         fill_holes=args.fill_holes,
-        removed_outside_z=int(remove.sum()),
+        removed_outside_z=int(remove_z.sum()),
+        removed_outside_footprint=int(outside_footprint.sum()),
         kept_without_lidar_evidence=int((keep & ~evidence).sum()),
         deficit_voxels=deficit_voxels, added_splats=len(cand),
         added_coloured_from_splats=int(from_splats.sum()),
@@ -233,6 +250,9 @@ def main():
                         help="Rayon XY de recherche de la bande Z LiDAR (m)")
     parser.add_argument("--z-neighbours", type=int, default=64,
                         help="Nombre de points LiDAR XY pris pour la bande Z")
+    parser.add_argument("--footprint-sigmas", type=float, default=3.0,
+                        help="Retire les splats dont le support planimétrique (k × σ) n'atteint "
+                             "pas le LiDAR ; 0 désactive")
     parser.add_argument("--voxel", type=float, default=1.0,
                         help="Taille de voxel de comparaison de densité (m)")
     parser.add_argument("--density-ratio", type=float, default=1.0,

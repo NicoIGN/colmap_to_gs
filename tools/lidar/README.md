@@ -329,7 +329,11 @@ au plus proche voisin. Préparer une zone LAZ adaptée pour les grandes acquisit
 ### Fusion LiDAR + 3DGS (`fuse_lidar_splats.py`)
 
 Entrée et sortie en `.splat` ou `.ply` (même extension). Par défaut, seule la
-règle 1 s'applique :
+règle 1 s'applique, plus le nettoyage planimétrique :
+
+0. Un splat dont le support planimétrique (`--footprint-sigmas` × σ, 3 par défaut)
+   n'atteint pas le LiDAR le plus proche en XY est retiré (il déborde du LAZ).
+   `--footprint-sigmas 0` désactive ce nettoyage.
 
 1. Un splat dont le Z est sous ou au-dessus de la bande Z LiDAR locale (min/max
    des `--z-neighbours` points les plus proches en XY dans `--z-radius`, par
