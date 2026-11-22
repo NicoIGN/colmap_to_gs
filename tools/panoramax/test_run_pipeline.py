@@ -296,7 +296,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS=on\nSFM_MASKS_BACKEND=spirula\n'
                     'SFM_MASKS_SPIRULA_MODEL=/models/sam3.ggml\n'
                     'SFM_MASKS_LABELS=sky,car,person\nSFM_MASKS_CONFIDENCE=0.6\n'
-                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n')
+                    'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n'
+                    'SFM_MASKS_DIR=/external/sfm_masks\n')
             # Changing SfM masks on an existing workspace is refused: move the mask-free SfM aside first.
             (dataset / "sfm").rename(dataset / "sfm-without-masks")
             result = execute("prepare")
@@ -307,6 +308,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
             self.assertEqual(mask_env["SFM_MASKS_DILATE"], "0.003")
             self.assertEqual(mask_env["MASKS_ACCEPT_LICENSE"], "true")
+            self.assertEqual(mask_env["SFM_MASKS_DIR"], "/external/sfm_masks")
             sfm_calls = [json.loads(line) for line in (root / "bin/sfm-args.jsonl").read_text().splitlines()]
             extract_args = last_call("extract")
             self.assertEqual(extract_args[extract_args.index("--feature-masks") + 1],

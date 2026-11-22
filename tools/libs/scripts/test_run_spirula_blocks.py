@@ -567,6 +567,31 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertNotEqual(disabled.returncode, 0)
             self.assertIn("conserver SFM_MASKS", disabled.stderr)
 
+    def test_external_masks_are_adopted_without_generation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(sparse.parent)
+            jpeg = (b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" +
+                    (2160).to_bytes(2, "big") + (4096).to_bytes(2, "big") +
+                    b"\x01\x01\x11\x00\xff\xd9")
+            (data / "images/img.jpg").write_bytes(jpeg)
+            external = root / "external_masks"
+            external.mkdir()
+            (external / "masks.json").write_text(json.dumps({"status": "complete", "settings": {}}))
+            (external / "img.jpg.png").write_bytes(b"png")
+            model = root / "sam3.ggml"
+            model.write_bytes(b"sam")
+            env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
+                       TRAIN_MASKS_LABELS="sky,person,car", TRAIN_MASKS_MODE="ignore",
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model), SPLIT_NUM_BLOCKS="1",
+                       MASKS_ACCEPT_LICENSE="true", SFM_MASKS_DIR=str(external),
+                       TRAIN_MASKS_DIR=str(external))
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+            self.assertEqual(sum(cmd[0] == "masks" for cmd in commands), 0)
+            self.assertIn("copiés (sans génération)", result.stdout + result.stderr)
+
     def test_native_backend_uses_sam_model_without_transformers_environment(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
