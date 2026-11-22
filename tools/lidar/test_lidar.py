@@ -427,6 +427,14 @@ class LidarTests(unittest.TestCase):
             report = json.loads(aligned.with_suffix(".splat.json").read_text())
             self.assertLess(report["rmse_after"], 0.001)
 
+    def test_z_offset_stats_reports_residual_to_local_lidar(self):
+        from fuse_lidar_splats import z_offset_stats
+        lidar = np.column_stack([np.random.rand(2000, 2) * 10, np.zeros(2000)])
+        splats = np.column_stack([np.random.rand(300, 2) * 10, np.full(300, 3.0)])
+        stats = z_offset_stats(splats, lidar, 5.0, 64)
+        self.assertAlmostEqual(stats["residual_to_local_lidar_median"]["p50"], 3.0)
+        self.assertEqual(stats["lidar_z"]["p50"], 0.0)
+
     def test_fusion_removes_outside_z_and_fills_sparse_voxels_in_both_formats(self):
         lidar_xyz = np.array([[.5, .5, 0], [1., .5, 0], [10.5, .5, 0], [10.7, .5, 0]])
         fuse = str(Path(__file__).with_name("fuse_lidar_splats.py"))

@@ -60,6 +60,28 @@ def z_band_mask(xyz, lidar, radius, neighbours, margin):
     return remove, evidence
 
 
+def z_offset_stats(xyz, lidar, radius, neighbours):
+    """Diagnostic: splat Z relative to the median LiDAR Z of its XY neighbourhood."""
+    tree = cKDTree(lidar[:, :2])
+    residual = np.full(len(xyz), np.nan)
+    for start in range(0, len(xyz), CHUNK):
+        part = xyz[start:start + CHUNK]
+        dist, idx = tree.query(part[:, :2], k=neighbours, distance_upper_bound=radius)
+        valid = np.isfinite(dist)
+        z = np.where(valid, lidar[np.minimum(idx, len(lidar) - 1), 2], np.nan)
+        with np.errstate(all="ignore"):
+            residual[start:start + len(part)] = part[:, 2] - np.nanmedian(z, axis=1)
+
+    def pct(values):
+        values = values[np.isfinite(values)]
+        if not len(values):
+            return None
+        return {f"p{q}": round(float(np.percentile(values, q)), 3) for q in (5, 50, 95)}
+
+    return dict(splat_z=pct(xyz[:, 2]), lidar_z=pct(lidar[:, 2]),
+                residual_to_local_lidar_median=pct(residual))
+
+
 def voxel_keys(points, lo, size):
     return np.floor((points - lo) / size).astype(np.int64)
 
@@ -158,6 +180,7 @@ def run(args, scene):
         added_coloured_from_splats=int(from_splats.sum()),
         added_default_grey=int(len(cand) - from_splats.sum()),
         output_splats=len(combined), dry_run=args.dry_run,
+        z_diagnostics=z_offset_stats(xyz, lidar, args.z_radius, args.z_neighbours),
         parameters=dict(z_margin=args.z_margin, z_radius=args.z_radius,
                         z_neighbours=args.z_neighbours, voxel=args.voxel,
                         density_ratio=args.density_ratio, scale_factor=args.scale_factor,
