@@ -82,6 +82,7 @@ export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+source "$repo_root/tools/libs/scripts/georef_phase.sh"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 export LIDAR_WORKSPACE="$OUTPUT_DIR"
@@ -562,8 +563,8 @@ if reference_path.is_file():
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
-set_pipeline_stage "nettoyage LiDAR du splat final"
-lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$FINAL_SPLAT"
+set_pipeline_stage "export de la référence géographique et nettoyage LiDAR"
+finalize_splat "$FINAL_SPLAT"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"
 printf '[pipeline] Géoréférencement et références : %s\n' "$GEOREF_DIR"

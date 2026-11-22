@@ -265,9 +265,6 @@ for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
 done
 set_stage "fusion des blocs"
 merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
-set_stage "export de la référence géographique du splat"
-georef_export "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
-set_stage "nettoyage LiDAR du splat final"
-georef_lidar_env
-lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
+set_stage "export de la référence géographique et nettoyage LiDAR"
+finalize_splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"
