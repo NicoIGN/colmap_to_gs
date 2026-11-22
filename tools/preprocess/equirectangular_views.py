@@ -94,7 +94,14 @@ def prepare(source, target, manifest, size, check=False):
     map_shape = None
     maps = None
     hashes = {}
-    for entry in files:
+    print(f"[360] Projection de {len(files)} panoramas vers {target} ({len(expected)} vues).", flush=True)
+    step = max(1, math.ceil(len(files) / 100))
+    for index, entry in enumerate(files, 1):
+        if index == 1 or index % step == 0 or index == len(files):
+            ratio = index / len(files)
+            filled = int(32 * ratio)
+            print(f"[360] Projection [{'#' * filled}{'-' * (32 - filled)}] "
+                  f"{index}/{len(files)} ({ratio * 100:5.1f}%)", flush=True)
         path = source / entry["name"]
         with Image.open(path) as image:
             rgb = np.asarray(image.convert("RGB"))

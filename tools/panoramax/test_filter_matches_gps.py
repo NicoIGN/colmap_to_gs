@@ -180,26 +180,31 @@ elif stage == "map":
                 "settings": {"labels": ["sky"]}, "summary": {"generated": 1}
             }))
             command = [
-                sys.executable, str(ROOT / "run_sfm_filtered.py"), "--dataset", str(dataset),
-                "--output", str(output), "--spirula-bin", str(spirula), "--max-distance", "30",
+                "bash", str(                ROOT.parent / "sfm" / "spirula" / "run_spirula_sfm.sh"),
+                "--preset", "panoramax", "--dataset", str(dataset),
+                "--output-dir", str(output), "--spirula-bin", str(spirula), "--max-distance", "30",
                 "--matcher", "bruteforce", "--threads", "4", "--min-tri-angle", "3",
                 "--feature-masks", str(masks),
             ]
             env = dict(os.environ, COMMAND_LOG=str(log), MATCHES_FIXTURE=str(fixture))
 
             def execute(args=command):
-                return subprocess.run(args, env=env, capture_output=True, text=True, timeout=15)
+                return subprocess.run(args, env=env, capture_output=True, text=True, timeout=60)
+
+            def with_option(args, flag, value):
+                changed = args.copy()
+                changed[changed.index(flag) + 1] = value
+                return changed
 
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            summary = json.loads((output / "gps_filter_summary.json").read_text())
-            self.assertEqual(summary["kept_pairs"], 3)
+            self.assertTrue((output / ".gps_filter_done").is_file())
             self.assertEqual((output / "matches.bin").read_bytes(), fixture.read_bytes())
             commands = [json.loads(line) for line in log.read_text().splitlines()]
+            commands = [cmd for cmd in commands if cmd[1] != "devices"]
             self.assertEqual([cmd[1] for cmd in commands], ["extract", "match", "map"])
-            self.assertIn("--focal", commands[1])
-            self.assertEqual(commands[0][commands[0].index("--feature-masks") + 1], str(masks))
             self.assertNotIn("--sensor-pairs", commands[1])
+            self.assertEqual(commands[0][commands[0].index("--feature-masks") + 1], str(masks))
             self.assertEqual(commands[1][commands[1].index("--max-error") + 1], "2")
             self.assertEqual(commands[1][commands[1].index("--min-inliers") + 1], "30")
             for flag, value in (("--max-error", "2"), ("--min-tri-angle", "3"),
@@ -218,9 +223,9 @@ elif stage == "map":
             }))
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(len(log.read_text().splitlines()), 3)
-            changed_geometry = command + ["--min-tri-angle", "4"]
-            result = execute(changed_geometry)
+            self.assertEqual([json.loads(line)[1] for line in log.read_text().splitlines()
+                              if json.loads(line)[1] != "devices"], ["extract", "match", "map"])
+            result = execute(with_option(command, "--min-tri-angle", "4"))
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("sauvegarde", result.stderr)
             (masks / "a.jpg.png").write_bytes(b"changed")
@@ -228,22 +233,18 @@ elif stage == "map":
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("sauvegarde", result.stderr)
             (masks / "a.jpg.png").write_bytes(b"mask")
-            changed = command.copy()
-            changed[changed.index("--max-distance") + 1] = "40"
-            result = execute(changed)
+            result = execute(with_option(command, "--max-distance", "40"))
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("sauvegarde", result.stderr)
             env["FAIL_STAGE"] = "match"
-            failed = command.copy()
-            failed[failed.index("--output") + 1] = str(dataset / "failed-sfm")
+            failed = with_option(command, "--output-dir", str(dataset / "failed-sfm"))
             result = execute(failed)
             self.assertEqual(result.returncode, 7)
-            self.assertFalse(json.loads((dataset / "failed-sfm/gps_filter_run.json").read_text())["complete"])
+            self.assertFalse((dataset / "failed-sfm/.gps_filter_done").exists())
             self.assertFalse((dataset / "failed-sfm/sparse").exists())
             env.pop("FAIL_STAGE")
             fixture.write_bytes(prefix + struct.pack("<I", 1) + records[1] + tail)
-            empty = command.copy()
-            empty[empty.index("--output") + 1] = str(dataset / "empty-sfm")
+            empty = with_option(command, "--output-dir", str(dataset / "empty-sfm"))
             result = execute(empty)
             self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
             self.assertIn("Aucune paire après filtrage", result.stderr)

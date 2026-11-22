@@ -11,7 +11,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.csgraph import connected_components
 
-from tools.preprocess import colmap_split_blocks as splitter
+from tools.sfm import colmap_split_blocks as splitter
 
 
 def graph(n, edges):
@@ -121,6 +121,7 @@ class SoftBalanceTest(unittest.TestCase):
                     observations[a].append(pid)
                     observations[b].append(pid)
             (source / "points3D.txt").write_text("".join(point_lines))
+            (source / "gauge.txt").write_text("oriented 1\n")
             (source / "images.txt").write_text("".join(
                 f"{i + 1} 0.9238795325112867 0 0 0.3826834323650898 {i * 0.125} {-i * 0.25} 2 1 image-{i}.jpg\n"
                 + " ".join(f"0 0 {pid}" for pid in pids) + "\n"
@@ -140,6 +141,8 @@ class SoftBalanceTest(unittest.TestCase):
                                 for call in warning.call_args_list))
             manifest = json.loads((output / "manifest.json").read_text())
             self.assertEqual([block["num_primary_images"] for block in manifest["blocks"]], [7, 3])
+            for block in range(2):
+                self.assertEqual((output / f"block_{block:03d}" / "gauge.txt").read_text(), "oriented 1\n")
             memberships = []
             with contextlib.redirect_stderr(io.StringIO()):
                 source_cameras, source_images, source_points, _ = splitter.load_colmap_model(source)
@@ -197,6 +200,34 @@ class SoftBalanceTest(unittest.TestCase):
                 _, images, points, _ = splitter.load_colmap_model(output / "block_000")
             self.assertEqual(sorted(images), [1, 2, 3])
             self.assertEqual(sorted(points), [1])
+
+
+class SpectralRestartTest(unittest.TestCase):
+    def test_best_restart_has_minimal_normalized_cut(self):
+        side = 10
+        edges = []
+        for r in range(side):
+            for c in range(side):
+                node = r * side + c
+                if c + 1 < side:
+                    edges.append((node, node + 1, 1.0))
+                if r + 1 < side:
+                    edges.append((node, node + side, 1.0))
+        W = graph(side * side, edges)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            best = splitter.best_spectral_partition(W, 4, seed=0)
+            attempts = [
+                splitter.spectral_partition(W, 4, seed=seed)
+                for seed in range(splitter.SPECTRAL_RESTARTS)
+            ]
+
+        best_cut = splitter.normalized_cut(best, W, 4)
+        for labels in attempts:
+            self.assertLessEqual(
+                best_cut,
+                splitter.normalized_cut(labels, W, 4) + 1e-9,
+            )
 
 
 if __name__ == "__main__":

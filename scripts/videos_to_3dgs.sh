@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$repo_root/tools/libs/scripts/shell_helpers.sh"
 
 usage() {
   echo "Usage : bash scripts/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
 }
-die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
-# realpath -e/-m n'existe pas sur macOS : Python est portable.
-resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift

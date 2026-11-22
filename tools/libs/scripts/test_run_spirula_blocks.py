@@ -19,14 +19,15 @@ class BlockPipelineTest(unittest.TestCase):
             import pycolmap
             import numpy as np
             from PIL import Image
-            from tools.preprocess.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
+            from tools.sfm.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
         except ImportError as exc:
             self.skipTest(f"Dépendance HLOC indisponible : {exc}")
         with tempfile.TemporaryDirectory() as temporary:
             root, data, _, env, log, execute = self.fixture(temporary)
+            source = data / "panoramax"
             shutil.rmtree(data / "sfm")
-            (data / "images/img.jpg").unlink(missing_ok=True)
-            (data / "metadata").mkdir()
+            shutil.rmtree(data / "images")
+            (source / "metadata").mkdir()
             coordinates = [(2., 48.), (2.0002, 48.), (2.0002, 48.0002), (2., 48.0002)]
             geo = np.array([[lat, lon, 0.] for lon, lat in coordinates])
             origin = geo.mean(axis=0)
@@ -38,8 +39,8 @@ class BlockPipelineTest(unittest.TestCase):
             rotation = pycolmap.Rotation3d(np.array([[1., 0, 0], [0, 0, -1.], [0, 1., 0]]))
             for index, (lon, lat) in enumerate(coordinates):
                 name = f"img{index}.jpg"
-                Image.new("RGB", (40, 20)).save(data / "images" / name)
-                (data / "metadata" / f"img{index}.json").write_text(json.dumps({
+                Image.new("RGB", (40, 20)).save(source / "images" / name)
+                (source / "metadata" / f"img{index}.json").write_text(json.dumps({
                     "feature": {"geometry": {"type": "Point", "coordinates": [lon, lat]},
                                 "properties": {"type": "equirectangular"}}
                 }))
@@ -71,7 +72,7 @@ class BlockPipelineTest(unittest.TestCase):
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             self.assertIn("hloc", [command[0] for command in commands])
             self.assertNotIn(["spirula", "sfm"], [command[:2] for command in commands])
-            self.assertEqual(len(list((data / "sfm/images").rglob("*.jpg"))), 24)
+            self.assertEqual(len(list((data / "images").rglob("*.jpg"))), 24)
             env["HLOC_MATCHER"] = "other"
             refused = execute("--block", "0")
             self.assertNotEqual(refused.returncode, 0)
@@ -114,8 +115,9 @@ class BlockPipelineTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
             shutil.rmtree(data / "sfm")
-            (data / "sfm/images").mkdir(parents=True)
-            (data / "images/img.jpg").write_bytes(
+            (data / "images").mkdir(exist_ok=True)
+            source = data / "panoramax"
+            (source / "images/img.jpg").write_bytes(
                 b"\xff\xd8\xff\xc0\x00\x11\x08\x00\x01\x00\x01" + b"\x00" * 12)
             env.update(
                 SFM_SP_IMAGE_EXPOSURE="-1.5",
@@ -151,7 +153,7 @@ class BlockPipelineTest(unittest.TestCase):
             with self.subTest(overrides=overrides), tempfile.TemporaryDirectory() as temporary:
                 root, data, sparse, env, log, execute = self.fixture(temporary)
                 shutil.rmtree(data / "sfm")
-                (data / "sfm/images").mkdir(parents=True)
+                (data / "images").mkdir(exist_ok=True)
                 env.update(PREPARE="false", **overrides)
                 result = execute("--prepare-only")
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -185,15 +187,17 @@ class BlockPipelineTest(unittest.TestCase):
 
     def fixture(self, temporary):
             root = Path(temporary)
-            data = root / "dataset"
-            (data / "images").mkdir(parents=True)
+            data = root / "output"
+            source = data / "panoramax"
+            (source / "images").mkdir(parents=True)
             sparse = data / "sfm" / "sparse" / "0"
-            images = data / "sfm" / "images"
+            images = data / "images"
             sparse.mkdir(parents=True)
             images.mkdir()
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
                 (sparse / name).write_bytes(b"colmap")
-            (images / "img.jpg").write_bytes(b"jpg")
+            from PIL import Image
+            Image.new("RGB", (8, 8)).save(images / "img.jpg")
 
             fake_bin = root / "bin"
             fake_bin.mkdir()
@@ -218,6 +222,9 @@ class BlockPipelineTest(unittest.TestCase):
                 "elif args and args[0].endswith('generate_masks.py'):\n"
                 "  with open(log, 'a') as f: f.write(json.dumps(['masks'] + args[1:]) + '\\n')\n"
                 "  output = args[args.index('--output') + 1]; os.makedirs(output, exist_ok=True)\n"
+                "  from PIL import Image\n"
+                "  source = args[args.index('--images') + 1]\n"
+                "  for image in os.listdir(source): Image.new('L', Image.open(os.path.join(source, image)).size).save(os.path.join(output, image + '.png'))\n"
                 "  json.dump({'status': 'complete', 'settings': {'labels': args[args.index('--labels') + 1]}}, open(os.path.join(output, 'masks.json'), 'w'))\n"
                 "elif args and args[0].endswith('export_ply.py'):\n"
                 "  with open(log, 'a') as f: f.write(json.dumps(['export']) + '\\n')\n"
@@ -255,7 +262,8 @@ class BlockPipelineTest(unittest.TestCase):
             spirula.chmod(0o755)
             env = dict(
                 os.environ,
-                DIR=str(data),
+                DIR=str(source),
+                OUTPUT_DIR=str(data),
                 SPIRULA_BIN=str(spirula),
                 PYTHON_BIN="python3",
                 PATH=f"{fake_bin}:{os.environ['PATH']}",
@@ -330,7 +338,7 @@ class BlockPipelineTest(unittest.TestCase):
                     self.assertAlmostEqual(800000 * factor ** 154, 8000000, delta=0.01)
                     self.assertLess(800000 * factor ** 153, 8000000)
                 self.assertIn("154 cycles avant le pas 16000", result.stdout)
-                command_file = data / "gs-20000-blocks-2/block_000/train_command.sh"
+                command_file = data / "gs/block_000/train_command.sh"
                 self.assertIn("--growth-factor", command_file.read_text())
 
     def test_worker_growth_estimation_bounds_defaults_and_overrides(self):
@@ -357,7 +365,7 @@ class BlockPipelineTest(unittest.TestCase):
                 env.update(settings)
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                      "--output-dir", str(root / "worker"), *args],
                     env=env, capture_output=True, text=True, timeout=30)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -384,7 +392,7 @@ class BlockPipelineTest(unittest.TestCase):
                 env.pop("TRAIN_SP_GROWTH_FACTOR")
                 result = subprocess.run(
                     ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                     "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
+                     "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                      "--output-dir", str(root / "unused"), *args],
                     env=env, capture_output=True, text=True, timeout=10)
                 self.assertNotEqual(result.returncode, 0)
@@ -417,7 +425,7 @@ class BlockPipelineTest(unittest.TestCase):
                        TRAIN_SP_REFINE_STOP_ITER="12000", TRAIN_SP_REFINE_STOP_NUM_ITER="3000")
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "worker"), "--num-iterations", "15000"],
                 env=env,
                 capture_output=True, text=True, timeout=30,
@@ -441,8 +449,8 @@ class BlockPipelineTest(unittest.TestCase):
                                 if cmd[:2] == ["spirula", "train"]))
             self.assertTrue(all(cmd[cmd.index("--distraction-robustness") + 1] == "off"
                                 for cmd in commands if cmd[:2] == ["spirula", "train"]))
-            self.assertTrue((data / "gs-3-blocks-2/block_000/splats/block_000.splat").is_file())
-            self.assertTrue((data / "gs-3-blocks-2/block_001/splats/block_001.splat").is_file())
+            self.assertTrue((data / "gs/block_000/splats/block_000.splat").is_file())
+            self.assertTrue((data / "gs/block_001/splats/block_001.splat").is_file())
 
             second = execute()
             self.assertEqual(second.returncode, 0, second.stderr + second.stdout)
@@ -482,13 +490,13 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
             masks = next(cmd for cmd in commands if cmd[0] == "masks")
-            masks_dir = data / "sfm" / "train_masks"
+            masks_dir = data / "train_masks"
             self.assertEqual(masks[masks.index("--output") + 1], str(masks_dir))
             self.assertEqual(masks[masks.index("--dilate-fraction") + 1], "0")
             train = next(cmd for cmd in commands if cmd[:2] == ["spirula", "train"])
             self.assertEqual(train[train.index("--mask-dir") + 1], "masks")
             self.assertEqual(train[train.index("--apply-loss-for-mask") + 1], "1")
-            block = data / "gs-3-blocks-1" / "block_000"
+            block = data / "gs" / "block_000"
             self.assertEqual((block / "masks").resolve(), masks_dir.resolve())
             self.assertIn("mode=empty", (block / "train_masks.txt").read_text())
 
@@ -527,11 +535,11 @@ class BlockPipelineTest(unittest.TestCase):
     def test_shared_masks_precede_sfm_and_are_used_by_training(self):
         with tempfile.TemporaryDirectory() as temporary:
             root, data, sparse, env, log, execute = self.fixture(temporary)
+            source = data / "panoramax"
             shutil.rmtree(sparse.parent)
-            jpeg = (b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" +
-                    (2160).to_bytes(2, "big") + (4096).to_bytes(2, "big") +
-                    b"\x01\x01\x11\x00\xff\xd9")
-            (data / "images/img.jpg").write_bytes(jpeg)
+            from PIL import Image
+            Image.new("RGB", (4096, 2160)).save(source / "images/img.jpg")
+            Image.new("RGB", (4096, 2160)).save(data / "images/img.jpg")
             model = root / "sam3.ggml"
             model.write_bytes(b"sam")
             env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
@@ -548,10 +556,10 @@ class BlockPipelineTest(unittest.TestCase):
                             commands.index(sfm))
             self.assertIn("--reuse-features", sfm)
             self.assertEqual(sfm[sfm.index("--matcher") + 1], "lightglue")
-            features = data / "sfm/feature_masks"
+            features = data / "feature_masks"
             self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(features))
             self.assertTrue(features.is_symlink())
-            self.assertEqual(features.resolve(), data / "sfm/train_masks")
+            self.assertEqual(features.resolve(), data / "train_masks")
             block = execute("--block", "0")
             self.assertEqual(block.returncode, 0, block.stderr + block.stdout)
             commands = [json.loads(line) for line in log.read_text().splitlines()]
@@ -566,6 +574,33 @@ class BlockPipelineTest(unittest.TestCase):
             disabled = execute("--prepare-only")
             self.assertNotEqual(disabled.returncode, 0)
             self.assertIn("conserver SFM_MASKS", disabled.stderr)
+
+    def test_external_masks_are_adopted_without_generation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, data, sparse, env, log, execute = self.fixture(temporary)
+            shutil.rmtree(sparse.parent)
+            jpeg = (b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" +
+                    (2160).to_bytes(2, "big") + (4096).to_bytes(2, "big") +
+                    b"\x01\x01\x11\x00\xff\xd9")
+            (data / "panoramax/images/img.jpg").write_bytes(jpeg)
+            (data / "images/img.jpg").write_bytes(jpeg)
+            external = root / "external_masks"
+            external.mkdir()
+            (external / "masks.json").write_text(json.dumps({"status": "complete", "settings": {}}))
+            from PIL import Image
+            Image.new("L", (4096, 2160)).save(external / "img.jpg.png")
+            model = root / "sam3.ggml"
+            model.write_bytes(b"sam")
+            env.update(SFM_MASKS="on", TRAIN_MASKS="on", TRAIN_MASKS_BACKEND="spirula",
+                       TRAIN_MASKS_LABELS="sky,person,car", TRAIN_MASKS_MODE="ignore",
+                       TRAIN_MASKS_SPIRULA_MODEL=str(model), SPLIT_NUM_BLOCKS="1",
+                       MASKS_ACCEPT_LICENSE="true", SFM_MASKS_DIR=str(external),
+                       TRAIN_MASKS_DIR=str(external))
+            result = execute("--prepare-only")
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            commands = [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+            self.assertEqual(sum(cmd[0] == "masks" for cmd in commands), 0)
+            self.assertIn("copiés et signés (sans génération)", result.stdout + result.stderr)
 
     def test_native_backend_uses_sam_model_without_transformers_environment(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -693,7 +728,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertIn("TRAIN_SP_QUALITY", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "unused"), "--quality", "invalid"],
                 env=env, capture_output=True, text=True, timeout=10)
             self.assertNotEqual(result.returncode, 0)
@@ -729,7 +764,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
             result = subprocess.run(
                 ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
-                 "--sparse-dir", str(sparse), "--images-dir", str(data / "sfm/images"),
+                 "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "unused"),
                  "--distraction-robustness", "invalid"],
                 env=env, capture_output=True, text=True, timeout=10)

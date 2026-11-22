@@ -25,7 +25,7 @@ class SlurmLaunchTest(unittest.TestCase):
         shutil.copytree(SOURCE.parents[1] / "config" / "defaults", self.pipeline_dir.parents[1] / "config" / "defaults")
         shared_scripts = self.pipeline_dir.parents[1] / "tools/libs/scripts"
         shared_scripts.mkdir(parents=True)
-        for name in ("pipeline_config.sh", "pipeline_lidar.sh", "pipeline_report.sh", "pipeline_slurm.sh"):
+        for name in ("shell_helpers.sh", "pipeline_config.sh", "pipeline_lidar.sh", "pipeline_report.sh", "pipeline_slurm.sh"):
             shutil.copyfile(SOURCE.parents[1] / "tools/libs/scripts" / name, shared_scripts / name)
         self.output = self.root / "output with spaces,comma"
         self.config = self.root / "dataset config.sh"

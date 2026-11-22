@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 # Shared configuration for local execution and Slurm submission.
-die() { printf '[ERREUR] %s\n' "$*" >&2; exit 1; }
-# realpath -e/-m n'existe pas sur macOS : Python est portable.
-resolve_path() { python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$1"; }
+source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../libs/scripts" && pwd)/shell_helpers.sh"
 
 # Modèle SAM 3 par défaut : models/ de spirula-studio (SPIRULA_ROOT, sinon
 # dépôt adjacent au projet, puis parent du dossier de SPIRULA_BIN).
@@ -87,6 +85,7 @@ load_config() {
   PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
   REMOVE_LOCKS="${REMOVE_LOCKS:-false}"
   SFM_FILTER_DENSITY="${SFM_FILTER_DENSITY:-false}"
+  SFM_PREPARE_IMAGES="${SFM_PREPARE_IMAGES:-false}"
   SFM_DENSITY_VOTE_FRACTION="${SFM_DENSITY_VOTE_FRACTION:-0.75}"
   SFM_DENSITY_FAR_SUPPORT_RATE="${SFM_DENSITY_FAR_SUPPORT_RATE:-0.25}"
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
@@ -127,6 +126,7 @@ load_config() {
   SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
   SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
   GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
+  GEOREF_FROM_EXIF="${GEOREF_FROM_EXIF:-true}"
   GEOREF_VIEW_PREFIX="${GEOREF_VIEW_PREFIX:-}"
   GEOREF_EPSG="${GEOREF_EPSG:-2154}"
   GEOREF_ALLOW_UNCERTAIN="${GEOREF_ALLOW_UNCERTAIN:-false}"
@@ -218,6 +218,10 @@ load_config() {
     config_error "REMOVE_LOCKS=true exige PIPELINE_RESUME=true."
   fi
   config_choice SFM_FILTER_DENSITY "$SFM_FILTER_DENSITY" 'true|false'
+  config_choice SFM_PREPARE_IMAGES "$SFM_PREPARE_IMAGES" 'true|false'
+  if [[ "$SFM_PREPARE_IMAGES" == true && "$COLMAP_METHOD" != spirula ]]; then
+    config_error "SFM_PREPARE_IMAGES=true exige COLMAP_METHOD=spirula."
+  fi
   if ! awk -v v="$SFM_DENSITY_VOTE_FRACTION" 'BEGIN { exit !(v > 0 && v < 1) }'; then
     config_error "SFM_DENSITY_VOTE_FRACTION='$SFM_DENSITY_VOTE_FRACTION' doit être dans ]0,1[."
   fi
@@ -274,6 +278,7 @@ load_config() {
     config_error "Nerfstudio : utiliser TRAIN_MASKS_BACKEND=segmentation avec Mask2Former ou SegFormer."
   fi
   config_choice GEOREF_ALLOW_UNCERTAIN "$GEOREF_ALLOW_UNCERTAIN" 'true|false'
+  config_choice GEOREF_FROM_EXIF "$GEOREF_FROM_EXIF" 'true|false'
   config_positive_integer GEOREF_EPSG "$GEOREF_EPSG"
   if [[ -n "$GEOREF_GPX_FILE" ]]; then
     [[ "$GEOREF_GPX_FILE" == /* && -f "$GEOREF_GPX_FILE" ]] ||

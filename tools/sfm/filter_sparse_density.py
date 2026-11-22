@@ -283,7 +283,7 @@ def density_votes(
     *,
     neighbors=128,
     max_angle_deg=5.0,
-    min_neighbors=12,
+    min_neighbors=6,
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
@@ -354,7 +354,7 @@ def write_partition(input_dir, output_dir, point_ids, images, mask, report, *, p
     with tempfile.TemporaryDirectory(prefix=".filter-sparse-", dir=output_dir) as temporary:
         temporary = Path(temporary)
         shutil.copyfile(input_dir / "cameras.bin", temporary / "cameras.bin")
-        for optional in ("rigs.bin", "frames.bin"):
+        for optional in ("rigs.bin", "frames.bin", "gauge.txt"):
             if (input_dir / optional).is_file():
                 shutil.copyfile(input_dir / optional, temporary / optional)
         with (input_dir / "points3D.bin").open("rb") as source, \
@@ -387,7 +387,7 @@ def write_partition(input_dir, output_dir, point_ids, images, mask, report, *, p
         )
         for path in temporary.iterdir():
             os.replace(path, output_dir / path.name)
-        for optional in ("rigs.bin", "frames.bin"):
+        for optional in ("rigs.bin", "frames.bin", "gauge.txt"):
             if not (input_dir / optional).is_file():
                 (output_dir / optional).unlink(missing_ok=True)
 
@@ -398,11 +398,12 @@ def filter_sparse_model(
     *,
     neighbors=128,
     max_angle_deg=5.0,
-    min_neighbors=12,
+    min_neighbors=6,
     min_cluster_points=5,
     min_cluster_fraction=0.05,
     low_density_fraction=0.2,
-    min_views=2,
+    min_views=1,
+    keep_non_evaluable=False,
     vote_fraction=0.75,
     far_support_rate=0.25,
     workers=1,
@@ -454,9 +455,10 @@ def filter_sparse_model(
         progress=progress,
         verbose=verbose,
     )
-    rejected = (
-        (evaluable >= min_views)
-        & (suspicious >= np.ceil(vote_fraction * evaluable))
+    not_evaluable = evaluable < min_views
+    dropped_unevaluable = not_evaluable & (not keep_non_evaluable)
+    rejected = dropped_unevaluable | (
+        (suspicious >= np.ceil(vote_fraction * evaluable))
         & (suspicious > 0)
     )
     if rejected.all():
@@ -477,15 +479,9 @@ def filter_sparse_model(
         "points_kept": int((~rejected).sum()),
         "points_removed": int(rejected.sum()),
         "points_with_enough_views": int((evaluable >= min_views).sum()),
-        "removed_points": [
-            {
-                "point3D_id": int(point_ids[index]),
-                "xyz": positions[index].tolist(),
-                "evaluable_views": int(evaluable[index]),
-                "suspicious_views": int(suspicious[index]),
-            }
-            for index in np.flatnonzero(rejected)
-        ],
+        "points_ignored": int(not_evaluable.sum()),
+        "points_suspicious": int((suspicious > 0).sum()),
+        "points_removed_by_votes": int((rejected & ~dropped_unevaluable).sum()),
         "parameters": {
             "neighbors": neighbors,
             "max_angle_deg": max_angle_deg,
@@ -495,6 +491,7 @@ def filter_sparse_model(
             "low_density_fraction": low_density_fraction,
             "far_support_rate": far_support_rate,
             "min_views": min_views,
+            "keep_non_evaluable": keep_non_evaluable,
             "vote_fraction": vote_fraction,
         },
     }
@@ -520,8 +517,8 @@ def main():
                         help="Nombre maximal de voisins angulaires (défaut : 128).")
     parser.add_argument("--max-angle-deg", type=float, default=5.0,
                         help="Ouverture du voisinage directionnel en degrés (défaut : 5).")
-    parser.add_argument("--min-neighbors", type=int, default=12,
-                        help="Voisins minimums pour évaluer une vue (défaut : 12).")
+    parser.add_argument("--min-neighbors", type=int, default=6,
+                        help="Voisins minimums pour évaluer une vue (défaut : 6).")
     parser.add_argument("--min-cluster-points", type=int, default=5,
                         help="Support absolu minimum d'un paquet (défaut : 5).")
     parser.add_argument("--min-cluster-fraction", type=float, default=0.05,
@@ -531,8 +528,12 @@ def main():
     parser.add_argument("--far-support-rate", type=float, default=0.25,
                         help="Hausse du support requis par doublement de profondeur "
                              "(défaut : 0.25).")
-    parser.add_argument("--min-views", type=int, default=2,
-                        help="Nombre de vues évaluables requis (défaut : 2).")
+    parser.add_argument("--min-views", type=int, default=1,
+                        help="Nombre de vues évaluables requis ; en dessous, le point est rejeté "
+                             "sans vote (défaut : 1).")
+    parser.add_argument("--keep-non-evaluable", action="store_true",
+                        help="Conserver les points non évaluables au lieu de les rejeter "
+                             "(défaut : rejetés).")
     parser.add_argument("--vote-fraction", type=float, default=0.75,
                         help="Fraction de vues suspectes requise (défaut : 0.75).")
     parser.add_argument("--workers", type=int, default=1,
@@ -553,6 +554,7 @@ def main():
             min_cluster_fraction=args.min_cluster_fraction,
             low_density_fraction=args.low_density_fraction,
             min_views=args.min_views,
+            keep_non_evaluable=args.keep_non_evaluable,
             vote_fraction=args.vote_fraction,
             far_support_rate=args.far_support_rate,
             workers=args.workers,
@@ -561,7 +563,26 @@ def main():
         )
     except (OSError, ValueError) as error:
         parser.error(str(error))
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    if args.verbose:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(format_summary(report))
+
+
+def format_summary(report):
+    total = report["points_total"]
+
+    def share(count):
+        return f"{count} ({count / total:.1%})" if total else "0 (0.0%)"
+
+    return "\n".join((
+        f"Points : {total}",
+        f"Supprimés : {share(report['points_removed'])}",
+        f"  - par vote suspect : {share(report['points_removed_by_votes'])}",
+        f"  - ignorés (non évaluables) : {share(report['points_ignored'])}",
+        f"Suspects (au moins un vote) : {share(report['points_suspicious'])}",
+        f"Rapport : {Path(report['output_clean']) / 'density_report.json'}",
+    ))
 
 
 if __name__ == "__main__":

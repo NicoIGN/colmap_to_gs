@@ -436,6 +436,29 @@ class DownloadTest(unittest.TestCase):
         self.assertEqual(point["properties"]["providers"], "Ville")
         self.assertEqual(point["properties"]["image"], "images/a.jpg")
 
+    def test_positions_geojson_uses_exif_altitude_when_present(self):
+        transformer = Transformer.from_crs(4326, 2154, always_xy=True)
+        record = {"id": "abc", "collection": "c1", "image": "images/a.jpg",
+                  "metadata": "metadata/a.json", "source_page": "u", "status": "downloaded"}
+        with_altitude = {"id": "abc", "collection": "c1",
+                         "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
+                         "properties": {"exif": {"Exif.GPSInfo.GPSAltitude": "7889/100"}}}
+        below_sea = {"id": "def", "collection": "c1",
+                     "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
+                     "properties": {"exif": json.dumps({"Exif.GPSInfo.GPSAltitude": "250/10",
+                                                        "Exif.GPSInfo.GPSAltitudeRef": "1"})}}
+        without = {"id": "ghi", "collection": "c1",
+                   "geometry": {"type": "Point", "coordinates": [2.3522, 48.8566]},
+                   "properties": {}}
+        geojson = download.positions_geojson(
+            [(with_altitude, record), (below_sea, record), (without, record)], 2154, transformer)
+        first, second, third = geojson["features"]
+        self.assertAlmostEqual(first["geometry"]["coordinates"][2], 78.89)
+        self.assertAlmostEqual(first["properties"]["altitude"], 78.89)
+        self.assertAlmostEqual(second["geometry"]["coordinates"][2], -25.0)
+        self.assertEqual(len(third["geometry"]["coordinates"]), 2)
+        self.assertIsNone(third["properties"]["altitude"])
+
     def test_invalid_geometry(self):
         transformer = Transformer.from_crs(4326, 2154, always_xy=True)
         with self.assertRaises(ValueError):

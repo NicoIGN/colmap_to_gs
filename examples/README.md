@@ -18,3 +18,4 @@ Les prérequis complets sont indiqués dans la documentation de chaque outil.
 - [Panoramax : télécharger des images par emprise](panoramax.md)
 - [Images, vidéos et COLMAP](images-colmap.md)
 - [Post-traitement et visualisation](postprocess.md)
+- [Tester le filtre de densité sparse](sparse-density-filter.md)

@@ -14,6 +14,8 @@ from plyfile import PlyData, PlyElement
 
 SOURCE = Path(__file__).resolve().parent
 ROOT = SOURCE.parents[1]
+sys.path.insert(0, str(SOURCE / "colmap"))
+sys.path.insert(0, str(SOURCE / "spirula"))
 sys.path.insert(0, str(SOURCE))
 sys.path.insert(0, str(ROOT / "tools/libs/python"))
 from orientations_to_colmap import convert
@@ -123,8 +125,8 @@ class ConversionTest(unittest.TestCase):
             'SPLIT_NUM_BLOCKS=1\nSPIRULA_BIN=true\n'
         )
         for script, args in (
-            (ROOT / "tools/images_to_colmap/run.sh", []),
-            (ROOT / "script/images_to_3dgs.sh", ["--phase", "prepare"]),
+            (ROOT / "tools/sfm/run.sh", []),
+            (ROOT / "scripts/images_to_3dgs.sh", ["--phase", "prepare"]),
         ):
             result = subprocess.run(["bash", str(script), str(config), *args],
                                     capture_output=True, text=True, timeout=30)

@@ -19,28 +19,10 @@ only one prepared zero-based block; merge requires every block to be exported.
 EOF
 }
 
-die() {
-  printf '[ERREUR] %s\n' "$*" >&2
-  exit 1
-}
+source "$repo_root/tools/libs/scripts/spirula_common.sh"
 
 # Résout SPIRULA_DEVICE=auto une seule fois : premier GPU « ok » discret, puis intégré.
 # Colonnes de `spirula sam devices` : no, nom (espaces possibles), type, VRAM (2 mots), uuid, état.
-resolve_spirula_device() {
-  local requested="$1" out kind idx
-  [[ "$requested" == auto ]] || { printf '%s' "$requested"; return; }
-  out="$("$SPIRULA_BIN" sam devices 2>&1)" \
-    || die "spirula sam devices a échoué ; définir SPIRULA_DEVICE (index, nom ou uuid)"
-  for kind in discrete integrated; do
-    idx="$(awk -v k="$kind" '$1 ~ /^[0-9]+$/ && $NF == "ok" && $(NF-4) == k { print $1; exit }' <<<"$out")"
-    if [[ -n "$idx" ]]; then
-      printf '%s' "$idx"
-      return
-    fi
-  done
-  die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
-}
-
 pipeline_stage="configuration et validation des paramètres"
 pipeline_error() {
   local status="$1" line="$2"
@@ -100,6 +82,7 @@ export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
+source "$repo_root/tools/libs/scripts/georef_phase.sh"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 export LIDAR_WORKSPACE="$OUTPUT_DIR"
@@ -123,12 +106,15 @@ fi
 export TRAIN_NS_TRAIN_BIN="${TRAIN_NS_TRAIN_BIN:-ns-train}"
 export TRAIN_NS_EXPORT_BIN="${TRAIN_NS_EXPORT_BIN:-ns-export}"
 export TRAIN_NS_DOWNSCALE_FACTOR="${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
+# Child scripts (run_spirula_blocks.sh, masks.py) only see exported variables.
+export SFM_MASKS_DIR="${SFM_MASKS_DIR:-}" TRAIN_MASKS_DIR="${TRAIN_MASKS_DIR:-}"
 if [[ "$TRAIN_BACKEND" == nerfstudio && ( "$phase" == all || "$phase" == train-block ) ]]; then
   "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
 fi
 SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
 SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
 SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+SFM_SP_PREFILTER_NEIGHBORS="${SFM_SP_PREFILTER_NEIGHBORS:-16}"
 SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
 SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 NUM_CPUS="${NUM_CPUS:-2}"
@@ -205,10 +191,11 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BI
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 DATASET_DIR="$OUTPUT_DIR/panoramax"
-SFM_DIR="$DATASET_DIR/sfm"
-BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
-GS_ROOT="$DATASET_DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
-[[ "$TRAIN_BACKEND" != nerfstudio ]] || GS_ROOT="$GS_ROOT-nerfstudio"
+SFM_DIR="$OUTPUT_DIR/sfm"
+IMAGES_DIR="$OUTPUT_DIR/images"
+BLOCKS_DIR="$OUTPUT_DIR/blocks"
+GS_ROOT="$OUTPUT_DIR/gs"
+[[ "$TRAIN_BACKEND" != nerfstudio ]] || GS_ROOT="$OUTPUT_DIR/gs-nerfstudio"
 download_done="$DATASET_DIR/.download_done"
 download_lock="$DATASET_DIR/.download.lock"
 download_lock_helper="$repo_root/tools/libs/python/pipeline_lock.py"
@@ -378,10 +365,12 @@ if [[ "$phase" != merge ]]; then
         ( "${COLMAP_METHOD:-spirula}" == spirula || "$TRAIN_BACKEND" == spirula ||
           ( "${SFM_MASKS:-off}" == on && "${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" == spirula ) ||
           ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ) ]]; then
-    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_DEVICE")"
+    SPIRULA_DEVICE="$(resolve_spirula_device "$SPIRULA_BIN" "$SPIRULA_DEVICE")"
+    [[ "$SPIRULA_DEVICE" != auto ]] ||
+      die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
     printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
   fi
-  DIR="$DATASET_DIR" \
+  DIR="$DATASET_DIR" OUTPUT_DIR="$OUTPUT_DIR" \
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}" \
   HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}" \
   SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}" \
@@ -411,8 +400,12 @@ if [[ "$phase" != merge ]]; then
   TRAIN_SP_BILAGRID_TYPE="$TRAIN_SP_BILAGRID_TYPE" \
   SFM_SP_IMAGE_EXPOSURE="$SFM_SP_IMAGE_EXPOSURE" \
   SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
+  SFM_FILTER_DENSITY="$SFM_FILTER_DENSITY" \
+  SFM_DENSITY_VOTE_FRACTION="$SFM_DENSITY_VOTE_FRACTION" \
+  SFM_DENSITY_FAR_SUPPORT_RATE="$SFM_DENSITY_FAR_SUPPORT_RATE" \
   SFM_ALIKED_MAX_FEATURES="$SFM_ALIKED_MAX_FEATURES" \
   SFM_SP_PAIRS="$SFM_SP_PAIRS" \
+  SFM_SP_PREFILTER_NEIGHBORS="$SFM_SP_PREFILTER_NEIGHBORS" \
   SFM_SP_FEATURES="$SFM_SP_FEATURES" \
   SFM_SP_MATCHER="$SFM_SP_MATCHER" \
   NUM_CPUS="$NUM_CPUS" \
@@ -456,7 +449,7 @@ if [[ "$phase" == prepare || "$phase" == train-block ]]; then
 fi
 LIDAR_SPARSE="$SFM_DIR/sparse/0"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
-lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
+lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$IMAGES_DIR"
 
 set_pipeline_stage "vérification des splats avant fusion"
 rm -f -- "$OUTPUT_DIR/.merge_done"
@@ -487,7 +480,7 @@ if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
     CLEAN_SCENE="$OUTPUT_DIR/lidar_scene"
     mkdir -p "$CLEAN_SCENE/sparse"
     [[ -e "$CLEAN_SCENE/sparse/0" ]] || ln -s "$LIDAR_SPARSE" "$CLEAN_SCENE/sparse/0"
-    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$SFM_DIR/images" "$CLEAN_SCENE/images"
+    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$IMAGES_DIR" "$CLEAN_SCENE/images"
   fi
   "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
@@ -521,8 +514,8 @@ mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
 cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
-if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
-  cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
+if [[ -f "$SFM_DIR/.gps_filter_done" ]]; then
+  cp "$SFM_DIR/.gps_filter_done" "$GEOREF_DIR/gps_filter_signature.txt"
 fi
 if [[ -f "$SFM_DIR/projection.json" ]]; then
   cp "$SFM_DIR/projection.json" "$GEOREF_DIR/"
@@ -573,8 +566,8 @@ if reference_path.is_file():
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
-set_pipeline_stage "nettoyage LiDAR du splat final"
-lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$FINAL_SPLAT"
+set_pipeline_stage "export de la référence géographique et nettoyage LiDAR"
+finalize_splat "$FINAL_SPLAT"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"
 printf '[pipeline] Géoréférencement et références : %s\n' "$GEOREF_DIR"

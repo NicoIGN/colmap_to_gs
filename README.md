@@ -50,7 +50,7 @@ le parcours adapté.
 
 Pour un modèle COLMAP, fournir le modèle et les images correspondantes, ou
 produire les données COLMAP depuis des images avec les
-[outil images vers COLMAP](tools/images_to_colmap/README.md). L'entraînement peut ensuite
+[outil images vers COLMAP](tools/sfm/README.md). L'entraînement peut ensuite
 se faire avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
 
 ```text
@@ -71,7 +71,7 @@ Les moteurs d'entraînement proposés sont :
 
 ### Pipelines complets
 
-Deux pipelines dans `script/` enchaînent les étapes depuis les images jusqu'à
+Deux pipelines dans `scripts/` enchaînent les étapes depuis les images jusqu'à
 l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
 
 - **Bbox + flux Panoramax → splat** :
@@ -106,7 +106,7 @@ paramètres `SLURM_*` :
 
 ```bash
 # Images locales → 3DGS
-bash script/images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
 bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
@@ -122,13 +122,15 @@ la soumission Slurm.
 
 ```bash
 # Images locales → 3DGS
-bash script/launch_images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/launch_images_to_3dgs.sh /chemin/config_image.sh
 
 # Panoramax → 3DGS
-bash script/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
+bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
-Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md).
+Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md) et les
+[exemples de configuration complète](examples/pipelines.md) pour les paramètres
+commentés de chaque pipeline.
 
 Les installations, données attendues, paramètres et sorties sont décrits dans
 le README du pipeline choisi.
@@ -153,19 +155,13 @@ python3 tools/splat_to_3dtiles/convert.py \
 bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
 ```
 
-Sans `--georef-summary`, le convertisseur cherche `georef/georef_summary.json`
-puis `georef_summary.json` dans le dossier du `.splat`. Il est donc prévu de
-convertir depuis le dossier de calcul. Indique `--georef-summary` si le résumé
-est ailleurs. Le dossier `scene_tiles` ne doit pas exister, sauf avec `--overwrite`.
-
-Détails et options : [conversion 3D Tiles](tools/splat_to_3dtiles/README.md) et
-[visualisation](tools/viewer/README.md).
+Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/splat_to_3dtiles/README.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
 
 ### Documentation des outils
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
 - [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
-- [Images, orientations et LiDAR vers COLMAP](tools/images_to_colmap/README.md).
+- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
 - [Installation de Spirula](tools/spirula/README.md).
 - [Masques](tools/segmentation_masks/README.md).

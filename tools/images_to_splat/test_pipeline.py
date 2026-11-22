@@ -1,6 +1,7 @@
 import json
 import io
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -234,12 +235,23 @@ if args[0] == "sfm":
         (sparse / "cameras.bin").write_bytes(
             struct.pack("<QIiQQ3d", 1, 1, 0, 2, 2, 2, 1, 1))
         images = struct.pack("<Q", len(names))
+        points = [(0.0, 0.0, 10.0)]
+        if os.environ.get("TEST_DENSE_POINTS") == "1":
+            points = [(x * 0.2, y * 0.2, 10.0) for x in range(-3, 4) for y in range(-3, 4)]
         for index, image in enumerate(names, 1):
             images += struct.pack("<I7dI", index, 1, 0, 0, 0, 0, 0, 0, 1) + image.encode() + b"\0"
-            images += struct.pack("<Qddq", 1, 0.5, 0.5, 1) if index == 1 else struct.pack("<Q", 0)
+            if index == 1:
+                observations = [(0.5, 0.5, 1)] if len(points) == 1 else [
+                    (0.1 + 0.3 * (i % 7), 0.1 + 0.3 * (i // 7), i + 1) for i in range(len(points))]
+                images += struct.pack("<Q", len(observations)) + b"".join(
+                    struct.pack("<ddq", *observation) for observation in observations)
+            else:
+                images += struct.pack("<Q", 0)
         (sparse / "images.bin").write_bytes(images)
-        (sparse / "points3D.bin").write_bytes(
-            struct.pack("<QQdddBBBdQII", 1, 1, 0, 0, 10, 120, 130, 140, 0.1, 1, 1, 0))
+        body = struct.pack("<Q", len(points))
+        for index, (x, y, z) in enumerate(points, 1):
+            body += struct.pack("<QdddBBBdQII", index, x, y, z, 120, 130, 140, 0.1, 1, 1, index - 1)
+        (sparse / "points3D.bin").write_bytes(body)
     sparse = Path(get("--output")) / "sparse/0"
     if split_pass:
         write_model(sparse, ["cam_00/root.jpg", "cam_00/h00/photo.jpg", "cam_01/h01/photo.jpg"])
@@ -258,17 +270,18 @@ else:
     assert get("--num-iterations") == "20000"
     assert get("--quality") == "ultra"
     output = Path(get("--output-dir-prefix"))
+    data = Path(get("--data"))
     if os.environ["TRAIN_MASKS"] == "on":
         assert get("--apply-loss-for-mask") == "1"
-        expected = "masks" if (Path(os.environ["OUTPUT_DIR"]) / "masks").is_dir() else "train_masks"
-        assert (output / "masks").resolve() == Path(os.environ["OUTPUT_DIR"]) / expected
+        expected = "train_masks"
+        assert (data / "masks").resolve() == (Path(os.environ["OUTPUT_DIR"]) / expected).resolve()
     else:
         assert get("--load-masks") == "0"
         assert "--mask-dir" not in args
-    assert (output / "images").resolve() == Path(os.environ["OUTPUT_DIR"]) / "images"
-    if os.environ.get("TEST_FAIL_BLOCK") == output.name:
+    assert (data / "images").resolve() == (Path(os.environ["OUTPUT_DIR"]) / "images").resolve()
+    if os.environ.get("TEST_FAIL_BLOCK") == data.name:
         sys.exit(9)
-    splats = output / "splats"
+    splats = output / "chkpt"
     ckpt = splats / "step-000020000.ckpt"
     ckpt.mkdir(parents=True)
     (ckpt / "splat.ply").write_bytes(b"ply")
@@ -410,6 +423,13 @@ if "--wait" in args:
         self.assertEqual(gps["altitude_images"], 3)
         self.assertEqual(gps["metric_gps"], "full")
 
+    def test_georef_from_exif_can_be_disabled(self):
+        self.add_gps(altitude_images=(0, 1, 2))
+        self.append("GEOREF_FROM_EXIF=false")
+        self.assert_ok(self.run_pipeline("--phase", "prepare"))
+        self.assertEqual((self.output / ".georef_mode").read_text().strip(), "none")
+        self.assertFalse((self.output / "georef").exists())
+
     def test_nerfstudio_missing_torch_stops_before_preparation(self):
         (self.root / "torch.py").write_text('raise ImportError("test: torch absent")\n')
         self.env["PYTHONPATH"] = str(self.root)
@@ -470,6 +490,7 @@ if "--wait" in args:
         self.assertEqual(len(json.loads((self.output / "inputs.json").read_text())["images"]), 1)
 
     def test_density_filter_local_and_slurm_with_gpx_and_reuse(self):
+        self.env["TEST_DENSE_POINTS"] = "1"
         self.append("SFM_FILTER_DENSITY=true\nNUM_CPUS=8")
         self.assert_ok(self.run_pipeline())
         filtered = self.output / "sparse_clean"
@@ -542,18 +563,16 @@ if "--wait" in args:
 
         for path in self.images.rglob("*.jpg"):
             Image.new("RGB", (2, 2)).save(path)
-        self.output.mkdir()
-        selected = self.output / "images"
-        masks = self.output / "masks"
-        for source in self.images.rglob("*.jpg"):
-            relative = source.relative_to(self.images)
-            target = selected / relative
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.symlink_to(source)
-            mask = masks / (relative.as_posix() + ".png")
-            mask.parent.mkdir(parents=True, exist_ok=True)
-            Image.new("L", (2, 2), 255).save(mask)
+        # Run the real pipeline until it fails after masks and SfM markers are written,
+        # then keep only the state an interrupted run leaves behind.
+        self.env["TEST_FAIL_TOOL"] = "colmap_split_blocks.py"
+        self.assertNotEqual(self.run_pipeline("--phase", "prepare").returncode, 0)
+        self.env.pop("TEST_FAIL_TOOL")
+        self.events.unlink(missing_ok=True)
+        (self.output / "inputs.json").unlink(missing_ok=True)
+        masks = self.output / "train_masks"
         sparse = self.output / "sfm/sparse/0"
+        shutil.rmtree(sparse)
         sparse.mkdir(parents=True)
         for name in ("cameras.bin", "images.bin", "points3D.bin"):
             (sparse / name).write_bytes(b"interrupted")
@@ -574,8 +593,8 @@ if "--wait" in args:
         self.assertEqual(sum(cmd[:2] == ["spirula", "sfm"] for cmd in commands), 1)
         self.assertTrue((self.output / "scene.splat").is_file())
         self.assertTrue((self.output / "inputs.json").is_file())
-        adopted_masks = json.loads((self.output / "masks/masks.json").read_text())
-        self.assertEqual(adopted_masks["settings"]["provenance"], "unknown")
+        adopted_masks = json.loads((self.output / "train_masks/masks.json").read_text())
+        self.assertEqual(adopted_masks["status"], "complete")
         before = len(commands)
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         self.assertFalse(any(cmd[:2] == ["spirula", "sfm"]
@@ -633,7 +652,7 @@ if "--wait" in args:
         retained = [
             self.output / "sfm/sparse/0/points3D.bin",
             self.output / "georef/0/points3D.bin",
-            self.output / "masks/root.jpg.png",
+            self.output / "train_masks/root.jpg.png",
         ]
         stamps = {path: (path.stat().st_mtime_ns, path.read_bytes()) for path in retained}
         # Simulate the old workspace signature which included partition settings.
@@ -737,7 +756,7 @@ if "--wait" in args:
         self.assertNotEqual(self.run_pipeline().returncode, 0)
         self.env.pop("TEST_FAIL_BLOCK")
         block = self.output / "gs/block_000"
-        splats = block / "splats"
+        splats = block / "splats" / "chkpt"
         checkpoint = splats / "step-000001000.ckpt"
         checkpoint.mkdir(parents=True)
         (splats / "config.json").write_text("{}")
@@ -807,7 +826,7 @@ if "--wait" in args:
         return [command for command in self.commands() if command[:2] == ["spirula", "sfm"]]
 
     def test_camera_split_retries_sfm_with_one_camera_per_model(self):
-        sys.path.insert(0, str(SOURCE.parents[1] / "tools/images_to_colmap"))
+        sys.path.insert(0, str(SOURCE.parents[1] / "tools/sfm/spirula"))
         from camera_split import model_dirs, read_image_names
 
         self.env["TEST_CAMERA_SPLIT"] = "1"
@@ -927,6 +946,28 @@ if "--wait" in args:
         self.assertIn("SFM_SP_IMAGE_EXPOSURE est propre", result.stdout + result.stderr)
         self.assertEqual(len(self.commands()), before)
 
+    def test_prepare_images_switches_spirula_preparation(self):
+        result = self.run_pipeline("--phase", "prepare")
+        self.assert_ok(result)
+        sfm = next(cmd for cmd in self.commands() if cmd[:2] == ["spirula", "sfm"])
+        self.assertEqual(sfm[3], str(self.root / "output with spaces" / "images"))
+        self.assertNotIn("[prepare]", result.stdout + result.stderr)
+
+        before = len(self.commands())
+        self.append(f'OUTPUT_DIR="{self.root / "prepared"}"\nSFM_PREPARE_IMAGES="true"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assert_ok(result)
+        self.assertIn("[prepare]", result.stdout + result.stderr)
+        sfm = next(cmd for cmd in self.commands()[before:] if cmd[:2] == ["spirula", "sfm"])
+        self.assertTrue(sfm[3].endswith(os.path.join("sfm", "images")), sfm[3])
+
+        before = len(self.commands())
+        self.append('SFM_PREPARE_IMAGES="maybe"')
+        result = self.run_pipeline("--phase", "prepare")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("SFM_PREPARE_IMAGES", result.stdout + result.stderr)
+        self.assertEqual(len(self.commands()), before)
+
     def test_strict_geometry_defaults_and_overrides_local_and_slurm(self):
         variables = ("SFM_MAX_ERROR", "SFM_MIN_INLIERS", "SFM_MIN_TRI_ANGLE",
                      "SFM_SP_BA_LOSS", "SFM_SP_BA_LOSS_PARAM")
@@ -980,8 +1021,8 @@ if "--wait" in args:
                 self.append(f'SFM_MASKS="{sfm}"\nTRAIN_MASKS="{train}"\nOUTPUT_DIR="{output}"')
                 self.assert_ok(self.run_pipeline())
                 self.assertTrue((output / "scene.splat").is_file())
-                self.assertEqual((output / "masks").exists(), sfm == train == "on")
-                self.assertEqual((output / "feature_masks").exists(), sfm == "on" and train == "off")
+                self.assertEqual((output / "train_masks").exists(), train == "on")
+                self.assertEqual((output / "feature_masks").exists(), sfm == "on")
                 self.assertEqual((output / "train_masks").exists(), train == "on" and sfm == "off")
 
     def test_prefixed_policies_are_independent_local_and_slurm(self):
@@ -1009,11 +1050,11 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         generated = [cmd for cmd in self.commands() if cmd[0] == "generate_masks.py"]
         self.assertEqual(len(generated), 1)
-        self.assertTrue((self.output / "masks/masks.json").exists())
+        self.assertTrue((self.output / "train_masks/masks.json").exists())
 
     def test_external_mask_changes_identify_file_and_metadata_or_content(self):
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
-        source_masks = self.output / "masks"
+        source_masks = self.output / "train_masks"
         self.output = self.root / "external-mask-diagnostics"
         self.append(
             f'OUTPUT_DIR="{self.output}"\n'
@@ -1037,7 +1078,7 @@ if "--wait" in args:
     def test_external_masks_are_reused_for_new_sfm_workspace(self):
         self.append('SFM_MASKS_LABELS="sky"\nTRAIN_MASKS_LABELS="sky"')
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
-        source_masks = self.output / "masks"
+        source_masks = self.output / "train_masks"
         new_output = self.root / "new-sfm-output"
         self.append(
             f'OUTPUT_DIR="{new_output}"\n'
@@ -1048,10 +1089,12 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         commands = self.commands()[before:]
         self.assertFalse(any(command[0] == "generate_masks.py" for command in commands))
-        self.assertTrue((new_output / "masks").is_symlink())
-        self.assertEqual((new_output / "masks").resolve(), source_masks.resolve())
+        self.assertTrue((new_output / "train_masks").is_dir())
+        self.assertFalse((new_output / "train_masks").is_symlink())
+        self.assertTrue(any((new_output / "train_masks").iterdir()))
         sfm = next(command for command in commands if command[:2] == ["spirula", "sfm"])
-        self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(new_output / "masks"))
+        self.assertEqual(sfm[sfm.index("--feature-masks") + 1], str(new_output / "feature_masks"))
+        self.assertTrue((new_output / "feature_masks").is_symlink())
         self.assertEqual(sfm[sfm.index("--threads") + 1], "8")
 
     def test_segmentation_backend_reuses_panoramax_variables(self):

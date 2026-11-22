@@ -1,0 +1,25 @@
+# Environnement de l'agent Copilot (exporté depuis ~/.venvs/colmap_to_gs, Python 3.12.3, Linux 6.12).
+# Créer : conda env create --yes --file $GIT_ROOT/copilot/conda_env.yml
+# Les versions sont celles observées ; fiona est requis par tools/sfm/georef_colmap_from_gpx.py.
+
+name: colmap_to_gs_copilot
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.12.3
+  - pip
+  - pip:
+      - certifi==2026.11.20
+      - laspy==2.7.0
+      - lazrs==0.9.0
+      - numpy==2.5.5
+      - opencv-python-headless==5.1.0.95
+      - pillow==13.0.0
+      - plyfile==1.1.5
+      - pycolmap==4.2.1
+      - pyproj==3.8.0
+      - scipy==1.18.1
+      - tqdm==4.70.1
+      - fiona==1.10.1

@@ -3,7 +3,7 @@
 [Accueil du projet](../README.md)
 
 Ce guide aide à choisir comment produire les données COLMAP et entraîner une
-scène 3D. Le [README général](../README.md#1-quest-ce-que-le-3dgs)
+scène 3D. Le [README général](../README.md#1-quest-ce-que-le-3dgs-)
 présente
 les Gaussian Splats et le principe général. Les commandes complètes, options,
 paramètres et détails de chaque outil sont documentés dans les README
@@ -16,7 +16,7 @@ spécialisés liés ci-dessous.
 La première étape consiste à reconstruire les caméras et les points 3D depuis
 les images, ou à réutiliser un modèle COLMAP existant avec ses images.
 
-- Images : l'[outil images vers COLMAP](../tools/images_to_colmap/README.md)
+- Images : l'[outil images vers COLMAP](../tools/sfm/README.md)
   propose `COLMAP_METHOD=spirula|colmap|nerfstudio|orientations`, avec une
   configuration commune. Les [outils de préparation](../tools/preprocess/README.md)
   permettent aussi d'extraire des images d'une vidéo.
@@ -44,7 +44,7 @@ Une fois les données COLMAP disponibles, choisir le moteur d'entraînement :
 Dans ce dépôt, les points d'entrée correspondants sont :
 
 - **Pipeline commun** : `TRAIN_BACKEND=spirula|nerfstudio` dans la configuration
-  de `script/images_to_3dgs.sh` ou `script/panoramax_to_3dgs.sh`.
+  de `scripts/images_to_3dgs.sh` ou `scripts/panoramax_to_3dgs.sh`.
   Le modèle COLMAP et le découpage restent communs ; chaque moteur dispose
   de ses sorties d'entraînement. Nerfstudio exige PyTorch et NVIDIA/CUDA,
   sans repli CPU/Metal. Ses masques sont en mode `ignore`, pas `empty`.
@@ -67,7 +67,7 @@ est décrit dans le [README du post-traitement](../tools/postprocess/README.md).
 
 ### 2.3. Utiliser un pipeline complet
 
-Deux pipelines dans `script/` enchaînent la production des données COLMAP,
+Deux pipelines dans `scripts/` enchaînent la production des données COLMAP,
 l'entraînement et l'export. Spirula reste le moteur par défaut ; Nerfstudio
 peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 
@@ -77,6 +77,10 @@ peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 - **Images locales → splat** : sélection des images, reconstruction,
   entraînement par blocs et fusion ; voir le
   [pipeline images locales](../tools/images_to_splat/README.md).
+- **Vidéo → splat** : extraction des images d'une vidéo, puis même chaîne que
+  le pipeline images (reconstruction, entraînement par blocs et fusion) ; voir
+  la section « Vidéo sur Slurm » du
+  [pipeline images locales](../tools/images_to_splat/README.md#vidéo-sur-slurm).
 
 ## 3. Préparer les données et lancer un calcul
 
@@ -111,7 +115,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Préparation des données et sparse COLMAP** :
   [tools/preprocess](../tools/preprocess/README.md).
 - **Choix du producteur COLMAP et conversion orientations/LiDAR** :
-  [tools/images_to_colmap](../tools/images_to_colmap/README.md).
+  [tools/sfm](../tools/sfm/README.md).
 - **Conversion des poses caméra IGNF `.CON` et du LiDAR `.LAZ`** :
   [tools/con_laz_to_orientations](../tools/con_laz_to_orientations/README.md).
 - **Masques de segmentation** :

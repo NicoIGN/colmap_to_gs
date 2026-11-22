@@ -8,6 +8,7 @@ préparation des données, reconstruction COLMAP, entraînement et export. Conne
 Cette note contient les conventions, les points d'entrée et les pièges à connaître. 
 Utilise GIT_ROOT pour les chemins du projet sans chemins absolus dans les réponses. 
 Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
+Avant tout test, active le venv ~/.venvs/colmap_to_gs (voir copilot/CONTEXT.md, « Dépendances Python ») : sans lui, les tests échouent sur numpy/pyproj, ce n'est pas une régression.
 ```
 
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
@@ -28,6 +29,15 @@ bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
+Environnement de référence de l'agent : `copilot/conda_env_copilot.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
+
+```bash
+conda env create --yes --file "$GIT_ROOT/copilot/conda_env_copilot.yml"
+conda activate colmap_to_gs_copilot
+```
+
+Il ne contient pas `fiona` (requis par `tools/sfm/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
+
 Paquets utilisés par les tests et le pipeline :
 - Tests images/Spirula : `pillow numpy opencv-python-headless tqdm scipy plyfile`
 - Lidar / panoramax : `pyproj laspy lazrs` (`tools/lidar/requirements.txt`, `tools/panoramax/requirements.txt`)
@@ -35,13 +45,13 @@ Paquets utilisés par les tests et le pipeline :
 
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/images_to_colmap/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
 - Syntaxe seule : `node --check html/viewer/colmap.js`.
-- Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/preprocess/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
+- Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/sfm/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
 - Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
 
 ## macOS : HLOC et OpenMP
@@ -52,11 +62,11 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
 
 ## Bash : `set -u` et tableaux vides
-Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/images_to_colmap/reconstruct.sh`.
+Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/sfm/reconstruct.sh`.
 
 ## Densification MVS (`COLMAP_USE_MVS`, défaut `false`)
 - Clés : `COLMAP_USE_MVS`, `MVS_MAX_IMAGE_SIZE` (2000), `MVS_GPU_INDEX` (0) dans `config/defaults/sfm.default.sh`.
-- Script : `tools/images_to_colmap/mvs_densify.py` (image_undistorter, patch_match_stereo, stereo_fusion). Nécessite un COLMAP compilé avec CUDA : à lancer sur Slurm, pas sur Mac.
+- Script : `tools/sfm/colmap/mvs_densify.py` (image_undistorter, patch_match_stereo, stereo_fusion). Nécessite un COLMAP compilé avec CUDA : à lancer sur Slurm, pas sur Mac.
 - Le sparse dense est `sfm/mvs/sparse/0` ; `run.sh` et `scripts/images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
 - Les points denses reprennent le track du point sparse le plus proche (scipy `cKDTree`), pour que le découpage par tracks fonctionne. Approximatif si `SPLIT_NUM_BLOCKS > 1`.
 - Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
@@ -67,7 +77,13 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
 
 ## Lancer les tests
-Depuis la racine du dépôt, venv activé :
+Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier les imports :
+
+```bash
+python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
+```
+
+Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_spirula_blocks.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
 
 ```bash
 python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_spirula_blocks.py   # ~4 min, 109 tests
@@ -91,6 +107,13 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - L'ancien paramètre `SFM_EQUIRECTANGULAR_VIEWS` est refusé dans les nouvelles configurations ; les signatures locales où il valait `true` restent compatibles avec le mode `EQUIRECTANGULAR`. En modifiant ces réglages, préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
 - GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
 - Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
+
+## Documentation (README et `doc/`)
+- Structure obligatoire, dans cet ordre : d'abord l'objectif de l'outil, du script ou du pipeline (une ou deux phrases, puis le pipeline ou le flux en bref), ensuite les entrées et sorties, la configuration, le fonctionnement interne et les notes. Les détails vont dans des sous-sections (`###`) après l'objectif, jamais avant.
+- Ne pas éparpiller une même notion (ex. paramètres de téléchargement) sur plusieurs sections : une section la décrit en entier, les autres renvoient vers elle.
+- Ne pas dupliquer : si une information existe déjà dans `doc/`, `examples/` ou le README d'un autre outil, mettre un lien relatif vers l'ancre existante au lieu de la recopier. Exemples : `doc/guide_utilisateur.md`, `examples/pipelines.md`, `doc/lancement_bash_slurm.md`.
+- Les commandes exécutables vont dans `examples/*.md`, pas dans les README d'outils.
+- Après une modification : vérifier que les liens et ancres existent, et que les blocs de code sont équilibrés.
 
 ## Conventions
 - Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.

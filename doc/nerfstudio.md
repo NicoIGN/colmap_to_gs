@@ -55,7 +55,7 @@ dossier d'images
 
 Étapes :
 
-1. *(Optionnel)* `tools/preprocess/images_to_colmap.py` convertit un dossier d'images en dataset COLMAP.
+1. *(Optionnel)* `tools/sfm/colmap/images_to_colmap.py` convertit un dossier d'images en dataset COLMAP.
 2. `tools/libs/scripts/run.sh` génère `transforms.json`, estime `near` / `far`, entraîne Splatfacto, exporte le `.ply` et le nettoie.
 3. *(Optionnel)* `tools/viewer/server.py` sert le résultat pour une visualisation locale.
 
@@ -78,7 +78,7 @@ Structure attendue :
 └── sparse_pc.ply
 ```
 
-- `sparse_pc.ply` peut provenir de COLMAP (par exemple via `images_to_colmap.py`) ou être enrichi avec des données externes, comme un nuage LAZ.
+- `sparse_pc.ply` peut provenir de COLMAP (par exemple via `tools/sfm/colmap/images_to_colmap.py`) ou être enrichi avec des données externes, comme un nuage LAZ.
 - `sparse_pc.ply` doit être exprimé dans le repère mondial COLMAP.
 - `sparse_pc.ply` initialise les Gaussians ; sa densité, sa répartition, ses couleurs et sa cohérence avec les poses influencent fortement le résultat.
 
@@ -135,7 +135,7 @@ Cette étape est optionnelle. Le dossier produit peut être passé directement �
 Commande :
 
 ```bash
-python "$GIT_ROOT/tools/preprocess/images_to_colmap.py" \
+python "$GIT_ROOT/tools/sfm/colmap/images_to_colmap.py" \
   --image_dir /path/to/images \
   --output_dir /path/to/dataset \
   --camera_model OPENCV \
@@ -310,7 +310,7 @@ cd /tmp/nerfstudio_poster
 Générer le dataset COLMAP compatible avec `tools/libs/scripts/run.sh` :
 
 ```bash
-python "$GIT_ROOT/tools/preprocess/images_to_colmap.py" \
+python "$GIT_ROOT/tools/sfm/colmap/images_to_colmap.py" \
   --image_dir /tmp/nerfstudio_poster/images \
   --output_dir /tmp/nerfstudio_poster/poster_colmap \
   --camera_model OPENCV \
@@ -502,7 +502,9 @@ Ces quatre chemins sont fournis explicitement au lanceur ; `run.sh` les prépare
 
 ### Fonctionnement de SLURM
 
-`environment/ign.slurm/launch.sh` soumet `launch.slurm` avec `sbatch`, affiche les logs en direct jusqu'à la fin du job et renvoie `0` si l'état final est `COMPLETED`, `1` sinon. Le job active l'environnement conda `gsplat`, puis lance `run.sh` avec `--skip-conda`.
+Le fonctionnement du lanceur (suivi des journaux, codes de retour, environnement
+`gsplat`) est décrit dans la [section Nerfstudio du guide Bash / Slurm](lancement_bash_slurm.md#pipeline-nerfstudio--splatfacto).
+Le job lance `run.sh` avec `--skip-conda`.
 
 ## 5. Notes et informations complémentaires
 

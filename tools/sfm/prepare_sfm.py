@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panoramax"))
 from dataset_layout import image_files, jpeg_size, metadata_index, resolved_picture_type
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}
@@ -98,6 +99,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--dataset", required=True, help="Dossier Panoramax (contenant images/ et metadata/)")
     parser.add_argument("--output-dir", required=True, help="Workspace SfM ; les images retenues vont dans images/")
+    parser.add_argument("--images-dir", help="Dossier des images retenues ; défaut : <output-dir>/images")
     parser.add_argument("--size", type=parse_size, help="Taille à garder, LxH ; défaut : la plus fréquente")
     parser.add_argument(
         "--multi-cam",
@@ -112,7 +114,7 @@ def main(argv=None):
     if not images:
         raise SystemExit(f"Aucune image dans les dossiers images/ de {args.dataset}")
     output_dir = Path(args.output_dir).resolve()
-    target_dir = output_dir / "images"
+    target_dir = Path(args.images_dir).resolve() if args.images_dir else output_dir / "images"
     if any(path.parent.resolve() == target_dir.resolve() for path in images):
         raise SystemExit("Le workspace ne doit pas contenir le dossier d'images source")
 

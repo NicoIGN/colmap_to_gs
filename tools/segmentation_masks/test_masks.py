@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -7,7 +9,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-import prepare_masks
+import masks as prepare_masks
 
 
 class MaskResumeTests(unittest.TestCase):
@@ -19,7 +21,7 @@ class MaskResumeTests(unittest.TestCase):
         self.images.mkdir()
         for name in ("a.jpg", "b.jpg"):
             Image.new("RGB", (2, 2)).save(self.images / name)
-        self.masks = self.output / "masks"
+        self.masks = self.output / "train_masks"
         self.masks.mkdir()
         self.policy = dict(backend="spirula", model="/model", confidence=.5,
                            dilate=0., max_fraction=.8, labels=["sky"])
@@ -118,11 +120,69 @@ class MaskResumeTests(unittest.TestCase):
             prepare_masks.prepare()
         self.generate.assert_not_called()
 
+    def test_external_masks_are_copied_and_signed_without_generation(self):
+        external = self.output / "external"
+        external.mkdir()
+        for image in self.images.glob("*.jpg"):
+            Image.new("L", (2, 2), 255).save(external / (image.name + ".png"))
+        self.masks.rmdir()
+        self.policy.clear()
+        self.policy["external_dir"] = str(external)
+        prepare_masks.prepare()
+        self.generate.assert_not_called()
+        self.assertFalse(self.masks.is_symlink())
+        self.assertTrue((self.masks / "a.jpg.png").is_file())
+        report = json.loads((self.masks / "masks.json").read_text())
+        self.assertEqual(report["settings"]["external_dir"], str(external))
+
+    def test_changed_images_refuse_existing_masks(self):
+        prepare_masks.prepare()
+        self.generate.assert_called_once()
+        prepare_masks.prepare()
+        self.generate.assert_called_once()
+        (self.images / "a.jpg").write_bytes(b"new-photo")
+        with self.assertRaises(ValueError):
+            prepare_masks.prepare()
+        self.generate.assert_called_once()
+
+    def test_existing_masks_report_verification_progress(self):
+        self.finish(None, self.images, self.masks)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            prepare_masks.validate_masks(self.images, self.masks)
+        self.assertIn("Vérification des masques", output.getvalue())
+        self.assertIn("2/2 (100.0%)", output.getvalue())
+        self.assertIn("[reprise] 2 masques vérifiés", output.getvalue())
+
+    def test_shared_policies_link_feature_masks_to_training_masks(self):
+        prepare_masks.prepare()
+        feature = self.output / "feature_masks"
+        self.assertTrue(feature.is_symlink())
+        self.assertEqual(feature.resolve(), self.masks.resolve())
+
     def test_generation_failure_is_propagated(self):
         self.generate.side_effect = RuntimeError("license")
         with self.assertRaisesRegex(RuntimeError, "license"):
             prepare_masks.prepare()
         self.assertFalse((self.masks / "masks.json").exists())
+
+    def test_sfm_marker_refuses_existing_sfm_with_other_policy(self):
+        prepare_masks.prepare()
+        (self.output / "sfm" / "sparse").mkdir(parents=True)
+        other = dict(self.policy, labels=["person"])
+        with patch.object(prepare_masks, "policies", return_value={
+            "SFM_MASKS": other, "TRAIN_MASKS": other,
+        }):
+            with self.assertRaisesRegex(ValueError, "autre politique"):
+                prepare_masks.prepare()
+
+    def test_check_accepts_prepared_masks_and_rejects_missing_marker(self):
+        prepare_masks.prepare()
+        settings = prepare_masks.policies()
+        prepare_masks.check(self.output, settings, perspective=False)
+        (self.output / "sfm" / "sfm_mask_policy.json").unlink()
+        with self.assertRaisesRegex(ValueError, "non préparée"):
+            prepare_masks.check(self.output, settings, perspective=False)
 
 
 if __name__ == "__main__":

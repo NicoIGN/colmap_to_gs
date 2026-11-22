@@ -195,38 +195,8 @@ Priorité:
 EOF
 }
 
-die() {
-  echo "Erreur: $*" >&2
-  exit 1
-}
-
 log() {
   echo "[run_spirula] $*"
-}
-
-need_arg() {
-  [[ $# -ge 2 ]] || die "Valeur manquante pour $1"
-  [[ -n "${2:-}" ]] || die "Valeur vide pour $1"
-}
-
-is_true() {
-  case "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes|y|on) return 0 ;;
-    0|false|no|n|off|"") return 1 ;;
-    *) die "Booléen invalide: $1" ;;
-  esac
-}
-
-is_positive_integer() {
-  [[ "$1" =~ ^[1-9][0-9]*$ ]]
-}
-
-is_nonnegative_integer() {
-  [[ "$1" =~ ^[0-9]+$ ]]
-}
-
-is_number() {
-  [[ "$1" =~ ^[0-9]+([.][0-9]+)?$ ]]
 }
 
 split_parent_and_name() {

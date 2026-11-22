@@ -1,4 +1,4 @@
-# Images et orientations vers COLMAP
+# SfM : images et orientations vers COLMAP
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
@@ -6,8 +6,24 @@
 La configuration est un fichier Bash de confiance :
 
 ```bash
-bash tools/images_to_colmap/run.sh /chemin/config.sh
+bash tools/sfm/run.sh /chemin/config.sh
 ```
+
+**Organisation.** Tout le code SfM est regroupé ici, avec une interface commune
+(`run.sh` puis `reconstruct.sh`, qui route selon `COLMAP_METHOD`) :
+
+| Emplacement | Contenu |
+|---|---|
+| `run.sh`, `reconstruct.sh`, `param.default.sh` | Entrée commune, dispatch par méthode, défauts |
+| `prepare_sfm.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
+| `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |
+| `spirula/` | Scripts qui appellent Spirula (`run_spirula_sfm.sh`, `camera_split.py`, `spirula_progress.py`) |
+| `colmap/` | Outils COLMAP seul, sans Spirula (`reconstruct.py`, `hloc_reconstruct.py`, `mvs_densify.py`, `georef_gps.py`, conversions d'orientations et LAS) |
+
+Les scripts d'appel direct à Spirula ne sont appelés que depuis `spirula/` ;
+les outils n'utilisant que COLMAP (dont HLOC) sont dans `colmap/`.
+Le découpage équirectangulaire des images 360 (utilisé par HLOC) reste dans
+[`tools/preprocess`](../preprocess/README.md).
 
 **Méthodes.** `COLMAP_METHOD` choisit la production des caméras et points :
 
@@ -49,7 +65,7 @@ pas fournir un résultat géoréférencé à partir des EXIF.
 
 **Réutilisation.** `inputs.json` protège les images, la méthode et les données
 d'orientation/LiDAR. Une méthode différente exige un nouveau workspace.
-Le pipeline `script/images_to_3dgs.sh` appelle ce même outil avant de découper
+Le pipeline `scripts/images_to_3dgs.sh` appelle ce même outil avant de découper
 et entraîner ; il réutilise donc une préparation compatible déjà effectuée.
 Une sortie COLMAP direct ou Nerfstudio partielle doit être sauvegardée/déplacée ;
 elle n'est pas reprise implicitement.
@@ -99,7 +115,7 @@ Valider visuellement les projections ; réduire les gros nuages avant conversion
 | Données source | Outil |
 |---|---|
 | Poses caméra IGNF `.CON` + LiDAR `.LAZ` | [`tools/con_laz_to_orientations`](../con_laz_to_orientations/README.md) |
-| `transforms.json` Nerfstudio | `transforms_to_orientations.py` (ci-dessous) |
+| `transforms.json` Nerfstudio | `colmap/transforms_to_orientations.py` (ci-dessous) |
 | LAS/LAZ coloré seul | `las_to_ply.py` (ci-dessous) |
 
 ```bash
@@ -112,11 +128,11 @@ Les deux scripts suivants ne modifient pas le repère :
 
 ```bash
 # transforms.json : matrices OpenGL camera-to-world explicites, pas un checkpoint.
-python tools/images_to_colmap/transforms_to_orientations.py \
+python tools/sfm/colmap/transforms_to_orientations.py \
   --input /chemin/transforms.json --output /chemin/orientations.json
 
 # LAS/LAZ colore : laspy et lazrs necessaires ; stride=10 garde un point sur dix.
-python tools/images_to_colmap/las_to_ply.py \
+python tools/sfm/colmap/las_to_ply.py \
   --input /chemin/points.laz --output /chemin/points.ply --stride 10
 ```
 

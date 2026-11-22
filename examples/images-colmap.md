@@ -1,6 +1,6 @@
 # Images, vidéos et COLMAP
 
-[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/images_to_colmap/README.md) · [Images vers 3DGS](../tools/images_to_splat/README.md)
+[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/sfm/README.md) · [Images vers 3DGS](../tools/images_to_splat/README.md)
 
 ## Extraire des images nettes d'une vidéo
 
@@ -18,7 +18,7 @@ Après avoir préparé un fichier `config-images.sh` avec `SFM_IMAGES_DIR`,
 `OUTPUT_DIR` et la méthode `COLMAP_METHOD` souhaitée :
 
 ```bash
-bash "$GIT_ROOT/tools/images_to_colmap/run.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/tools/sfm/run.sh" "$DATA_ROOT/config-images.sh"
 ```
 
 Cette commande prépare le modèle sans entraîner de 3DGS. Pour produire aussi

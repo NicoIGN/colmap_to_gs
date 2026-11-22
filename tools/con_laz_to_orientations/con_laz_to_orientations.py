@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Convert IGNF CON camera orientations and a colored LAS/LAZ into the
-orientation JSON + PLY inputs of tools/images_to_colmap (COLMAP_METHOD=orientations)."""
+orientation JSON + PLY inputs of tools/sfm/colmap (COLMAP_METHOD=orientations)."""
 
 import argparse
 import json
@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "images_to_colmap"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sfm" / "colmap"))
 from las_to_ply import convert as convert_las  # noqa: E402
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}

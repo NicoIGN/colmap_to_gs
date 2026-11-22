@@ -300,12 +300,36 @@ def scalar_properties(feature):
     return attributes
 
 
+def gps_altitude(feature):
+    """Altitude EXIF (Exif.GPSInfo.GPSAltitude, fraction « num/den » ou nombre), signée par GPSAltitudeRef."""
+    properties = feature.get("properties") or {}
+    value = feature_value(feature, "Exif.GPSInfo.GPSAltitude")
+    if value is None:
+        return None
+    try:
+        if isinstance(value, str) and "/" in value:
+            numerator, denominator = value.split("/", 1)
+            altitude = float(numerator) / float(denominator)
+        else:
+            altitude = float(value)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    if not math.isfinite(altitude):
+        return None
+    if str(feature_value(feature, "Exif.GPSInfo.GPSAltitudeRef")).strip() == "1":
+        altitude = -altitude
+    return altitude
+
+
 def positions_geojson(located, bbox_epsg, to_bbox_crs):
     features = []
     for feature, record in located:
         lon, lat = feature["geometry"]["coordinates"][:2]
         x, y = to_bbox_crs.transform(lon, lat, errcheck=True)
+        altitude = gps_altitude(feature)
+        coordinates = [x, y] if altitude is None else [x, y, altitude]
         properties = scalar_properties(feature)
+        properties["altitude"] = altitude
         properties.update({
             "id": record["id"],
             "collection": record["collection"],
@@ -320,7 +344,7 @@ def positions_geojson(located, bbox_epsg, to_bbox_crs):
         })
         features.append({
             "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [x, y]},
+            "geometry": {"type": "Point", "coordinates": coordinates},
             "properties": properties,
         })
     return {

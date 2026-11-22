@@ -12,16 +12,12 @@ Usage:
 EOF
 }
 
-die() {
-  echo "Erreur : $*" >&2
-  exit 1
-}
-
 TRANSFORM_FILE=""
 COLMAP_POINTS=""
 IN_PLY=""
 OUT_PLY=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../libs/scripts/shell_helpers.sh"
 CLEANER_SCRIPT="$SCRIPT_DIR/clean_ply.py"
 
 while [[ $# -gt 0 ]]; do

@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from tools.preprocess.filter_sparse_density import (
+from tools.sfm.filter_sparse_density import (
     POINT_HEADER,
     density_votes,
     filter_sparse_model,
@@ -93,13 +93,13 @@ class SparseDensityTest(unittest.TestCase):
                                   ("quiet", ["--no-progress"])):
                 output = root / name
                 result = subprocess.run(
-                    [sys.executable, "-m", "tools.preprocess.filter_sparse_density",
+                    [sys.executable, "-m", "tools.sfm.filter_sparse_density",
                      "--input", str(source), "--output", str(output), *options],
                     capture_output=True, text=True, check=True,
                 )
-                report = json.loads(result.stdout)
-                self.assertEqual(report["points_removed"], 1)
                 if name == "progress":
+                    report = json.loads(result.stdout)
+                    self.assertEqual(report["points_removed"], 1)
                     for message in ("Lecture points 3D", "Lecture images",
                                     "Analyse densité", "Écriture sparse",
                                     "progress_clean", "progress_rejected",
@@ -107,6 +107,8 @@ class SparseDensityTest(unittest.TestCase):
                         self.assertIn(message, result.stderr)
                 else:
                     self.assertEqual(result.stderr, "")
+                    self.assertIn("Supprimés : 1 (4.8%)", result.stdout)
+                    self.assertIn("ignorés (non évaluables)", result.stdout)
                 results.append(output)
             for suffix in ("_clean", "_rejected"):
                 for filename in ("cameras.bin", "images.bin", "points3D.bin"):
@@ -164,22 +166,24 @@ class SparseDensityTest(unittest.TestCase):
         np.testing.assert_array_equal(parallel[0], serial[0])
         np.testing.assert_array_equal(parallel[1], serial[1])
 
-    def test_insufficient_camera_views_do_not_make_a_removal_decision(self):
+    def test_non_evaluable_points_are_removed_and_all_removal_is_refused(self):
         positions = np.vstack((np.tile([0, 0, 10.0], (20, 1)), [[0, 0, 100]]))
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "sparse"
             output = root / "filtered"
             write_model(source, positions, image_count=1)
+            with self.assertRaisesRegex(ValueError, "supprimer tous les points"):
+                filter_sparse_model(
+                    source, output, min_neighbors=12, min_cluster_points=5, min_views=2
+                )
             report = filter_sparse_model(
-                source, output, min_neighbors=12, min_cluster_points=5
+                source, output, min_neighbors=12, min_cluster_points=5, min_views=2,
+                keep_non_evaluable=True,
             )
-            self.assertEqual(report["points_removed"], 0)
-            self.assertEqual(len(read_output_point_ids(
-                root / "filtered_clean/points3D.bin")), 21)
-            self.assertEqual(read_output_point_ids(root / "filtered_rejected/points3D.bin"), [])
-            self.assertTrue(all(refs == [-1] * 21 for _, refs in
-                                read_image_point_ids(root / "filtered_rejected/images.bin")))
+            self.assertEqual(report["points_removed"], 1)
+            self.assertEqual(report["points_removed_by_votes"], 1)
+            self.assertEqual(report["points_ignored"], 21)
 
     def test_filter_writes_consistent_sparse_and_report(self):
         rng = np.random.default_rng(7)
@@ -192,6 +196,7 @@ class SparseDensityTest(unittest.TestCase):
             source = root / "sparse"
             output = root / "filtered"
             write_model(source, positions)
+            (source / "gauge.txt").write_text("oriented 1\norigin_lat 48.8\norigin_lon 2.3\n")
             report = filter_sparse_model(
                 source, output, min_neighbors=12, min_cluster_points=5
             )
@@ -218,6 +223,8 @@ class SparseDensityTest(unittest.TestCase):
             validate_sparse(rejected)
             self.assertEqual((output / "rigs.bin").read_bytes(), b"rig metadata")
             self.assertEqual((output / "frames.bin").read_bytes(), b"frame metadata")
+            self.assertEqual((output / "gauge.txt").read_bytes(), (source / "gauge.txt").read_bytes())
+            self.assertEqual((rejected / "gauge.txt").read_bytes(), (source / "gauge.txt").read_bytes())
             self.assertEqual(
                 (source / "points3D.bin").stat().st_size,
                 (output / "points3D.bin").stat().st_size + POINT_HEADER.size + 16,

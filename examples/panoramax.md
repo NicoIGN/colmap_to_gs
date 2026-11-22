@@ -13,6 +13,16 @@ bash "$GIT_ROOT/tools/panoramax/download.sh" \
   --crs EPSG:2154 --output-dir "$DATA_ROOT/panoramax"
 ```
 
+Lancer le téléchargement dans l'env `lidar-pdal` (créé par `environment/ign.slurm/pdal_env.yml`) :
+
+```bash
+micromamba -n lidar-pdal run bash "$GIT_ROOT/tools/panoramax/download.sh" \
+  --bbox "655150,6861000,656000,6861400" --crs EPSG:2154 \
+  --dry-run --output-dir ./
+```
+
+`--dry-run` affiche ce qui serait téléchargé sans écrire de fichiers.
+
 Les images et leurs métadonnées sont enregistrées dans un dossier par collection STAC,
 `$DATA_ROOT/panoramax/<id-collection>/images/` et `.../metadata/`. Si une collection
 mélange plusieurs tailles d'image, elle est répartie dans `<id-collection>-<LxH>/`.
@@ -93,6 +103,16 @@ dans `PANORAMAX_FILTERS` pour exprimer un OU ; utiliser la liste `,` à la place
 
 Ce filtre est transmis à `download.py` sous forme de `--filter` répétés et enregistré dans
 `request.json` ; changer `PANORAMAX_FILTERS` sur un `OUTPUT_DIR` existant est refusé.
+
+Pour ne garder que les photos d'un provider STAC (`properties.providers[].name`,
+insensible à la casse), utiliser `PANORAMAX_PROVIDER` :
+
+```bash
+PANORAMAX_PROVIDER="gaelle.gabriel@paris.fr"
+```
+
+Équivalent en ligne de commande : `--provider gaelle.gabriel@paris.fr`. Sur les photos
+ayant un seul provider, cela revient à `PANORAMAX_FILTERS="geovisio:producer=gaelle.gabriel@paris.fr"`.
 
 Pour les panoramas 360 avec HLOC, ajouter à la configuration
 `PANORAMAX_PICTURE_TYPE=360`, `COLMAP_METHOD=hloc` et

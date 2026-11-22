@@ -3,6 +3,7 @@ import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
 import { readGeojsonLayers } from "./geojson-geometry.js";
+import { parseGeoref } from "./georef.js";
 
 export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
@@ -233,6 +234,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
+  let viewGeoref = null;
   let wireColor = new pc.Color().fromString(DEFAULT_WIRE_COLOR);
   let pointSize = DEFAULT_POINT_SIZE;
   const layers = new Map();
@@ -270,9 +272,22 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     }
   }
 
+  // Sans géoréférencement, le centre de la première couche sert de translation (georef « projected »
+  // interne) : les coordonnées restent exactes en float64 avant d'être converties en float32.
   function render(child, georef) {
     destroyRender(child);
-    const placement = placementFor(child.source, georef);
+    if (!georef && !viewGeoref) {
+      const [x, y, h] = child.source.centre;
+      viewGeoref = parseGeoref({
+        output_reference: {
+          type: "projected",
+          units: "m",
+          epsg: child.source.epsg,
+          origin_projected: { x, y, h },
+        },
+      });
+    }
+    const placement = placementFor(child.source, georef ?? viewGeoref);
     child.placement = placement;
     child.bounds = null;
     const hasLines = child.source.count > 0;
@@ -449,6 +464,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       for (const child of layer.children) destroyRender(child);
     }
     layers.clear();
+    viewGeoref = null;
     emitBounds(false);
   }
 

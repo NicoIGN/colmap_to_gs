@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
-# Caller supplies repo_root and PYTHON_BIN; coordinate-frame selection stays upstream.
+# Caller supplies repo_root, PYTHON_BIN and OUTPUT_DIR, and sources georef_phase.sh and pipeline_lidar.sh.
+# Coordinate-frame selection stays upstream.
+
+# Tail commun : référence géographique puis nettoyage LiDAR du splat final.
+finalize_splat() {
+  local splat="$1"
+  [[ -s "$splat" ]] || {
+    printf '[ERREUR] Splat final absent ou vide : %s\n' "$splat" >&2
+    return 1
+  }
+  georef_export "$splat"
+  georef_lidar_env
+  lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$splat"
+}
 
 crop_splat_to_sparse() {
   local input="$1" output="$2" sparse="$3" mode="$4" margin="$5"

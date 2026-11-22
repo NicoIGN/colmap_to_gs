@@ -56,8 +56,10 @@ TRAIN_SP_BILAGRID_TYPE=""
 
 # --- TRAIN_BACKEND=nerfstudio uniquement ---
 # Ces paramètres sont ignorés par Spirula ; Nerfstudio requiert NVIDIA/CUDA.
+# Commandes Nerfstudio (chemin absolu ou nom dans le PATH).
 TRAIN_NS_TRAIN_BIN="ns-train"
 TRAIN_NS_EXPORT_BIN="ns-export"
+# Entier >= 1 : facteur de réduction des images d'entraînement (1 = résolution native).
 TRAIN_NS_DOWNSCALE_FACTOR="1"
 # false : réutiliser un checkpoint final ; une sortie partielle est refusée.
 # true : supprimer/recalculer les sorties 3DGS des blocs, PAS le SfM.

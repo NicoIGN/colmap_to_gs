@@ -66,6 +66,7 @@ validate_config() {
   config_choice SFM_SP_FEATURES "${SFM_SP_FEATURES:-aliked-n16rot}" \
     'sift|aliked-n16rot|aliked-n32|loma-b128|loma-b'
   config_choice SFM_SP_PAIRS "${SFM_SP_PAIRS:-prefilter}" 'auto|prefilter|exhaustive|sequential'
+  config_positive_integer SFM_SP_PREFILTER_NEIGHBORS "${SFM_SP_PREFILTER_NEIGHBORS:-16}"
   if [[ "$train_backend" == spirula ]]; then
     config_choice TRAIN_SP_PRESET "${TRAIN_SP_PRESET:-}" \
       '3dgs|360-camera|in-the-wild|centered-object|hdr|synthetic|meshing'

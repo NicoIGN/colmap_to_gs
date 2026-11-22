@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
-usage() { echo "Usage : bash tools/images_to_colmap/run.sh CONFIG [--images DIR]"; }
+usage() { echo "Usage : bash tools/sfm/run.sh CONFIG [--images DIR]"; }
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
@@ -43,21 +43,7 @@ sfm_masks="$OUTPUT_DIR/feature_masks"
 train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 sparse="$sfm/sparse/0"
-[[ -z "$GEOREF_GPX_FILE" ]] || sparse="$OUTPUT_DIR/georef/0"
-if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR && -z "$GEOREF_GPX_FILE" ]]; then
-  sparse="$OUTPUT_DIR/gps_georef/0"
-fi
-if [[ "$COLMAP_USE_MVS" == true ]]; then
-  [[ -z "$GEOREF_GPX_FILE" ]] ||
-    die "COLMAP_USE_MVS=true est incompatible avec GEOREF_GPX_FILE (le recalage lit le sparse, pas le dense)."
-  sparse="$sfm/mvs/sparse/0"
-fi
-filter_input="$sparse"
-[[ "$SFM_FILTER_DENSITY" != true ]] || sparse="$OUTPUT_DIR/sparse_clean"
-check_filtered_sparse() {
-  [[ -f "$sparse/.density_done" && -s "$sparse/density_report.json" ]] || die "Filtrage sparse incomplet."
-  "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-}
+[[ "$COLMAP_USE_MVS" != true ]] || sparse="$sfm/mvs/sparse/0"
 sparse_ready() {
   if [[ "$PIPELINE_RESUME" == true ]]; then
     local status=0
@@ -77,14 +63,10 @@ prepare() {
   feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     begin_stage "masques SfM / entraînement"
-    "$PYTHON_BIN" "$script_dir/prepare_masks.py"
-    if [[ -d "$OUTPUT_DIR/masks" ]]; then
-      sfm_masks="$OUTPUT_DIR/masks"
-      train_masks="$OUTPUT_DIR/masks"
-    fi
+    "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py"
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
-  camera_split="$repo_root/tools/images_to_colmap/camera_split.py"
+  camera_split="$repo_root/tools/sfm/spirula/camera_split.py"
   if [[ "$COLMAP_METHOD" == spirula ]]; then
     "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"
   fi
@@ -97,7 +79,7 @@ prepare() {
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0" --archive-sparse
     fi
     begin_stage "reconstruction COLMAP ($COLMAP_METHOD)"
-    bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+    bash "$repo_root/tools/sfm/reconstruct.sh"
     if [[ "$PIPELINE_RESUME" == true ]]; then
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     fi
@@ -119,7 +101,7 @@ prepare() {
         SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
         SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
         SFM_RECONSTRUCT_CAMERA_MODE=folder \
-        bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+        bash "$repo_root/tools/sfm/reconstruct.sh"
       "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     elif ((split_status != 3)); then
@@ -132,7 +114,7 @@ prepare() {
   if [[ "$COLMAP_USE_MVS" == true ]]; then
     begin_stage "densification MVS"
     if [[ ! -s "$sfm/mvs/sparse/0/points3D.bin" ]]; then
-      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/mvs_densify.py" \
+      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/mvs_densify.py" \
         --colmap "$SFM_COLMAP_BIN" --images "$selected" \
         --sparse "$sfm/sparse/0" --output "$sfm/mvs" \
         --max-image-size "$MVS_MAX_IMAGE_SIZE" --gpu-index "$MVS_GPU_INDEX"
@@ -140,42 +122,6 @@ prepare() {
     for name in cameras images points3D; do
       [[ -s "$sfm/mvs/sparse/0/$name.bin" ]] || die "MVS incomplet : $name.bin"
     done
-  fi
-  if [[ -n "$GEOREF_GPX_FILE" ]]; then
-    begin_stage "recalage du SfM sur le GPX"
-    "$PYTHON_BIN" "$script_dir/georeference.py" prepare
-  elif [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" == EQUIRECTANGULAR ]]; then
-    begin_stage "recalage du SfM sur les GPS"
-    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
-      --projection "$OUTPUT_DIR/projection.json" --sparse "$sfm/sparse/0" \
-      --output "$OUTPUT_DIR/gps_georef/0" --epsg "$GEOREF_EPSG" --allow-missing
-    "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR/gps_georef/0"
-  fi
-  if [[ "$SFM_FILTER_DENSITY" == true ]]; then
-    begin_stage "filtrage du sparse par densité"
-    density_filter="$repo_root/tools/preprocess/filter_sparse_density.py"
-    density_version="$("$PYTHON_BIN" "$density_filter" --version)"
-    [[ "$density_version" =~ ^[0-9]+$ ]] ||
-      die "Version du filtre de densité invalide : $density_version"
-    cached_density_version=""
-    density_key="$density_version $SFM_DENSITY_VOTE_FRACTION $SFM_DENSITY_FAR_SUPPORT_RATE"
-    cached_density_version=""
-    if [[ -f "$sparse/.density_done" ]]; then
-      IFS= read -r cached_density_version < "$sparse/.density_done" || true
-    fi
-    if [[ "$cached_density_version" != "$density_key" ]]; then
-      [[ ! -e "$blocks" && ! -e "$OUTPUT_DIR/gs" && ! -e "$OUTPUT_DIR/gs-nerfstudio" ]] ||
-        die "Réglages ou version du filtre de densité modifiés : choisir un nouvel OUTPUT_DIR pour refaire le découpage et l'entraînement."
-      "$PYTHON_BIN" "$density_filter" \
-        --input "$filter_input" --output "$OUTPUT_DIR/sparse" \
-        --vote-fraction "$SFM_DENSITY_VOTE_FRACTION" \
-        --far-support-rate "$SFM_DENSITY_FAR_SUPPORT_RATE" \
-        --workers "$NUM_CPUS" --verbose
-      "$PYTHON_BIN" "$script_dir/resume.py" "$sparse"
-      printf '%s\n' "$density_key" > "$sparse/.density_done"
-    else
-      check_filtered_sparse
-    fi
   fi
 }
 begin_stage "initialisation"

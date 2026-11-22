@@ -19,7 +19,9 @@ SFM_IMAGES_RECURSIVE="true"
 # Workspace distinct et EXTÉRIEUR au dossier d'images. Les images sont liées,
 # jamais déplacées. Choisir un nouveau workspace si images/SfM/masques changent.
 OUTPUT_DIR=""
+# Chemin absolu de l'exécutable spirula ; vide = non renseigné.
 SPIRULA_BIN=""
+# Interpréteur Python des outils (ex. python3 ou chemin d'un venv).
 PYTHON_BIN="python3"
 # Reprise explicite après interruption, sans supprimer les artefacts.
 # true : accepter une signature absente/ancienne avant blocs/train, vérifier

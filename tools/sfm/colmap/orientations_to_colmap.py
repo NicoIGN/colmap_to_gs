@@ -12,7 +12,7 @@ from PIL import Image
 from plyfile import PlyData
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from colmap_split_blocks import (
     CAMERA_MODELS, Camera, ImageRec, write_block_images, write_cameras_bin,
 )
