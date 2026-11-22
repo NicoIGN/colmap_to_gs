@@ -20,6 +20,8 @@ import shutil
 import subprocess
 import sys
 
+from generate_masks import progress
+
 GENERATOR = Path(__file__).resolve().with_name("generate_masks.py")
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 
@@ -134,7 +136,9 @@ def validate_masks(images, output, *, allow_missing=False):
     if not sources:
         raise ValueError(f"Aucune image sélectionnée : {images}")
     missing = []
-    for source in sources:
+    progress(0, len(sources), None, "Vérification des masques")
+    for index, source in enumerate(sources, 1):
+        progress(index, len(sources), None, "Vérification des masques")
         mask_path = output / (source.relative_to(images).as_posix() + ".png")
         if not mask_path.is_file():
             if allow_missing:

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -142,6 +144,15 @@ class MaskResumeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             prepare_masks.prepare()
         self.generate.assert_called_once()
+
+    def test_existing_masks_report_verification_progress(self):
+        self.finish(None, self.images, self.masks)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            prepare_masks.validate_masks(self.images, self.masks)
+        self.assertIn("Vérification des masques", output.getvalue())
+        self.assertIn("2/2 (100.0%)", output.getvalue())
+        self.assertIn("[reprise] 2 masques vérifiés", output.getvalue())
 
     def test_shared_policies_link_feature_masks_to_training_masks(self):
         prepare_masks.prepare()
