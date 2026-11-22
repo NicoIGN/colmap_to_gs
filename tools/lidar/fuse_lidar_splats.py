@@ -9,6 +9,7 @@ import argparse
 from pathlib import Path
 import sys
 from types import SimpleNamespace
+import warnings
 
 import numpy as np
 from scipy.spatial import cKDTree
@@ -22,7 +23,7 @@ from filter_splats_by_lidar import MAX_LIDAR_POINTS
 GREY_RGB = 128
 GREY_DC = (GREY_RGB / 255.0 - 0.5) / C0
 SPLAT_ROTATION_IDENTITY = np.array([255, 128, 128, 128], dtype=np.uint8)
-CHUNK = 500000
+CHUNK = 100000
 
 
 def positive(value, name):
@@ -40,7 +41,17 @@ def to_u8(dc):
     return np.clip(np.round((dc * C0 + 0.5) * 255.0), 0, 255).astype(np.uint8)
 
 
-def z_band_mask(xyz, lidar, radius, neighbours, margin):
+def progress(label, current, total, *, force=False):
+    """Print a bar per chunk, same format as the segmentation mask progress."""
+    total = max(total, 1)
+    width = 32
+    ratio = min(current / total, 1.0)
+    filled = int(width * ratio)
+    bar = "#" * filled + "-" * (width - filled)
+    print(f"[fusion] {label:<22} [{bar}] {current}/{total} ({ratio * 100:5.1f}%)", flush=True)
+
+
+def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None):
     """Return (remove, has_evidence) using the Z range of the nearest LiDAR points in XY."""
     tree = cKDTree(lidar[:, :2])
     remove = np.zeros(len(xyz), dtype=bool)
@@ -57,6 +68,8 @@ def z_band_mask(xyz, lidar, radius, neighbours, margin):
         end = start + len(part)
         evidence[start:end] = has
         remove[start:end] = has & outside
+        if label:
+            progress(label, end, len(xyz))
     return remove, evidence
 
 
@@ -69,7 +82,8 @@ def z_offset_stats(xyz, lidar, radius, neighbours):
         dist, idx = tree.query(part[:, :2], k=neighbours, distance_upper_bound=radius)
         valid = np.isfinite(dist)
         z = np.where(valid, lidar[np.minimum(idx, len(lidar) - 1), 2], np.nan)
-        with np.errstate(all="ignore"):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
             residual[start:start + len(part)] = part[:, 2] - np.nanmedian(z, axis=1)
 
     def pct(values):
@@ -147,7 +161,8 @@ def run(args, scene):
                        max_points=MAX_LIDAR_POINTS)
 
     remove, evidence = z_band_mask(xyz + np.array([0.0, 0.0, args.z_offset]), lidar,
-                                   args.z_radius, args.z_neighbours, args.z_margin)
+                                   args.z_radius, args.z_neighbours, args.z_margin,
+                                   label="bande Z")
     keep = ~remove
     if not keep.any():
         raise ValueError("Aucun splat conservé après filtrage par la bande Z LiDAR")
