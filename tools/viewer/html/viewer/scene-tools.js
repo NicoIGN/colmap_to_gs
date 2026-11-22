@@ -1148,6 +1148,10 @@ export function createSceneTools({
           return track;
         },
 
+        clearGpsTrack() {
+          resetTrack();
+        },
+
         getGeoref() {
           return georef;
         },

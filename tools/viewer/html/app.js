@@ -1723,6 +1723,7 @@ async function initialize() {
       gpsLayer = createGpsLayer({
         app,
         registerLayer: (layer) => layerManager.add(layer),
+        onClear: () => sceneTools?.clearGpsTrack(),
       });
 
       lidarLayer = createLidarLayer({

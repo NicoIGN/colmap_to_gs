@@ -8,7 +8,7 @@ const SPHERE_RADIUS_MIN = 0.06; // m
 const SPHERE_RADIUS_MAX = 0.22; // m
 const SPHERE_SCALE_BY_DISTANCE = 0.015; // m par m de distance caméra
 
-export function createGpsLayer({ app, registerLayer }) {
+export function createGpsLayer({ app, registerLayer, onClear }) {
 
   let rootEntity = null;
   let lineEntity = null;
@@ -168,6 +168,10 @@ export function createGpsLayer({ app, registerLayer }) {
       setVisible(value) {
         visible = value;
         refreshUI();
+      },
+      // Vide la trajectoire côté scène ; le rendu est retiré à la frame suivante.
+      onRemove() {
+        onClear?.();
       },
     }) ?? null;
     refreshUI();
