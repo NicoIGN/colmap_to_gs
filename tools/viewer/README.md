@@ -84,7 +84,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   importé comme volumes ombrés (surfaces triangulées, faces extérieures seules ;
   trous ignorés, géométries `GeometryInstance` et multi-points non prises en
   charge). Le CRS vient de `metadata.referenceSystem`, la couleur et l'opacité se
-  règlent dans « Options » (« Opacité bâtiments 3D »). Sous la couche, dans le panneau
+  règlent dans « Options » (curseurs « Opacité toits » et « Opacité façades », 100 % par défaut). Sous la couche, dans le panneau
   d'informations, les cases « Toits » et « Façades » (cochées par défaut) affichent l'un ou l'autre type : un triangle est un toit si sa normale
   pointe vers le haut (Z ≥ 0,5), sinon façade (sols compris). Le LoD0 est ignoré. Limite : 1,5 million de
   triangles. Les autres `.json` servent toujours au géoréférencement.

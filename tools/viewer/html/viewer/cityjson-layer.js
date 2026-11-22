@@ -74,7 +74,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   let disposed = false;
   let nextId = 1;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
-  let opacity = DEFAULT_VOLUME_OPACITY / 100;
+  const partOpacity = { roof: DEFAULT_VOLUME_OPACITY / 100, facade: DEFAULT_VOLUME_OPACITY / 100 };
   // Visibilité de chaque partie, décidée par les cases « Toits » et « Façades » du panneau de couches.
   const partShown = { roof: true, facade: true };
   const layers = new Map();
@@ -119,7 +119,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       mesh.setNormals(worldNormals(part.normals, placement));
       mesh.update(pc.PRIMITIVE_TRIANGLES, true);
 
-      const material = makeVolumeMaterial(color, opacity);
+      const material = makeVolumeMaterial(color, partOpacity[kind]);
       const root = new pc.Entity(`CityJSON · ${child.source.name} · ${kind === "roof" ? "toit" : "façade"}`);
       root.addComponent("render", {
         type: "asset",
@@ -256,12 +256,14 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       }
     },
 
-    // `percent` : 100 = opaque, 0 = invisible.
-    setOpacity(percent) {
-      opacity = percent / 100;
+    // `percent` : 100 = opaque, 0 = invisible. `kind` : "roof" ou "facade".
+    setOpacity(kind, percent) {
+      partOpacity[kind] = percent / 100;
       for (const layer of layers.values()) {
         for (const child of layer.children) {
-          for (const part of child.parts) applyOpacity(part.material, opacity);
+          for (const part of child.parts) {
+            if (part.kind === kind) applyOpacity(part.material, partOpacity[kind]);
+          }
         }
       }
     },

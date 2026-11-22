@@ -252,7 +252,8 @@ function refreshUI() {
         element.id === "colmapFolderInput" ||
         element.id === "colmapPointSize" ||
         element.id === "colmapCameraSize" ||
-        element.id === "cityOpacity"
+        element.id === "cityRoofOpacity" ||
+        element.id === "cityFacadeOpacity"
       ) {
         return;
       }
@@ -1388,10 +1389,12 @@ function installUI() {
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
   $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
-  $("cityOpacity").addEventListener("input", (event) => {
-    cityLayer?.setOpacity(Number(event.target.value));
-    $("cityOpacityValue").value = `${event.target.value} %`;
-  });
+  for (const kind of ["roof", "facade"]) {
+    $(`city${kind === "roof" ? "Roof" : "Facade"}Opacity`).addEventListener("input", (event) => {
+      cityLayer?.setOpacity(kind, Number(event.target.value));
+      $(`city${kind === "roof" ? "Roof" : "Facade"}OpacityValue`).value = `${event.target.value} %`;
+    });
+  }
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1785,7 +1788,8 @@ async function initialize() {
           applyFreeBounds(wireBox, bounds, framed);
         },
       });
-      cityLayer.setOpacity(Number($("cityOpacity").value));
+      cityLayer.setOpacity("roof", Number($("cityRoofOpacity").value));
+      cityLayer.setOpacity("facade", Number($("cityFacadeOpacity").value));
 
       installUI();
       installDnD();
