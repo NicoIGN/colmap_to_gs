@@ -335,9 +335,11 @@ règle 1 s'applique, plus le nettoyage planimétrique :
    n'atteint pas le LiDAR le plus proche en XY est retiré (il déborde du LAZ).
    `--footprint-sigmas 0` désactive ce nettoyage.
 
-1. Un splat dont le Z est sous ou au-dessus de la bande Z LiDAR locale (min/max
-   des `--z-neighbours` points les plus proches en XY dans `--z-radius`, par
-   défaut 64 points dans 5 m), à `--z-margin` près, est retiré. Un grand voisinage
+1. Un splat dont le Z (ou le support vertical, `--footprint-sigmas` × σ) sort de la bande
+   Z LiDAR locale, à `--z-margin` près, est retiré. Un grand splat de bord qui descend
+   sous le LiDAR est donc retiré même si son centre reste dans la bande. La bande est
+   le min/max des `--z-neighbours` points les plus proches en XY dans `--z-radius`
+   (par défaut 64 points dans 5 m). Un grand voisinage
    évite de retirer les objets (bâtiments, végétation) à cause d'un LiDAR sol trop
    étroit. Un splat sans LiDAR voisin est conservé. `--z-offset` ajoute un décalage
    vertical aux splats pour ce test seulement (utile si le datum diffère du LAZ) ;

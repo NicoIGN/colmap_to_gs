@@ -427,6 +427,13 @@ class LidarTests(unittest.TestCase):
             report = json.loads(aligned.with_suffix(".splat.json").read_text())
             self.assertLess(report["rmse_after"], 0.001)
 
+    def test_z_band_extent_removes_splats_whose_support_leaves_the_band(self):
+        from fuse_lidar_splats import z_band_mask
+        lidar = np.column_stack([np.random.rand(500, 2) * 10, np.zeros(500)])
+        xyz = np.array([[5.0, 5.0, 0.0], [5.0, 5.0, 0.0]])
+        remove, _ = z_band_mask(xyz, lidar, 5.0, 64, 0.5, extent=np.array([0.0, 2.0]))
+        self.assertEqual(remove.tolist(), [False, True])
+
     def test_footprint_removes_splats_whose_support_misses_lidar(self):
         from fuse_lidar_splats import footprint_mask
         lidar = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])

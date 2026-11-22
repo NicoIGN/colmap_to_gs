@@ -51,11 +51,16 @@ def progress(label, current, total, *, force=False):
     print(f"[fusion] {label:<22} [{bar}] {current}/{total} ({ratio * 100:5.1f}%)", flush=True)
 
 
-def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None):
-    """Return (remove, has_evidence) using the Z range of the nearest LiDAR points in XY."""
+def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None, extent=None):
+    """Return (remove, has_evidence) using the Z range of the nearest LiDAR points in XY.
+
+    extent (optional, per splat) is the vertical half-size of the splat support: the
+    splat is removed when its bottom or top leaves the band, not only its centre.
+    """
     tree = cKDTree(lidar[:, :2])
     remove = np.zeros(len(xyz), dtype=bool)
     evidence = np.zeros(len(xyz), dtype=bool)
+    half = np.zeros(len(xyz)) if extent is None else extent
     for start in range(0, len(xyz), CHUNK):
         part = xyz[start:start + CHUNK]
         dist, idx = tree.query(part[:, :2], k=neighbours, distance_upper_bound=radius)
@@ -64,7 +69,8 @@ def z_band_mask(xyz, lidar, radius, neighbours, margin, label=None):
         zmin = np.where(valid, z, np.inf).min(axis=1)
         zmax = np.where(valid, z, -np.inf).max(axis=1)
         has = valid.any(axis=1)
-        outside = (part[:, 2] < zmin - margin) | (part[:, 2] > zmax + margin)
+        h = half[start:start + len(part)]
+        outside = (part[:, 2] - h < zmin - margin) | (part[:, 2] + h > zmax + margin)
         end = start + len(part)
         evidence[start:end] = has
         remove[start:end] = has & outside
@@ -171,11 +177,13 @@ def run(args, scene):
     lidar = load_lidar(args.lidar, origin, args.lidar_stride, classes=classes,
                        max_points=MAX_LIDAR_POINTS)
 
+    sigma = np.exp(log_size)
+    support = args.footprint_sigmas * sigma
     remove_z, evidence = z_band_mask(xyz + np.array([0.0, 0.0, args.z_offset]), lidar,
                                      args.z_radius, args.z_neighbours, args.z_margin,
-                                     label="bande Z")
+                                     label="bande Z", extent=support)
     if args.footprint_sigmas > 0:
-        outside_footprint = footprint_mask(xyz, np.exp(log_size), lidar, args.footprint_sigmas)
+        outside_footprint = footprint_mask(xyz, sigma, lidar, args.footprint_sigmas)
     else:
         outside_footprint = np.zeros(len(xyz), dtype=bool)
     remove = remove_z | outside_footprint
