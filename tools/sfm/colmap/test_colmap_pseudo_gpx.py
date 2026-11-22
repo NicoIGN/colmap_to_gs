@@ -23,8 +23,10 @@ class PseudoGpxOrderingTest(unittest.TestCase):
         t = np.linspace(0, 1, 120)
         points = np.column_stack([t * 200, 20 * np.sin(t * 6), np.zeros_like(t)])
         perm = rng.permutation(len(points))
+        tangent = np.column_stack([np.full_like(t, 200.0), 120 * np.cos(t * 6), np.zeros_like(t)])
+        tangent /= np.linalg.norm(tangent, axis=1, keepdims=True)
         names = [f"img_f{i:05d}" for i in range(len(points))]
-        order = order_centres(names, points[perm], "path")
+        order = order_centres(names, points[perm], tangent[perm], "path", weight=1.0)
         recovered = perm[order]
         self.assertGreater(abs(np.corrcoef(np.arange(len(points)), recovered)[0, 1]), 0.999)
 
