@@ -75,7 +75,8 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   let nextId = 1;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
   let opacity = DEFAULT_VOLUME_OPACITY / 100;
-  const partVisibility = { roof: true, facade: true };
+  // Visibilité de chaque partie, décidée par les cases « Toits » et « Façades » du panneau de couches.
+  const partShown = { roof: true, facade: true };
   const layers = new Map();
 
   function emitBounds(frame) {
@@ -126,12 +127,22 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
         layers: [getOverlayLayer(app).id],
       });
       root.setLocalEulerAngles(getFlipUp() ? 180 : 0, 0, 0);
-      root.enabled = child.visible && partVisibility[kind];
+      root.enabled = partShown[kind];
       app.root.addChild(root);
       child.parts.push({ kind, mesh, material, root });
     }
     child.bounds = colmapBounds(allPositions, false);
     child.placement = placement;
+  }
+
+  function applyPartVisibility(kind) {
+    for (const layer of layers.values()) {
+      for (const child of layer.children) {
+        for (const part of child.parts) {
+          if (part.kind === kind) part.root.enabled = partShown[kind];
+        }
+      }
+    }
   }
 
   function refreshPlacement() {
@@ -165,7 +176,6 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
     const child = {
       name: `${name} · ${source.objectCount.toLocaleString("fr-FR")} objets · ${source.triangleCount.toLocaleString("fr-FR")} triangles`,
       source,
-      visible: true,
       bounds: null,
       pivot: null,
       parts: [],
@@ -182,10 +192,19 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       visible: true,
       children: [
         {
-          name: child.name,
+          name: "Toits",
+          visible: true,
           setVisible(visible) {
-            child.visible = visible;
-            for (const part of child.parts) part.root.enabled = visible && partVisibility[part.kind];
+            partShown.roof = visible;
+            applyPartVisibility("roof");
+          },
+        },
+        {
+          name: "Façades",
+          visible: true,
+          setVisible(visible) {
+            partShown.facade = visible;
+            applyPartVisibility("facade");
           },
         },
       ],
@@ -243,18 +262,6 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       for (const layer of layers.values()) {
         for (const child of layer.children) {
           for (const part of child.parts) applyOpacity(part.material, opacity);
-        }
-      }
-    },
-
-    // `kind` : "roof" ou "facade".
-    setPartVisible(kind, visible) {
-      partVisibility[kind] = visible;
-      for (const layer of layers.values()) {
-        for (const child of layer.children) {
-          for (const part of child.parts) {
-            if (part.kind === kind) part.root.enabled = child.visible && visible;
-          }
         }
       }
     },
