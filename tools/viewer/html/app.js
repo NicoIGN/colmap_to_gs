@@ -21,6 +21,8 @@ import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
+import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
+import { isCityJsonText } from "./viewer/cityjson-geometry.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -109,6 +111,7 @@ let colmapLayer = null;
 let gpsLayer = null;
 let lidarLayer = null;
 let gpkgLayer = null;
+let cityLayer = null;
 
 
 const canvas = document.createElement("canvas");
@@ -497,6 +500,7 @@ function releaseScene() {
   colmapLayer?.clear();
   lidarLayer?.clear();
   gpkgLayer?.clear();
+  cityLayer?.clear();
   gpsLayer?.clear();
   layerManager?.clear();
 
@@ -955,6 +959,15 @@ async function handleDroppedFiles(fileList, items) {
       );
     }
 
+    if (/\.json$/i.test(file.name)) {
+      const text = await file.text();
+      if (isCityJsonText(text)) {
+        if (!cityLayer) throw new Error("L’importeur CityJSON n’est pas initialisé.");
+        await cityLayer.loadText(text, file.name);
+        return;
+      }
+    }
+
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
     } else if (/\.(splat|ply)$/i.test(file.name)) {
@@ -1374,6 +1387,10 @@ function installUI() {
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
   $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
+  $("cityOpacity").addEventListener("input", (event) => {
+    cityLayer?.setOpacity(Number(event.target.value));
+    $("cityOpacityValue").value = `${event.target.value} %`;
+  });
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1401,6 +1418,7 @@ function installUI() {
     colmapLayer?.setFlipUp($("flipUp").checked);
     lidarLayer?.setFlipUp($("flipUp").checked);
     gpkgLayer?.setFlipUp($("flipUp").checked);
+    cityLayer?.setFlipUp($("flipUp").checked);
 
     computeSceneBounds();
     syncCamera();
@@ -1755,6 +1773,19 @@ async function initialize() {
       gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
       gpkgLayer.setPointSize(Number($("colmapPointSize").value));
 
+      cityLayer = createCityJsonLayer({
+        app,
+        setStatus,
+        getFlipUp: () => $("flipUp").checked,
+        getGeoref: () => sceneTools?.getGeoref() ?? null,
+        registerGroup: (group) => layerManager.addGroup(group),
+        onBoundsChanged: (bounds, frame) => {
+          const framed = frame && !hasFreeData() && !splatLayers.length;
+          applyFreeBounds(wireBox, bounds, framed);
+        },
+      });
+      cityLayer.setOpacity(Number($("cityOpacity").value));
+
       installUI();
       installDnD();
 
@@ -1765,6 +1796,7 @@ async function initialize() {
         sceneTools?.frame(dt);
         lidarLayer?.refreshPlacement();
         gpkgLayer?.refreshPlacement();
+        cityLayer?.refreshPlacement();
         colmapLayer?.frame();
 
         // Peut être null pendant init/teardown.
@@ -1828,6 +1860,9 @@ async function initialize() {
 
         gpkgLayer?.dispose();
         gpkgLayer = null;
+
+        cityLayer?.dispose();
+        cityLayer = null;
     
       progress.dispose();
       app?.destroy();

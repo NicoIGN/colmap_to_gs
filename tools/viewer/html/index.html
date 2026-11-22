@@ -371,6 +371,12 @@
         <input type="color" id="wireColor" value="#00e5ff" />
       </div>
 
+      <label class="slider" for="cityOpacity">
+        Opacité des volumes CityJSON (100 % = opaque)
+        <input type="range" id="cityOpacity" min="0" max="100" step="5" value="100" />
+        <output id="cityOpacityValue" for="cityOpacity">100 %</output>
+      </label>
+
       <label class="check">
         <input type="checkbox" id="flipUp" />
         Axe Y vers le bas — COLMAP

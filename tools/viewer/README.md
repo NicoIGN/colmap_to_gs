@@ -80,7 +80,12 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
 - Un GeoJSON `.geojson` déposé seul est lu comme un GeoPackage (filaire, une
   sous-couche par fichier). Sans membre `crs`, les coordonnées sont supposées en
   WGS84 (EPSG:4326) ; sinon le code EPSG est lu dans `crs` (ex. `EPSG:2154`).
-  Un `.json` n'est pas pris en charge ici, car il sert au géoréférencement.
+  Un `.json` n'est pas un GeoJSON : s'il contient `"type": "CityJSON"`, il est
+  importé comme volumes ombrés (surfaces triangulées, faces extérieures seules ;
+  trous ignorés, géométries `GeometryInstance` et multi-points non prises en
+  charge). Le CRS vient de `metadata.referenceSystem`, la couleur et l'opacité se
+  règlent dans « Options » (« Volumes CityJSON »). Limite : 1,5 million de
+  triangles. Les autres `.json` servent toujours au géoréférencement.
 - Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
   en données 3D filaires : chaque table d'entités devient une sous-couche de
   lignes (polylignes et contours de polygones) ; les points (simples ou multiples)
