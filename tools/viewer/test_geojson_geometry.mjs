@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readGeojsonLayers, absoluteLocalPlacement } from "./html/viewer/geojson-geometry.js";
+import { readGeojsonLayers } from "./html/viewer/geojson-geometry.js";
 
 test("une FeatureCollection donne une couche WGS84 avec lignes et contours", () => {
   const text = JSON.stringify({
@@ -46,19 +46,4 @@ test("Point et MultiPoint deviennent des points, sans polylignes", () => {
   const [layer] = readGeojsonLayers(text, "pts.geojson");
   assert.deepEqual(layer.polylines, []);
   assert.deepEqual(layer.points, [1, 2, 0, 3, 4, 5, 6, 7, 0]);
-});
-
-test("sans géoréférencement, chaque couche garde ses coordonnées absolues en Z", () => {
-  const point = (z) => JSON.stringify({
-    type: "FeatureCollection",
-    crs: { properties: { name: "urn:ogc:def:crs:EPSG::2154" } },
-    features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [650000, 6860000, z] } }],
-  });
-  const [low] = readGeojsonLayers(point(78.89), "bas.geojson");
-  const [high] = readGeojsonLayers(point(108.89), "haut.geojson");
-  const lowPlacement = absoluteLocalPlacement(low.points.slice(0, 3), "");
-  const highPlacement = absoluteLocalPlacement(high.points.slice(0, 3), "");
-  assert.equal(lowPlacement.origin[2], 78.89);
-  assert.equal(highPlacement.origin[2], 108.89);
-  assert.equal(highPlacement.origin[0], 650000);
 });

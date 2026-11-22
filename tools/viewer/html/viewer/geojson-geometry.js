@@ -35,17 +35,6 @@ function collectGeometry(geometry, out, points) {
   }
 }
 
-// Sans géoréférencement, le monde reprend les coordonnées du fichier (x, y, z) : la couche est
-// décalée de son centre réel, au lieu d'être recentrée à l'origine.
-export function absoluteLocalPlacement(centre, note) {
-  return {
-    mode: "absolute",
-    note,
-    origin: [...centre],
-    linear: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-  };
-}
-
 // Tables équivalentes à celles du GeoPackage : une seule couche nommée d'après le fichier.
 export function readGeojsonLayers(text, name) {
   const geojson = JSON.parse(text);
