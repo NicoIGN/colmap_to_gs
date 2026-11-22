@@ -868,6 +868,12 @@ async function loadFile(file) {
   await resetAndLoad(file, file.name);
 }
 
+// Fichiers qui géoréférencent un splat déposé avec lui.
+function isGeorefSidecarName(name, base) {
+  const lower = name.toLowerCase();
+  return lower === `${base}.georef.json` || lower === "gauge.txt" || lower === "georef_stats.json";
+}
+
 async function appendScene(source, name) {
   if (!sceneReady && !hasFreeData()) {
     await resetAndLoad(source, name);
@@ -910,20 +916,15 @@ async function handleDroppedFiles(fileList, items) {
     const sceneFile = files.find((f) => isSupportedSceneName(f.name));
     if (sceneFile && files.length === 2) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
-      const georefFile = files.find((f) => f !== sceneFile && f.name.toLowerCase() === `${base}.georef.json`);
-      console.log("[georef] scan", {
-        scene: sceneFile.name,
-        expected: `${base}.georef.json`,
-        found: georefFile?.name ?? null,
-        files: files.map((f) => f.name),
-      });
+      const georefFile = files.find((f) => f !== sceneFile && isGeorefSidecarName(f.name, base));
       if (georefFile) {
+        // Le splat remplace la scène : son propre géoréférencement prend le relais.
         await loadFile(sceneFile);
-        console.log("[georef] scène chargée, import du georef", georefFile.name, {
-          ready: sceneTools?.getState?.().ready,
-        });
-        await sceneTools.importFile(georefFile);
-        console.log("[georef] importFile terminé", { georef: sceneTools?.getGeoref?.() ? "présent" : "absent" });
+        if (/\.txt$/i.test(georefFile.name)) {
+          await sceneTools.importGaugeFile(georefFile);
+        } else {
+          await sceneTools.importFile(georefFile);
+        }
         return;
       }
     }
@@ -957,6 +958,11 @@ async function handleDroppedFiles(fileList, items) {
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
     } else if (/\.(splat|ply)$/i.test(file.name)) {
+      if (sceneTools?.getGeoref?.()) {
+        throw new Error(
+          "La scène est déjà géoréférencée : ajoute le splat avec son gauge.txt ou son georef_stats.json."
+        );
+      }
       await appendScene(file, file.name);
     } else {
       await loadFile(file);
