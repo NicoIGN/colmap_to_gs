@@ -164,7 +164,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  out=args[args.index('--output-dir')+1]; imgs=args[args.index('--images-dir')+1] if '--images-dir' in args else os.path.join(out,'images'); os.makedirs(imgs,exist_ok=True)\n"
                 "  json.dump({'available':1,'selected':1},open(os.path.join(out,'selection.json'),'w'))\n"
                 "  print('images_dir='+imgs)\n"
-                "elif args and args[0].endswith('prepare_masks.py'):\n"
+                "elif args and args[0].endswith('/masks.py'):\n"
                 "  root=os.path.join(os.environ['OUTPUT_DIR'],'sfm'); os.makedirs(root,exist_ok=True)\n"
                 "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='MASKS_ACCEPT_LICENSE'},"
                 "    open(os.path.join(root,'mask_env.json'),'w'))\n"

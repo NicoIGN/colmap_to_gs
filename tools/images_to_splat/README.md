@@ -392,7 +392,7 @@ Le pipeline **Images locales vers Gaussian Splats** prépare les photos,
 reconstruit la scène et entraîne les blocs. Il partage avec le pipeline
 Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérente :
 
-- `tools/libs/python/mask_policies.py` : prépare les réglages de masques et leur génération.
+- `tools/segmentation_masks/masks.py` : interface commune des masques (entrée dossier, SAM via Spirula ou segmenteur) ; les pipelines l'appellent.
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
 - `tools/libs/python/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.

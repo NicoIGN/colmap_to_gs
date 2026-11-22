@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
-import prepare_masks
+import masks as prepare_masks
 
 
 class MaskResumeTests(unittest.TestCase):

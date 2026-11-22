@@ -90,41 +90,6 @@ def resumable_checkpoint(splats):
     return ""
 
 
-class MissingMaskError(ValueError):
-    pass
-
-
-def validate_masks(images, output, *, allow_missing=False):
-    from PIL import Image
-
-    extensions = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
-    sources = sorted(
-        path for path in images.rglob("*")
-        if path.is_file() and path.suffix.lower() in extensions
-    )
-    if not sources:
-        raise ValueError(f"Aucune image sélectionnée : {images}")
-    missing = []
-    for source in sources:
-        mask_path = output / (source.relative_to(images).as_posix() + ".png")
-        if not mask_path.is_file():
-            if allow_missing:
-                missing.append(mask_path)
-                continue
-            raise MissingMaskError(f"Masque attendu absent : {mask_path}")
-        with Image.open(source) as image, Image.open(mask_path) as mask:
-            mask.load()
-            if mask.format != "PNG" or mask.mode != "L" or mask.size != image.size:
-                raise ValueError(
-                    f"Masque invalide (PNG monochrome aux dimensions de l'image requis) : {mask_path}"
-                )
-            histogram = mask.histogram()
-            if sum(histogram[1:255]):
-                raise ValueError(f"Masque non binaire (0/255 requis) : {mask_path}")
-    print(f"[reprise] {len(sources)-len(missing)} masques vérifiés dans {output}.", flush=True)
-    return missing
-
-
 def validate_sparse(folder, images_dir=None):
     for name in ("cameras", "images", "points3D"):
         path = folder / f"{name}.bin"

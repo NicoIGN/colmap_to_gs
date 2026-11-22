@@ -106,7 +106,7 @@ fi
 export TRAIN_NS_TRAIN_BIN="${TRAIN_NS_TRAIN_BIN:-ns-train}"
 export TRAIN_NS_EXPORT_BIN="${TRAIN_NS_EXPORT_BIN:-ns-export}"
 export TRAIN_NS_DOWNSCALE_FACTOR="${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
-# Child scripts (run_spirula_blocks.sh, prepare_masks.py) only see exported variables.
+# Child scripts (run_spirula_blocks.sh, masks.py) only see exported variables.
 export SFM_MASKS_DIR="${SFM_MASKS_DIR:-}" TRAIN_MASKS_DIR="${TRAIN_MASKS_DIR:-}"
 if [[ "$TRAIN_BACKEND" == nerfstudio && ( "$phase" == all || "$phase" == train-block ) ]]; then
   "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"

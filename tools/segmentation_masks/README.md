@@ -7,6 +7,24 @@
 Générer des masques locaux pour le SfM et l'entraînement 3DGS avec
 [Spirula](../spirula/README.md) ou Nerfstudio. Par défaut, le masque exclut le ciel.
 
+### Interface commune : `masks.py`
+
+Tous les pipelines préparent les masques via `masks.py`, quelle que soit la source :
+
+- `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier de masques fourni, copié et validé
+  (sans génération) ;
+- `*_BACKEND=spirula` : SAM via Spirula ;
+- `*_BACKEND=segmentation` : segmenteur Transformers (`generate_masks.py`).
+
+```bash
+"$PYTHON_BIN" tools/segmentation_masks/masks.py                  # SfM et entraînement
+"$PYTHON_BIN" tools/segmentation_masks/masks.py --policy train   # une politique seule
+"$PYTHON_BIN" tools/segmentation_masks/masks.py --check          # validation sans génération
+```
+
+Le fichier `masks.json` de chaque dossier signe les réglages et le hash des images :
+des masques dont les images ont changé sont refusés.
+
 Exemple d’invocation :
 
 ```bash

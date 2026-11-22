@@ -207,7 +207,7 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
     die "Entrées des masques non préparées : relancer le lanceur Slurm."
   set_stage "calcul des masques ${phase#mask-}"
   policy="${phase#mask-}"
-  "$PYTHON_BIN" "$script_dir/prepare_masks.py" --policy "$policy"
+  "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py" --policy "$policy"
   exit 0
 else
   set_stage "vérification du workspace"
