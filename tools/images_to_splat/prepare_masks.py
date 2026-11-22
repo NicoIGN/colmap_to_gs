@@ -2,6 +2,7 @@
 """Prepare local-image mask directories using shared segmentation policies."""
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -10,7 +11,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"))
 from mask_policies import generate, policy
-from mask_preparation import read_report, write_json
+from mask_preparation import read_report, without_device, write_json
 from resume import MissingMaskError, validate_masks
 
 
@@ -33,6 +34,29 @@ def record_inputs(directory, digest):
     write_json(directory / "masks.json", report)
 
 
+def sfm_signature(output, sfm, perspective):
+    # A completed SfM is only valid for the SfM mask policy and the exact inputs it was built from.
+    parts = [without_device(sfm), input_digest(output / "images")]
+    if perspective:
+        parts.append(hashlib.sha256((output / "projection.json").read_bytes()).hexdigest())
+    return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
+
+
+def guard_sfm(output, signature):
+    workspace = output / "sfm"
+    marker = workspace / "sfm_mask_policy.json"
+    previous = read_report(marker) or {}
+    artifacts = any((workspace / name).exists() for name in ("sparse", "features", "matches.bin"))
+    artifacts = artifacts or any(output.glob("blocks-*"))
+    if (artifacts or previous) and previous.get("signature") != signature:
+        raise ValueError(
+            "SfM existant/partiel avec une autre politique de masques (ou sans signature). "
+            f"Déplacer {workspace} en sauvegarde ou choisir un nouvel OUTPUT_DIR. "
+            "TRAIN_CLEAN ne recalcule pas le SfM."
+        )
+    return marker
+
+
 def policies():
     result = {}
     for prefix in ("SFM_MASKS", "TRAIN_MASKS"):
@@ -47,11 +71,13 @@ def policies():
     return result
 
 
-def prepare(policy_only=None):
+def prepare(policy_only=None, perspective=False):
     settings = policies()
     output = Path(os.environ["OUTPUT_DIR"])
     images = output / "images"
     sfm, train = settings["SFM_MASKS"], settings["TRAIN_MASKS"]
+    signature = sfm_signature(output, sfm, perspective) if sfm is not None else None
+    marker = guard_sfm(output, signature) if signature is not None else None
 
     def prepare_policy(settings, directory):
         external = settings.get("external_dir")
@@ -196,6 +222,8 @@ def prepare(policy_only=None):
         if selected is None:
             raise ValueError(f"{prefix} est désactivé")
         prepare_policy(selected, output / directory)
+        if policy_only == "sfm":
+            record_sfm(marker, signature, sfm)
         return
 
     if sfm is not None and sfm == train:
@@ -212,6 +240,28 @@ def prepare(policy_only=None):
         for prefix, directory in (("SFM_MASKS", "feature_masks"), ("TRAIN_MASKS", "train_masks")):
             if settings[prefix] is not None:
                 prepare_policy(settings[prefix], output / directory)
+    if marker is not None:
+        record_sfm(marker, signature, sfm)
+
+
+def record_sfm(marker, signature, sfm):
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    write_json(marker, {"signature": signature, "settings": sfm, "status": "complete"})
+
+
+def check(output, settings, perspective):
+    # Validate the signed state written by prepare() without generating anything.
+    sfm = settings["SFM_MASKS"]
+    if sfm is not None:
+        marker = output / "sfm" / "sfm_mask_policy.json"
+        if (read_report(marker) or {}).get("signature") != sfm_signature(output, sfm, perspective):
+            raise ValueError("Politique de masques SfM non préparée ou modifiée : relancer la préparation")
+    for prefix, directory in (("SFM_MASKS", "feature_masks"), ("TRAIN_MASKS", "train_masks")):
+        if settings[prefix] is None:
+            continue
+        report = read_report(output / directory / "masks.json") or {}
+        if report.get("status") != "complete":
+            raise ValueError(f"Masques incomplets : {output / directory}")
 
 
 if __name__ == "__main__":
@@ -222,12 +272,18 @@ if __name__ == "__main__":
                         help="Générer seulement la politique demandée (jobs Slurm parallèles)")
     parser.add_argument("--policies-equal", action="store_true",
                         help="Indiquer si les politiques SfM et train sont identiques")
+    parser.add_argument("--check", action="store_true",
+                        help="Valider la préparation existante sans générer de masques")
+    parser.add_argument("--perspective", action="store_true",
+                        help="Les images sont des vues projetées (projection.json entre dans la signature SfM)")
     args = parser.parse_args()
     try:
         if args.policies_equal:
             current = policies()
             print(str(current["SFM_MASKS"] == current["TRAIN_MASKS"]).lower())
+        elif args.check:
+            check(Path(os.environ["OUTPUT_DIR"]), policies(), args.perspective)
         else:
-            prepare(args.policy)
+            prepare(args.policy, perspective=args.perspective)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         sys.exit(f"[ERREUR] Préparation des masques : {error}")

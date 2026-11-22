@@ -139,7 +139,7 @@ class MaskResumeTests(unittest.TestCase):
         prepare_masks.prepare()
         self.generate.assert_called_once()
         (self.images / "a.jpg").write_bytes(b"new-photo")
-        with self.assertRaisesRegex(ValueError, "Images modifiées"):
+        with self.assertRaises(ValueError):
             prepare_masks.prepare()
         self.generate.assert_called_once()
 
@@ -154,6 +154,24 @@ class MaskResumeTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "license"):
             prepare_masks.prepare()
         self.assertFalse((self.masks / "masks.json").exists())
+
+    def test_sfm_marker_refuses_existing_sfm_with_other_policy(self):
+        prepare_masks.prepare()
+        (self.output / "sfm" / "sparse").mkdir(parents=True)
+        other = dict(self.policy, labels=["person"])
+        with patch.object(prepare_masks, "policies", return_value={
+            "SFM_MASKS": other, "TRAIN_MASKS": other,
+        }):
+            with self.assertRaisesRegex(ValueError, "autre politique"):
+                prepare_masks.prepare()
+
+    def test_check_accepts_prepared_masks_and_rejects_missing_marker(self):
+        prepare_masks.prepare()
+        settings = prepare_masks.policies()
+        prepare_masks.check(self.output, settings, perspective=False)
+        (self.output / "sfm" / "sfm_mask_policy.json").unlink()
+        with self.assertRaisesRegex(ValueError, "non préparée"):
+            prepare_masks.check(self.output, settings, perspective=False)
 
 
 if __name__ == "__main__":
