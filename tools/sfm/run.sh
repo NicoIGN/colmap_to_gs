@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
-usage() { echo "Usage : bash tools/images_to_colmap/run.sh CONFIG [--images DIR]"; }
+usage() { echo "Usage : bash tools/sfm/run.sh CONFIG [--images DIR]"; }
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
@@ -66,7 +66,7 @@ prepare() {
     "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py"
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
-  camera_split="$repo_root/tools/images_to_colmap/camera_split.py"
+  camera_split="$repo_root/tools/sfm/spirula/camera_split.py"
   if [[ "$COLMAP_METHOD" == spirula ]]; then
     "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"
   fi
@@ -79,7 +79,7 @@ prepare() {
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0" --archive-sparse
     fi
     begin_stage "reconstruction COLMAP ($COLMAP_METHOD)"
-    bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+    bash "$repo_root/tools/sfm/reconstruct.sh"
     if [[ "$PIPELINE_RESUME" == true ]]; then
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     fi
@@ -101,7 +101,7 @@ prepare() {
         SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
         SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
         SFM_RECONSTRUCT_CAMERA_MODE=folder \
-        bash "$repo_root/tools/images_to_colmap/reconstruct.sh"
+        bash "$repo_root/tools/sfm/reconstruct.sh"
       "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     elif ((split_status != 3)); then
@@ -114,7 +114,7 @@ prepare() {
   if [[ "$COLMAP_USE_MVS" == true ]]; then
     begin_stage "densification MVS"
     if [[ ! -s "$sfm/mvs/sparse/0/points3D.bin" ]]; then
-      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/mvs_densify.py" \
+      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/mvs_densify.py" \
         --colmap "$SFM_COLMAP_BIN" --images "$selected" \
         --sparse "$sfm/sparse/0" --output "$sfm/mvs" \
         --max-image-size "$MVS_MAX_IMAGE_SIZE" --gpu-index "$MVS_GPU_INDEX"

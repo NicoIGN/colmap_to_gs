@@ -16,7 +16,7 @@ from plyfile import PlyData, PlyElement
 from nerfstudio_runtime import check_runtime
 
 ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / "tools/preprocess"))
+sys.path.insert(0, str(ROOT / "tools/sfm"))
 from colmap_split_blocks import read_points3d_binary
 
 

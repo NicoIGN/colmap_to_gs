@@ -3,7 +3,7 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=spirula_common.sh
-source "$script_dir/spirula_common.sh"
+source "$script_dir/../../libs/scripts/spirula_common.sh"
 
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"
@@ -314,7 +314,7 @@ source_dataset="$dataset"
 case "$prepare" in
   1|true|yes|on)
     prepare_cmd=(
-      python3 "$script_dir/../../../tools/panoramax/prepare_sfm.py"
+      python3 "$script_dir/../prepare_sfm.py"
       --dataset "$dataset" --output-dir "$output_dir" --shell
     )
     [[ -z "$keep_size" ]] || prepare_cmd+=(--size "$keep_size")
@@ -367,7 +367,7 @@ case "${VERBOSE:-False}" in
 esac
 # Sortie Spirula : barre de progression ; détail seulement en verbose.
 run_relayed() {
-  "$@" 2>&1 | "${PYTHON_BIN:-python3}" "$script_dir/../python/spirula_progress.py" ${progress_args[@]+"${progress_args[@]}"}
+  "$@" 2>&1 | "${PYTHON_BIN:-python3}" "$script_dir/spirula_progress.py" ${progress_args[@]+"${progress_args[@]}"}
 }
 
 gps_option() {
@@ -592,7 +592,7 @@ else
 from pathlib import Path
 import sys
 
-from tools.preprocess.colmap_split_blocks import (
+from tools.sfm.colmap_split_blocks import (
     read_cameras_binary, read_images_binary, read_points3d_binary,
 )
 

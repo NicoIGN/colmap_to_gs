@@ -85,7 +85,7 @@ et `.err`.
 
 ### Préparation COLMAP
 
-L'[outil images vers COLMAP](../images_to_colmap/README.md)
+L'[outil images vers COLMAP](../sfm/README.md)
 est appelé avant le découpage. `COLMAP_METHOD` choisit `spirula` (défaut),
 `colmap`, `nerfstudio` (`ns-process-data`), `orientations` (poses + LiDAR) ou `hloc`
 (SfM Hierarchical-Localization, `HLOC_*`).
@@ -344,7 +344,7 @@ Si `GEOREF_GPX_FILE` est absent ou vide, les coordonnées EXIF GPS sont utilisé
 automatiquement lorsqu'au moins deux images en possèdent ; fiona et pyproj ne
 sont alors pas nécessaires.
 
-Le pipeline réutilise `tools/preprocess/georef_colmap_from_gpx.py` : il recale
+Le pipeline réutilise `tools/sfm/georef_colmap_from_gpx.py` : il recale
 la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,
 timestamps ni offset temporel. Les images doivent porter des indices `_fXXXXX`
 et fournir au moins six frames distinctes dans un dossier exploitable.
@@ -394,7 +394,7 @@ Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérent
 
 - `tools/segmentation_masks/masks.py` : interface commune des masques (entrée dossier, SAM via Spirula ou segmenteur) ; les pipelines l'appellent.
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
-- `tools/libs/python/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
+- `tools/sfm/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.
 - `tools/libs/scripts/pipeline_postprocess.sh` : recadre et fusionne les résultats.
 - `tools/libs/scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
@@ -418,12 +418,12 @@ Chaque pipeline possède sa configuration, ses chemins de sortie et ses options
 ### Filtrage optionnel du sparse
 
 ```bash
-SFM_FILTER_DENSITY=true  # false par défaut ; local, Slurm et Panoramax (même étape partagée : libs/scripts/sparse_density.sh)
+SFM_FILTER_DENSITY=true  # false par défaut ; local, Slurm et Panoramax (même étape partagée : tools/sfm/sparse_density.sh)
 SFM_DENSITY_VOTE_FRACTION=0.75  # ]0,1[ ; baisser = plus strict
 SFM_DENSITY_FAR_SUPPORT_RATE=0.25  # ]0,1] ; monter = plus strict
 ```
 
-Le filtre expérimental de [`tools/preprocess/filter_sparse_density.py`](../preprocess/README.md) s'exécute
+Le filtre expérimental de [`tools/sfm/filter_sparse_density.py`](../sfm/README.md) s'exécute
 sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il utilise
 ces seuils et écrit deux modèles COLMAP binaires : `sparse_clean`
 (points conservés) et `sparse_rejected` (points retirés), chacun avec son

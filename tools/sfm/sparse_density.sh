@@ -1,4 +1,4 @@
-# Filtre de densité du sparse, partagé par images_to_colmap et Panoramax.
+# Filtre de densité du sparse, partagé par tools/sfm/run.sh et Panoramax.
 # Requiert repo_root, PYTHON_BIN, NUM_CPUS, SFM_DENSITY_* et die.
 #
 # Usage : sparse_density_stage INPUT_DIR OUTPUT_DIR GUARD_DIR...
@@ -10,7 +10,7 @@ sparse_density_stage() {
   local input="$1" output="$2" clean cached="" key version guard
   shift 2
   clean="${output}_clean"
-  local filter="$repo_root/tools/preprocess/filter_sparse_density.py"
+  local filter="$repo_root/tools/sfm/filter_sparse_density.py"
   local resume="$repo_root/tools/images_to_splat/resume.py"
 
   version="$("$PYTHON_BIN" "$filter" --version)"

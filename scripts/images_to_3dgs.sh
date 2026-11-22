@@ -4,7 +4,7 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
 source "$repo_root/tools/libs/scripts/georef_phase.sh"
-source "$repo_root/tools/libs/scripts/sparse_density.sh"
+source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
   echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
@@ -158,7 +158,7 @@ check_filtered_sparse() {
 
 prepare() {
   set_stage "production COLMAP"
-  bash "$repo_root/tools/images_to_colmap/run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  bash "$repo_root/tools/sfm/run.sh" "$config" --images "$SFM_IMAGES_DIR"
   set_stage "géoréférencement"
   georef_run "$sfm_model"
   georef_lidar_env
@@ -176,7 +176,7 @@ prepare() {
   "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition prepare
   if [[ ! -s "$blocks/manifest.json" ]]; then
     set_stage "découpage COLMAP"
-    "$PYTHON_BIN" "$repo_root/tools/preprocess/colmap_split_blocks.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/colmap_split_blocks.py" \
       --input "$sparse" --output "$blocks" --num-blocks "$SPLIT_NUM_BLOCKS" \
       --overlap-max-fraction "$SPLIT_OVERLAP_MAX_FRACTION" --export-binary
   fi

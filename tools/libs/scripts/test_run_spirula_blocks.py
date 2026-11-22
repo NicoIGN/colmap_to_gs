@@ -19,13 +19,14 @@ class BlockPipelineTest(unittest.TestCase):
             import pycolmap
             import numpy as np
             from PIL import Image
-            from tools.preprocess.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
+            from tools.sfm.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
         except ImportError as exc:
             self.skipTest(f"Dépendance HLOC indisponible : {exc}")
         with tempfile.TemporaryDirectory() as temporary:
             root, data, _, env, log, execute = self.fixture(temporary)
+            source = data / "panoramax"
             shutil.rmtree(data / "sfm")
-            (source / "images/img.jpg").unlink(missing_ok=True)
+            shutil.rmtree(data / "images")
             (source / "metadata").mkdir()
             coordinates = [(2., 48.), (2.0002, 48.), (2.0002, 48.0002), (2., 48.0002)]
             geo = np.array([[lat, lon, 0.] for lon, lat in coordinates])

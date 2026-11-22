@@ -6,7 +6,7 @@ import sys
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sfm"))
 from georef_colmap_from_gpx import enu_rotation
 
 

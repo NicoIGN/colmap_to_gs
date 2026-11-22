@@ -83,7 +83,7 @@ class ConLazTest(unittest.TestCase):
         vertex = PlyData.read(points)["vertex"]
         xyz = np.column_stack([vertex[key] for key in "xyz"])
         np.testing.assert_allclose(xyz, self.source[::2] - origin, atol=1e-6)
-        subprocess.run([sys.executable, str(HERE.parent / "images_to_colmap/orientations_to_colmap.py"),
+        subprocess.run([sys.executable, str(HERE.parent / "sfm/colmap/orientations_to_colmap.py"),
                         "--orientations", str(orientations), "--points", str(points),
                         "--images", str(self.images), "--output", str(output / "sparse")],
                        check=True, capture_output=True)

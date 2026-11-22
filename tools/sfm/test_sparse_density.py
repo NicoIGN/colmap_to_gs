@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-HELPER = REPO_ROOT / "tools/libs/scripts/sparse_density.sh"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+HELPER = REPO_ROOT / "tools/sfm/sparse_density.sh"
 
 FAKE_PYTHON = textwrap.dedent("""\
     #!/usr/bin/env bash

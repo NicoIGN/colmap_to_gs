@@ -15,7 +15,7 @@ Depuis la racine du dépôt, avec l'environnement Python du projet actif :
 export GIT_ROOT="$(git rev-parse --show-toplevel)"
 export DATA_ROOT="$HOME/colmap-data"
 
-python "$GIT_ROOT/tools/preprocess/filter_sparse_density.py" \
+python "$GIT_ROOT/tools/sfm/filter_sparse_density.py" \
   --input "$DATA_ROOT/sfm/sparse/0" \
   --output "$DATA_ROOT/density_test/sparse" \
   --vote-fraction 0.75 --far-support-rate 0.25 \
@@ -48,7 +48,7 @@ Pour comparer plusieurs réglages, utiliser un préfixe différent à chaque ess
 
 ```bash
 for vote in 0.6 0.75 0.9; do
-  python "$GIT_ROOT/tools/preprocess/filter_sparse_density.py" \
+  python "$GIT_ROOT/tools/sfm/filter_sparse_density.py" \
     --input "$DATA_ROOT/sfm/sparse/0" \
     --output "$DATA_ROOT/density_test/vote_$vote" \
     --vote-fraction "$vote" --workers 4

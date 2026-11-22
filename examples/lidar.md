@@ -24,7 +24,7 @@ et l'utilisation d'un PDAL déjà installé dans la [documentation LiDAR](../too
 ## Convertir un LAZ coloré en PLY
 
 ```bash
-python "$GIT_ROOT/tools/images_to_colmap/las_to_ply.py" \
+python "$GIT_ROOT/tools/sfm/colmap/las_to_ply.py" \
   --input "$DATA_ROOT/lidar-colore.laz" --output "$DATA_ROOT/points.ply" --stride 10
 ```
 

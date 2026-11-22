@@ -50,7 +50,7 @@ georef_run() {
       local args=(--sparse "$input" --output "$output" --epsg "$GEOREF_EPSG"
                   --images "$OUTPUT_DIR/images" --allow-missing)
       [[ ! -f "$OUTPUT_DIR/projection.json" ]] || args+=(--projection "$OUTPUT_DIR/projection.json")
-      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" "${args[@]}"
+      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" "${args[@]}"
       "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$output"
       ;;
   esac
@@ -67,7 +67,7 @@ georef_check() {
       args=(--sparse "$input" --output "$OUTPUT_DIR/georef/0" --epsg "$GEOREF_EPSG"
             --images "$OUTPUT_DIR/images" --allow-missing --check)
       [[ ! -f "$OUTPUT_DIR/projection.json" ]] || args+=(--projection "$OUTPUT_DIR/projection.json")
-      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" "${args[@]}"
+      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" "${args[@]}"
       ;;
   esac
 }

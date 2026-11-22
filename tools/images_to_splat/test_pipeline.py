@@ -826,7 +826,7 @@ if "--wait" in args:
         return [command for command in self.commands() if command[:2] == ["spirula", "sfm"]]
 
     def test_camera_split_retries_sfm_with_one_camera_per_model(self):
-        sys.path.insert(0, str(SOURCE.parents[1] / "tools/images_to_colmap"))
+        sys.path.insert(0, str(SOURCE.parents[1] / "tools/sfm/spirula"))
         from camera_split import model_dirs, read_image_names
 
         self.env["TEST_CAMERA_SPLIT"] = "1"

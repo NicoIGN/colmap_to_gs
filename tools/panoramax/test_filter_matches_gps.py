@@ -180,7 +180,7 @@ elif stage == "map":
                 "settings": {"labels": ["sky"]}, "summary": {"generated": 1}
             }))
             command = [
-                "bash", str(ROOT.parent / "libs" / "scripts" / "run_spirula_sfm.sh"),
+                "bash", str(                ROOT.parent / "sfm" / "spirula" / "run_spirula_sfm.sh"),
                 "--preset", "panoramax", "--dataset", str(dataset),
                 "--output-dir", str(output), "--spirula-bin", str(spirula), "--max-distance", "30",
                 "--matcher", "bruteforce", "--threads", "4", "--min-tri-angle", "3",

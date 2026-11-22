@@ -4,7 +4,7 @@
 
 **Objectif.** Convertir des poses caméra IGNF (fichiers XML `.CON`) et un
 nuage LiDAR coloré `.LAS`/`.LAZ` vers les deux entrées de la méthode
-`COLMAP_METHOD=orientations` de [images → COLMAP](../images_to_colmap/README.md) :
+`COLMAP_METHOD=orientations` de [images → COLMAP](../sfm/README.md) :
 `orientations.json` (poses caméra OpenCV monde → caméra et calibrations) et
 `points.ply`. Aucune estimation photogrammétrique n'est effectuée.
 
@@ -24,7 +24,7 @@ LIDAR_PLY="/chemin/ori/points.ply"
 SFM_MASKS=off
 ```
 
-Puis lancer `bash tools/images_to_colmap/run.sh CONFIG` pour le modèle COLMAP
+Puis lancer `bash tools/sfm/run.sh CONFIG` pour le modèle COLMAP
 seul, ou `bash scripts/images_to_3dgs.sh CONFIG` pour le pipeline complet.
 
 ## Entrées
@@ -67,7 +67,7 @@ Refus explicites, car non représentables en `PINHOLE` :
 ## Sorties
 
 - `orientations.json` : format version 1 décrit dans
-  [images → COLMAP](../images_to_colmap/README.md#orientations-et-lidar) ;
+  [images → COLMAP](../sfm/README.md#orientations-et-lidar) ;
   `reference.origin` et `reference.crs` permettent de revenir aux coordonnées
   source (`source = local + origin`). Ce champ est recopié dans
   `sfm/sparse/0/orientation_reference.json`.

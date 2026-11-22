@@ -8,7 +8,7 @@ import unittest
 
 import numpy as np
 
-from tools.preprocess.filter_sparse_density import (
+from tools.sfm.filter_sparse_density import (
     POINT_HEADER,
     density_votes,
     filter_sparse_model,
@@ -93,7 +93,7 @@ class SparseDensityTest(unittest.TestCase):
                                   ("quiet", ["--no-progress"])):
                 output = root / name
                 result = subprocess.run(
-                    [sys.executable, "-m", "tools.preprocess.filter_sparse_density",
+                    [sys.executable, "-m", "tools.sfm.filter_sparse_density",
                      "--input", str(source), "--output", str(output), *options],
                     capture_output=True, text=True, check=True,
                 )

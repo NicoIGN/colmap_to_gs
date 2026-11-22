@@ -48,7 +48,7 @@ def run(args):
     from PIL import Image
     from transformers import AutoImageProcessor, AutoModelForSemanticSegmentation
     from cleangs._vendor.gsplat_colmap.colmap import Parser
-    from tools.preprocess.colmap_split_blocks import read_cameras_binary
+    from tools.sfm.colmap_split_blocks import read_cameras_binary
 
     if not torch.cuda.is_available():
         raise ValueError("Clean-GS requiert un GPU NVIDIA CUDA disponible")

@@ -22,6 +22,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "panoramax"))
 from dataset_layout import image_files, jpeg_size, metadata_index, resolved_picture_type
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg"}

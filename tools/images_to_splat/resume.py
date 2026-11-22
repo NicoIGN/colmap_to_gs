@@ -95,7 +95,7 @@ def validate_sparse(folder, images_dir=None):
         path = folder / f"{name}.bin"
         if not path.is_file() or path.stat().st_size < 8:
             raise ValueError(f"Fichier absent ou tronqué : {path}")
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sfm"))
     from colmap_split_blocks import (
         read_cameras_binary, read_images_binary, read_points3d_binary,
     )

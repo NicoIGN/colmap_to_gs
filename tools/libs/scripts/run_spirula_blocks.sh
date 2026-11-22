@@ -6,7 +6,7 @@ repo_root="$(cd -- "$script_dir/../../.." && pwd)"
 # shellcheck source=spirula_common.sh
 source "$script_dir/spirula_common.sh"
 source "$script_dir/pipeline_config.sh"
-source "$repo_root/tools/libs/scripts/sparse_density.sh"
+source "$repo_root/tools/sfm/sparse_density.sh"
 config_errors=0
 reject_legacy_config || exit 1
 
@@ -352,10 +352,10 @@ if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
   [[ "$TRAIN_MASKS" != on || "$TRAIN_MASKS_BACKEND" == segmentation ]] ||
     die "Nerfstudio exige les masques du tool segmentation (Mask2Former ou SegFormer)."
 fi
-SPLITTER="$repo_root/tools/preprocess/colmap_split_blocks.py"
+SPLITTER="$repo_root/tools/sfm/colmap_split_blocks.py"
 
 if [[ "$COLMAP_METHOD" == spirula ]]; then
-  "$PYTHON_BIN" "$repo_root/tools/libs/python/sfm_geometry_policy.py" "$SFM_DIR" \
+  "$PYTHON_BIN" "$repo_root/tools/sfm/sfm_geometry_policy.py" "$SFM_DIR" \
     "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
     "$SFM_SP_BA_LOSS" "$SFM_SP_BA_LOSS_PARAM"
 fi
@@ -409,7 +409,7 @@ prepare_blocks() {
   pipeline_report_phase "reconstruction SfM"
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_sfm.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
@@ -423,7 +423,7 @@ prepare_blocks() {
   if [[ "$COLMAP_METHOD" != hloc && -z "$(find "$IMAGES_DIR" -type f -print -quit 2>/dev/null)" ]]; then
     # Les masques sont validés contre les images : sélection prête avant la préparation des masques.
     printf '[pipeline] Sélection des images Panoramax vers %s.\n' "$IMAGES_DIR"
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_sfm.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --shell >/dev/null
   fi
   if [[ "$SFM_MASKS" == on ]]; then
@@ -441,7 +441,7 @@ prepare_blocks() {
     check_hloc_policy prepare
     if [[ ! -s "$hloc_raw/cameras.bin" || ! -s "$hloc_raw/images.bin" || ! -s "$hloc_raw/points3D.bin" ]]; then
       [[ ! -d "$SFM_DIR/hloc" ]] || die "SfM HLOC partiel : déplacer le workspace avant de recommencer."
-      "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/hloc_reconstruct.py" \
+      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/hloc_reconstruct.py" \
         --images "$IMAGES_DIR" --output "$hloc_raw" --work "$SFM_DIR/hloc/work" \
         --features "${HLOC_FEATURES:-superpoint_max}" --matcher "${HLOC_MATCHER:-superpoint+lightglue}" \
         --pairs "${HLOC_PAIRS:-retrieval}" --retrieval "${HLOC_RETRIEVAL:-netvlad}" \
@@ -449,7 +449,7 @@ prepare_blocks() {
         --perspective-view-size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" \
         ${feature_args[@]+"${feature_args[@]}"}
     fi
-    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
       --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata"
   elif [[ -f "$SFM_DIR/.gps_filter_done" && -z "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
@@ -492,7 +492,7 @@ prepare_blocks() {
       printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
       mv -- "$BLOCKS_DIR" "$archive"
     fi
-    bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
+    bash "$repo_root/tools/sfm/spirula/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi
 
   for file in cameras.bin images.bin points3D.bin; do
@@ -577,7 +577,7 @@ if [[ "$mode" == block ]]; then
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
     check_hloc_policy check
-    "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$SFM_DIR/hloc/sparse/0" \
       --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata" --check
   fi

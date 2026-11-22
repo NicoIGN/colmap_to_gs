@@ -11,7 +11,7 @@ import numpy as np
 import scipy.sparse as sp
 from scipy.sparse.csgraph import connected_components
 
-from tools.preprocess import colmap_split_blocks as splitter
+from tools.sfm import colmap_split_blocks as splitter
 
 
 def graph(n, edges):

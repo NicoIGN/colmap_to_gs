@@ -127,7 +127,7 @@ class ProjectionTest(unittest.TestCase):
                        HLOC_FEATURES="sift", HLOC_MATCHER="NN-mutual",
                        HLOC_PAIRS="exhaustive", HLOC_RETRIEVAL="netvlad",
                        HLOC_NUM_NEIGHBORS="20", SFM_EQUIRECTANGULAR_VIEW_SIZE="8")
-            script = Path(__file__).resolve().parents[1] / "images_to_colmap/reconstruct.sh"
+            script = Path(__file__).resolve().parents[1] / "sfm/reconstruct.sh"
             for model in ("EQUIRECTANGULAR", "OPENCV"):
                 with self.subTest(model=model):
                     result = subprocess.run(["bash", str(script)],

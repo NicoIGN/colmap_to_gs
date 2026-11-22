@@ -4,12 +4,12 @@
 
 ## 1. Objectif
 
-Outils de préparation d’images pour COLMAP, géoréférencement et découpage de reconstructions, et filtrage expérimental du sparse.
+Outils de préparation d’images et d’extraction de frames (vidéo, image info), et découpage 360° équirectangulaire. Le SfM et le filtrage sparse sont dans [`tools/sfm`](../sfm/README.md).
 
 Exemple d’invocation :
 
 ```bash
-python3 tools/preprocess/images_to_colmap.py --help
+python3 tools/preprocess/extract_frames_from_video.py --help
 ```
 
 ## 2. Entrées et sorties
@@ -17,7 +17,7 @@ python3 tools/preprocess/images_to_colmap.py --help
 - Exécuter les scripts depuis la racine du dépôt :
 
 ```bash
-python3 tools/preprocess/images_to_colmap.py --help
+python3 tools/preprocess/extract_frames_from_video.py --help
 ```
 
 | Outil | Fonction |
@@ -25,11 +25,10 @@ python3 tools/preprocess/images_to_colmap.py --help
 | `extract_frames_from_video.py` | Extraction d'images depuis une vidéo (cadence fixe, GPX optionnel) |
 | `extract_sharp_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
 | `image_info.py` | Inspection d'une image et de ses informations GPS |
-| `images_to_colmap.py` | Reconstruction COLMAP depuis des images |
-| `diagnose_colmap_models.py` | Compare deux modèles COLMAP et leurs correspondances Spirula VKMT facultatives |
-| `georef_colmap_from_gpx.py` | Recalage d'un modèle COLMAP sur une trace GPX |
-| `colmap_split_blocks.py` | Découpage d'un modèle COLMAP en blocs |
-| `filter_sparse_density.py` | Filtrage expérimental des points sparse isolés et lointains |
+
+Les outils COLMAP (`images_to_colmap.py`, `georef_colmap_from_gpx.py`,
+`colmap_split_blocks.py`, `filter_sparse_density.py`, `diagnose_colmap_models.py`)
+ont été déplacés dans [`tools/sfm`](../sfm/README.md).
 
 `extract_sharp_frames.py` retient une frame par tranche temporelle non vide,
 sans éliminer globalement les séquences floues ou similaires. Le score combine
@@ -54,7 +53,7 @@ existantes ne sont pas recalculées automatiquement.
 Pour diagnostiquer deux modèles issus d'un même SfM Spirula :
 
 ```bash
-python tools/preprocess/diagnose_colmap_models.py \
+python tools/sfm/diagnose_colmap_models.py \
   /chemin/sfm/sparse/0 /chemin/sfm/sparse/1 \
   --matches /chemin/sfm/matches.bin
 ```
@@ -107,8 +106,9 @@ et peut augmenter les effectifs finaux.
 
 ## 4. Fonctionnement interne
 
-Les outils de `tools/preprocess/` préparent les images et les reconstructions
-COLMAP. En particulier, `filter_sparse_density.py` cherche les points 3D
+Les outils de `tools/preprocess/` préparent les images et les frames. Le SfM
+(`tools/sfm/`) prépare les reconstructions COLMAP ; en particulier,
+`tools/sfm/filter_sparse_density.py` cherche les points 3D
 manifestement isolés ou incohérents en les comparant à ce qui est observé
 depuis plusieurs images.
 

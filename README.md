@@ -50,7 +50,7 @@ le parcours adapté.
 
 Pour un modèle COLMAP, fournir le modèle et les images correspondantes, ou
 produire les données COLMAP depuis des images avec les
-[outil images vers COLMAP](tools/images_to_colmap/README.md). L'entraînement peut ensuite
+[outil images vers COLMAP](tools/sfm/README.md). L'entraînement peut ensuite
 se faire avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
 
 ```text
@@ -161,7 +161,7 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
 - [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
-- [Images, orientations et LiDAR vers COLMAP](tools/images_to_colmap/README.md).
+- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
 - [Installation de Spirula](tools/spirula/README.md).
 - [Masques](tools/segmentation_masks/README.md).
