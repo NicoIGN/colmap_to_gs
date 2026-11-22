@@ -447,6 +447,8 @@ class LidarTests(unittest.TestCase):
         xyz = np.array([[5.0, 5.0, 2.5], [0.5, 5.0, 2.5], [5.0, 5.0, 4.9]])
         support = np.array([1.0, 1.0, 1.0])
         self.assertEqual(bbox_mask(xyz, support, lidar).tolist(), [False, True, True])
+        self.assertEqual(bbox_mask(xyz, support, lidar, margin=1.0).tolist(),
+                         [False, False, False])
 
     def test_footprint_removes_splats_whose_support_misses_lidar(self):
         from fuse_lidar_splats import footprint_mask

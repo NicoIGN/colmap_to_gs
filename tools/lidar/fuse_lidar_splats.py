@@ -115,9 +115,10 @@ def footprint_mask(xyz, sigma, lidar, sigmas):
     return remove
 
 
-def bbox_mask(xyz, support, lidar):
-    """Remove splats whose support (per-splat half-size, all axes) leaves the LiDAR bbox."""
-    lo, hi = lidar.min(axis=0), lidar.max(axis=0)
+def bbox_mask(xyz, support, lidar, margin=0.0):
+    """Remove splats whose support (per-splat half-size, all axes) leaves the LiDAR bbox
+    grown by margin on every side."""
+    lo, hi = lidar.min(axis=0) - margin, lidar.max(axis=0) + margin
     return ((xyz - support[:, None] < lo) | (xyz + support[:, None] > hi)).any(axis=1)
 
 
@@ -194,7 +195,7 @@ def run(args, scene):
         outside_footprint = footprint_mask(xyz, sigma, lidar, args.footprint_sigmas)
     else:
         outside_footprint = np.zeros(len(xyz), dtype=bool)
-    outside_bbox = bbox_mask(xyz, support, lidar)
+    outside_bbox = bbox_mask(xyz, support, lidar, args.z_radius)
     remove = remove_z | outside_footprint | outside_bbox
     keep = ~remove
     if not keep.any():
