@@ -562,7 +562,7 @@ export function createNavigationSystem({
       // flouter un champ ou capturer le pointeur.
       if (event.metaKey || event.shiftKey) return;
 
-      // Alt + clic gauche : orbite autour du centre de scène, axe principal fixe.
+      // Alt + clic gauche : rotation autour de l'axe principal, autour du pivot courant.
       const centerOrbit =
         event.altKey && event.button === 0 && !event.ctrlKey;
       // Alt + clic droit : roulis autour de l'axe caméra → centre de vue.
@@ -594,12 +594,6 @@ export function createNavigationSystem({
 
       event.preventDefault();
       clearNavigation();
-
-      if (mode === "centerOrbit") {
-        target.copy(getSceneCenter());
-        camera.lookAt(target);
-        camera.updateMatrixWorld(true);
-      }
 
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
