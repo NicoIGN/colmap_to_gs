@@ -55,11 +55,16 @@ def resolve_model_argument(value, backend):
 INVERSE_ORIENTATION = {2: 0, 3: 3, 4: 1, 5: 5, 6: 2, 7: 6, 8: 4}
 
 SPIRULA_IMAGE_LINE = re.compile(r"^image (\d+) : (\S+) -- ")
+SPIRULA_PER_IMAGE_LINE = re.compile(r"^\s*\d+/\d+\s+\S+\s+Points : ")
 
 
 def relay_spirula_output(stream, names, verbose=False):
     """Print Spirula's output; per-image lines only in verbose mode, with the final frame index."""
     for line in stream:
+        if SPIRULA_PER_IMAGE_LINE.match(line):
+            if verbose:
+                print(line, end="", flush=True)
+            continue
         match = SPIRULA_IMAGE_LINE.match(line)
         if match:
             if not verbose:

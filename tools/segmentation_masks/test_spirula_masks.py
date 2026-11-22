@@ -49,6 +49,7 @@ class NativeMasksTest(unittest.TestCase):
             "        mask = Image.new(mode, size, 255)\n"
             "        mask.paste(0, (0, 0, 4, image.height))\n"
             "        mask.save(out / f'frame_{index:05d}.png')\n"
+            "        if os.environ.get('SAM_LINES'): print(f'{index + 1}/2   {source.name}   Points : 10   Écartés par les masques : 1', flush=True)\n"
         )
         self.binary.chmod(0o755)
         self.env = dict(os.environ, SAM_LOG=str(self.log))
@@ -133,6 +134,18 @@ class NativeMasksTest(unittest.TestCase):
         self.assertRegex(result.stdout, r"Calcul SAM .*1/2")
         self.assertLess(result.stdout.index("1/2", result.stdout.index("Calcul SAM")),
                         result.stdout.index("SAM process finished"))
+
+    def test_per_image_spirula_lines_are_verbose_only(self):
+        self.env["SAM_LINES"] = "1"
+        quiet = self.execute()
+        self.assertEqual(quiet.returncode, 0, quiet.stderr)
+        self.assertNotIn("Points :", quiet.stdout)
+        self.assertRegex(quiet.stdout, r"Calcul SAM .*2/2")
+        self.output = self.root / "masks_verbose"
+        verbose = self.execute("--verbose")
+        self.assertEqual(verbose.returncode, 0, verbose.stderr)
+        self.assertRegex(verbose.stdout, r"1/2 +\S+ +Points : 10")
+        del self.env["SAM_LINES"]
 
     def test_diagonal_dilation_and_detection_threshold(self):
         result = self.execute("--confidence", "0.7", "--dilate-fraction", "0.04")
