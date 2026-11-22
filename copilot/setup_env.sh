@@ -10,7 +10,7 @@ python3 -m venv "$venv"
 "$venv/bin/python" -m pip install --upgrade pip
 "$venv/bin/python" -m pip install \
   pillow numpy opencv-python-headless tqdm scipy plyfile \
-  pyproj laspy lazrs
+  pyproj laspy lazrs fiona
 
 # pycolmap : seulement pour HLOC / COLMAP ; échec non bloquant.
 "$venv/bin/python" -m pip install "pycolmap>=4.2" || echo "[avertissement] pycolmap non installé"
