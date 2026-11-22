@@ -524,7 +524,11 @@ export function createMeasurementSystem({
     }
 
   function onPointerDown(event) {
-    if (!event.shiftKey) return;
+    // Shift relâché sans keyup reçu : quitter le mode mesure.
+    if (!event.shiftKey) {
+      if (active) deactivate();
+      return;
+    }
 
     // Réserver Shift à la mesure et empêcher le drag habituel.
     consume(event);

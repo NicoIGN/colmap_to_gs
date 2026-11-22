@@ -549,6 +549,9 @@ export function createNavigationSystem({
       lastPointer.x = event.clientX;
       lastPointer.y = event.clientY;
 
+      // Un keyup perdu (capture d'écran, Alt/Shift) laisse Shift coincé.
+      if (!event.shiftKey) pressedKeys.delete("shift");
+
       if (!getCanNavigate()) return;
 
       // Un glissement resté ouvert (relâchement non reçu) bloquerait
