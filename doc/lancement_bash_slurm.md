@@ -206,5 +206,13 @@ réellement installés sur les nœuds.
 - Diagnostic : consulter les fichiers `.out` et `.err` de l'étape en échec.
   Une ligne `srun: error` relaie l'arrêt ; elle n'en donne pas nécessairement
   la cause. Un code `139` indique un SIGSEGV, pas à lui seul un manque de VRAM.
-- Suivi manuel : `squeue -j JOBID` pour la file, `sacct -j JOBID` pour le bilan,
-  `scancel JOBID` pour annuler un job.
+- Suivi manuel : `squeue` affiche la file du contrôleur Slurm, depuis n'importe
+  quel nœud. Pour un job donné : `squeue -j JOBID`. `sacct -j JOBID --format=JobID,State,ExitCode`
+  donne le bilan une fois le job terminé. `scancel JOBID` annule un job (plusieurs
+  IDs acceptés, ex. `scancel 3449 3450 3451`).
+  Pour voir ce qui tourne réellement sur le nœud, `ssh` ne suffit pas : une
+  session SSH n'est pas rattachée au job, donc `ps` et `nvidia-smi` n'affichent
+  pas ses processus. Il faut passer par `srun` dans l'allocation du job, par
+  exemple `srun --jobid=3449 --overlap nvidia-smi` pour la charge GPU, ou
+  `srun --jobid=3449 --overlap ps -ef` pour les processus. `--overlap` est
+  nécessaire pour partager les ressources déjà allouées au job.
