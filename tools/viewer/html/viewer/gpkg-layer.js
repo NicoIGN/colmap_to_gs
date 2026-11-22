@@ -2,7 +2,7 @@ import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
-import { readGeojsonLayers } from "./geojson-geometry.js";
+import { readGeojsonLayers, sharedLocalPlacement } from "./geojson-geometry.js";
 
 export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
@@ -236,6 +236,8 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   let wireColor = new pc.Color().fromString(DEFAULT_WIRE_COLOR);
   let pointSize = DEFAULT_POINT_SIZE;
   const layers = new Map();
+  // Centre du premier calque sans géoréférencement : référence commune des couches suivantes.
+  let sharedReference = null;
 
   function emitBounds(frame) {
     const boxes = [...layers.values()]
@@ -272,7 +274,11 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
 
   function render(child, georef) {
     destroyRender(child);
-    const placement = placementFor(child.source, georef);
+    let placement = placementFor(child.source, georef);
+    if (placement.mode === "local" && child.source.pointCount + child.source.count > 0) {
+      sharedReference ??= child.source.centre;
+      placement = sharedLocalPlacement(child.source.centre, sharedReference, placement.note);
+    }
     child.placement = placement;
     child.bounds = null;
     const hasLines = child.source.count > 0;
@@ -449,6 +455,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       for (const child of layer.children) destroyRender(child);
     }
     layers.clear();
+    sharedReference = null;
     emitBounds(false);
   }
 

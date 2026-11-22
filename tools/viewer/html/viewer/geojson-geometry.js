@@ -35,6 +35,17 @@ function collectGeometry(geometry, out, points) {
   }
 }
 
+// Placement sans géoréférencement : chaque couche est décalée de `centre - reference`, pour garder
+// les écarts relatifs entre fichiers (sinon chaque couche serait recentrée à l'origine).
+export function sharedLocalPlacement(centre, reference, note) {
+  return {
+    mode: "shared",
+    note,
+    origin: centre.map((value, axis) => value - reference[axis]),
+    linear: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+  };
+}
+
 // Tables équivalentes à celles du GeoPackage : une seule couche nommée d'après le fichier.
 export function readGeojsonLayers(text, name) {
   const geojson = JSON.parse(text);
