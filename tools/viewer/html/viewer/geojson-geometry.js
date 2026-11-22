@@ -35,13 +35,13 @@ function collectGeometry(geometry, out, points) {
   }
 }
 
-// Placement sans géoréférencement : chaque couche est décalée de `centre - reference`, pour garder
-// les écarts relatifs entre fichiers (sinon chaque couche serait recentrée à l'origine).
-export function sharedLocalPlacement(centre, reference, note) {
+// Sans géoréférencement, le monde reprend les coordonnées du fichier (x, y, z) : la couche est
+// décalée de son centre réel, au lieu d'être recentrée à l'origine.
+export function absoluteLocalPlacement(centre, note) {
   return {
-    mode: "shared",
+    mode: "absolute",
     note,
-    origin: centre.map((value, axis) => value - reference[axis]),
+    origin: [...centre],
     linear: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
   };
 }
