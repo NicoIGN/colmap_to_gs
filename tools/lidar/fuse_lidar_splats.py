@@ -146,7 +146,8 @@ def run(args, scene):
     lidar = load_lidar(args.lidar, origin, args.lidar_stride, classes=classes,
                        max_points=MAX_LIDAR_POINTS)
 
-    remove, evidence = z_band_mask(xyz, lidar, args.z_radius, args.z_neighbours, args.z_margin)
+    remove, evidence = z_band_mask(xyz + np.array([0.0, 0.0, args.z_offset]), lidar,
+                                   args.z_radius, args.z_neighbours, args.z_margin)
     keep = ~remove
     if not keep.any():
         raise ValueError("Aucun splat conservé après filtrage par la bande Z LiDAR")
@@ -181,7 +182,7 @@ def run(args, scene):
         added_default_grey=int(len(cand) - from_splats.sum()),
         output_splats=len(combined), dry_run=args.dry_run,
         z_diagnostics=z_offset_stats(xyz, lidar, args.z_radius, args.z_neighbours),
-        parameters=dict(z_margin=args.z_margin, z_radius=args.z_radius,
+        parameters=dict(z_offset=args.z_offset, z_margin=args.z_margin, z_radius=args.z_radius,
                         z_neighbours=args.z_neighbours, voxel=args.voxel,
                         density_ratio=args.density_ratio, scale_factor=args.scale_factor,
                         opacity=args.opacity, colour_radius=args.colour_radius,
@@ -204,6 +205,9 @@ def main():
     parser.add_argument("--fill-holes", action="store_true",
                         help="Ajouter les splats LiDAR dans les zones moins denses que le LiDAR ; "
                              "défaut : seulement retirer les splats hors bande Z")
+    parser.add_argument("--z-offset", type=float, default=0.0,
+                        help="Décalage ajouté au Z des splats pour le test de bande seulement (m), "
+                             "par ex. pour corriger un datum vertical décalé")
     parser.add_argument("--z-margin", type=float, default=0.5,
                         help="Marge verticale autour de la bande Z LiDAR locale (m)")
     parser.add_argument("--z-radius", type=float, default=5.0,

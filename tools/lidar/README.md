@@ -335,7 +335,9 @@ règle 1 s'applique :
    des `--z-neighbours` points les plus proches en XY dans `--z-radius`, par
    défaut 64 points dans 5 m), à `--z-margin` près, est retiré. Un grand voisinage
    évite de retirer les objets (bâtiments, végétation) à cause d'un LiDAR sol trop
-   étroit. Un splat sans LiDAR voisin est conservé.
+   étroit. Un splat sans LiDAR voisin est conservé. `--z-offset` ajoute un décalage
+   vertical aux splats pour ce test seulement (utile si le datum diffère du LAZ) ;
+   le fichier de sortie garde les Z d'origine.
 2. Avec `--fill-holes`, dans chaque voxel `--voxel` où les splats sont moins nombreux que
    `--density-ratio` × points LiDAR, un point LiDAR est ajouté comme splat
    (écart-type `--scale-factor` × distance LiDAR au plus proche, opacité `--opacity`).
