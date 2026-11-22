@@ -464,7 +464,8 @@ class LidarTests(unittest.TestCase):
         self.assertEqual(stats["lidar_z"]["p50"], 0.0)
 
     def test_fusion_removes_outside_z_and_fills_sparse_voxels_in_both_formats(self):
-        lidar_xyz = np.array([[.5, .5, 0], [1., .5, 0], [10.5, .5, 0], [10.7, .5, 0]])
+        lidar_xyz = np.array([[.5, .5, 0], [1., .5, 0], [10.5, .5, 0], [10.7, .5, 0],
+                              [-30., -30., -1.], [30., 30., 6.]])
         fuse = str(Path(__file__).with_name("fuse_lidar_splats.py"))
 
         def write_scene(path, positions, rgb):
@@ -523,12 +524,12 @@ class LidarTests(unittest.TestCase):
                     self.assertEqual(result.returncode, 0, result.stderr)
                     report = json.loads(output.with_suffix(suffix + ".json").read_text())
                     self.assertEqual(report["removed_outside_z"], 1)
-                    self.assertEqual(report["added_splats"], 2)
+                    self.assertEqual(report["added_splats"], 4)
                     self.assertEqual(report["added_coloured_from_splats"], 1)
-                    self.assertEqual(report["added_default_grey"], 1)
+                    self.assertEqual(report["added_default_grey"], 3)
                     xyz, rgb = read_scene(output)
-                    self.assertEqual(len(xyz), 3)
-                    self.assertTrue(np.all(xyz[:, 2] < 1))
+                    self.assertEqual(len(xyz), 5)
+                    self.assertTrue(np.all(xyz[np.abs(xyz[:, 0]) < 20, 2] < 1))
                     near = np.argmin(np.abs(xyz[:, 0] - 1.))
                     far = np.argmin(np.abs(xyz[:, 0] - 10.5))
                     np.testing.assert_allclose(rgb[near], (200, 0, 0), atol=2)
