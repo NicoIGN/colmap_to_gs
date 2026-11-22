@@ -69,7 +69,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   sphère vue de l'intérieur ; le cadre de sélection est un cadre nominal de 90°.
   Le panneau « Options » (haut droite) permet de passer à un cube map (six faces
   rééchantillonnées depuis l'équirectangulaire) si la sphère déforme trop l'image.
-- Les fichiers `.splat` et `.ply` ajoutés par glisser-déposer s'ajoutent à la
+- Les fichiers `.splat`, `.ply`, `.sog` et `.ksplat` ajoutés par glisser-déposer s'ajoutent à la
   scène déjà ouverte. Le bouton d'ouverture remplace la scène.
 - Un nuage LiDAR `.laz` ou `.las` ajouté par glisser-déposer apparaît comme une
   couche dans la liste des couches. Il est placé via le géoréférencement JSON

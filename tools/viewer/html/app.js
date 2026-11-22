@@ -1006,7 +1006,7 @@ async function handleDroppedFiles(fileList, items) {
 
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
-    } else if (/\.(splat|ply)$/i.test(file.name)) {
+    } else if (isSupportedSceneName(file.name)) {
       if (sceneTools?.getGeoref?.()) {
         throw new Error(
           "La scène est déjà géoréférencée : ajoute le splat avec son gauge.txt ou son georef_stats.json."
