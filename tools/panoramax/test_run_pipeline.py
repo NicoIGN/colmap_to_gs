@@ -161,11 +161,11 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  import shutil\n"
                 "  shutil.copyfile(args[args.index('--input')+1],args[args.index('--output')+1])\n"
                 "elif args and args[0].endswith('prepare_sfm.py'):\n"
-                "  out=args[args.index('--output-dir')+1]; os.makedirs(os.path.join(out,'images'),exist_ok=True)\n"
+                "  out=args[args.index('--output-dir')+1]; imgs=args[args.index('--images-dir')+1] if '--images-dir' in args else os.path.join(out,'images'); os.makedirs(imgs,exist_ok=True)\n"
                 "  json.dump({'available':1,'selected':1},open(os.path.join(out,'selection.json'),'w'))\n"
-                "  print('images_dir='+os.path.join(out,'images'))\n"
+                "  print('images_dir='+imgs)\n"
                 "elif args and args[0].endswith('prepare_masks.py'):\n"
-                "  root=args[2]\n"
+                "  root=os.path.join(os.environ['OUTPUT_DIR'],'sfm'); os.makedirs(root,exist_ok=True)\n"
                 "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='MASKS_ACCEPT_LICENSE'},"
                 "    open(os.path.join(root,'mask_env.json'),'w'))\n"
                 "elif args and args[0].endswith('colmap_split_blocks.py'):\n"
@@ -277,7 +277,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             def last_call(stage):
                 return next(call for call in reversed(sfm_calls) if call[1] == stage)
             extract_args, match_args, map_args = last_call("extract"), last_call("match"), last_call("map")
-            self.assertTrue((dataset / "sfm/.gps_filter_done").read_text().startswith("|30|"))
+            self.assertTrue((dataset.parent / "sfm/.gps_filter_done").read_text().startswith("|30|"))
             for args, flag, value in ((extract_args, "--max-image-size", "1600"),
                                       (extract_args, "--aliked-max-features", "2048"),
                                       (match_args, "--matcher", "bruteforce"),
@@ -299,10 +299,10 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n'
                     'SFM_MASKS_DIR=/external/sfm_masks\n')
             # Changing SfM masks on an existing workspace is refused: move the mask-free SfM aside first.
-            (dataset / "sfm").rename(dataset / "sfm-without-masks")
+            (dataset.parent / "sfm").rename(dataset.parent / "sfm-without-masks")
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            mask_env = json.loads((dataset / "sfm/mask_env.json").read_text())
+            mask_env = json.loads((dataset.parent / "sfm/mask_env.json").read_text())
             self.assertEqual(mask_env["SFM_MASKS_LABELS"], "sky,car,person")
             self.assertEqual(mask_env["SFM_MASKS_BACKEND"], "spirula")
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
@@ -312,7 +312,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             sfm_calls = [json.loads(line) for line in (root / "bin/sfm-args.jsonl").read_text().splitlines()]
             extract_args = last_call("extract")
             self.assertEqual(extract_args[extract_args.index("--feature-masks") + 1],
-                             str(dataset / "sfm/feature_masks"))
+                             str(dataset.parent / "feature_masks"))
             result = execute("train-block", "0")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((dataset / "gs-3-blocks-2/block_001").exists())
@@ -380,7 +380,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertIn("Ce SfM a été filtré par GPS", result.stderr)
             with config.open("a") as stream:
                 stream.write('SFM_SP_PAIR_MAX_DISTANCE="30"\n')
-            (dataset / "sfm").rename(dataset / "sfm-backup")
+            (dataset.parent / "sfm").rename(dataset.parent / "sfm-backup")
             result = execute("prepare")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("anciens entraînements", result.stderr)

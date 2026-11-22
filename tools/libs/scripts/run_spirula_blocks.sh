@@ -319,7 +319,10 @@ if [[ "$COLMAP_METHOD" == spirula || "$TRAIN_BACKEND" == spirula ||
 fi
 
 DIR="$(cd -- "$DIR" && pwd)"
-SFM_DIR="$DIR/sfm"
+[[ -n "${OUTPUT_DIR:-}" ]] || die "Définir OUTPUT_DIR : racine commune au pipeline images et Panoramax."
+OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
+SFM_DIR="$OUTPUT_DIR/sfm"
+IMAGES_DIR="$OUTPUT_DIR/images"
 SPARSE_DIR="$SFM_DIR/sparse/0"
 RAW_SPARSE_DIR="$SPARSE_DIR"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
@@ -337,7 +340,7 @@ blocks_exit() {
 trap blocks_exit EXIT
 pipeline_report_phase "validation de la configuration des blocs"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
-MASKS_DIR="$SFM_DIR/train_masks"
+MASKS_DIR="$OUTPUT_DIR/train_masks"
 GS_ROOT="$DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
   GS_ROOT="$GS_ROOT-nerfstudio"
@@ -409,7 +412,7 @@ prepare_blocks() {
     "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
     "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
-      --source "$SFM_DIR/panoramas_source/images" --output "$SFM_DIR/images" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
   fi
   if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
@@ -420,9 +423,9 @@ prepare_blocks() {
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" \
+    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/prepare_masks.py" \
       ${mask_projection_args[@]+"${mask_projection_args[@]}"}
-    feature_args=(--feature-masks "$SFM_DIR/feature_masks")
+    feature_args=(--feature-masks "$OUTPUT_DIR/feature_masks")
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
   fi
@@ -432,7 +435,7 @@ prepare_blocks() {
     if [[ ! -s "$hloc_raw/cameras.bin" || ! -s "$hloc_raw/images.bin" || ! -s "$hloc_raw/points3D.bin" ]]; then
       [[ ! -d "$SFM_DIR/hloc" ]] || die "SfM HLOC partiel : déplacer le workspace avant de recommencer."
       "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/hloc_reconstruct.py" \
-        --images "$SFM_DIR/images" --output "$hloc_raw" --work "$SFM_DIR/hloc/work" \
+        --images "$IMAGES_DIR" --output "$hloc_raw" --work "$SFM_DIR/hloc/work" \
         --features "${HLOC_FEATURES:-superpoint_max}" --matcher "${HLOC_MATCHER:-superpoint+lightglue}" \
         --pairs "${HLOC_PAIRS:-retrieval}" --retrieval "${HLOC_RETRIEVAL:-netvlad}" \
         --num-neighbors "${HLOC_NUM_NEIGHBORS:-20}" --camera-model PINHOLE --camera-mode single \
@@ -454,6 +457,7 @@ prepare_blocks() {
       --spirula-bin "$SPIRULA_BIN"
       --dataset "$DIR"
       --output-dir "$SFM_DIR"
+      --images-dir "$IMAGES_DIR"
       --preset panoramax
       --pairs "$SFM_SP_PAIRS"
       --prefilter-neighbors "$SFM_SP_PREFILTER_NEIGHBORS"
@@ -481,13 +485,13 @@ prepare_blocks() {
   for file in cameras.bin images.bin points3D.bin; do
     [[ -s "$RAW_SPARSE_DIR/$file" ]] || die "Artefact SfM absent ou vide : $RAW_SPARSE_DIR/$file"
   done
-  [[ -d "$SFM_DIR/images" ]] || die "Images préparées par SfM absentes : $SFM_DIR/images"
+  [[ -d "$IMAGES_DIR" ]] || die "Images préparées par SfM absentes : $IMAGES_DIR"
   if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
     [[ ! -s "$BLOCKS_DIR/manifest.json" || -f "$LIDAR_WORKSPACE/lidar/colmap_inputs.json" ]] ||
       die "Activer LiDAR nécessite un nouveau workspace avant découpage."
     pipeline_report_phase "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$LIDAR_WORKSPACE" \
-      --model "$RAW_SPARSE_DIR" --images "$SFM_DIR/images"
+      --model "$RAW_SPARSE_DIR" --images "$IMAGES_DIR"
   fi
 
   if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
@@ -512,7 +516,7 @@ prepare_blocks() {
       printf '[pipeline] Masques d’entraînement : backend %s, labels %s, mode %s.\n' \
         "$TRAIN_MASKS_BACKEND" "$TRAIN_MASKS_LABELS" "$TRAIN_MASKS_MODE"
       "$TRAIN_MASKS_PYTHON" "$repo_root/tools/segmentation_masks/generate_masks.py" \
-        --images "$SFM_DIR/images" --output "$MASKS_DIR" \
+        --images "$IMAGES_DIR" --output "$MASKS_DIR" \
         --backend "$TRAIN_MASKS_BACKEND" --spirula-bin "$SPIRULA_BIN" \
         --spirula-device "$SPIRULA_DEVICE" \
         --model "$mask_model" --labels "$TRAIN_MASKS_LABELS" \
@@ -570,7 +574,7 @@ if [[ "$mode" != block ]]; then
 fi
 if [[ "$mode" == block ]]; then
   lidar_pipeline_hook check --workspace "$LIDAR_WORKSPACE" \
-    --model "$RAW_SPARSE_DIR" --images "$SFM_DIR/images"
+    --model "$RAW_SPARSE_DIR" --images "$IMAGES_DIR"
 fi
 
 [[ "$mode" != prepare ]] || {
@@ -581,7 +585,7 @@ fi
 if [[ "$mode" == block ]]; then
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
-      --source "$SFM_DIR/panoramas_source/images" --output "$SFM_DIR/images" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
     check_hloc_policy check
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
@@ -591,7 +595,7 @@ if [[ "$mode" == block ]]; then
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
-    "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_masks.py" "$DIR" "$SFM_DIR" --check \
+    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/prepare_masks.py" --check \
       ${mask_projection_args[@]+"${mask_projection_args[@]}"}
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
@@ -602,7 +606,7 @@ if [[ "$mode" == block ]]; then
     [[ -s "$BLOCKS_DIR/block_$(printf '%03d' "$block_index")/$file" ]] ||
       die "Bloc $block_index incomplet : $file absent."
   done
-  [[ -d "$SFM_DIR/images" ]] || die "Images préparées absentes : $SFM_DIR/images"
+  [[ -d "$IMAGES_DIR" ]] || die "Images préparées absentes : $IMAGES_DIR"
 fi
 if [[ "$TRAIN_MASKS" == on ]]; then
   grep -q '"status": "complete"' "$MASKS_DIR/masks.json" 2>/dev/null ||
@@ -624,7 +628,7 @@ for ((index = first_index; index < last_index; index++)); do
   block_args=(
     --spirula-bin "$SPIRULA_BIN"
     --sparse-dir "$block_sparse"
-    --images-dir "$SFM_DIR/images"
+    --images-dir "$IMAGES_DIR"
     --output-dir "$block_output"
     --num-iterations "$TRAIN_NUM_ITER"
     --name "$splat_name"

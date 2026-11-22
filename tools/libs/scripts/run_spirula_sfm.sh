@@ -8,6 +8,7 @@ source "$script_dir/spirula_common.sh"
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"
 output_dir="${OUTPUT_DIR:-}"
+images_dir=""
 dry_run=false
 preset="${PRESET:-}"
 sensor_pairs="${SENSOR_PAIRS:-false}"
@@ -271,6 +272,7 @@ while [[ $# -gt 0 ]]; do
         spirula-bin) spirula_bin="$value" ;;
         dataset) dataset="$value" ;;
         output-dir) output_dir="$value" ;;
+        images-dir) images_dir="$value" ;;
         *) set_option "$name" "$value" ;;
       esac
       shift
@@ -285,6 +287,7 @@ while [[ $# -gt 0 ]]; do
         spirula-bin) spirula_bin="$value" ;;
         dataset) dataset="$value" ;;
         output-dir) output_dir="$value" ;;
+        images-dir) images_dir="$value" ;;
         *) set_option "$name" "$value" ;;
       esac
       shift 2
@@ -315,6 +318,7 @@ case "$prepare" in
       --dataset "$dataset" --output-dir "$output_dir" --shell
     )
     [[ -z "$keep_size" ]] || prepare_cmd+=(--size "$keep_size")
+    [[ -z "$images_dir" ]] || prepare_cmd+=(--images-dir "$images_dir")
     [[ "$dry_run" != true ]] || prepare_cmd+=(--dry-run)
     prepare_output="$("${prepare_cmd[@]}")" || die "Préparation des images échouée"
     prepared_images=""
@@ -397,7 +401,7 @@ if [[ -n "$max_distance" ]]; then
   metadata_dir="$(gps_option metadata-dir)"
   metadata_dir="${metadata_dir:-$source_dataset/metadata}"
 
-  images="$output_dir/images"
+  images="${images_dir:-$output_dir/images}"
   features_dir="$output_dir/features"
   original="$output_dir/matches.bin"
   filtered="$output_dir/matches-gps.bin"

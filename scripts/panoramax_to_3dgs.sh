@@ -190,7 +190,8 @@ command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BI
 mkdir -p "$OUTPUT_DIR"
 OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
 DATASET_DIR="$OUTPUT_DIR/panoramax"
-SFM_DIR="$DATASET_DIR/sfm"
+SFM_DIR="$OUTPUT_DIR/sfm"
+IMAGES_DIR="$OUTPUT_DIR/images"
 BLOCKS_DIR="$SFM_DIR/blocks-$SPLIT_NUM_BLOCKS"
 GS_ROOT="$DATASET_DIR/gs-${TRAIN_NUM_ITER}-blocks-${SPLIT_NUM_BLOCKS}"
 [[ "$TRAIN_BACKEND" != nerfstudio ]] || GS_ROOT="$GS_ROOT-nerfstudio"
@@ -368,7 +369,7 @@ if [[ "$phase" != merge ]]; then
       die "Aucun GPU Vulkan prêt (discrete/integrated) ; définir SPIRULA_DEVICE explicitement (ex. index du CPU)"
     printf '[pipeline] SPIRULA_DEVICE résolu : %s\n' "$SPIRULA_DEVICE"
   fi
-  DIR="$DATASET_DIR" \
+  DIR="$DATASET_DIR" OUTPUT_DIR="$OUTPUT_DIR" \
   COLMAP_METHOD="${COLMAP_METHOD:-spirula}" \
   HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}" \
   SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}" \
@@ -444,7 +445,7 @@ if [[ "$phase" == prepare || "$phase" == train-block ]]; then
 fi
 LIDAR_SPARSE="$SFM_DIR/sparse/0"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
-lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$SFM_DIR/images"
+lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$IMAGES_DIR"
 
 set_pipeline_stage "vérification des splats avant fusion"
 rm -f -- "$OUTPUT_DIR/.merge_done"
@@ -475,7 +476,7 @@ if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
     CLEAN_SCENE="$OUTPUT_DIR/lidar_scene"
     mkdir -p "$CLEAN_SCENE/sparse"
     [[ -e "$CLEAN_SCENE/sparse/0" ]] || ln -s "$LIDAR_SPARSE" "$CLEAN_SCENE/sparse/0"
-    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$SFM_DIR/images" "$CLEAN_SCENE/images"
+    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$IMAGES_DIR" "$CLEAN_SCENE/images"
   fi
   "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
     --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
