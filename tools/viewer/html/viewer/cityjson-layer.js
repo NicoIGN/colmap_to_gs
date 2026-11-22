@@ -73,7 +73,6 @@ function applyOpacity(material, opacity) {
 export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
-  let lastGeoref = null;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
   let opacity = DEFAULT_VOLUME_OPACITY / 100;
   const layers = new Map();
@@ -99,7 +98,9 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   // Sans géoréférencement de scène, le pivot partagé avec LiDAR et vecteurs sert de repère.
   function render(child, georef) {
     destroyRender(child);
-    const placement = placementFor(child.source, resolvePivot(child.source, georef));
+    const pivot = resolvePivot(child.source, georef);
+    child.pivot = pivot;
+    const placement = placementFor(child.source, pivot);
     child.bounds = null;
     if (!child.source.triangleCount) return;
 
@@ -128,12 +129,15 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   function refreshPlacement() {
     if (disposed) return;
     const georef = getGeoref?.() ?? null;
-    if (georef === lastGeoref) return;
-    lastGeoref = georef;
+    let changed = false;
     for (const layer of layers.values()) {
-      for (const child of layer.children) render(child, georef);
+      for (const child of layer.children) {
+        if (child.pivot === resolvePivot(child.source, georef)) continue;
+        render(child, georef);
+        changed = true;
+      }
     }
-    emitBounds(false);
+    if (changed) emitBounds(false);
   }
 
   async function loadText(text, name) {
@@ -149,13 +153,13 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
     }
 
     const georef = getGeoref?.() ?? null;
-    lastGeoref = georef;
     const id = `cityjson-${nextId++}`;
     const child = {
       name: `${name} · ${source.objectCount.toLocaleString("fr-FR")} objets · ${source.triangleCount.toLocaleString("fr-FR")} triangles`,
       source,
       visible: true,
       bounds: null,
+      pivot: null,
       root: null,
       resource: null,
     };

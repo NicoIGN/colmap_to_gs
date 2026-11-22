@@ -263,7 +263,6 @@ export function worldPositions(source, placement) {
 export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
-  let lastGeoref = null;
   const layers = new Map();
 
   function emitBounds(frame) {
@@ -284,7 +283,9 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
 
   function render(layer, georef) {
     destroyRender(layer);
-    const placement = placementFor(layer.source, resolvePivot(layer.source, georef));
+    const pivot = resolvePivot(layer.source, georef);
+    layer.pivot = pivot;
+    const placement = placementFor(layer.source, pivot);
     layer.placement = placement;
     const positions = worldPositions(layer.source, placement);
     layer.bounds = colmapBounds([positions], false);
@@ -309,10 +310,13 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
   function refreshPlacement() {
     if (disposed) return;
     const georef = getGeoref?.() ?? null;
-    if (georef === lastGeoref) return;
-    lastGeoref = georef;
-    for (const layer of layers.values()) render(layer, georef);
-    emitBounds(false);
+    let changed = false;
+    for (const layer of layers.values()) {
+      if (layer.pivot === resolvePivot(layer.source, georef)) continue;
+      render(layer, georef);
+      changed = true;
+    }
+    if (changed) emitBounds(false);
   }
 
   async function loadFile(file, sidecarFile = null) {
@@ -346,13 +350,13 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       root: null,
       resource: null,
       placement: null,
+      pivot: null,
       unregister: null,
     };
     layers.set(id, layer);
     retainPivot(id);
 
     const georef = getGeoref?.() ?? null;
-    lastGeoref = georef;
     const placement = render(layer, georef);
 
     layer.unregister = registerGroup?.({
