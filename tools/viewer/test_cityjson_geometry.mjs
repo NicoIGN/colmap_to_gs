@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readCityJson, isCityJsonText, epsgOfCityJson } from "./html/viewer/cityjson-geometry.js";
+import { readCityJson, isCityJsonText, epsgOfCityJson, splitRoofFacade } from "./html/viewer/cityjson-geometry.js";
 
 const CUBE_FACES = [
   [[0, 3, 2, 1]],
@@ -99,6 +99,19 @@ test("les géométries non surfaciques sont comptées et la limite de triangles 
   const limited = readCityJson(text, "ville.json", { maxTriangles: 5 });
   assert.equal(limited.truncated, true);
   assert.ok(limited.triangleCount <= 6);
+});
+
+test("les triangles orientés vers le ciel sont des toits, les autres des façades", () => {
+  const text = cityJson({
+    building: { type: "Building", geometry: [{ type: "Solid", lod: "2", boundaries: [CUBE_FACES] }] },
+  });
+  const source = readCityJson(text, "ville.json");
+  const { roof, facade } = splitRoofFacade(source);
+  assert.equal(roof.triangleCount, 2);
+  assert.equal(facade.triangleCount, 10);
+  for (let v = 0; v < roof.vertexCount; v++) assert.equal(roof.normals[v * 3 + 2], 1);
+  for (let v = 0; v < facade.vertexCount; v++) assert.ok(facade.normals[v * 3 + 2] < 0.5);
+  assert.equal(roof.rel.length + facade.rel.length, source.rel.length);
 });
 
 test("détection CityJSON et refus d'un JSON qui n'en est pas un", () => {

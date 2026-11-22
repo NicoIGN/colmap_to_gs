@@ -252,7 +252,9 @@ function refreshUI() {
         element.id === "colmapFolderInput" ||
         element.id === "colmapPointSize" ||
         element.id === "colmapCameraSize" ||
-        element.id === "cityOpacity"
+        element.id === "cityOpacity" ||
+        element.id === "cityRoof" ||
+        element.id === "cityFacade"
       ) {
         return;
       }
@@ -1392,6 +1394,8 @@ function installUI() {
     cityLayer?.setOpacity(Number(event.target.value));
     $("cityOpacityValue").value = `${event.target.value} %`;
   });
+  $("cityRoof").addEventListener("change", (event) => cityLayer?.setPartVisible("roof", event.target.checked));
+  $("cityFacade").addEventListener("change", (event) => cityLayer?.setPartVisible("facade", event.target.checked));
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();

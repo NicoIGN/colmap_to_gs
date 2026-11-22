@@ -11,6 +11,28 @@ export function isCityJsonText(text) {
   return /"type"\s*:\s*"CityJSON"/.test(text);
 }
 
+// Un triangle est un toit si sa normale (repère source, Z vers le haut) pointe assez vers le ciel.
+// Les autres (façades, surfaces au sol) vont dans la catégorie façade.
+export const ROOF_NORMAL_Z = 0.5;
+
+export function splitRoofFacade(source, threshold = ROOF_NORMAL_Z) {
+  const roofTriangles = [];
+  const facadeTriangles = [];
+  for (let t = 0; t < source.triangleCount; t++) {
+    (source.normals[t * 9 + 2] >= threshold ? roofTriangles : facadeTriangles).push(t);
+  }
+  const pick = (indices) => {
+    const rel = new Float32Array(indices.length * 9);
+    const normals = new Float32Array(indices.length * 9);
+    indices.forEach((t, i) => {
+      rel.set(source.rel.subarray(t * 9, t * 9 + 9), i * 9);
+      normals.set(source.normals.subarray(t * 9, t * 9 + 9), i * 9);
+    });
+    return { rel, normals, triangleCount: indices.length, vertexCount: indices.length * 3 };
+  };
+  return { roof: pick(roofTriangles), facade: pick(facadeTriangles) };
+}
+
 // Les sommets sont quantifiés (entiers) quand un transform est présent : x = v * scale + translate.
 function decodeVertices(json) {
   const { scale, translate } = json.transform ?? {};
@@ -54,6 +76,10 @@ function sub(a, b) {
 
 function cross(a, b) {
   return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+}
+
+function dot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 // Normale de Newell : robuste à l'ordre des sommets et aux polygones non convexes.
@@ -152,11 +178,15 @@ function appendObjectTriangles(geometry, vertices, out, limit) {
       if (first[0] === last[0] && first[1] === last[1] && first[2] === last[2]) ring = ring.slice(0, -1);
     }
     if (ring.length < 3) continue;
-    for (const [a, b, c] of triangulateSurface(ring)) {
-      const n = cross(sub(b, a), sub(c, a));
-      const length = Math.hypot(...n) || 1;
-      const normal = n.map((v) => v / length);
-      for (const p of [a, b, c]) out.push(p[0], p[1], p[2], normal[0], normal[1], normal[2]);
+    // La triangulation travaille en 2D : on réoriente chaque triangle selon la normale 3D de la surface.
+    const surfaceNormal = newellNormal(ring);
+    for (const triangle of triangulateSurface(ring)) {
+      let [a, b, c] = triangle;
+      if (dot(cross(sub(b, a), sub(c, a)), surfaceNormal) < 0) [b, c] = [c, b];
+      const normal = cross(sub(b, a), sub(c, a));
+      const length = Math.hypot(...normal) || 1;
+      const unit = normal.map((v) => v / length);
+      for (const p of [a, b, c]) out.push(p[0], p[1], p[2], unit[0], unit[1], unit[2]);
     }
   }
   return holes;

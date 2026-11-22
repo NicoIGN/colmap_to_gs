@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
-import { readCityJson } from "./cityjson-geometry.js";
+import { readCityJson, splitRoofFacade } from "./cityjson-geometry.js";
 
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
 export const MAX_TRIANGLES = 1_500_000;
@@ -75,6 +75,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   let nextId = 1;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
   let opacity = DEFAULT_VOLUME_OPACITY / 100;
+  const partVisibility = { roof: true, facade: true };
   const layers = new Map();
 
   function emitBounds(frame) {
@@ -88,11 +89,12 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
   }
 
   function destroyRender(child) {
-    child.resource?.mesh?.destroy?.();
-    child.resource?.material?.destroy?.();
-    child.root?.destroy?.();
-    child.root = null;
-    child.resource = null;
+    for (const part of child.parts ?? []) {
+      part.mesh?.destroy?.();
+      part.material?.destroy?.();
+      part.root?.destroy?.();
+    }
+    child.parts = [];
   }
 
   // Sans géoréférencement de scène, le pivot partagé avec LiDAR et vecteurs sert de repère.
@@ -104,26 +106,32 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
     child.bounds = null;
     if (!child.source.triangleCount) return;
 
-    const positions = worldPositions({ rel: child.source.rel, count: child.source.vertexCount }, placement);
-    const mesh = new pc.Mesh(app.graphicsDevice);
-    mesh.setPositions(positions);
-    mesh.setNormals(worldNormals(child.source.normals, placement));
-    mesh.update(pc.PRIMITIVE_TRIANGLES, true);
-    child.bounds = colmapBounds([positions], false);
+    const allPositions = [];
+    const split = splitRoofFacade(child.source);
+    for (const kind of ["roof", "facade"]) {
+      const part = split[kind];
+      if (!part.triangleCount) continue;
+      const positions = worldPositions({ rel: part.rel, count: part.vertexCount }, placement);
+      allPositions.push(positions);
+      const mesh = new pc.Mesh(app.graphicsDevice);
+      mesh.setPositions(positions);
+      mesh.setNormals(worldNormals(part.normals, placement));
+      mesh.update(pc.PRIMITIVE_TRIANGLES, true);
+
+      const material = makeVolumeMaterial(color, opacity);
+      const root = new pc.Entity(`CityJSON · ${child.source.name} · ${kind === "roof" ? "toit" : "façade"}`);
+      root.addComponent("render", {
+        type: "asset",
+        meshInstances: [new pc.MeshInstance(mesh, material)],
+        layers: [getOverlayLayer(app).id],
+      });
+      root.setLocalEulerAngles(getFlipUp() ? 180 : 0, 0, 0);
+      root.enabled = child.visible && partVisibility[kind];
+      app.root.addChild(root);
+      child.parts.push({ kind, mesh, material, root });
+    }
+    child.bounds = colmapBounds(allPositions, false);
     child.placement = placement;
-
-    const material = makeVolumeMaterial(color, opacity);
-    child.resource = { mesh, material };
-
-    child.root = new pc.Entity(`CityJSON · ${child.source.name}`);
-    child.root.addComponent("render", {
-      type: "asset",
-      meshInstances: [new pc.MeshInstance(mesh, material)],
-      layers: [getOverlayLayer(app).id],
-    });
-    child.root.setLocalEulerAngles(getFlipUp() ? 180 : 0, 0, 0);
-    child.root.enabled = child.visible;
-    app.root.addChild(child.root);
   }
 
   function refreshPlacement() {
@@ -160,8 +168,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       visible: true,
       bounds: null,
       pivot: null,
-      root: null,
-      resource: null,
+      parts: [],
     };
     const layer = { id, name, visible: true, children: [child] };
     layers.set(id, layer);
@@ -178,7 +185,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
           name: child.name,
           setVisible(visible) {
             child.visible = visible;
-            if (child.root) child.root.enabled = visible;
+            for (const part of child.parts) part.root.enabled = visible && partVisibility[part.kind];
           },
         },
       ],
@@ -224,7 +231,9 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {
-        for (const child of layer.children) child.root?.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
+        for (const child of layer.children) {
+          for (const part of child.parts) part.root.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
+        }
       }
     },
 
@@ -233,7 +242,19 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
       opacity = percent / 100;
       for (const layer of layers.values()) {
         for (const child of layer.children) {
-          if (child.resource) applyOpacity(child.resource.material, opacity);
+          for (const part of child.parts) applyOpacity(part.material, opacity);
+        }
+      }
+    },
+
+    // `kind` : "roof" ou "facade".
+    setPartVisible(kind, visible) {
+      partVisibility[kind] = visible;
+      for (const layer of layers.values()) {
+        for (const child of layer.children) {
+          for (const part of child.parts) {
+            if (part.kind === kind) part.root.enabled = child.visible && visible;
+          }
         }
       }
     },
