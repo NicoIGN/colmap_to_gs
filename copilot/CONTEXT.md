@@ -29,6 +29,15 @@ bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
+Environnement de référence de l'agent : `copilot/conda_env_copilot.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
+
+```bash
+conda env create --yes --file "$GIT_ROOT/copilot/conda_env_copilot.yml"
+conda activate colmap_to_gs_copilot
+```
+
+Il ne contient pas `fiona` (requis par `tools/preprocess/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
+
 Paquets utilisés par les tests et le pipeline :
 - Tests images/Spirula : `pillow numpy opencv-python-headless tqdm scipy plyfile`
 - Lidar / panoramax : `pyproj laspy lazrs` (`tools/lidar/requirements.txt`, `tools/panoramax/requirements.txt`)
