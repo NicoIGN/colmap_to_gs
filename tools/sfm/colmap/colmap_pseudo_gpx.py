@@ -4,6 +4,8 @@
 Le repère du modèle est ENU, centré sur origin_lat/origin_lon/origin_alt du gauge.txt.
 Les sommets sont ordonnés géométriquement (plus proche voisin puis 2-opt, chemin ouvert),
 ou par indice de frame `_fXXXXX` du nom d'image avec --order frame.
+--tolerance X régularise la trajectoire : Douglas-Peucker garde les sommets nécessaires pour
+que la courbe reste à moins de X mètres de la polyligne reliant tous les sommets.
 """
 
 import argparse
@@ -19,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from georef_colmap_from_gpx import enu_to_wgs84
 from compare_sparse_geojson import read_gauge_origin
+
 
 FRAME_PATTERN = re.compile(r"_f([0-9]+)(?=[^0-9]|$)")
 GPX_NAMESPACE = "http://www.topografix.com/GPX/1/1"
@@ -120,30 +123,61 @@ def write_gpx(path, coordinates, name):
     ET.ElementTree(root).write(path, encoding="utf-8", xml_declaration=True)
 
 
-def build_track(model, gauge, method):
-    origin = read_gauge_origin(gauge)
+def simplify_polyline(points, tolerance):
+    """Douglas-Peucker : garde les sommets nécessaires pour que la courbe reste à moins de `tolerance` de la polyligne d'origine."""
+    points = np.asarray(points, dtype=float)
+    keep = np.zeros(len(points), dtype=bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(points) - 1)]
+    while stack:
+        first, last = stack.pop()
+        if last <= first + 1:
+            continue
+        segment = points[last] - points[first]
+        inner = points[first + 1:last] - points[first]
+        length = np.linalg.norm(segment)
+        if length > 0:
+            along = np.clip(inner @ segment / length ** 2, 0.0, 1.0)
+            distances = np.linalg.norm(inner - np.outer(along, segment), axis=1)
+        else:
+            distances = np.linalg.norm(inner, axis=1)
+        k = int(np.argmax(distances))
+        if distances[k] > tolerance:
+            index = first + 1 + k
+            keep[index] = True
+            stack.append((first, index))
+            stack.append((index, last))
+    return keep
+
+
+def build_track(model, method, tolerance=0.0):
+    origin = read_gauge_origin(model / "gauge.txt")
     names, centres = camera_centres(model)
     if len(centres) < 2:
         raise ValueError("Pas assez de centres caméra pour une trajectoire.")
     order = order_centres(names, centres, method)
     track = centres[order]
-    return enu_to_wgs84(track, origin), path_length(track), [names[i] for i in order]
+    if tolerance > 0:
+        track = track[simplify_polyline(track, tolerance)]
+    return enu_to_wgs84(track, origin), path_length(track), len(track)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", required=True, type=Path, help="Dossier COLMAP (images.bin ou images.txt).")
-    parser.add_argument("--gauge", type=Path, help="gauge.txt (défaut : MODEL/gauge.txt, sinon dossier parent).")
+    parser.add_argument("--model", required=True, type=Path,
+                        help="Dossier COLMAP (images.bin ou images.txt) contenant gauge.txt.")
     parser.add_argument("--output", type=Path, help="GPX de sortie (défaut : MODEL/pseudo_trajectory.gpx).")
     parser.add_argument("--order", choices=("path", "frame"), default="path",
                         help="path : plus court chemin géométrique (défaut) ; frame : indice _fXXXXX du nom.")
+    parser.add_argument("--tolerance", type=float, default=0.0,
+                        help="Régularisation en mètres : la trajectoire simplifiée reste à moins de cette distance "
+                             "de la polyligne reliant tous les sommets (0 = pas de régularisation).")
     args = parser.parse_args()
 
-    gauge = args.gauge or (args.model / "gauge.txt" if (args.model / "gauge.txt").exists() else args.model.parent / "gauge.txt")
     output = args.output or args.model / "pseudo_trajectory.gpx"
-    coordinates, length, _ = build_track(args.model, gauge, args.order)
+    coordinates, length, count = build_track(args.model, args.order, args.tolerance)
     write_gpx(output, coordinates, "Pseudo-trajectoire COLMAP")
-    print(f"[gpx] {len(coordinates)} sommets, longueur {length:.1f} m -> {output}")
+    print(f"[gpx] {count} sommets, longueur {length:.1f} m -> {output}")
 
 
 if __name__ == "__main__":

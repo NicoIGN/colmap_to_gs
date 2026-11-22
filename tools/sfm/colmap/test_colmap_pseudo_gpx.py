@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.sfm.colmap.colmap_pseudo_gpx import (
-    GPX_NAMESPACE, frame_order, order_centres, path_length, two_opt, write_gpx,
+    GPX_NAMESPACE, frame_order, order_centres, path_length, simplify_polyline, two_opt, write_gpx,
 )
 from tools.sfm.georef_colmap_from_gpx import enu_to_wgs84
 
@@ -27,6 +27,25 @@ class PseudoGpxOrderingTest(unittest.TestCase):
         order = order_centres(names, points[perm], "path")
         recovered = perm[order]
         self.assertGreater(abs(np.corrcoef(np.arange(len(points)), recovered)[0, 1]), 0.999)
+
+    def test_simplification_keeps_curve_within_tolerance(self):
+        t = np.linspace(0, 1, 200)
+        points = np.column_stack([t * 100, np.sin(t * 3) * 5, np.zeros_like(t)])
+        points[50, 1] += 0.05
+        keep = simplify_polyline(points, tolerance=1.0)
+        self.assertLess(keep.sum(), len(points))
+        self.assertTrue(keep[0] and keep[-1])
+        kept = points[keep]
+        for p in points:
+            seg = np.diff(kept, axis=0)
+            rel = p - kept[:-1]
+            along = np.clip(np.sum(rel * seg, axis=1) / np.sum(seg * seg, axis=1), 0, 1)
+            dist = np.linalg.norm(rel - along[:, None] * seg, axis=1).min()
+            self.assertLessEqual(dist, 1.0 + 1e-9)
+
+    def test_zero_tolerance_keeps_all_points_shape(self):
+        points = np.array([[0, 0, 0], [1, 1, 0], [2, 0, 0]], float)
+        self.assertTrue(simplify_polyline(points, tolerance=0.1).all())
 
     def test_frame_order_uses_frame_index_not_positions(self):
         names = ["x_f00010.jpg", "x_f00002.jpg", "x_f00007.jpg"]
