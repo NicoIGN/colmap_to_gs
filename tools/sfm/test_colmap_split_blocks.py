@@ -121,6 +121,7 @@ class SoftBalanceTest(unittest.TestCase):
                     observations[a].append(pid)
                     observations[b].append(pid)
             (source / "points3D.txt").write_text("".join(point_lines))
+            (source / "gauge.txt").write_text("oriented 1\n")
             (source / "images.txt").write_text("".join(
                 f"{i + 1} 0.9238795325112867 0 0 0.3826834323650898 {i * 0.125} {-i * 0.25} 2 1 image-{i}.jpg\n"
                 + " ".join(f"0 0 {pid}" for pid in pids) + "\n"
@@ -140,6 +141,8 @@ class SoftBalanceTest(unittest.TestCase):
                                 for call in warning.call_args_list))
             manifest = json.loads((output / "manifest.json").read_text())
             self.assertEqual([block["num_primary_images"] for block in manifest["blocks"]], [7, 3])
+            for block in range(2):
+                self.assertEqual((output / f"block_{block:03d}" / "gauge.txt").read_text(), "oriented 1\n")
             memberships = []
             with contextlib.redirect_stderr(io.StringIO()):
                 source_cameras, source_images, source_points, _ = splitter.load_colmap_model(source)

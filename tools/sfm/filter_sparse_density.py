@@ -354,7 +354,7 @@ def write_partition(input_dir, output_dir, point_ids, images, mask, report, *, p
     with tempfile.TemporaryDirectory(prefix=".filter-sparse-", dir=output_dir) as temporary:
         temporary = Path(temporary)
         shutil.copyfile(input_dir / "cameras.bin", temporary / "cameras.bin")
-        for optional in ("rigs.bin", "frames.bin"):
+        for optional in ("rigs.bin", "frames.bin", "gauge.txt"):
             if (input_dir / optional).is_file():
                 shutil.copyfile(input_dir / optional, temporary / optional)
         with (input_dir / "points3D.bin").open("rb") as source, \
@@ -387,7 +387,7 @@ def write_partition(input_dir, output_dir, point_ids, images, mask, report, *, p
         )
         for path in temporary.iterdir():
             os.replace(path, output_dir / path.name)
-        for optional in ("rigs.bin", "frames.bin"):
+        for optional in ("rigs.bin", "frames.bin", "gauge.txt"):
             if not (input_dir / optional).is_file():
                 (output_dir / optional).unlink(missing_ok=True)
 

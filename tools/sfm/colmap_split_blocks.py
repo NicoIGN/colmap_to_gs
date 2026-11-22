@@ -29,6 +29,7 @@ import argparse
 import colorsys
 import json
 import math
+import shutil
 import struct
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -1811,6 +1812,10 @@ def main():
         colors,
         args,
     )
+    gauge = input_dir / "gauge.txt"
+    if gauge.is_file():
+        for folder in sorted(out_dir.glob("block_*")):
+            shutil.copyfile(gauge, folder / "gauge.txt")
 
     if args.export_ply:
         export_colored_ply(

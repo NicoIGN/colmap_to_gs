@@ -196,6 +196,7 @@ class SparseDensityTest(unittest.TestCase):
             source = root / "sparse"
             output = root / "filtered"
             write_model(source, positions)
+            (source / "gauge.txt").write_text("oriented 1\norigin_lat 48.8\norigin_lon 2.3\n")
             report = filter_sparse_model(
                 source, output, min_neighbors=12, min_cluster_points=5
             )
@@ -222,6 +223,8 @@ class SparseDensityTest(unittest.TestCase):
             validate_sparse(rejected)
             self.assertEqual((output / "rigs.bin").read_bytes(), b"rig metadata")
             self.assertEqual((output / "frames.bin").read_bytes(), b"frame metadata")
+            self.assertEqual((output / "gauge.txt").read_bytes(), (source / "gauge.txt").read_bytes())
+            self.assertEqual((rejected / "gauge.txt").read_bytes(), (source / "gauge.txt").read_bytes())
             self.assertEqual(
                 (source / "points3D.bin").stat().st_size,
                 (output / "points3D.bin").stat().st_size + POINT_HEADER.size + 16,
