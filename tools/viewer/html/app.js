@@ -958,8 +958,8 @@ async function handleDroppedFiles(fileList, items) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
       const georefFile = files.find((f) => f !== sceneFile && isGeorefSidecarName(f.name, base));
       if (georefFile) {
-        // Le splat remplace la scène : son propre géoréférencement prend le relais.
-        await loadFile(sceneFile);
+        // Le splat s'ajoute à la vue courante : son propre géoréférencement prend le relais.
+        await appendScene(sceneFile, sceneFile.name);
         if (/\.txt$/i.test(georefFile.name)) {
           await sceneTools.importGaugeFile(georefFile);
         } else {
