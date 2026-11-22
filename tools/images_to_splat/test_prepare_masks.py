@@ -148,13 +148,6 @@ class MaskResumeTests(unittest.TestCase):
         feature = self.output / "feature_masks"
         self.assertTrue(feature.is_symlink())
         self.assertEqual(feature.resolve(), self.masks.resolve())
-        self.assertFalse((self.output / "masks").exists())
-
-    def test_legacy_masks_directory_is_refused(self):
-        (self.output / "masks").mkdir()
-        with self.assertRaisesRegex(ValueError, "Ancien dossier"):
-            prepare_masks.prepare()
-        self.generate.assert_not_called()
 
     def test_generation_failure_is_propagated(self):
         self.generate.side_effect = RuntimeError("license")

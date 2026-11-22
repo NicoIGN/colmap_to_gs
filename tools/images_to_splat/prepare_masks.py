@@ -198,12 +198,6 @@ def prepare(policy_only=None):
         prepare_policy(selected, output / directory)
         return
 
-    legacy = output / "masks"
-    if legacy.exists():
-        raise ValueError(
-            f"Ancien dossier {legacy} : la disposition est désormais feature_masks/ et train_masks/. "
-            "Le déplacer en sauvegarde ou choisir un nouvel OUTPUT_DIR."
-        )
     if sfm is not None and sfm == train:
         train_dir, feature_dir = output / "train_masks", output / "feature_masks"
         prepare_policy(sfm, train_dir)

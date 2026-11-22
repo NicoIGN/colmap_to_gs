@@ -265,7 +265,7 @@ def prepare(check=False):
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
     elif any((output / name).exists() for name in
-             ("images", "panoramas", "sfm", "masks", "feature_masks", "train_masks",
+             ("images", "panoramas", "sfm", "feature_masks", "train_masks",
               "sparse_filtered", "sparse_clean", "sparse_rejected", "blocks", "gs", "gs-nerfstudio")):
         if not resume:
             raise ValueError("Workspace sans inputs.json : choisir un nouvel OUTPUT_DIR.")
