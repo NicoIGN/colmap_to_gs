@@ -1,7 +1,7 @@
 """Fuse a LAZ point cloud with a 3DGS scene (.splat or .ply, same format in and out).
 
 1. Splats whose Z lies below or above the local LiDAR Z band (plus margin) are removed.
-2. Voxels where splats are sparser than LiDAR get one LiDAR-derived splat each.
+2. With --fill-holes, voxels where splats are sparser than LiDAR get one LiDAR-derived splat each.
    Its colour is the mean of nearby kept splats, or grey when none is close enough.
 """
 
@@ -132,7 +132,10 @@ def run(args, scene):
     kept_xyz = xyz[keep]
     kept_dc = colour_dc(kept_raw, scene.is_splat)
 
-    cand, deficit_voxels = fill_candidates(kept_xyz, lidar, args.voxel, args.density_ratio)
+    if args.fill_holes:
+        cand, deficit_voxels = fill_candidates(kept_xyz, lidar, args.voxel, args.density_ratio)
+    else:
+        cand, deficit_voxels = np.zeros(0, dtype=np.int64), 0
     added_xyz = lidar[cand]
     if len(cand):
         nn = cKDTree(lidar).query(added_xyz, k=2)[0][:, 1]
@@ -148,6 +151,7 @@ def run(args, scene):
     report = dict(
         input=str(args.input), output=str(args.output), lidar=str(args.lidar),
         origin=origin.tolist(), lidar_points=len(lidar), input_splats=scene.count,
+        fill_holes=args.fill_holes,
         removed_outside_z=int(remove.sum()),
         kept_without_lidar_evidence=int((keep & ~evidence).sum()),
         deficit_voxels=deficit_voxels, added_splats=len(cand),
@@ -174,6 +178,9 @@ def main():
     parser.add_argument("--origin", default="0,0,0", help="Origine soustraite au LAZ")
     parser.add_argument("--lidar-stride", type=int, default=1)
     parser.add_argument("--lidar-classes", help="Codes LAS de référence ; défaut : tous")
+    parser.add_argument("--fill-holes", action="store_true",
+                        help="Ajouter les splats LiDAR dans les zones moins denses que le LiDAR ; "
+                             "défaut : seulement retirer les splats hors bande Z")
     parser.add_argument("--z-margin", type=float, default=0.5,
                         help="Marge verticale autour de la bande Z LiDAR locale (m)")
     parser.add_argument("--z-radius", type=float, default=1.0,

@@ -473,8 +473,16 @@ class LidarTests(unittest.TestCase):
                 with self.subTest(suffix=suffix):
                     source, output = root / f"in{suffix}", root / f"out{suffix}"
                     write_scene(source, np.array([[.5, .5, .2], [.5, .5, 5.]]), (200, 0, 0))
-                    command = [sys.executable, fuse, "--lidar", str(laz), "--input", str(source),
-                               "--output", str(output), "--voxel", "1", "--colour-radius", "2"]
+                    base = [sys.executable, fuse, "--lidar", str(laz), "--input", str(source),
+                            "--voxel", "1", "--colour-radius", "2"]
+                    plain = root / f"plain{suffix}"
+                    result = subprocess.run(base + ["--output", str(plain)],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(plain.with_suffix(suffix + ".json").read_text())
+                                     ["added_splats"], 0)
+                    self.assertEqual(len(read_scene(plain)[0]), 1)
+                    command = base + ["--output", str(output), "--fill-holes"]
                     result = subprocess.run(command, capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)
                     report = json.loads(output.with_suffix(suffix + ".json").read_text())
