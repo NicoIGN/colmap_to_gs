@@ -115,6 +115,12 @@ def footprint_mask(xyz, sigma, lidar, sigmas):
     return remove
 
 
+def bbox_mask(xyz, support, lidar):
+    """Remove splats whose support (per-splat half-size, all axes) leaves the LiDAR bbox."""
+    lo, hi = lidar.min(axis=0), lidar.max(axis=0)
+    return ((xyz - support[:, None] < lo) | (xyz + support[:, None] > hi)).any(axis=1)
+
+
 def voxel_keys(points, lo, size):
     return np.floor((points - lo) / size).astype(np.int64)
 
@@ -188,7 +194,8 @@ def run(args, scene):
         outside_footprint = footprint_mask(xyz, sigma, lidar, args.footprint_sigmas)
     else:
         outside_footprint = np.zeros(len(xyz), dtype=bool)
-    remove = remove_z | outside_footprint
+    outside_bbox = bbox_mask(xyz, support, lidar)
+    remove = remove_z | outside_footprint | outside_bbox
     keep = ~remove
     if not keep.any():
         raise ValueError("Aucun splat conservé après filtrage par la bande Z LiDAR")
@@ -221,6 +228,7 @@ def run(args, scene):
         fill_holes=args.fill_holes,
         removed_outside_z=int(remove_z.sum()),
         removed_outside_footprint=int(outside_footprint.sum()),
+        removed_outside_bbox=int(outside_bbox.sum()),
         kept_without_lidar_evidence=int((keep & ~evidence).sum()),
         deficit_voxels=deficit_voxels, added_splats=len(cand),
         added_coloured_from_splats=int(from_splats.sum()),

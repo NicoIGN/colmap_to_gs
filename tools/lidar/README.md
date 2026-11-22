@@ -334,6 +334,8 @@ règle 1 s'applique, plus le nettoyage planimétrique :
 0. Un splat dont le support planimétrique (`--footprint-sigmas` × σ, 3 par défaut)
    n'atteint pas le LiDAR le plus proche en XY est retiré (il déborde du LAZ).
    `--footprint-sigmas 0` désactive ce nettoyage.
+   Passe bbox (toujours active) : tout splat dont le support (même demi-taille) sort de
+   la bbox globale du LAZ (X, Y et Z) est retiré. Compteur `removed_outside_bbox`.
 
 1. Un splat dont le Z (ou le support vertical, `--footprint-sigmas` × σ) sort de la bande
    Z LiDAR locale, à `--z-margin` près, est retiré. Un grand splat de bord qui descend

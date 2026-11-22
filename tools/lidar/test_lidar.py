@@ -441,6 +441,13 @@ class LidarTests(unittest.TestCase):
         remove, evidence = z_band_mask(xyz, lidar, 5.0, 64, 0.5, extent=np.array([7.0]))
         self.assertEqual((remove.tolist(), evidence.tolist()), ([True], [True]))
 
+    def test_bbox_removes_splats_whose_support_leaves_lidar_extent(self):
+        from fuse_lidar_splats import bbox_mask
+        lidar = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 5.0]])
+        xyz = np.array([[5.0, 5.0, 2.5], [0.5, 5.0, 2.5], [5.0, 5.0, 4.9]])
+        support = np.array([1.0, 1.0, 1.0])
+        self.assertEqual(bbox_mask(xyz, support, lidar).tolist(), [False, True, True])
+
     def test_footprint_removes_splats_whose_support_misses_lidar(self):
         from fuse_lidar_splats import footprint_mask
         lidar = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
