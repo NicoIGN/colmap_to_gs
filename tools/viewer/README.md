@@ -89,6 +89,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   pointe vers le haut (Z ≥ 0,5), sinon façade (sols compris). Le LoD0 est ignoré. Limite : 1,5 million de
   triangles. Les autres `.json` servent toujours au géoréférencement.
   Option « Splats masquent les volumes 3D » (activée par défaut) : active `depthWrite` sur le matériau interne des splats PlayCanvas 2.23.1 (accès non public, à revérifier à chaque mise à jour du moteur).
+  Option « Masquer façades près des splats » (désactivée par défaut) : retire les triangles de façade dont un côté, projeté en plan, passe à moins d'environ 1 m d'un centre de splat (grille en cellules de 1 m, approximation). La grille est calculée à l'activation et au rendu d'un CityJSON ; elle n'est pas recalculée quand on charge de nouveaux splats après coup (recocher la case).
 - Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
   en données 3D filaires : chaque table d'entités devient une sous-couche de
   lignes (polylignes et contours de polygones) ; les points (simples ou multiples)

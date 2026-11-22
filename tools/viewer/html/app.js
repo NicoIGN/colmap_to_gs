@@ -266,7 +266,8 @@ function refreshUI() {
         element.id === "colmapPointSize" ||
         element.id === "colmapCameraSize" ||
         element.id === "cityRoofOpacity" ||
-        element.id === "cityFacadeOpacity"
+        element.id === "cityFacadeOpacity" ||
+        element.id === "facadeNearSplats"
       ) {
         return;
       }
@@ -1595,6 +1596,7 @@ async function initialize() {
     app.scene.gsplatCentersEnabled = true;
   app.on("update", applySplatDepthWrite);
   $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
+  $("facadeNearSplats").addEventListener("change", () => cityLayer?.setFacadeNearSplats($("facadeNearSplats").checked));
     layerManager = createLayerManager($("layerList"));
 
     cameraEntity = new pc.Entity("Camera");
@@ -1796,6 +1798,7 @@ async function initialize() {
         app,
         setStatus,
         getFlipUp: () => $("flipUp").checked,
+        getSplatCenters: () => splatLayers.map((layer) => layer.centers),
         getGeoref: () => sceneTools?.getGeoref() ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {

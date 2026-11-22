@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
-import { readCityJson, splitRoofFacade } from "./cityjson-geometry.js";
+import { readCityJson, splitRoofFacade, buildNearSplatGrid, dropNearTriangles } from "./cityjson-geometry.js";
 
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
 export const MAX_TRIANGLES = 1_500_000;
@@ -70,13 +70,16 @@ function applyOpacity(material, opacity) {
   material.update();
 }
 
-export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
+export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getSplatCenters, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
   const partOpacity = { roof: DEFAULT_VOLUME_OPACITY / 100, facade: DEFAULT_VOLUME_OPACITY / 100 };
   // Visibilité de chaque partie, décidée par les cases « Toits » et « Façades » du panneau de couches.
   const partShown = { roof: true, facade: true };
+  // Option « Masquer façades près des splats » : grilles en plan calculées à la demande, par paire d'axes.
+  let hideNearSplats = false;
+  const nearGrids = new Map();
   const layers = new Map();
 
   function emitBounds(frame) {
@@ -98,6 +101,23 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
     child.parts = [];
   }
 
+  // Axes du plan horizontal : tous sauf l'axe qui porte la verticale source (Z).
+  function planAxesFor(placement) {
+    if (placement.mode === "local") return [0, 1];
+    const linear = placement.linear;
+    let up = 0;
+    for (let i = 1; i < 3; i++) if (Math.abs(linear[i][2]) > Math.abs(linear[up][2])) up = i;
+    return [0, 1, 2].filter((i) => i !== up);
+  }
+
+  function nearGridFor(placement) {
+    if (!hideNearSplats) return null;
+    const [a, b] = planAxesFor(placement);
+    const key = `${a}${b}`;
+    if (!nearGrids.has(key)) nearGrids.set(key, buildNearSplatGrid(getSplatCenters?.() ?? [], a, b));
+    return nearGrids.get(key);
+  }
+
   // Sans géoréférencement de scène, le pivot partagé avec LiDAR et vecteurs sert de repère.
   function render(child, georef) {
     destroyRender(child);
@@ -109,14 +129,20 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
 
     const allPositions = [];
     const split = splitRoofFacade(child.source);
+    const nearGrid = nearGridFor(placement);
     for (const kind of ["roof", "facade"]) {
       const part = split[kind];
       if (!part.triangleCount) continue;
-      const positions = worldPositions({ rel: part.rel, count: part.vertexCount }, placement);
+      let positions = worldPositions({ rel: part.rel, count: part.vertexCount }, placement);
+      let normals = worldNormals(part.normals, placement);
       allPositions.push(positions);
+      if (kind === "facade" && nearGrid) {
+        ({ positions, normals } = dropNearTriangles(positions, normals, nearGrid));
+        if (!positions.length) continue;
+      }
       const mesh = new pc.Mesh(app.graphicsDevice);
       mesh.setPositions(positions);
-      mesh.setNormals(worldNormals(part.normals, placement));
+      mesh.setNormals(normals);
       mesh.update(pc.PRIMITIVE_TRIANGLES, true);
 
       const material = makeVolumeMaterial(color, partOpacity[kind]);
@@ -265,6 +291,14 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, regi
             if (part.kind === kind) applyOpacity(part.material, partOpacity[kind]);
           }
         }
+      }
+    },
+
+    setFacadeNearSplats(enabled) {
+      hideNearSplats = enabled;
+      nearGrids.clear();
+      for (const layer of layers.values()) {
+        for (const child of layer.children) render(child, getGeoref?.() ?? null);
       }
     },
 

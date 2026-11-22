@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readCityJson, isCityJsonText, epsgOfCityJson, splitRoofFacade } from "./html/viewer/cityjson-geometry.js";
+import {
+  readCityJson, isCityJsonText, epsgOfCityJson, splitRoofFacade, buildNearSplatGrid, dropNearTriangles,
+} from "./html/viewer/cityjson-geometry.js";
 
 const CUBE_FACES = [
   [[0, 3, 2, 1]],
@@ -120,4 +122,21 @@ test("détection CityJSON et refus d'un JSON qui n'en est pas un", () => {
   assert.throws(() => readCityJson('{"type":"FeatureCollection"}', "x.json"), /pas un CityJSON/);
   assert.equal(epsgOfCityJson({ metadata: { referenceSystem: "https://www.opengis.net/def/crs/EPSG/0/7415" } }), 7415);
   assert.equal(epsgOfCityJson({}), null);
+});
+
+test("facade triangles are dropped only when a splat lies within about 1 m of their plan edges", () => {
+  // Deux murs verticaux au même endroit en plan : un côté x = 0 (y de 0 à 10), un côté x = 20.
+  const positions = new Float32Array([
+    0, 0, 0, 0, 10, 0, 0, 0, 5,
+    20, 0, 0, 20, 10, 0, 20, 0, 5,
+  ]);
+  const normals = new Float32Array(18);
+  // Un splat à 0,5 m du premier mur, rien près du second.
+  const grid = buildNearSplatGrid([new Float32Array([0.5, 5, 2])], 0, 1);
+  const kept = dropNearTriangles(positions, normals, grid);
+  assert.equal(kept.triangleCount, 1);
+  assert.equal(kept.positions[0], 20);
+
+  const farGrid = buildNearSplatGrid([new Float32Array([5, 5, 2])], 0, 1);
+  assert.equal(dropNearTriangles(positions, normals, farGrid).triangleCount, 2);
 });

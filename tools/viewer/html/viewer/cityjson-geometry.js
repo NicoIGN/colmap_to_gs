@@ -33,6 +33,80 @@ export function splitRoofFacade(source, threshold = ROOF_NORMAL_Z) {
   return { roof: pick(roofTriangles), facade: pick(facadeTriangles) };
 }
 
+// Grille en plan des centres de splats : cellules de 1 m, puis dilatation d'une cellule
+// pour approcher une bande de 1 m. Au-delà de `maxSamples` centres, sous-échantillonnage.
+export const NEAR_SPLAT_CELL_M = 1;
+const CELL_KEY_OFFSET = 2 ** 21;
+const CELL_KEY_SPAN = 2 ** 22;
+const cellKey = (ia, ib) => (ia + CELL_KEY_OFFSET) * CELL_KEY_SPAN + (ib + CELL_KEY_OFFSET);
+
+export function buildNearSplatGrid(centerSets, axisA, axisB, maxSamples = 4_000_000) {
+  const total = centerSets.reduce((sum, centers) => sum + centers.length / 3, 0);
+  const stride = Math.max(1, Math.ceil(total / maxSamples));
+  const seen = new Set();
+  const cells = [];
+  for (const centers of centerSets) {
+    for (let p = 0; p < centers.length / 3; p += stride) {
+      const ia = Math.floor(centers[p * 3 + axisA] / NEAR_SPLAT_CELL_M);
+      const ib = Math.floor(centers[p * 3 + axisB] / NEAR_SPLAT_CELL_M);
+      const key = cellKey(ia, ib);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cells.push(ia, ib);
+    }
+  }
+  const near = new Set();
+  for (let i = 0; i < cells.length; i += 2) {
+    for (let da = -1; da <= 1; da++) {
+      for (let db = -1; db <= 1; db++) near.add(cellKey(cells[i] + da, cells[i + 1] + db));
+    }
+  }
+  return { near, axisA, axisB };
+}
+
+// Vrai si un point (coordonnées du repère du monde) tombe dans la grille.
+function isNearGrid(grid, x, y, z) {
+  const coords = [x, y, z];
+  const ia = Math.floor(coords[grid.axisA] / NEAR_SPLAT_CELL_M);
+  const ib = Math.floor(coords[grid.axisB] / NEAR_SPLAT_CELL_M);
+  return grid.near.has(cellKey(ia, ib));
+}
+
+// Un triangle est « proche » si un de ses côtés, projeté en plan, passe par la grille (pas de 0,5 m, 64 points max par côté).
+function triangleNearSplats(positions, t, grid) {
+  for (let e = 0; e < 3; e++) {
+    const a = (t * 3 + e) * 3;
+    const b = (t * 3 + ((e + 1) % 3)) * 3;
+    const dx = positions[b] - positions[a];
+    const dy = positions[b + 1] - positions[a + 1];
+    const dz = positions[b + 2] - positions[a + 2];
+    const length = Math.hypot(dx, dy, dz);
+    const steps = Math.min(64, Math.max(1, Math.ceil(length / (NEAR_SPLAT_CELL_M / 2))));
+    for (let s = 0; s <= steps; s++) {
+      const f = s / steps;
+      if (isNearGrid(grid, positions[a] + dx * f, positions[a + 1] + dy * f, positions[a + 2] + dz * f)) return true;
+    }
+  }
+  return false;
+}
+
+// Retire les triangles proches de la grille. `positions` et `normals` sont des tableaux de 9 valeurs par triangle.
+export function dropNearTriangles(positions, normals, grid) {
+  const triangleCount = positions.length / 9;
+  const keep = [];
+  for (let t = 0; t < triangleCount; t++) {
+    if (!triangleNearSplats(positions, t, grid)) keep.push(t);
+  }
+  if (keep.length === triangleCount) return { positions, normals, triangleCount };
+  const outPositions = new Float32Array(keep.length * 9);
+  const outNormals = new Float32Array(keep.length * 9);
+  keep.forEach((t, i) => {
+    outPositions.set(positions.subarray(t * 9, t * 9 + 9), i * 9);
+    outNormals.set(normals.subarray(t * 9, t * 9 + 9), i * 9);
+  });
+  return { positions: outPositions, normals: outNormals, triangleCount: keep.length };
+}
+
 // Les sommets sont quantifiés (entiers) quand un transform est présent : x = v * scale + translate.
 function decodeVertices(json) {
   const { scale, translate } = json.transform ?? {};
