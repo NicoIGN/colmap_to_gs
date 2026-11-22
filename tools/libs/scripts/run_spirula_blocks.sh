@@ -429,9 +429,16 @@ prepare_blocks() {
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
-    printf '[pipeline] Préparation des masques SfM (%s).\n' "$OUTPUT_DIR/feature_masks"
-    "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/masks.py" \
-      ${mask_projection_args[@]+"${mask_projection_args[@]}"}
+    masks_done="$SFM_DIR/.masks_done"
+    if [[ "${PIPELINE_RESUME:-false}" == true && -f "$masks_done" ]]; then
+      printf '[pipeline] Masques SfM déjà préparés (%s) : étape ignorée.\n' "$masks_done"
+    else
+      rm -f -- "$masks_done"
+      printf '[pipeline] Préparation des masques SfM (%s).\n' "$OUTPUT_DIR/feature_masks"
+      "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/masks.py" \
+        ${mask_projection_args[@]+"${mask_projection_args[@]}"}
+      touch -- "$masks_done"
+    fi
     feature_args=(--feature-masks "$OUTPUT_DIR/feature_masks")
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
