@@ -8,13 +8,15 @@ Usage:
     --transform <transforms.json> \
     --points <points3D.bin> \
     --in-ply <input.ply> \
-    --out-ply <output.ply>
+    --out-ply <output.ply> \
+    [--bbox-margin <m>] [--support-sigmas <k>]
 EOF
 }
 
 TRANSFORM_FILE=""
 COLMAP_POINTS=""
 IN_PLY=""
+EXTRA_ARGS=()
 OUT_PLY=""
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../libs/scripts/shell_helpers.sh"
@@ -32,6 +34,12 @@ while [[ $# -gt 0 ]]; do
         --in-ply)    IN_PLY="$2" ;;
         --out-ply|-o) OUT_PLY="$2" ;;
       esac
+      shift 2
+      ;;
+    --bbox-margin|--support-sigmas)
+      [[ $# -ge 2 && -n "$2" && "$2" != --* ]] \
+        || die "Valeur manquante pour $1"
+      EXTRA_ARGS+=("$1" "$2")
       shift 2
       ;;
     -h|--help)
@@ -91,6 +99,7 @@ python "$CLEANER_SCRIPT" \
   --in-ply "$IN_PLY" \
   --points "$COLMAP_POINTS" \
   --out-ply "$OUT_PLY" \
-  --transform "$TRANSFORM_FILE"
+  --transform "$TRANSFORM_FILE" \
+  "${EXTRA_ARGS[@]}"
 
 echo "✅ Terminé"
