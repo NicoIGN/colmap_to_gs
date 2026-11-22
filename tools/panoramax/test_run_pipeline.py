@@ -130,13 +130,6 @@ class PanoramaxPipelineTest(unittest.TestCase):
             root = Path(temporary)
             output = root / "output"
             dataset = output / "panoramax"
-            sparse = dataset / "sfm" / "sparse" / "0"
-            images = dataset / "sfm" / "images"
-            sparse.mkdir(parents=True)
-            images.mkdir()
-            for name in ("cameras.bin", "images.bin", "points3D.bin"):
-                (sparse / name).write_bytes(b"colmap")
-            (images / "img.jpg").write_bytes(b"prepared")
 
             tools = root / "bin"
             tools.mkdir()
@@ -164,12 +157,13 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  json.dump({'download':{}}, open(os.path.join(root,'metadata','photo.json'),'w'))\n"
                 "  json.dump({'image':'images/photo.jpg','status':'downloaded'},"
                 "    open(os.path.join(root,'manifest.jsonl'),'w'))\n"
-                "elif args and args[0].endswith('run_sfm_filtered.py'):\n"
-                "  root=args[args.index('--output')+1]\n"
-                "  json.dump(args[1:],open(os.path.join(root,'gps_filter_args.json'),'w'))\n"
-                "  json.dump({'max_distance_m':float(args[args.index('--max-distance')+1])},"
-                "    open(os.path.join(root,'gps_filter_summary.json'),'w'))\n"
-                "  json.dump({'complete':True},open(os.path.join(root,'gps_filter_run.json'),'w'))\n"
+                "elif args and args[0].endswith('filter_matches_gps.py'):\n"
+                "  import shutil\n"
+                "  shutil.copyfile(args[args.index('--input')+1],args[args.index('--output')+1])\n"
+                "elif args and args[0].endswith('prepare_sfm.py'):\n"
+                "  out=args[args.index('--output-dir')+1]; os.makedirs(os.path.join(out,'images'),exist_ok=True)\n"
+                "  json.dump({'available':1,'selected':1},open(os.path.join(out,'selection.json'),'w'))\n"
+                "  print('images_dir='+os.path.join(out,'images'))\n"
                 "elif args and args[0].endswith('prepare_masks.py'):\n"
                 "  root=args[2]\n"
                 "  json.dump({k:v for k,v in os.environ.items() if k.startswith('SFM_MASKS') or k=='MASKS_ACCEPT_LICENSE'},"
@@ -228,6 +222,14 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 "  root=args[args.index('--output-dir-prefix')+1]; name=args[args.index('--output-dir-name')+1]; n=int(args[args.index('--num-iterations')+1]); chkpt=os.path.join(root,name); os.makedirs(chkpt,exist_ok=True)\n"
                 "  open(os.path.join(chkpt,f'chkpt_step-{n:09d}.ply'),'wb').write(b'ply')\n"
                 "  json.dump({'format':'spirula-scene-transform','version':1,'train_from_world':{'matrix_4x4':[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]]}},open(os.path.join(chkpt,'scene_transform.json'),'w'))\n"
+                "elif args[0]=='sfm':\n"
+                "  stage=args[1]; out=args[args.index('--output')+1]\n"
+                "  with open(os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])),'sfm-args.jsonl'),'a') as f: f.write(json.dumps(args)+'\\n')\n"
+                "  if stage=='extract': os.makedirs(out,exist_ok=True)\n"
+                "  elif stage=='match': open(out,'wb').write(b'matches')\n"
+                "  elif stage=='map':\n"
+                "    sparse=os.path.join(out,'0'); os.makedirs(sparse,exist_ok=True)\n"
+                "    [open(os.path.join(sparse,n),'wb').write(b'colmap') for n in ('cameras.bin','images.bin','points3D.bin')]\n"
             )
             spirula.chmod(0o755)
             config = root / "dataset.sh"
@@ -271,14 +273,22 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(request_metadata["bbox_crs"], "EPSG:4326")
             self.assertFalse((dataset / "gs-3-blocks-2").exists())
             self.assertFalse((output / "test.splat").exists())
-            gps_args = json.loads((dataset / "sfm/gps_filter_args.json").read_text())
-            for flag, value in (("--max-distance", "30"), ("--matcher", "bruteforce"),
-                                ("--threads", "6"), ("--max-image-size", "1600"),
-                                ("--aliked-max-features", "2048"),
-                                ("--max-error", "1.5"), ("--min-inliers", "40"),
-                                ("--min-tri-angle", "4"), ("--ba-loss", "cauchy"),
-                                ("--ba-loss-param", "1")):
-                self.assertEqual(gps_args[gps_args.index(flag) + 1], value)
+            sfm_calls = [json.loads(line) for line in (root / "bin/sfm-args.jsonl").read_text().splitlines()]
+            def last_call(stage):
+                return next(call for call in reversed(sfm_calls) if call[1] == stage)
+            extract_args, match_args, map_args = last_call("extract"), last_call("match"), last_call("map")
+            self.assertTrue((dataset / "sfm/.gps_filter_done").read_text().startswith("|30|"))
+            for args, flag, value in ((extract_args, "--max-image-size", "1600"),
+                                      (extract_args, "--aliked-max-features", "2048"),
+                                      (match_args, "--matcher", "bruteforce"),
+                                      (match_args, "--threads", "6"),
+                                      (match_args, "--max-error", "1.5"),
+                                      (match_args, "--min-inliers", "40"),
+                                      (map_args, "--max-error", "1.5"),
+                                      (map_args, "--min-tri-angle", "4"),
+                                      (map_args, "--ba-loss", "cauchy"),
+                                      (map_args, "--ba-loss-param", "1")):
+                self.assertEqual(args[args.index(flag) + 1], value, flag)
             # The versioned pipeline must forward independent SfM mask settings,
             # even when training masks are disabled.
             with config.open("a") as stream:
@@ -287,6 +297,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
                     'SFM_MASKS_SPIRULA_MODEL=/models/sam3.ggml\n'
                     'SFM_MASKS_LABELS=sky,car,person\nSFM_MASKS_CONFIDENCE=0.6\n'
                     'SFM_MASKS_DILATE=0.003\nTRAIN_MASKS=off\nMASKS_ACCEPT_LICENSE=true\n')
+            # Changing SfM masks on an existing workspace is refused: move the mask-free SfM aside first.
+            (dataset / "sfm").rename(dataset / "sfm-without-masks")
             result = execute("prepare")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             mask_env = json.loads((dataset / "sfm/mask_env.json").read_text())
@@ -295,8 +307,9 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(mask_env["SFM_MASKS_CONFIDENCE"], "0.6")
             self.assertEqual(mask_env["SFM_MASKS_DILATE"], "0.003")
             self.assertEqual(mask_env["MASKS_ACCEPT_LICENSE"], "true")
-            gps_args = json.loads((dataset / "sfm/gps_filter_args.json").read_text())
-            self.assertEqual(gps_args[gps_args.index("--feature-masks") + 1],
+            sfm_calls = [json.loads(line) for line in (root / "bin/sfm-args.jsonl").read_text().splitlines()]
+            extract_args = last_call("extract")
+            self.assertEqual(extract_args[extract_args.index("--feature-masks") + 1],
                              str(dataset / "sfm/feature_masks"))
             result = execute("train-block", "0")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -311,7 +324,8 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             commands = log.read_text().splitlines()
             self.assertEqual(commands.count("download.py"), 2)
-            self.assertEqual(commands.count("colmap_split_blocks.py"), 1)
+            # Once per SfM build: the mask-free workspace is rebuilt after masks are enabled.
+            self.assertEqual(commands.count("colmap_split_blocks.py"), 2)
             self.assertEqual(commands.count("merge_splats.py"), 1)
             self.assertEqual(commands.count("filter_splats.py"), 1)
             self.assertEqual((output / "test.unfiltered.splat").read_bytes(), b"merged-splat")
@@ -322,7 +336,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertTrue((georef / "sparse/images.bin").is_file())
             self.assertTrue((georef / "blocks_manifest.json").is_file())
             self.assertTrue((georef / "splat_filter_summary.json").is_file())
-            self.assertEqual(json.loads((georef / "gps_filter_summary.json").read_text())["max_distance_m"], 30)
+            self.assertTrue((georef / "gps_filter_signature.txt").read_text().startswith("|30|"))
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")

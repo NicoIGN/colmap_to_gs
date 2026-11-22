@@ -30,7 +30,10 @@ option_names=(
   masks feature-masks image-exposure
   reuse-features reuse-matches
   threads device
+  max-distance metadata-dir
 )
+# Options du driver, absentes de `sfm auto` : seul le filtrage GPS les utilise.
+driver_only_options=" max-distance metadata-dir "
 option_values=()
 
 usage() {
@@ -105,6 +108,12 @@ Masques et exposition :
   --masks DIR                Masques d'extraction
   --feature-masks DIR        Masques supplémentaires réservés aux points
   --image-exposure VALUE     auto ou correction en diaphs, par exemple 2 ou -1
+
+Filtrage GPS des paires (remplace sfm auto ; nécessite --prepare) :
+  --max-distance M           Rayon strict en mètres ; ne garde que les paires
+                             dont les positions GPS sont plus proches.
+                             Étapes : extract, match, filter_matches_gps.py, map.
+  --metadata-dir DIR         Métadonnées Panoramax ; défaut : DATASET/metadata
 
 Reprise et exécution :
   --reuse-features MODE      auto [défaut] | keep | redo
@@ -298,6 +307,7 @@ else
     die "Commande introuvable : $spirula_bin"
 fi
 
+source_dataset="$dataset"
 case "$prepare" in
   1|true|yes|on)
     prepare_cmd=(
@@ -347,6 +357,172 @@ for ((i = 0; i < ${#option_names[@]}; i++)); do
   fi
 done
 
+progress_args=()
+case "${VERBOSE:-False}" in
+  1|true|True|yes|on) progress_args=(--verbose) ;;
+esac
+# Sortie Spirula : barre de progression ; détail seulement en verbose.
+run_relayed() {
+  "$@" 2>&1 | "${PYTHON_BIN:-python3}" "$script_dir/../python/spirula_progress.py" ${progress_args[@]+"${progress_args[@]}"}
+}
+
+gps_option() {
+  local name="$1" i
+  for ((i = 0; i < ${#option_names[@]}; i++)); do
+    if [[ "${option_names[$i]}" == "$name" ]]; then
+      printf '%s' "${option_values[$i]}"
+      return
+    fi
+  done
+}
+
+fail_step() {
+  printf 'Erreur : %s (code %s).\n' "$1" "$2" >&2
+  exit "$2"
+}
+
+show_gps_command() {
+  printf '  '
+  printf ' %q' "$@"
+  printf '\n'
+}
+
+max_distance="$(gps_option max-distance)"
+if [[ -n "$max_distance" ]]; then
+  [[ "$max_distance" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v radius="$max_distance" 'BEGIN { exit !(radius > 0) }' ||
+    die "max-distance doit être un nombre positif."
+  [[ -n "${prepared_images:-}" ]] || die "Le filtrage GPS nécessite --prepare (préréglage panoramax)."
+  [[ ${#extra_args[@]} -eq 0 ]] || die "Options Spirula supplémentaires non prises en charge avec le filtrage GPS."
+  metadata_dir="$(gps_option metadata-dir)"
+  metadata_dir="${metadata_dir:-$source_dataset/metadata}"
+
+  images="$output_dir/images"
+  features_dir="$output_dir/features"
+  original="$output_dir/matches.bin"
+  filtered="$output_dir/matches-gps.bin"
+  sparse="$output_dir/sparse"
+  marker="$output_dir/.gps_filter_done"
+
+  gps_pairs="$(gps_option pairs)"
+  if [[ "$gps_pairs" == auto || -z "$gps_pairs" ]]; then
+    selected="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["selected"])' "$output_dir/selection.json")"
+    if [[ "$selected" -ge 100 ]]; then gps_pairs=prefilter; else gps_pairs=exhaustive; fi
+  fi
+  [[ "$gps_pairs" == prefilter || "$gps_pairs" == exhaustive ]] ||
+    die "Filtrage GPS : --pairs doit être prefilter, exhaustive ou auto (reçu : $gps_pairs)."
+
+  gps_threads="$(gps_option threads)"
+  gps_camera_model="$(gps_option camera-model)"
+  gps_camera_model="${gps_camera_model:-opencv}"
+  gps_focal="$(gps_option focal)"
+  gps_features="$(gps_option features)"
+  gps_matcher="$(gps_option matcher)"
+  gps_max_image_size="$(gps_option max-image-size)"
+  gps_aliked_max_features="$(gps_option aliked-max-features)"
+  gps_prefilter_neighbors="$(gps_option prefilter-neighbors)"
+  gps_camera_mode="$(gps_option camera-mode)"
+  gps_max_error="$(gps_option max-error)"
+  gps_min_inliers="$(gps_option min-inliers)"
+  gps_min_tri_angle="$(gps_option min-tri-angle)"
+  gps_ba_loss="$(gps_option ba-loss)"
+  gps_ba_loss_param="$(gps_option ba-loss-param)"
+
+  # Empreinte des masques de features : seules les images PNG comptent, pas les statistiques de masks.json.
+  gps_feature_masks="$(gps_option feature-masks)"
+  mask_digest=""
+  if [[ -n "$gps_feature_masks" ]]; then
+    mask_digest="$(python3 - "$gps_feature_masks" <<'PY'
+import hashlib, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+for path in sorted(root.rglob("*.png")):
+    digest.update(path.relative_to(root).as_posix().encode())
+    digest.update(path.read_bytes())
+print(digest.hexdigest())
+PY
+)" || die "Empreinte des masques impossible : $gps_feature_masks"
+  fi
+  # Chaque paramètre qui change le modèle entre dans la signature : tout écart est refusé.
+  signature="|$max_distance|$gps_pairs|${gps_features:-aliked-n16rot}|${gps_matcher:-lightglue}|${gps_max_image_size:-1600}"
+  signature+="|${gps_aliked_max_features:-2048}|${gps_prefilter_neighbors:-16}|${gps_camera_mode:-folder}"
+  signature+="|$gps_camera_model|${gps_focal:-}|${gps_max_error:-2}|${gps_min_inliers:-30}|${gps_min_tri_angle:-6}"
+  signature+="|${gps_ba_loss:-huber}|${gps_ba_loss_param:-2}|${gps_threads:-}|$mask_digest"
+
+  sparse_complete=false
+  if [[ -s "$sparse/0/cameras.bin" && -s "$sparse/0/images.bin" && -s "$sparse/0/points3D.bin" ]]; then
+    sparse_complete=true
+  fi
+  if [[ "$sparse_complete" == true && -f "$marker" && -f "$output_dir/.sfm_done" &&
+        "$(cat -- "$marker")" == "$signature" ]]; then
+    printf '[SFM GPS] Modèle filtré existant réutilisé : %s\n' "$sparse/0"
+    exit 0
+  fi
+  # Un workspace existant sans signature identique est refusé : ni ancien modèle, ni mélange de partitions.
+  for stale in "$marker" "$output_dir/.sfm_done" "$sparse" "$features_dir" "$original" "$filtered"; do
+    [[ ! -e "$stale" ]] || die "Workspace SfM existant ou partiel, paramètres GPS/masques différents ou non filtré : $output_dir. Déplacer ce workspace en sauvegarde ; garder les images téléchargées."
+  done
+
+  extract_cmd=(
+    "$spirula_bin" sfm extract "$images" --output "$features_dir"
+    --features "${gps_features:-aliked-n16rot}"
+    --max-image-size "${gps_max_image_size:-1600}"
+    --aliked-max-features "${gps_aliked_max_features:-2048}"
+  )
+  [[ -z "$gps_threads" ]] || extract_cmd+=(--decode-threads "$gps_threads")
+  [[ -z "$gps_feature_masks" ]] || extract_cmd+=(--feature-masks "$gps_feature_masks")
+  match_cmd=(
+    "$spirula_bin" sfm match "$features_dir" --output "$original"
+    --pairs "$gps_pairs" --prefilter-neighbors "${gps_prefilter_neighbors:-16}"
+    --matcher "${gps_matcher:-lightglue}" --camera-mode "${gps_camera_mode:-folder}"
+    --camera-model "$gps_camera_model"
+    --max-error "${gps_max_error:-2}" --min-inliers "${gps_min_inliers:-30}"
+  )
+  # Une focale déduite du champ de vue n'a pas de sens pour une équirectangulaire.
+  [[ -z "$gps_focal" || "$gps_camera_model" == equirectangular ]] || match_cmd+=(--focal "$gps_focal")
+  [[ -z "$gps_threads" ]] || match_cmd+=(--threads "$gps_threads")
+  filter_cmd=(
+    "${PYTHON_BIN:-python3}" "$script_dir/../../panoramax/filter_matches_gps.py"
+    --input "$original" --output "$filtered"
+    --metadata-dir "$metadata_dir" --max-distance "$max_distance"
+  )
+  map_cmd=(
+    "$spirula_bin" sfm map "$filtered" "$features_dir"
+    --output "$sparse" --image-dir "$images" --metric-gps full
+    --max-error "${gps_max_error:-2}" --min-tri-angle "${gps_min_tri_angle:-6}"
+    --ba-loss "${gps_ba_loss:-huber}" --ba-loss-param "${gps_ba_loss_param:-2}"
+  )
+  [[ -z "$gps_threads" ]] || map_cmd+=(--threads "$gps_threads")
+
+  printf '[SFM GPS] Commandes :\n'
+  show_gps_command "${extract_cmd[@]}"
+  show_gps_command "${match_cmd[@]}"
+  show_gps_command "${filter_cmd[@]}"
+  show_gps_command "${map_cmd[@]}"
+  if [[ "$dry_run" == true ]]; then
+    printf '[SFM GPS] Aperçu uniquement : aucun calcul ni dossier créé.\n'
+    exit 0
+  fi
+
+  mkdir -p -- "$output_dir"
+  printf '[SFM GPS] Extraction des points.\n'
+  # Les codes de sortie de Spirula sont conservés : le pipeline les interprète (ex. SIGSEGV).
+  run_relayed "${extract_cmd[@]}" || fail_step "Extraction SfM GPS échouée" $?
+  printf '[SFM GPS] Appariement des paires.\n'
+  run_relayed "${match_cmd[@]}" || fail_step "Appariement SfM GPS échoué" $?
+  printf '[SFM GPS] Filtrage des paires par distance GPS (< %s m).\n' "$max_distance"
+  "${filter_cmd[@]}" || fail_step "Filtrage GPS échoué" $?
+  printf '[SFM GPS] Reconstruction.\n'
+  run_relayed "${map_cmd[@]}" || fail_step "Reconstruction SfM GPS échouée" $?
+  if [[ ! -s "$sparse/0/cameras.bin" || ! -s "$sparse/0/images.bin" || ! -s "$sparse/0/points3D.bin" ]]; then
+    die "Modèle COLMAP absent ou incomplet après reconstruction : $sparse/0"
+  fi
+  printf '%s' "$signature" > "$marker"
+  touch -- "$output_dir/.sfm_done"
+  printf '[SFM GPS] Reconstruction filtrée terminée : %s\n' "$sparse/0"
+  exit 0
+fi
+
 # Spirula valide les types numériques, les valeurs autorisées et les
 # compatibilités entre options. Le wrapper ne duplique pas son parseur.
 cmd=(
@@ -355,10 +531,11 @@ cmd=(
 )
 
 for ((i = 0; i < ${#option_names[@]}; i++)); do
-  if [[ -n "${option_values[$i]}" ]]; then
+  if [[ -n "${option_values[$i]}" && "$driver_only_options" != *" ${option_names[$i]} "* ]]; then
     cmd+=("--${option_names[$i]}" "${option_values[$i]}")
   fi
 done
+
 
 case "$sensor_pairs" in
   1|true|yes|on) cmd+=(--sensor-pairs) ;;
@@ -389,7 +566,7 @@ for name in cameras images points3D; do
   [[ ! -e "$output_dir/sparse/0/$name.bin" ]] || existing_sparse=true
 done
 
-if "${cmd[@]}"; then
+if run_relayed "${cmd[@]}"; then
   touch -- "$output_dir/.sfm_done"
   printf '[SFM] Reconstruction terminée : %s\n' "$output_dir"
 else
@@ -406,7 +583,7 @@ else
     "$message" "$status" "$output_dir" >&2
   if [[ "$status" -eq 139 ]]; then
     if [[ "$existing_sparse" == false ]] &&
-       PYTHONPATH="$script_dir/..${PYTHONPATH:+:$PYTHONPATH}" \
+       PYTHONPATH="$script_dir/../../..${PYTHONPATH:+:$PYTHONPATH}" \
        "${PYTHON_BIN:-python3}" - "$output_dir/sparse/0" <<'PY'
 from pathlib import Path
 import sys

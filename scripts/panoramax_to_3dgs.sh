@@ -507,8 +507,8 @@ mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
 cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
-if [[ -f "$SFM_DIR/gps_filter_summary.json" ]]; then
-  cp "$SFM_DIR/gps_filter_summary.json" "$GEOREF_DIR/"
+if [[ -f "$SFM_DIR/.gps_filter_done" ]]; then
+  cp "$SFM_DIR/.gps_filter_done" "$GEOREF_DIR/gps_filter_signature.txt"
 fi
 if [[ -f "$SFM_DIR/projection.json" ]]; then
   cp "$SFM_DIR/projection.json" "$GEOREF_DIR/"

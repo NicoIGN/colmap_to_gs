@@ -92,7 +92,9 @@ def prepare(dataset, workspace, check_only=False, perspective=False):
     if generator_hash in (
             "6f6363b524a637850821662d19792cf2d4397ce644513c327dd3d52aa773c74e",
             "f6eeb39e0d9227aa318d4bc44ac8952432af6bdfca44b733069bd7f6a880b896",
-            "16bc0e17e25fb01933fbd907941c1ea8b01e48084b857a17b0fffe1748d42437"):
+            "16bc0e17e25fb01933fbd907941c1ea8b01e48084b857a17b0fffe1748d42437",
+            # Verbose-only logging (d2f19e3, 121e786): same masks.
+            "145320d66c87b352255eddd7a6d5fd306b659424b6cfb115857d0774cdea8985"):
         if isinstance(previous_settings, dict) and without_device(previous_settings) == without_device(sfm):
             compatible.add(fingerprint("5b46a95fa64db889a1d0c16740a4790c1b3e1a7e26e74d2f3145534ad6045379",
                                        previous_settings))

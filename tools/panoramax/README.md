@@ -464,10 +464,12 @@ au `--sensor-pairs` du mode auto non filtré. `SFM_SP_PAIRS` continue de choisir
 candidats initiaux. L'appariement est effectué avant le filtre : celui-ci ne
 réduit donc pas son coût.
 
-Le workspace `panoramax/sfm/` conserve `matches.bin` original,
-`matches-gps.bin` filtré et `gps_filter_summary.json` (paires conservées,
-retirées et sans GPS). Le résumé est aussi copié dans le dossier final
-`.georef/`. Les formats VKMT v2, v3 et v4 sont reconnus ; un format inconnu
+Le workspace `panoramax/sfm/` conserve `matches.bin` original et
+`matches-gps.bin` filtré. Le marqueur `.gps_filter_done` enregistre la signature
+du filtrage (rayon, appariement, géométrie, empreinte des masques) : un SfM
+identique est réutilisé, tout autre réglage est refusé sur un workspace existant.
+Le marqueur est copié dans le dossier final `.georef/` sous
+`gps_filter_signature.txt`. Les formats VKMT v2, v3 et v4 sont reconnus ; un format inconnu
 ou tronqué provoque une erreur explicite, sans écraser l'original.
 Si aucune paire ne subsiste, la reconstruction ne démarre pas.
 

@@ -442,25 +442,9 @@ prepare_blocks() {
     "$PYTHON_BIN" "$repo_root/tools/images_to_colmap/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
       --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata"
-  elif [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
-    sfm_args=(
-      "$repo_root/tools/panoramax/run_sfm_filtered.py"
-      --dataset "$DIR" --output "$SFM_DIR" --spirula-bin "$SPIRULA_BIN"
-      --max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --pairs "$SFM_SP_PAIRS"
-      --prefilter-neighbors "$SFM_SP_PREFILTER_NEIGHBORS"
-      --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER"
-      --max-image-size "$SFM_MAX_IMAGE_SIZE"
-      --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
-      --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
-      --min-tri-angle "$SFM_MIN_TRI_ANGLE"
-      --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-    )
-    sfm_args+=("${camera_args[@]}" --threads "$NUM_CPUS")
-    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}")
-    "$PYTHON_BIN" "${sfm_args[@]}"
-  elif [[ -f "$SFM_DIR/gps_filter_run.json" ]]; then
+  elif [[ -f "$SFM_DIR/.gps_filter_done" && -z "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
     die "Ce SfM a été filtré par GPS ; conserver SFM_SP_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
-  elif [[ -s "$RAW_SPARSE_DIR/cameras.bin" &&
+  elif [[ -z "$SFM_SP_PAIR_MAX_DISTANCE" && -s "$RAW_SPARSE_DIR/cameras.bin" &&
         -s "$RAW_SPARSE_DIR/images.bin" &&
         -s "$RAW_SPARSE_DIR/points3D.bin" ]]; then
     printf '[pipeline] SfM existant : %s (ignoré).\n' "$RAW_SPARSE_DIR"
@@ -487,6 +471,9 @@ prepare_blocks() {
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
     sfm_args+=(--threads "$NUM_CPUS")
+    if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+      sfm_args+=(--max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --metadata-dir "$DIR/metadata")
+    fi
     [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
     bash "$script_dir/run_spirula_sfm.sh" "${sfm_args[@]}"
   fi

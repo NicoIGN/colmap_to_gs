@@ -21,7 +21,7 @@ def check(workspace, values):
                 "TRAIN_CLEAN ne recalcule pas le SfM."
             )
     elif any((workspace / name).exists() for name in
-             ("sparse", "features", "matches.bin", "gps_filter_run.json")):
+             ("sparse", "features", "matches.bin", ".gps_filter_done")):
         print(
             "[AVERTISSEMENT] SfM existant sans signature géométrique : "
             "les nouveaux seuils ne sont PAS appliqués à ce modèle. "
