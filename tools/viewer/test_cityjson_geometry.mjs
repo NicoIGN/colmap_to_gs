@@ -66,6 +66,15 @@ test("seul le LoD le plus détaillé d'un objet est gardé", () => {
   assert.equal(source.triangleCount, 4);
 });
 
+test("un LoD0 seul est ignoré et compté comme non pris en charge", () => {
+  const text = cityJson({
+    footprint: { type: "Building", geometry: [{ type: "Solid", lod: "0", boundaries: [CUBE_FACES] }] },
+  });
+  const source = readCityJson(text, "ville.json");
+  assert.equal(source.triangleCount, 0);
+  assert.equal(source.unsupportedCount, 1);
+});
+
 test("un polygone concave est triangulé sans perte d'aire", () => {
   const lShape = [[0, 0, 0], [2, 0, 0], [2, 1, 0], [1, 1, 0], [1, 2, 0], [0, 2, 0]];
   const text = JSON.stringify({

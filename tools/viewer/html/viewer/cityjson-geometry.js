@@ -37,11 +37,12 @@ function surfacesOf(geometry) {
   return surfaces;
 }
 
-// Un CityObject peut porter plusieurs LoD : on garde le plus détaillé pour éviter les doublons.
+// Un CityObject peut porter plusieurs LoD : on garde le plus détaillé pour éviter les doublons. Le LoD0 (empreinte) est ignoré.
 function bestGeometry(object) {
   let best = null;
   for (const geometry of object.geometry ?? []) {
     if (!SUPPORTED_TYPES.has(geometry.type)) continue;
+    if (Number(geometry.lod) === 0) continue;
     if (!best || Number(geometry.lod) > Number(best.lod)) best = geometry;
   }
   return best;

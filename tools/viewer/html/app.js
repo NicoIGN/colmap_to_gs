@@ -251,7 +251,8 @@ function refreshUI() {
         element.id === "fileInput" ||
         element.id === "colmapFolderInput" ||
         element.id === "colmapPointSize" ||
-        element.id === "colmapCameraSize"
+        element.id === "colmapCameraSize" ||
+        element.id === "cityOpacity"
       ) {
         return;
       }
