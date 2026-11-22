@@ -422,12 +422,14 @@ prepare_blocks() {
   fi
   if [[ "$COLMAP_METHOD" != hloc && -z "$(find "$IMAGES_DIR" -type f -print -quit 2>/dev/null)" ]]; then
     # Les masques sont validés contre les images : sélection prête avant la préparation des masques.
+    printf '[pipeline] Sélection des images Panoramax vers %s.\n' "$IMAGES_DIR"
     "$PYTHON_BIN" "$repo_root/tools/panoramax/prepare_sfm.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --shell >/dev/null
   fi
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
+    printf '[pipeline] Préparation des masques SfM (%s).\n' "$OUTPUT_DIR/feature_masks"
     "$PYTHON_BIN" "$repo_root/tools/images_to_splat/prepare_masks.py" \
       ${mask_projection_args[@]+"${mask_projection_args[@]}"}
     feature_args=(--feature-masks "$OUTPUT_DIR/feature_masks")
