@@ -342,6 +342,8 @@ règle 1 s'applique :
    `--density-ratio` × points LiDAR, un point LiDAR est ajouté comme splat
    (écart-type `--scale-factor` × distance LiDAR au plus proche, opacité `--opacity`).
    Sa couleur est la moyenne des splats conservés dans `--colour-radius`, sinon gris (128).
+   `--min-splat-distance` écarte les points LiDAR situés à moins de cette distance d'un
+   splat conservé, pour ne garder que les zones isolées.
 
 ```bash
 python tools/lidar/fuse_lidar_splats.py \

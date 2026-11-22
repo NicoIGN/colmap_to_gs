@@ -172,6 +172,9 @@ def run(args, scene):
 
     if args.fill_holes:
         cand, deficit_voxels = fill_candidates(kept_xyz, lidar, args.voxel, args.density_ratio)
+        if args.min_splat_distance > 0 and len(cand):
+            gap = cKDTree(kept_xyz).query(lidar[cand], k=1)[0]
+            cand = cand[gap >= args.min_splat_distance]
     else:
         cand, deficit_voxels = np.zeros(0, dtype=np.int64), 0
     added_xyz = lidar[cand]
@@ -202,6 +205,7 @@ def run(args, scene):
                         density_ratio=args.density_ratio, scale_factor=args.scale_factor,
                         opacity=args.opacity, colour_radius=args.colour_radius,
                         colour_neighbours=args.colour_neighbours,
+                        min_splat_distance=args.min_splat_distance,
                         grey_rgb=GREY_RGB),
         warning="Absence de LiDAR ne prouve pas un artefact ; vérifier couverture et dates.")
     return combined, report
@@ -239,6 +243,9 @@ def main():
     parser.add_argument("--colour-radius", type=float, default=2.0,
                         help="Rayon de propagation de couleur depuis les splats (m)")
     parser.add_argument("--colour-neighbours", type=int, default=4)
+    parser.add_argument("--min-splat-distance", type=float, default=0.0,
+                        help="N'ajoute un point LiDAR que s'il est à au moins cette distance (m) "
+                             "du splat conservé le plus proche ; 0 désactive")
     parser.add_argument("--dry-run", action="store_true", help="Rapport seul, sans écrire de scène")
     args = parser.parse_args()
     scene = None
