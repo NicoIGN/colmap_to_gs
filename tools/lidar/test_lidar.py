@@ -15,7 +15,7 @@ from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh
                     support_radii, transform_records, write_scene)
 from filter_splats_by_lidar import (HeightGrid, MAX_SUPPORT_POINTS, aerial_guard,
                                    distance_mask, ellipsoid_distances, support_mask)
-from merge_splats import BASE_DTYPE, SPLAT_DTYPE
+from merge_splats import BASE_DTYPE, C0, SPLAT_DTYPE
 
 
 class LidarTests(unittest.TestCase):
@@ -426,6 +426,69 @@ class LidarTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(aligned.with_suffix(".splat.json").read_text())
             self.assertLess(report["rmse_after"], 0.001)
+
+    def test_fusion_removes_outside_z_and_fills_sparse_voxels_in_both_formats(self):
+        lidar_xyz = np.array([[.5, .5, 0], [1., .5, 0], [10.5, .5, 0], [10.7, .5, 0]])
+        fuse = str(Path(__file__).with_name("fuse_lidar_splats.py"))
+
+        def write_scene(path, positions, rgb):
+            n = len(positions)
+            if path.suffix == ".splat":
+                raw = np.zeros(n, dtype=SPLAT_DTYPE)
+                raw["position"] = positions
+                raw["scale"] = .01
+                raw["rotation"] = [255, 128, 128, 128]
+                raw["rgba"][:, :3] = rgb
+                raw["rgba"][:, 3] = 230
+                raw.tofile(path)
+            else:
+                raw = np.zeros(n, dtype=BASE_DTYPE)
+                for i, name in enumerate("xyz"):
+                    raw[name] = positions[:, i]
+                raw["f_dc_0"] = raw["f_dc_1"] = raw["f_dc_2"] = 0
+                raw["f_dc_0"], raw["f_dc_1"], raw["f_dc_2"] = [
+                    (c / 255 - .5) / C0 for c in rgb]
+                raw["opacity"] = 2.
+                for i in range(3):
+                    raw[f"scale_{i}"] = np.log(.01)
+                raw["rot_0"] = 1
+                PlyData([PlyElement.describe(raw, "vertex")], byte_order="<").write(str(path))
+
+        def read_scene(path):
+            if path.suffix == ".splat":
+                raw = np.fromfile(path, dtype=SPLAT_DTYPE)
+                return raw["position"], raw["rgba"][:, :3].astype(float)
+            data = PlyData.read(str(path))["vertex"].data
+            xyz = np.column_stack([data["x"], data["y"], data["z"]])
+            dc = np.column_stack([data["f_dc_0"], data["f_dc_1"], data["f_dc_2"]])
+            return xyz, np.clip((dc * C0 + .5) * 255, 0, 255)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cloud = laspy.LasData(laspy.LasHeader(point_format=6, version="1.4"))
+            cloud.x, cloud.y, cloud.z = lidar_xyz.T
+            laz = root / "lidar.laz"
+            cloud.write(laz)
+            for suffix in (".splat", ".ply"):
+                with self.subTest(suffix=suffix):
+                    source, output = root / f"in{suffix}", root / f"out{suffix}"
+                    write_scene(source, np.array([[.5, .5, .2], [.5, .5, 5.]]), (200, 0, 0))
+                    command = [sys.executable, fuse, "--lidar", str(laz), "--input", str(source),
+                               "--output", str(output), "--voxel", "1", "--colour-radius", "2"]
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    report = json.loads(output.with_suffix(suffix + ".json").read_text())
+                    self.assertEqual(report["removed_outside_z"], 1)
+                    self.assertEqual(report["added_splats"], 2)
+                    self.assertEqual(report["added_coloured_from_splats"], 1)
+                    self.assertEqual(report["added_default_grey"], 1)
+                    xyz, rgb = read_scene(output)
+                    self.assertEqual(len(xyz), 3)
+                    self.assertTrue(np.all(xyz[:, 2] < 1))
+                    near = np.argmin(np.abs(xyz[:, 0] - 1.))
+                    far = np.argmin(np.abs(xyz[:, 0] - 10.5))
+                    np.testing.assert_allclose(rgb[near], (200, 0, 0), atol=2)
+                    np.testing.assert_allclose(rgb[far], (128, 128, 128), atol=2)
 
 
 if __name__ == "__main__":

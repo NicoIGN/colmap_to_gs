@@ -326,6 +326,27 @@ des splats résident en RAM. `--lidar-stride N` réduit la mémoire en gardant u
 point sur N (par défaut 1) ; pour le nettoyage, cela augmente les distances
 au plus proche voisin. Préparer une zone LAZ adaptée pour les grandes acquisitions.
 
+### Fusion LiDAR + 3DGS (`fuse_lidar_splats.py`)
+
+Entrée et sortie en `.splat` ou `.ply` (même extension). Deux règles :
+
+1. Un splat dont le Z est sous ou au-dessus de la bande Z LiDAR locale (min/max
+   des `--z-neighbours` points les plus proches en XY dans `--z-radius`), à
+   `--z-margin` près, est retiré. Un splat sans LiDAR voisin est conservé.
+2. Dans chaque voxel `--voxel` où les splats sont moins nombreux que
+   `--density-ratio` × points LiDAR, un point LiDAR est ajouté comme splat
+   (écart-type `--scale-factor` × distance LiDAR au plus proche, opacité `--opacity`).
+   Sa couleur est la moyenne des splats conservés dans `--colour-radius`, sinon gris (128).
+
+```bash
+python tools/lidar/fuse_lidar_splats.py \
+  --lidar terrain.laz --input scene.ply --output scene_fused.ply \
+  --origin 650000,6860000,0 --z-margin 0.5 --voxel 0.5
+```
+
+Le rapport JSON (`scene_fused.ply.json`) compte les retraits, ajouts et couleurs
+propagées ou grises. `--dry-run` écrit uniquement le rapport.
+
 ## Tests
 
 ```bash
