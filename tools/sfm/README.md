@@ -70,6 +70,14 @@ et entraîner ; il réutilise donc une préparation compatible déjà effectuée
 Une sortie COLMAP direct ou Nerfstudio partielle doit être sauvegardée/déplacée ;
 elle n'est pas reprise implicitement.
 
+**Pseudo-trajectoire GPX.** `colmap/colmap_pseudo_gpx.py --model DOSSIER` lit les
+centres caméra d'un modèle COLMAP et le `gauge.txt` (ENU centré sur
+`origin_lat/origin_lon/origin_alt`, par défaut `DOSSIER/gauge.txt`). Il ordonne les
+sommets par plus court chemin ouvert (plus proche voisin depuis plusieurs extrémités,
+puis 2-opt) et écrit `DOSSIER/pseudo_trajectory.gpx`. `--order frame` suit l'indice
+`_fXXXXX` des noms d'images à la place. L'ordre géométrique ne traite pas les passages
+multiples au même endroit : il suppose une trajectoire simple.
+
 ## Orientations et LiDAR
 
 **Convention.** `ORIENTATIONS_JSON` décrit des poses caméra (extrinsèques) OpenCV monde → caméra :
