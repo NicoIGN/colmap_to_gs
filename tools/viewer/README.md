@@ -84,7 +84,7 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   importé comme volumes ombrés (surfaces triangulées, faces extérieures seules ;
   trous ignorés, géométries `GeometryInstance` et multi-points non prises en
   charge). Le CRS vient de `metadata.referenceSystem`, la couleur et l'opacité se
-  règlent dans « Options » (« Volumes CityJSON »). Le LoD0 est ignoré. Limite : 1,5 million de
+  règlent dans « Options » (« Opacité bâtiments 3D »). Le LoD0 est ignoré. Limite : 1,5 million de
   triangles. Les autres `.json` servent toujours au géoréférencement.
 - Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
   en données 3D filaires : chaque table d'entités devient une sous-couche de

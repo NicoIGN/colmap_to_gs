@@ -303,6 +303,14 @@ summary {
   font-size: 12px;
 }
 
+.slider.stacked {
+  flex-wrap: wrap;
+}
+
+.slider.stacked > span {
+  flex-basis: 100%;
+}
+
 .slider input {
   flex: 1;
   min-width: 0;
