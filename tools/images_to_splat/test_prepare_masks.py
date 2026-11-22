@@ -133,6 +133,16 @@ class MaskResumeTests(unittest.TestCase):
         report = json.loads((self.masks / "masks.json").read_text())
         self.assertEqual(report["settings"]["external_dir"], str(external))
 
+    def test_changed_images_refuse_existing_masks(self):
+        prepare_masks.prepare()
+        self.generate.assert_called_once()
+        prepare_masks.prepare()
+        self.generate.assert_called_once()
+        (self.images / "a.jpg").write_bytes(b"new-photo")
+        with self.assertRaisesRegex(ValueError, "Images modifiées"):
+            prepare_masks.prepare()
+        self.generate.assert_called_once()
+
     def test_generation_failure_is_propagated(self):
         self.generate.side_effect = RuntimeError("license")
         with self.assertRaisesRegex(RuntimeError, "license"):

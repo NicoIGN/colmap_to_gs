@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Prepare local-image mask directories using shared segmentation policies."""
 
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -11,6 +12,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/libs/python"
 from mask_policies import generate, policy
 from mask_preparation import read_report, write_json
 from resume import MissingMaskError, validate_masks
+
+
+IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
+
+
+def input_digest(images):
+    # Masks are only valid for the exact photos they were generated from.
+    digest = hashlib.sha256()
+    for path in sorted(images.rglob("*")):
+        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES:
+            digest.update(path.relative_to(images).as_posix().encode())
+            digest.update(hashlib.sha256(path.read_bytes()).digest())
+    return digest.hexdigest()
+
+
+def record_inputs(directory, digest):
+    report = read_report(directory / "masks.json") or {}
+    report["input_digest"] = digest
+    write_json(directory / "masks.json", report)
 
 
 def policies():
@@ -68,6 +88,13 @@ def prepare(policy_only=None):
             return
 
         report_path = directory / "masks.json"
+        digest = input_digest(images)
+        recorded_digest = (read_report(report_path) or {}).get("input_digest")
+        if directory.is_dir() and any(directory.iterdir()) and recorded_digest not in (None, digest):
+            raise ValueError(
+                f"Images modifiées depuis la génération des masques : {directory}. "
+                "Sauvegarder ce dossier ou choisir un nouvel OUTPUT_DIR."
+            )
 
         def verify_report(strict):
             report = read_report(report_path)
@@ -128,6 +155,7 @@ def prepare(policy_only=None):
                     flush=True,
                 )
                 generate(settings, images, directory)
+                record_inputs(directory, digest)
                 validate_masks(images, directory)
                 return
             if not report_path.is_file():
@@ -157,6 +185,7 @@ def prepare(policy_only=None):
                     )
                     return
             generate(settings, images, directory)
+            record_inputs(directory, digest)
 
     if policy_only is not None:
         prefix, directory = {
