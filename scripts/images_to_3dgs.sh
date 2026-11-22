@@ -221,9 +221,6 @@ else
   lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
 fi
 [[ "$phase" != prepare ]] || exit 0
-if [[ -d "$OUTPUT_DIR/masks" ]]; then
-  train_masks="$OUTPUT_DIR/masks"
-fi
 
 if [[ "$phase" == all || "$phase" == train-block ]]; then
   first="${block:-0}"; last="$SPLIT_NUM_BLOCKS"

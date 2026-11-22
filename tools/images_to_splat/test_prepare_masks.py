@@ -19,7 +19,7 @@ class MaskResumeTests(unittest.TestCase):
         self.images.mkdir()
         for name in ("a.jpg", "b.jpg"):
             Image.new("RGB", (2, 2)).save(self.images / name)
-        self.masks = self.output / "masks"
+        self.masks = self.output / "train_masks"
         self.masks.mkdir()
         self.policy = dict(backend="spirula", model="/model", confidence=.5,
                            dilate=0., max_fraction=.8, labels=["sky"])
@@ -142,6 +142,19 @@ class MaskResumeTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Images modifiées"):
             prepare_masks.prepare()
         self.generate.assert_called_once()
+
+    def test_shared_policies_link_feature_masks_to_training_masks(self):
+        prepare_masks.prepare()
+        feature = self.output / "feature_masks"
+        self.assertTrue(feature.is_symlink())
+        self.assertEqual(feature.resolve(), self.masks.resolve())
+        self.assertFalse((self.output / "masks").exists())
+
+    def test_legacy_masks_directory_is_refused(self):
+        (self.output / "masks").mkdir()
+        with self.assertRaisesRegex(ValueError, "Ancien dossier"):
+            prepare_masks.prepare()
+        self.generate.assert_not_called()
 
     def test_generation_failure_is_propagated(self):
         self.generate.side_effect = RuntimeError("license")

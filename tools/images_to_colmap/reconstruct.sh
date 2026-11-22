@@ -9,7 +9,6 @@ camera_mode="${SFM_RECONSTRUCT_CAMERA_MODE:-$SFM_CAMERA_MODE}"
 mask_args=()
 if [[ "$SFM_MASKS" == on ]]; then
   mask_dir="$OUTPUT_DIR/feature_masks"
-  [[ ! -d "$OUTPUT_DIR/masks" ]] || mask_dir="$OUTPUT_DIR/masks"
   mask_dir="${SFM_RECONSTRUCT_MASKS:-$mask_dir}"
   mask_args=(--feature-masks "$mask_dir")
 fi

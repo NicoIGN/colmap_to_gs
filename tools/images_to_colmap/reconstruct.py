@@ -65,10 +65,7 @@ def reconstruct():
             "--SiftExtraction.num_threads", env["NUM_CPUS"], *camera_flags,
         ]
         if env["SFM_MASKS"] == "on":
-            masks = output / "masks"
-            if not masks.is_dir():
-                masks = output / "feature_masks"
-            command += ["--ImageReader.mask_path", masks]
+            command += ["--ImageReader.mask_path", output / "feature_masks"]
         run(command)
         if env["SFM_COLMAP_MATCHING"] == "vocab_tree":
             raise ValueError("Le matching vocab_tree exige un vocabulaire ; utiliser exhaustive ou sequential.")

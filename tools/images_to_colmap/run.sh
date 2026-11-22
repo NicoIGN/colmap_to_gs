@@ -64,10 +64,6 @@ prepare() {
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     begin_stage "masques SfM / entraînement"
     "$PYTHON_BIN" "$script_dir/prepare_masks.py"
-    if [[ -d "$OUTPUT_DIR/masks" ]]; then
-      sfm_masks="$OUTPUT_DIR/masks"
-      train_masks="$OUTPUT_DIR/masks"
-    fi
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
   camera_split="$repo_root/tools/images_to_colmap/camera_split.py"

@@ -198,16 +198,23 @@ def prepare(policy_only=None):
         prepare_policy(selected, output / directory)
         return
 
+    legacy = output / "masks"
+    if legacy.exists():
+        raise ValueError(
+            f"Ancien dossier {legacy} : la disposition est désormais feature_masks/ et train_masks/. "
+            "Le déplacer en sauvegarde ou choisir un nouvel OUTPUT_DIR."
+        )
     if sfm is not None and sfm == train:
-        prepare_policy(sfm, output / "masks")
-        print("[masques] Politiques SfM/train identiques : calcul partagé.", flush=True)
+        train_dir, feature_dir = output / "train_masks", output / "feature_masks"
+        prepare_policy(sfm, train_dir)
+        if feature_dir.exists() and not feature_dir.is_symlink():
+            raise ValueError(f"{feature_dir} est un dossier réel : choisir un nouveau workspace pour partager les masques")
+        if feature_dir.is_symlink():
+            feature_dir.unlink()
+        feature_dir.symlink_to(train_dir, target_is_directory=True)
+        print("[masques] Politiques SfM/train identiques : calcul partagé "
+              f"({feature_dir} -> {train_dir}).", flush=True)
     else:
-        if (os.environ.get("PIPELINE_RESUME") == "true"
-                and (output / "masks").exists()):
-            raise ValueError(
-                "Masques partagés préexistants mais politiques SfM/train non partagées : "
-                "conserver la configuration d'origine ou choisir un nouvel OUTPUT_DIR."
-            )
         for prefix, directory in (("SFM_MASKS", "feature_masks"), ("TRAIN_MASKS", "train_masks")):
             if settings[prefix] is not None:
                 prepare_policy(settings[prefix], output / directory)
