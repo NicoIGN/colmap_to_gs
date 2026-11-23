@@ -62,11 +62,9 @@ def write_harness(root, extra_config=""):
         "    blocks.append({'block_id':i})\n"
         "  json.dump({'blocks':blocks},open(os.path.join(out,'manifest.json'),'w'))\n"
         "elif args and args[0].endswith('export_ply.py'):\n"
-        "  assert args[args.index('--filter-mode')+1]=='off'\n"
+        "  assert args[args.index('--filter-mode')+1]=='apply'\n"
         "  out=args[args.index('--output')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
         "elif args and args[0].endswith('merge_splats.py'):\n"
-        "  if os.environ.get('TEST_PREMERGE_BBOX')=='1':\n"
-        "    assert all(x.endswith('.splat') and '.bbox.' not in x for x in args[1:args.index('--output')]), args\n"
         "  out=args[args.index('--output')+1]; open(out,'wb').write(b'merged-splat')\n"
         "elif args and args[0].endswith('filter_sparse_density.py'):\n"
         "  import pathlib, shutil\n"
@@ -126,7 +124,6 @@ def write_harness(root, extra_config=""):
         'SPLIT_OVERLAP_MAX_FRACTION="0.05"\nTRAIN_CLEAN="false"\n'
         'EXPORT_SPLAT_NAME="test.splat"\nMERGE_STRENGTH="1.0"\n'
         'POSTPROCESS_FILTER_MODE="apply"\nPOSTPROCESS_FILTER_SIZE_FACTOR="12"\n'
-        'POSTPROCESS_SPARSE_BBOX_MODE="diagnostic"\nPOSTPROCESS_SPARSE_BBOX_MARGIN="0.1"\n'
         'TRAIN_SP_SPLATS_PER_IMAGE="200"\nTRAIN_SP_GROWTH_FACTOR="1.03"\n'
         'TRAIN_SP_REFINE_STOP_ITER="2"\nTRAIN_SP_REFINE_STOP_NUM_ITER="1"\nTRAIN_SP_FLOATER_SUPPRESSION="mild"\n'
         + extra_config
@@ -345,20 +342,13 @@ class PanoramaxPipelineTest(unittest.TestCase):
             result = execute("train-block", "2")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("hors de", result.stderr)
-            with config.open("a") as stream:
-                stream.write('POSTPROCESS_SPARSE_BBOX_MODE="apply"\n')
-            os.environ["TEST_PREMERGE_BBOX"] = "1"
-            try:
-                before = len(log.read_text().splitlines())
-                result = execute("merge")
-            finally:
-                os.environ.pop("TEST_PREMERGE_BBOX")
+            before = len(log.read_text().splitlines())
+            result = execute("merge")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(log.read_text().splitlines()[before:], [
                 "merge_splats.py", "splat_metadata.py"])
             for index in range(2):
                 splats = output / f"gs/block_{index:03d}/splats"
-                self.assertFalse((splats / f"block_{index:03d}.bbox.splat").exists())
                 self.assertEqual((splats / f"block_{index:03d}.splat").read_bytes(),
                                  b"splat")
             with config.open("a") as stream:

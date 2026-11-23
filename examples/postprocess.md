@@ -33,29 +33,6 @@ Le filtre BBOX retire les splats dont le support à `--bbox-sigma` sigma sort de
 BBOX des points de `--points` (marge `--dist`, repère d'entraînement).
 Le chemin du checkpoint est le dernier `chkpt_step-*.ply` de `chkpt/`.
 
-```bash
-python "$GIT_ROOT/tools/postprocess/filter_splats.py" \
-  --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/scene.clean.splat" \
-  --mode off \
-  --sparse-points "$DATA_ROOT/sfm/sparse/0/points3D.bin" \
-  --sparse-cameras "$DATA_ROOT/sfm/sparse/0/images.bin" \
-  --sparse-bbox-mode apply --sparse-bbox-scope planar --sparse-bbox-margin 0.02 \
-  --sparse-bbox-quantile 0.02 \
-  --sparse-support-mode apply --sparse-support-distance-factor 3.0 \
-  --sparse-support-isolation-factor 3.0 --sparse-support-min-opacity 0 \
-  --max-removal-fraction 0.20 --overwrite
-```
-
-`points3D.bin` et `images.bin` doivent être dans le même repère que le splat.
-Le recadrage retire les gaussiennes hors de la boîte sparse (`planar` : seulement
-le plan horizontal, la verticale est estimée depuis les caméras) et les
-flottants isolés. Les valeurs sont celles de `config/defaults/postprocess.default.sh`.
-Les sorties sont `scene.clean.splat`, `scene.clean.rejected.splat` (gaussiennes
-retirées) et `scene.clean.filter.json` (rapport). Si la part retirée dépasse
-`--max-removal-fraction`, le filtre est ignoré et l'entrée est conservée : examiner
-le rapport avant d'augmenter cette limite. Pour seulement diagnostiquer, remplacer `--sparse-bbox-mode apply` et
-`--sparse-support-mode apply` par `diagnostic`.
-
 ## Convertir un splat en 3D Tiles
 
 ```bash

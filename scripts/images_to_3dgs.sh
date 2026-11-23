@@ -125,6 +125,7 @@ pipeline_report_phase "$stage"
 trap 'status=$?; echo "[ERREUR] Étape $stage, code $status, ligne $LINENO" >&2; exit "$status"' ERR
 exec > >(tee -a "$OUTPUT_DIR/logs/${phase}-${block:-all}.log") 2>&1
 export PYTHONUNBUFFERED=1
+export POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
 sfm="$OUTPUT_DIR/sfm"
 sfm_masks="$OUTPUT_DIR/feature_masks"
 train_masks="$OUTPUT_DIR/train_masks"
@@ -241,7 +242,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     set_stage "entraînement $id"
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$gs_root/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
-          --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}" --name "$id.splat")
+          --export-filter-mode "${POSTPROCESS_FILTER_MODE:-apply}" --name "$id.splat")
     [[ "$redo" != true ]] || args+=(--clean)
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")

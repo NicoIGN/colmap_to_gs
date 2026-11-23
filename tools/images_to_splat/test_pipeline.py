@@ -165,7 +165,7 @@ elif name == "colmap_split_blocks.py":
         "blocks": list(range(count)),
         "parameters": {"overlap_max_fraction": float(get("--overlap-max-fraction"))}}))
 elif name == "export_ply.py":
-    assert get("--filter-mode") == "off"
+    assert get("--filter-mode") == "apply"
     Path(get("--output")).write_bytes(b"raw-splat")
 elif name == "merge_splats.py":
     paths = args[1:args.index("--output")]

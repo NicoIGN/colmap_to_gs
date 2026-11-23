@@ -629,7 +629,7 @@ for ((index = first_index; index < last_index; index++)); do
     --num-iterations "$TRAIN_NUM_ITER"
     --name "$splat_name"
     --python-bin "$PYTHON_BIN"
-    --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}"
+    --export-filter-mode "${POSTPROCESS_FILTER_MODE:-apply}"
   )
   [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
     block_args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")

@@ -368,25 +368,6 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Les blocs déjà entraînés ne sont pas recalculés ; utiliser
   `TRAIN_CLEAN=true`.
 
-- `POSTPROCESS_SPARSE_BBOX_MODE="apply"` : recadre chaque bloc avant la fusion
-  dans une copie `.bbox.splat`, sans modifier les splats bruts ; défaut `apply`.
-  Valeurs alternatives : `diagnostic` ou `off`.
-- Bbox de recadrage : provient du **modèle COLMAP global**, pas du sous-modèle
-  du bloc, afin de préserver les recouvrements. Seules les copies sont indexées
-  en voxels.
-- En mode `diagnostic` ou `off`, la fusion utilise les blocs bruts. Le recadrage
-  s'applique aussi avant une finition Clean-GS.
-- Le filtre final conserve son diagnostic bbox global ; chaque recadrage garde
-  la sécurité de 20 % de rejets.
-- Bbox du filtre contextuel : les splats dont le **centre** sort de la bbox des
-  points 3D sparse (`sfm/sparse/0/points3D.bin`, même repère que les splats)
-  sont retirés en mode `apply`.
-- La boîte est orientée sur les axes principaux des points, bornée aux
-  quantiles 0,5 %/99,5 %, puis élargie de `POSTPROCESS_SPARSE_BBOX_MARGIN` ×
-  son plus grand côté.
-- `POSTPROCESS_SPARSE_BBOX_MARGIN` : marge sans unité ; défaut `0.05`.
-- Le filtre contextuel n'est ensuite évalué que sur les splats restants ; la
-  limite de 20 % de rejets appliqués reste active.
 
 - Spirula (MCMC) augmente le nombre de splats jusqu'à `cap_max` ; atteindre le
   plafond est donc attendu.
