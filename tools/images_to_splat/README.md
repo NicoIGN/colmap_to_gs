@@ -373,6 +373,12 @@ avec `tools/splat_to_3dtiles/convert.py --georef-summary`, sans appliquer une
 seconde transformation aux coordonnées. Un `.splat` seul n'embarque pas de CRS :
 conserver le fichier de référence avec lui.
 
+Les pipelines `images_to_3dgs` et `panoramax_to_3dgs` écrivent aussi
+`<nom-du-splat>.metadata.json` (GeoJSON, `tools/libs/python/splat_metadata.py`) :
+géoréférencement (`output_reference`, présent seulement si le recalage existe),
+CRS, qualité du recalage, avertissements et origine. Les images ne sont pas listées.
+Le viewer l'applique comme géoréférencement quand il est déposé avec le splat.
+
 GPX activé : fiona et pyproj sont requis par l'outil existant. Les modèles
 COLMAP contenant `rigs.*` ou `frames.*` sont refusés explicitement par celui-ci.
 Une sortie GPX interrompue sans rapport doit être sauvegardée/déplacée avant

@@ -567,7 +567,7 @@ Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
 set_pipeline_stage "export de la référence géographique et nettoyage LiDAR"
-finalize_splat "$FINAL_SPLAT"
+finalize_splat "$FINAL_SPLAT" panoramax_to_3dgs "$GEOREF_DIR/sparse/georef_stats.json"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"
 printf '[pipeline] Géoréférencement et références : %s\n' "$GEOREF_DIR"

@@ -70,7 +70,9 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   Le panneau « Options » (haut droite) permet de passer à un cube map (six faces
   rééchantillonnées depuis l'équirectangulaire) si la sphère déforme trop l'image.
 - Les fichiers `.splat`, `.ply`, `.sog` et `.ksplat` ajoutés par glisser-déposer s'ajoutent à la
-  scène déjà ouverte. Le bouton d'ouverture remplace la scène.
+  scène déjà ouverte. Le bouton d'ouverture remplace la scène. Déposés avec
+  `<nom>.metadata.json` (ou `<nom>.georef.json`), ils sont géoréférencés comme le
+  fichier de référence le décrit ; un fichier de métadonnées sans `output_reference` est ignoré.
 - Un nuage LiDAR `.laz` ou `.las` ajouté par glisser-déposer apparaît comme une
   couche dans la liste des couches. Il est placé via le géoréférencement JSON
   s'il a le même CRS (EPSG) ; sinon il est centré à l'origine et un message le

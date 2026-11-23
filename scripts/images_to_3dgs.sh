@@ -266,5 +266,5 @@ done
 set_stage "fusion des blocs"
 merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
 set_stage "export de la référence géographique et nettoyage LiDAR"
-finalize_splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
+finalize_splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" images_to_3dgs "$OUTPUT_DIR/georef/0/georef_stats.json"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

@@ -4,12 +4,14 @@
 
 # Tail commun : référence géographique puis nettoyage LiDAR du splat final.
 finalize_splat() {
-  local splat="$1"
+  local splat="$1" pipeline="$2" stats="$3"
   [[ -s "$splat" ]] || {
     printf '[ERREUR] Splat final absent ou vide : %s\n' "$splat" >&2
     return 1
   }
   georef_export "$splat"
+  "$PYTHON_BIN" "$repo_root/tools/libs/python/splat_metadata.py" \
+    --splat "$splat" --pipeline "$pipeline" --stats "$stats"
   georef_lidar_env
   lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$splat"
 }

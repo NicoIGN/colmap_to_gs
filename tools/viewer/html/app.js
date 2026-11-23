@@ -911,7 +911,21 @@ async function loadFile(file) {
 // Fichiers qui géoréférencent un splat déposé avec lui.
 function isGeorefSidecarName(name, base) {
   const lower = name.toLowerCase();
-  return lower === `${base}.georef.json` || lower === "gauge.txt" || lower === "georef_stats.json";
+  return (
+    lower === `${base}.georef.json` ||
+    lower === `${base}.metadata.json` ||
+    lower === "gauge.txt" ||
+    lower === "georef_stats.json"
+  );
+}
+
+// Un métadonnées sans output_reference (pas de géoréférencement) ne doit pas provoquer d'erreur.
+async function hasOutputReference(file) {
+  try {
+    return "output_reference" in JSON.parse(await file.text());
+  } catch {
+    return false;
+  }
 }
 
 async function appendScene(source, name) {
@@ -962,7 +976,7 @@ async function handleDroppedFiles(fileList, items) {
         await appendScene(sceneFile, sceneFile.name);
         if (/\.txt$/i.test(georefFile.name)) {
           await sceneTools.importGaugeFile(georefFile);
-        } else {
+        } else if (!/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile))) {
           await sceneTools.importFile(georefFile);
         }
         return;

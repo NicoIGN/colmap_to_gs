@@ -55,7 +55,7 @@ def prepare_partition(output, *, check=False):
     if export.name != str(export):
         raise ValueError("EXPORT_SPLAT_NAME doit être un simple nom de fichier.")
     names = ("blocks", "gs", "gs-nerfstudio", ".prepare_done",
-             export.name, f"{export.stem}.georef.json")
+             export.name, f"{export.stem}.georef.json", f"{export.stem}.metadata.json")
     sources = [output / name for name in names if (output / name).exists()]
     if sources:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
