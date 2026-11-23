@@ -228,7 +228,7 @@ class BlockPipelineTest(unittest.TestCase):
                 "  json.dump({'status': 'complete', 'settings': {'labels': args[args.index('--labels') + 1]}}, open(os.path.join(output, 'masks.json'), 'w'))\n"
                 "elif args and args[0].endswith('export_ply.py'):\n"
                 "  with open(log, 'a') as f: f.write(json.dumps(['export']) + '\\n')\n"
-                "  output = args[args.index('--out-ply') + 1]\n"
+                "  output = args[args.index('--output') + 1]\n"
                 "  os.makedirs(os.path.dirname(output), exist_ok=True)\n"
                 "  open(output, 'wb').write(b'splat')\n"
                 "else:\n"
@@ -667,7 +667,7 @@ class BlockPipelineTest(unittest.TestCase):
                 f"#!{sys.executable}\n"
                 "import json, os, sys\n"
                 "if sys.argv[1].endswith('export_ply.py'):\n"
-                "  args=sys.argv[2:]; out=args[args.index('--out-ply')+1]\n"
+                "  args=sys.argv[2:]; out=args[args.index('--output')+1]\n"
                 "  open(out, 'wb').write(b'splat')\n"
                 "else: os.execvp(os.environ['REAL_PYTHON'], [os.environ['REAL_PYTHON'], *sys.argv[1:]])\n"
             )

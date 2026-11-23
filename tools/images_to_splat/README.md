@@ -11,7 +11,7 @@ avec [Spirula](../spirula/README.md) ou Nerfstudio/Splatfacto :
 Images
   → sélection → [masques] → SfM global [GPS EXIF ou GPX prioritaire]
   → découpage COLMAP → entraînement par blocs
-  → recadrage bbox → fusion → fichier .splat
+  → export par bloc (filtre 3σ, export_ply) → fusion → fichier .splat
 ```
 
 Les [masques](../segmentation_masks/README.md) et le
@@ -402,7 +402,7 @@ Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérent
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
 - `tools/sfm/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.
-- `tools/libs/scripts/pipeline_postprocess.sh` : recadre et fusionne les résultats.
+- `tools/libs/scripts/pipeline_postprocess.sh` : fusionne les splats exportés par bloc.
 - `tools/libs/scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
 - `tools/libs/scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
   et entraîner les blocs.
@@ -434,7 +434,7 @@ sur CPU après le SfM et le recalage GPX éventuel, avant le découpage. Il util
 ces seuils et écrit deux modèles COLMAP binaires : `sparse_clean`
 (points conservés) et `sparse_rejected` (points retirés), chacun avec son
 rapport. Aucun PLY n'est produit ; les originaux restent intacts.
-Les blocs et le recadrage bbox final utilisent tous deux ce sparse filtré.
+Les blocs utilisent tous ce sparse filtré.
 Les étapes sont journalisées en mode verbose, sans barres interactives en batch.
 Un résultat terminé et valide est réutilisé à la reprise.
 
@@ -554,30 +554,15 @@ bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 1 -
 ```
 
 Les entrées de fusion (brut et `.export_done` de chaque bloc) sont vérifiées avant tout
-nettoyage. `--redo merge` supprime le splat final, son `.metadata.json`, son `.georef.json`
-et les `.bbox.splat` recadrés. `--redo train-block` appelle
+nettoyage. `--redo merge` supprime le splat final, son `.metadata.json` et son `.georef.json`.
+`--redo train-block` appelle
 `--clean` sur le ou les blocs (`splats/`, `.train_done`, `.export_done`) et supprime
 en plus les sorties de fusion. Le SfM n'est jamais touché. Sans `--redo`, la fusion
 est toujours recalculée et un export dont la commande a changé est relancé automatiquement.
 
-La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers
-`gs/block_NNN/splats/block_NNN.bbox.splat`, avec les points **globaux**
-`sfm/sparse/0/points3D.bin` : les recouvrements entre blocs sont préservés.
-Seuls les fichiers explicitement retenus sont fusionnés (pas de glob mêlant
-bruts, rejets et copies recadrées).
-Les diagnostics `.filter.json` et `.rejected.splat` sont conservés à côté.
-La bbox planaire (`POSTPROCESS_SPARSE_BBOX_SCOPE=planar`, défaut) ne nettoie que le plan
-horizontal, défini par la normale du plan des centres caméra : l'altitude n'est jamais
-coupée. Elle est resserrée par défaut (quantile 0.02, marge 0.02). Le quantile vaut
-`POSTPROCESS_SPARSE_BBOX_QUANTILE` de chaque axe des points sparse. Un quantile plus petit élargit la bbox et
-évite de couper le haut d'un objet peu couvert par les points sparse.
-Le filtre de support (`POSTPROCESS_SPARSE_SUPPORT_MODE`, défaut `apply`) retire les
-floaters isolés : un splat est retiré si son centre est à plus de
-`POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR` espacements sparse locaux de tout point sparse
-ET si son 8e voisin de splats est aussi à plus de cette distance. Les zones denses en splats
-sont donc conservées même si le sparse y est pauvre. `POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY`
-(défaut `0`) ignore les splats moins opaques. Utiliser `diagnostic` pour examiner `.filter.json` sans retirer.
-La sécurité de rejet de 20 % s'applique par bloc : au-delà, le filtre est ignoré et
-l'entrée est conservée (avertissement, diagnostic écrit). Examiner le diagnostic avant
-de modifier `POSTPROCESS_MAX_REMOVAL_FRACTION`. Le filtre contextuel est désactivé.
+La fusion seule exige tous les blocs terminés. Elle fusionne les splats exportés par bloc
+(`gs/block_NNN/splats/block_NNN.splat`) sans recadrage supplémentaire. Le nettoyage est fait
+à l'export par `tools/postprocess/export_ply.py` : il retire les splats dont le support 3σ
+dépasse de la bbox des points 3D COLMAP (`POSTPROCESS_FILTER_MODE`, `apply` ou `diagnostic`).
+Les diagnostics sont conservés à côté du splat par bloc.
 La fusion écrit `OUTPUT_DIR/EXPORT_SPLAT_NAME`, sans réentraîner.

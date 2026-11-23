@@ -51,7 +51,7 @@ class ImagesPipelineTest(unittest.TestCase):
         runs = report["runs"]
         self.assertTrue(all(run["status"] == "completed" for run in runs))
         images = next(run for run in runs if run["pipeline"].startswith("images_to_3dgs:"))
-        self.assertTrue(any(p["name"] == "fusion des blocs" for p in images["phases"]))
+        self.assertTrue(any(p["name"] == "fusion des splats des blocs" for p in images["phases"]))
         self.assertTrue(all(p["duration_seconds"] >= 0 for p in images["phases"]))
 
     def setUp(self):
@@ -91,7 +91,7 @@ import shutil, sys
 args = sys.argv[1:]
 name = Path(args[0]).name if args else ""
 known = {"generate_masks.py", "colmap_split_blocks.py", "georef_colmap_from_gpx.py", "export_ply.py",
-         "filter_splats.py", "merge_splats.py", "filter_sparse_density.py"}
+         "merge_splats.py", "filter_sparse_density.py"}
 def get(flag): return args[args.index(flag) + 1]
 if name not in known:
     os.execv(sys.executable, [sys.executable, *args])
@@ -167,27 +167,11 @@ elif name == "colmap_split_blocks.py":
 elif name == "export_ply.py":
     assert get("--filter-mode") == "off"
     Path(get("--output")).write_bytes(b"raw-splat")
-elif name == "filter_splats.py":
-    assert get("--mode") == "off"
-    expected = "/georef/0/points3D.bin" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0/points3D.bin"
-    if os.environ.get("SFM_FILTER_DENSITY") == "true":
-        expected = "/sparse_clean/points3D.bin"
-    assert get("--sparse-points").endswith(expected)
-    assert Path(get("--input")).read_bytes() == b"raw-splat"
-    output = Path(get("--output"))
-    output.write_bytes(b"cropped" if get("--sparse-bbox-mode") == "apply" else b"raw-splat")
-    output.with_suffix(".filter.json").write_text("{}")
-    output.with_suffix(".rejected.splat").write_bytes(b"rejected")
 elif name == "merge_splats.py":
     paths = args[1:args.index("--output")]
     assert len(paths) == int(os.environ.get("SPLIT_NUM_BLOCKS", "4")), paths
-    mode = os.environ["POSTPROCESS_SPARSE_BBOX_MODE"]
-    if mode != "off":
-        assert all(p.endswith(".bbox.splat") for p in paths), paths
-    else:
-        assert all(".bbox." not in p for p in paths), paths
-    expected = b"cropped" if mode == "apply" else b"raw-splat"
-    assert all(Path(p).read_bytes() == expected for p in paths), paths
+    assert all(p.endswith(".splat") and ".bbox." not in p for p in paths), paths
+    assert all(Path(p).read_bytes() == b"raw-splat" for p in paths), paths
     Path(get("--output")).write_bytes(b"merged")
 ''')
         self.tool("spirula", f"#!{sys.executable}\n" + r'''
@@ -399,15 +383,13 @@ if "--wait" in args:
         commands = self.commands()
         self.assertEqual(sum(cmd[:2] == ["spirula", "sfm"] for cmd in commands), 1)
         self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 4)
-        self.assertEqual([cmd[0] for cmd in commands][-5:],
-                         ["filter_splats.py"] * 4 + ["merge_splats.py"])
+        self.assertEqual([cmd[0] for cmd in commands][-1:], ["merge_splats.py"])
         self.assert_ok(self.run_pipeline())
         commands = self.commands()
         self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 4)
         before = len(commands)
         self.assert_ok(self.run_pipeline("--phase", "merge"))
-        self.assertEqual([cmd[0] for cmd in self.commands()[before:]],
-                         ["filter_splats.py"] * 4 + ["merge_splats.py"])
+        self.assertEqual([cmd[0] for cmd in self.commands()[before:]], ["merge_splats.py"])
         self.assertEqual((self.output / "gs/block_000/splats/block_000.splat").read_bytes(),
                          b"raw-splat")
 
@@ -417,8 +399,7 @@ if "--wait" in args:
         self.assert_ok(self.run_pipeline("--phase", "merge", "--redo"))
         commands = self.commands()[before:]
         self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 0)
-        self.assertEqual([cmd[0] for cmd in commands],
-                         ["filter_splats.py"] * 4 + ["merge_splats.py"])
+        self.assertEqual([cmd[0] for cmd in commands], ["merge_splats.py"])
         self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
 
     def test_redo_train_block_cleans_block_and_downstream_outputs(self):
@@ -532,7 +513,7 @@ if "--wait" in args:
         self.assertEqual(sum(cmd[0] == "filter_sparse_density.py" and "--input" in cmd
                              for cmd in self.commands()), 1)
         self.assertEqual((self.output / "sfm/sparse/0/points3D.bin").read_bytes(), raw)
-        # A separate Slurm workspace exercises GPX -> filter -> split -> bbox.
+        # A separate Slurm workspace exercises GPX -> split -> export -> merge.
         self.output = self.root / "filtered-gpx"
         gpx = self.root / "track.gpx"
         gpx.write_text("<gpx/>")
@@ -1169,21 +1150,6 @@ if "--wait" in args:
         self.assertIn("Splat brut absent", result.stdout + result.stderr)
         self.assertFalse(any(cmd[0] == "merge_splats.py" for cmd in self.commands()))
 
-    def test_bbox_diagnostic_and_off_preserve_raw_records(self):
-        for mode in ("diagnostic", "off"):
-            with self.subTest(mode=mode):
-                output = self.root / f"bbox-{mode}"
-                self.append(f'POSTPROCESS_SPARSE_BBOX_MODE="{mode}"\nOUTPUT_DIR="{output}"')
-                if mode == "off":
-                    self.append('POSTPROCESS_SPARSE_SUPPORT_MODE="off"')
-                self.assert_ok(self.run_pipeline())
-                self.assertTrue((output / "scene.splat").is_file())
-                cropped = output / "gs/block_000/splats/block_000.bbox.splat"
-                if mode == "diagnostic":
-                    self.assertEqual(cropped.read_bytes(), b"raw-splat")
-                else:
-                    self.assertFalse(cropped.exists())
-
     def test_validation_and_no_images(self):
         self.append("TRAIN_SP_CAP_MAX=0")
         result = self.run_pipeline(slurm=True)
@@ -1202,12 +1168,10 @@ if "--wait" in args:
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Aucune image", result.stdout + result.stderr)
 
-    def test_failing_crop_stops_before_merge(self):
-        self.env["TEST_FAIL_TOOL"] = "filter_splats.py"
+    def test_failing_merge_leaves_no_final_splat(self):
+        self.env["TEST_FAIL_TOOL"] = "merge_splats.py"
         result = self.run_pipeline()
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("recadrage COLMAP", result.stdout + result.stderr)
-        self.assertFalse(any(cmd[0] == "merge_splats.py" for cmd in self.commands()))
         self.assertFalse((self.output / "scene.splat").exists())
 
     def configure_video_launcher(self):
@@ -1256,7 +1220,7 @@ if name not in known:'''))
         self.assertEqual(len(json.loads(self.jobs.read_text())), 1)
         self.assertEqual([command[0] for command in self.commands()], ["extract_sharp_frames.py"])
 
-    def test_slurm_runs_same_config_and_array_then_crops(self):
+    def test_slurm_runs_same_config_and_array_then_merges(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))
         prepare, train, merge = json.loads(self.jobs.read_text())
         self.assertIn("--gres=gpu:1", prepare)
@@ -1268,8 +1232,7 @@ if name not in known:'''))
             self.assertEqual(job[-3], str(self.config))
             self.assertEqual(job[-1], str(self.images))
         self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
-        self.assertEqual([cmd[0] for cmd in self.commands()][-5:],
-                         ["filter_splats.py"] * 4 + ["merge_splats.py"])
+        self.assertEqual([cmd[0] for cmd in self.commands()][-1:], ["merge_splats.py"])
 
     def test_slurm_prepare_only_stops_after_sfm_and_split(self):
         self.assert_ok(self.run_pipeline("--prepare-only", "--wait", slurm=True))

@@ -66,28 +66,8 @@ def write_harness(root, extra_config=""):
         "  out=args[args.index('--output')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
         "elif args and args[0].endswith('merge_splats.py'):\n"
         "  if os.environ.get('TEST_PREMERGE_BBOX')=='1':\n"
-        "    assert all(x.endswith('.bbox.splat') for x in args[1:args.index('--output')]), args\n"
+        "    assert all(x.endswith('.splat') and '.bbox.' not in x for x in args[1:args.index('--output')]), args\n"
         "  out=args[args.index('--output')+1]; open(out,'wb').write(b'merged-splat')\n"
-        "elif args and args[0].endswith('filter_splats.py'):\n"
-        "  import pathlib, shutil\n"
-        "  premerge=args[args.index('--output')+1].endswith('.bbox.splat')\n"
-        "  assert args[args.index('--mode')+1]==('off' if premerge else 'apply')\n"
-        "  if not premerge: assert args[args.index('--size-factor')+1]=='12'\n"
-        "  assert args[args.index('--sparse-points')+1].endswith('sfm/sparse/0/points3D.bin')\n"
-        "  assert args[args.index('--sparse-bbox-mode')+1]==('apply' if premerge or os.environ.get('TEST_PREMERGE_BBOX')=='1' else 'diagnostic')\n"
-        "  assert args[args.index('--sparse-bbox-margin')+1]=='0.1'\n"
-        "  out=pathlib.Path(args[args.index('--output')+1])\n"
-        "  shutil.copyfile(args[args.index('--input')+1],out)\n"
-        "  out.with_suffix('.rejected.splat').write_bytes(b'')\n"
-        "  out.with_suffix('.filter.json').write_text('{}')\n"
-        "elif args and args[0].endswith('clean_sky.py'):\n"
-        "  import pathlib, shutil\n"
-        "  assert args[args.index('--scene')+1].endswith('sfm')\n"
-        "  assert args[args.index('--model')+1]=='/local/model'\n"
-        "  assert args[args.index('--mode')+1]=='diagnostic'\n"
-        "  out=pathlib.Path(args[args.index('--output')+1])\n"
-        "  shutil.copyfile(args[args.index('--input')+1],out)\n"
-        "  out.with_suffix('.filter.json').write_text('{\"algorithm\":\"cleangs\"}')\n"
         "elif args and args[0].endswith('filter_sparse_density.py'):\n"
         "  import pathlib, shutil\n"
         "  if '--version' in args: print(1)\n"
@@ -346,27 +326,19 @@ class PanoramaxPipelineTest(unittest.TestCase):
             # Once per SfM build: the mask-free workspace is rebuilt after masks are enabled.
             self.assertEqual(commands.count("colmap_split_blocks.py"), 2)
             self.assertEqual(commands.count("merge_splats.py"), 1)
-            self.assertEqual(commands.count("filter_splats.py"), 1)
-            self.assertEqual((output / "test.unfiltered.splat").read_bytes(), b"merged-splat")
+            self.assertEqual(commands.count("filter_splats.py"), 0)
+            self.assertFalse((output / "test.unfiltered.splat").exists())
             self.assertEqual((output / "test.splat").read_bytes(), b"merged-splat")
             georef = output / "test.georef"
             self.assertTrue((georef / "georeference.json").is_file())
             self.assertTrue((georef / "metadata/photo.json").is_file())
             self.assertTrue((georef / "sparse/images.bin").is_file())
             self.assertTrue((georef / "blocks_manifest.json").is_file())
-            self.assertTrue((georef / "splat_filter_summary.json").is_file())
             self.assertTrue((georef / "gps_filter_signature.txt").read_text().startswith("|30|"))
             self.assertTrue((georef / "scene_transforms/block_001.json").is_file())
             metadata = json.loads((georef / "georeference.json").read_text())
             self.assertEqual(metadata["coordinate_frame"], "Spirula SfM metric frame aligned from Panoramax EXIF GPS")
             self.assertEqual(metadata["source_bbox_crs"], "EPSG:4326")
-            with config.open("a") as stream:
-                stream.write('POSTPROCESS_CLEANER="cleangs"\nCLEANGS_MODEL="/local/model"\n')
-            result = execute("merge")
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertEqual(json.loads((georef / "splat_filter_summary.json").read_text())["algorithm"], "cleangs")
-            with config.open("a") as stream:
-                stream.write('POSTPROCESS_CLEANER="contextual"\n')
             result = execute()
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertFalse((georef / "sparse/0").exists())
@@ -383,11 +355,10 @@ class PanoramaxPipelineTest(unittest.TestCase):
                 os.environ.pop("TEST_PREMERGE_BBOX")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(log.read_text().splitlines()[before:], [
-                "filter_splats.py", "filter_splats.py",
-                "merge_splats.py", "filter_splats.py", "splat_metadata.py"])
+                "merge_splats.py", "splat_metadata.py"])
             for index in range(2):
                 splats = output / f"gs/block_{index:03d}/splats"
-                self.assertTrue((splats / f"block_{index:03d}.bbox.splat").is_file())
+                self.assertFalse((splats / f"block_{index:03d}.bbox.splat").exists())
                 self.assertEqual((splats / f"block_{index:03d}.splat").read_bytes(),
                                  b"splat")
             with config.open("a") as stream:

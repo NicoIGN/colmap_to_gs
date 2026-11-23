@@ -142,7 +142,7 @@ georef_input() {
     echo "$sfm_model"
   fi
 }
-# Renseigne sparse (entrée du découpage et du recadrage) et lidar_input (entrée du recalage LiDAR).
+# Renseigne sparse (entrée du découpage) et lidar_input (entrée du recalage LiDAR).
 select_sparse() {
   sparse="$(georef_input)"
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
@@ -251,32 +251,6 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
 fi
 [[ "$phase" != train-block ]] || exit 0
 
-inputs=()
-for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
-  printf -v id 'block_%03d' "$index"
-  raw="$gs_root/$id/splats/$id.splat"
-  [[ -s "$raw" ]] || die "Splat brut absent : $raw"
-  [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
-  set_stage "recadrage COLMAP $id avant fusion"
-  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off || "$POSTPROCESS_SPARSE_SUPPORT_MODE" != off ]]; then
-    cropped="$gs_root/$id/splats/$id.bbox.splat"
-    crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
-      "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
-      --sparse-bbox-quantile "$POSTPROCESS_SPARSE_BBOX_QUANTILE" \
-      --sparse-bbox-scope "$POSTPROCESS_SPARSE_BBOX_SCOPE" \
-      --sparse-cameras "$sparse/images.bin" \
-      --sparse-support-mode "$POSTPROCESS_SPARSE_SUPPORT_MODE" \
-      --sparse-support-distance-factor "$POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR" \
-      --sparse-support-isolation-factor "$POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR" \
-      --sparse-support-min-opacity "$POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY" \
-      --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
-    inputs+=("$cropped")
-  else
-    inputs+=("$raw")
-  fi
-done
-set_stage "fusion des blocs"
-merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
-set_stage "export de la référence géographique et nettoyage LiDAR"
-finalize_splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" images_to_3dgs "$OUTPUT_DIR/georef/0/georef_stats.json"
+finish_block_splats "$gs_root" "$SPLIT_NUM_BLOCKS" "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" \
+  images_to_3dgs "$OUTPUT_DIR/georef/0/georef_stats.json"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

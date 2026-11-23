@@ -16,18 +16,23 @@ finalize_splat() {
   lidar_pipeline_hook clean --workspace "$OUTPUT_DIR" --splat "$splat"
 }
 
-crop_splat_to_sparse() {
-  local input="$1" output="$2" sparse="$3" mode="$4" margin="$5"
-  shift 5
-  "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
-    --input "$input" --output "$output" --mode off \
-    --sparse-points "$sparse/points3D.bin" \
-    --sparse-bbox-mode "$mode" --sparse-bbox-margin "$margin" \
-    "$@" --overwrite
-  [[ -s "$output" ]] || {
-    printf '[ERREUR] Splat recadré absent ou vide : %s\n' "$output" >&2
-    return 1
-  }
+# Tail commun images, vidéo et Panoramax : les blocs sont déjà filtrés par export_ply
+# (support 3σ et filtre contextuel), puis fusionnés et reçoivent la référence géographique.
+# Args: gs_root block_count final_splat pipeline stats_path
+finish_block_splats() {
+  local gs_root="$1" count="$2" final="$3" pipeline="$4" stats="$5"
+  local index id
+  local inputs=()
+  redo_check_blocks "$gs_root" "$count"
+  for ((index=0; index<count; index++)); do
+    printf -v id 'block_%03d' "$index"
+    inputs+=("$gs_root/$id/splats/$id.splat")
+  done
+  pipeline_report_phase "fusion des splats des blocs"
+  merge_pipeline_splats "$final" "$MERGE_STRENGTH" "${inputs[@]}"
+  pipeline_report_phase "référence géographique et nettoyage LiDAR"
+  finalize_splat "$final" "$pipeline" "$stats"
+  touch -- "$OUTPUT_DIR/.merge_done"
 }
 
 merge_pipeline_splats() {
