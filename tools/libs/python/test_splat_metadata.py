@@ -36,6 +36,17 @@ class SplatMetadataTest(unittest.TestCase):
         self.assertFalse(metadata["georeferenced"])
         self.assertIsNone(metadata["features"][0]["geometry"])
 
+    def test_spirula_gauge_provides_reference_when_no_georef_stats(self):
+        gauge = Path(self.tmp.name) / "gauge.txt"
+        gauge.write_text("# repère\noriented 1\nmetric 1\norigin_lat 48.5\norigin_lon -0.25\norigin_alt 12\n",
+                         encoding="utf-8")
+        stats = splat_metadata.load_reference(Path(self.tmp.name) / "georef_stats.json", 2154)
+        metadata = splat_metadata.build_metadata(self.splat, "panoramax_to_3dgs", stats)
+        self.assertTrue(metadata["georeferenced"])
+        self.assertEqual(metadata["output_reference"]["origin_lat_lon_height"], [48.5, -0.25, 12.0])
+        self.assertEqual(metadata["crs"], "EPSG:2154")
+        self.assertEqual(metadata["features"][0]["geometry"]["coordinates"], [-0.25, 48.5, 12.0])
+
     def test_main_writes_next_to_splat(self):
         output = self.splat.with_name("scene.metadata.json")
         import sys

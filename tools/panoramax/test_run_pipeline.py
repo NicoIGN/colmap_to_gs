@@ -63,7 +63,7 @@ def write_harness(root, extra_config=""):
         "  json.dump({'blocks':blocks},open(os.path.join(out,'manifest.json'),'w'))\n"
         "elif args and args[0].endswith('export_ply.py'):\n"
         "  assert args[args.index('--filter-mode')+1]=='off'\n"
-        "  out=args[args.index('--out-ply')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
+        "  out=args[args.index('--output')+1]; os.makedirs(os.path.dirname(out),exist_ok=True); open(out,'wb').write(b'splat')\n"
         "elif args and args[0].endswith('merge_splats.py'):\n"
         "  if os.environ.get('TEST_PREMERGE_BBOX')=='1':\n"
         "    assert all(x.endswith('.bbox.splat') for x in args[1:args.index('--output')]), args\n"
@@ -335,7 +335,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertFalse((output / "gs/block_001").exists())
             result = execute("merge")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("Splat du bloc absent", result.stderr)
+            self.assertIn("Splat brut absent", result.stderr)
             self.assertFalse((output / "test.splat").exists())
             result = execute("train-block", "1")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -384,7 +384,7 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(log.read_text().splitlines()[before:], [
                 "filter_splats.py", "filter_splats.py",
-                "merge_splats.py", "filter_splats.py"])
+                "merge_splats.py", "filter_splats.py", "splat_metadata.py"])
             for index in range(2):
                 splats = output / f"gs/block_{index:03d}/splats"
                 self.assertTrue((splats / f"block_{index:03d}.bbox.splat").is_file())
@@ -415,6 +415,24 @@ class PanoramaxPipelineTest(unittest.TestCase):
             self.assertLess(commands.index("filter_sparse_density.py"),
                             commands.index("colmap_split_blocks.py"))
             self.assertTrue((dataset.parent / "sfm/sparse_clean/density_report.json").is_file())
+
+    def test_redo_merge_checks_block_exports_before_cleaning_outputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            output, _dataset, _config, _log, execute = write_harness(root)
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "test.splat").write_bytes(b"stale")
+            result = execute("merge", "--redo")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Splat brut absent", result.stderr)
+            self.assertEqual((output / "test.splat").read_bytes(), b"stale")
+
+    def test_redo_rejects_phases_other_than_merge_and_train_block(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            _output, _dataset, _config, _log, execute = write_harness(Path(temporary))
+            result = execute("prepare", "--redo")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("--redo nécessite", result.stderr)
 
 
 if __name__ == "__main__":

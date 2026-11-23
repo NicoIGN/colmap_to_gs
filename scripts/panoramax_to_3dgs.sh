@@ -4,11 +4,12 @@ set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/panoramax"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/redo.sh"
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
+  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge] [--redo]
 
 The config is a trusted Bash file. It overrides config/defaults/*.default.sh and
 tools/panoramax/config.default.sh, which are always loaded first; only set the variables you want to change.
@@ -43,19 +44,27 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
-[[ $# -ge 1 && $# -le 3 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
-config_path="$1"
-phase="${2:-all}"
+redo=false
+args=()
+while (($#)); do
+  if [[ "$1" == --redo ]]; then redo=true; else args+=("$1"); fi
+  shift
+done
+argc="${#args[@]}"
+[[ $argc -ge 1 && $argc -le 3 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
+config_path="${args[0]}"
+phase="${args[1]:-all}"
 phase_args=()
 case "$phase" in
   all|prepare|merge)
-    [[ $# -le 2 ]] || die "Trop d'arguments pour $phase." ;;
+    [[ $argc -le 2 ]] || die "Trop d'arguments pour $phase." ;;
   train-block)
-    [[ $# -eq 3 && "$3" =~ ^(0|[1-9][0-9]*)$ ]] ||
+    [[ $argc -eq 3 && "${args[2]}" =~ ^(0|[1-9][0-9]*)$ ]] ||
       die "train-block attend un indice de bloc entier positif ou nul."
-    phase_args=(--block "$3") ;;
+    phase_args=(--block "${args[2]}") ;;
   *) die "Étape inconnue : $phase" ;;
 esac
+[[ "$redo" != true ]] || redo_check_phase "$phase"
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
 source "$repo_root/tools/libs/scripts/pipeline_config.sh"
 load_pipeline_defaults "$repo_root" panoramax
@@ -351,12 +360,22 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare_images
 fi
 
+if [[ "$phase" == merge ]]; then
+  redo_check_blocks "$GS_ROOT" "$SPLIT_NUM_BLOCKS"
+fi
+if [[ "$redo" == true ]]; then
+  set_pipeline_stage "nettoyage des sorties de fusion à refaire ($phase)"
+  redo_clean_merge_outputs "$OUTPUT_DIR" "$GS_ROOT" "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS"
+fi
+
+train_clean="$TRAIN_CLEAN"
+[[ "$redo" != true ]] || train_clean=true
 if [[ "$phase" != merge ]]; then
   if [[ "$phase" == prepare ]]; then
     phase_args=(--prepare-only)
     set_pipeline_stage "reconstruction SfM et découpage COLMAP"
   elif [[ "$phase" == train-block ]]; then
-    set_pipeline_stage "entraînement du bloc $3"
+    set_pipeline_stage "entraînement du bloc ${args[2]}"
   else
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
@@ -416,7 +435,7 @@ if [[ "$phase" != merge ]]; then
   SFM_SP_BA_LOSS_PARAM="$SFM_SP_BA_LOSS_PARAM" \
   SFM_SP_PAIR_MAX_DISTANCE="$SFM_SP_PAIR_MAX_DISTANCE" \
   SPLIT_OVERLAP_MAX_FRACTION="$SPLIT_OVERLAP_MAX_FRACTION" \
-  TRAIN_CLEAN="$TRAIN_CLEAN" \
+  TRAIN_CLEAN="$train_clean" \
   SPIRULA_DEVICE="$SPIRULA_DEVICE" \
   SFM_MASKS="${SFM_MASKS:-off}" \
   SFM_MASKS_BACKEND="${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" \
@@ -451,6 +470,7 @@ LIDAR_SPARSE="$SFM_DIR/sparse/0"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
 lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$IMAGES_DIR"
 
+redo_check_blocks "$GS_ROOT" "$SPLIT_NUM_BLOCKS"
 set_pipeline_stage "vérification des splats avant fusion"
 rm -f -- "$OUTPUT_DIR/.merge_done"
 MERGE_INPUTS=()

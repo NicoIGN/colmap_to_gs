@@ -4,13 +4,16 @@ repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$repo_root/tools/libs/scripts/shell_helpers.sh"
 
 usage() {
-  echo "Usage : bash scripts/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
-videos=(); num_frames=""; width=0; height=0; frames_dir=""; pipeline_args=()
+videos=(); num_frames=""; width=0; height=0; frames_dir=""; redo=false; pipeline_args=()
 while (($#)); do
+  if [[ "$1" == --redo ]]; then
+    redo=true; shift; continue
+  fi
   [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 1; }
   case "$1" in
     --video) videos+=("$2") ;;
@@ -23,6 +26,7 @@ while (($#)); do
   esac
   shift 2
 done
+[[ "$redo" != true ]] || pipeline_args+=(--redo)
 
 [[ -f "$config" ]] || die "Configuration introuvable : $config"
 ((${#videos[@]} > 0)) || die "Indiquer au moins une vidéo avec --video."

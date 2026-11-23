@@ -3,6 +3,7 @@ set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/redo.sh"
 source "$repo_root/tools/libs/scripts/georef_phase.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
@@ -38,8 +39,7 @@ elif [[ -n "$block" ]]; then
   die "--block nécessite --phase train-block."
 fi
 if [[ "$redo" == true ]]; then
-  [[ "$phase" == train-block || "$phase" == merge ]] ||
-    die "--redo nécessite --phase train-block ou merge."
+  redo_check_phase "$phase"
 fi
 command -v "$PYTHON_BIN" >/dev/null || die "Python introuvable : $PYTHON_BIN"
 lidar_pipeline_hook preflight
@@ -227,25 +227,10 @@ else
 fi
 [[ "$phase" != prepare ]] || exit 0
 
-clean_merge_outputs() {
-  local stem="${EXPORT_SPLAT_NAME%.splat}" index id
-  rm -f -- "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$OUTPUT_DIR/$stem.metadata.json" "$OUTPUT_DIR/$stem.georef.json"
-  for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
-    printf -v id 'block_%03d' "$index"
-    rm -f -- "$gs_root/$id/splats/$id.bbox.splat"
-  done
-}
-
 if [[ "$redo" == true ]]; then
-  if [[ "$phase" == merge ]]; then
-    for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
-      printf -v id 'block_%03d' "$index"
-      [[ -s "$gs_root/$id/splats/$id.splat" ]] || die "Splat brut absent : $gs_root/$id/splats/$id.splat"
-      [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
-    done
-  fi
+  [[ "$phase" != merge ]] || redo_check_blocks "$gs_root" "$SPLIT_NUM_BLOCKS"
   set_stage "nettoyage des sorties à refaire ($phase)"
-  clean_merge_outputs
+  redo_clean_merge_outputs "$OUTPUT_DIR" "$gs_root" "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS"
 fi
 
 if [[ "$phase" == all || "$phase" == train-block ]]; then
