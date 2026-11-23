@@ -7,8 +7,8 @@ import {
   selectNearestImages,
 } from "./colmap-images.js";
 
-// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x5 (5 %).
-const IMAGE_FRUSTUM_SCALE = 5;
+// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x3,5 (3,5 %).
+const IMAGE_FRUSTUM_SCALE = 3.5;
 // Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
