@@ -4,9 +4,12 @@ import test from "node:test";
 
 const imagesSource = await readFile(new URL("./html/viewer/colmap-images.js", import.meta.url), "utf8");
 const imagesModuleUrl = `data:text/javascript;base64,${Buffer.from(imagesSource).toString("base64")}`;
+const overlaySource = await readFile(new URL("./html/viewer/overlay-depth.js", import.meta.url), "utf8");
+const overlayModuleUrl = `data:text/javascript;base64,${Buffer.from(overlaySource).toString("base64")}`;
 const source = (await readFile(new URL("./html/viewer/colmap.js", import.meta.url), "utf8"))
   .replace('import * as pc from "playcanvas";', "const pc = globalThis.testPlayCanvas;")
-  .replace('from "./colmap-images.js"', `from "${imagesModuleUrl}"`);
+  .replace('from "./colmap-images.js"', `from "${imagesModuleUrl}"`)
+  .replace('from "./overlay-depth.js"', `from "${overlayModuleUrl}"`);
 class TestEntity {
   addChild(child) { child.parent = this; }
   removeChild(child) { child.parent = null; }

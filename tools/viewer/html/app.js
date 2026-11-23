@@ -225,7 +225,6 @@ function hexToColor(hex) {
 // on réapplique l'option à chaque frame pour suivre leur recréation.
 function applySplatDepthWrite() {
   const enabled = $("splatOcclusion").checked;
-  setOverlayOcclusion(enabled);
   const director = app?.renderer?.gsplatDirector;
   for (const cameraData of director?.camerasMap?.values() ?? []) {
     for (const layerData of cameraData.layersMap?.values() ?? []) {
@@ -233,6 +232,11 @@ function applySplatDepthWrite() {
       if (material && material.depthWrite !== enabled) material.depthWrite = enabled;
     }
   }
+}
+
+function applyOverlayOcclusion() {
+  setOverlayOcclusion("vectors", $("splatOcclusion").checked);
+  setOverlayOcclusion("colmap", $("colmapOcclusion").checked);
 }
 
 function applyBackgroundColor() {
@@ -1707,6 +1711,9 @@ async function initialize() {
     app.scene.gsplatCentersEnabled = true;
   app.on("update", applySplatDepthWrite);
   $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
+  applyOverlayOcclusion();
+  $("splatOcclusion").addEventListener("change", applyOverlayOcclusion);
+  $("colmapOcclusion").addEventListener("change", applyOverlayOcclusion);
   $("facadeNearSplats").addEventListener("change", () => cityLayer?.setFacadeNearSplats($("facadeNearSplats").checked));
     layerManager = createLayerManager($("layerList"));
 

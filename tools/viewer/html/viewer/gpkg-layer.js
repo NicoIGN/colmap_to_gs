@@ -81,7 +81,7 @@ function makeUnlitMaterial(color) {
   mat.emissive.copy(color);
   mat.diffuse.copy(color);
   mat.cull = pc.CULLFACE_NONE;
-  registerOverlayMaterial(mat);
+  registerOverlayMaterial(mat, "vectors");
   mat.depthWrite = false;
   mat.blendType = pc.BLEND_NORMAL;
   mat.update();
@@ -223,7 +223,7 @@ function makeSphereMaterial(color) {
   });
   material.setParameter("uColor", [color.r, color.g, color.b]);
   material.cull = pc.CULLFACE_BACK;
-  registerOverlayMaterial(material);
+  registerOverlayMaterial(material, "vectors");
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();

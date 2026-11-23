@@ -62,7 +62,7 @@ export function createGpsLayer({ app, registerLayer, onClear }) {
     mat.emissive.copy(color);
     mat.diffuse.copy(color);
     mat.cull = pc.CULLFACE_NONE;
-    registerOverlayMaterial(mat);
+    registerOverlayMaterial(mat, "vectors");
     mat.depthWrite = false;
     mat.blendType = pc.BLEND_NORMAL;
     mat.update();

@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { registerOverlayMaterial } from "./overlay-depth.js";
 import {
   findImageFile,
   indexImageFiles,
@@ -459,7 +460,8 @@ function makeColmapMaterial(app, { points = false, pointSize = 3, onTop = false 
   material.setParameter("uHighlight", 0);
 
   material.cull = pc.CULLFACE_NONE;
-  material.depthTest = !onTop;
+  if (onTop) registerOverlayMaterial(material, "colmap");
+  else material.depthTest = true;
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
