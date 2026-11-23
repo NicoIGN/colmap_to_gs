@@ -608,6 +608,8 @@ export function createNavigationSystem({
         requiresControl: mode === "look",
         x: event.clientX,
         y: event.clientY,
+        downX: event.clientX,
+        downY: event.clientY,
         moved: false,
       };
       if (mode === "centerOrbit") {
@@ -717,13 +719,18 @@ export function createNavigationSystem({
         mouseDrag.y = event.clientY;
       }
       // Clic gauche simple (sans glisser, sans modificateur) : sélection d'une image de frustum.
+      // Seuil en distance depuis le point de pression : un clic réel dérive de quelques pixels.
+      const travel = Math.hypot(event.clientX - mouseDrag.downX, event.clientY - mouseDrag.downY);
       const isPlainClick =
         event.type === "pointerup" &&
         mouseDrag.mode === "orbit" &&
         mouseDrag.button === 0 &&
-        !mouseDrag.moved &&
+        travel < 4 &&
         !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
       if (isPlainClick) pickImageAt?.(event.clientX, event.clientY);
+      else if (event.type === "pointerup" && mouseDrag.button === 0 && travel >= 4) {
+        console.log(`[images] clic ignoré : glissement de ${travel.toFixed(1)} px (seuil 4 px)`);
+      }
       finishMouseDrag({ commitZoom: event.type === "pointerup" });
     };
 
