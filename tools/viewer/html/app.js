@@ -1046,6 +1046,20 @@ async function handleDroppedFiles(fileList, items) {
   }
 }
 
+function pickImageAtPixel(clientX, clientY) {
+  if (!colmapLayer || !canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  camera.updateMatrixWorld();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera);
+  colmapLayer.pickImageRay(raycaster.ray.origin.toArray(), raycaster.ray.direction.toArray());
+}
+
 async function selectPivotAtPixel(clientX, clientY) {
   if (!sceneReady || disposed || !cameraEntity) return false;
   const serial = ++pivotSerial;
@@ -1795,6 +1809,7 @@ async function initialize() {
       requestGifCapture,
       selectPointInView,
       selectPivotAt: selectPivotAtPixel,
+      pickImageAt: pickImageAtPixel,
       setStatus,
     });
 

@@ -580,6 +580,54 @@ function frustumCorners(image, camera, near) {
   });
 }
 
+// Repère caméra du rayon (origine, direction) par rapport à une caméra pinhole, et demi-largeurs
+// relatives du cadre : la pyramide du frustum est { 0 ≤ z ≤ depth, |x| ≤ a·z, |y| ≤ b·z }.
+function rayInCameraFrame(image, camera, origin, dir) {
+  const { fx, fy } = getFxFy(camera);
+  const rcw = qvecToMat3(image.qvec);
+  const center = getCameraCenter(image);
+  const o = mulMat3Vec3(rcw, [origin[0] - center[0], origin[1] - center[1], origin[2] - center[2]]);
+  const d = mulMat3Vec3(rcw, dir);
+  return { o, d, a: camera.width / (2 * fx), b: camera.height / (2 * fy) };
+}
+
+// Distance t ≥ 0 d'entrée du rayon dans la pyramide du frustum (null si elle n'est pas traversée).
+export function rayFrustumEntry(image, camera, depth, origin, dir) {
+  const { o, d, a, b } = rayInCameraFrame(image, camera, origin, dir);
+  // Contraintes linéaires g(t) = g0 + g1·t ≥ 0 : z ≥ 0, z ≤ depth, et les quatre faces latérales.
+  const constraints = [
+    [o[2], d[2]],
+    [depth - o[2], -d[2]],
+    [a * o[2] - o[0], a * d[2] - d[0]],
+    [a * o[2] + o[0], a * d[2] + d[0]],
+    [b * o[2] - o[1], b * d[2] - d[1]],
+    [b * o[2] + o[1], b * d[2] + d[1]],
+  ];
+  let tMin = 0;
+  let tMax = Infinity;
+  for (const [g0, g1] of constraints) {
+    if (Math.abs(g1) < 1e-12) {
+      if (g0 < 0) return null;
+      continue;
+    }
+    const t = -g0 / g1;
+    if (g1 > 0) tMin = Math.max(tMin, t);
+    else tMax = Math.min(tMax, t);
+  }
+  return tMin <= tMax ? tMin : null;
+}
+
+// Vrai si le rayon traverse le plan lointain (le cadre affiché) du frustum.
+export function rayHitsFarFace(image, camera, depth, origin, dir) {
+  const { o, d, a, b } = rayInCameraFrame(image, camera, origin, dir);
+  if (Math.abs(d[2]) < 1e-12) return false;
+  const t = (depth - o[2]) / d[2];
+  if (t < 0) return false;
+  const x = o[0] + t * d[0];
+  const y = o[1] + t * d[1];
+  return Math.abs(x) <= a * depth && Math.abs(y) <= b * depth;
+}
+
 // Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
 // symbolisée par ses parallèles et méridiens, centrés sur `center`.
 function appendPanoramaMarker(out, center, radius, cube) {
@@ -1411,6 +1459,8 @@ export function createColmapLayer({
         imageInFrontOfViewer(model, pinholeCurrent, viewer, forward) &&
         viewerOnApexSide(model.colmapImages[pinholeCurrent], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
       ) chosen = [pinholeCurrent];
+      // Choix explicite par clic dans un frustum : remplace la sélection automatique.
+      if (model.overrideIndex !== null && model.overrideIndex !== undefined) chosen = [model.overrideIndex];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
@@ -1849,6 +1899,44 @@ export function createColmapLayer({
         return imageViewPose(model, model.colmapImages[index]);
       }
       return null;
+    },
+
+    // Clic (sans glisser) dans l'espace de la vue : affiche l'image du frustum traversé s'il est seul.
+    // Un clic sur l'image affichée rétablit la sélection automatique.
+    pickImageRay(origin, direction) {
+      if (!imageIndex) return false;
+      const flip = getFlipUp?.();
+      const toModel = (v) => (flip ? [v[0], -v[1], -v[2]] : v);
+      const o = toModel(origin);
+      const d = toModel(direction);
+      let handled = false;
+      for (const model of models.values()) {
+        if (!model.imagesOn) continue;
+        const depth = model.depth * IMAGE_FRUSTUM_SCALE;
+        const current = model.overrideIndex ?? null;
+        if (current !== null) {
+          const image = model.colmapImages[current];
+          const camera = model.cameras.get(image.cameraId);
+          if (camera && rayHitsFarFace(image, camera, depth, o, d)) {
+            model.overrideIndex = null;
+            model.pickedKey = null;
+            handled = true;
+            continue;
+          }
+        }
+        const hits = [];
+        model.colmapImages.forEach((image, i) => {
+          const camera = model.cameras.get(image.cameraId);
+          if (!camera || isPanorama(camera) || !findImageFile(imageIndex, image.name)) return;
+          if (rayFrustumEntry(image, camera, depth, o, d) !== null) hits.push(i);
+        });
+        if (hits.length === 1 && hits[0] !== current) {
+          model.overrideIndex = hits[0];
+          model.pickedKey = null;
+          handled = true;
+        }
+      }
+      return handled;
     },
 
     getPivotSources() {

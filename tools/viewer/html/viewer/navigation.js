@@ -40,6 +40,7 @@ export function createNavigationSystem({
   requestGifCapture,
   selectPointInView,
   selectPivotAt,
+  pickImageAt,
   setStatus,
 }) {
   const pressedKeys = new Set();
@@ -715,6 +716,14 @@ export function createNavigationSystem({
         mouseDrag.x = event.clientX;
         mouseDrag.y = event.clientY;
       }
+      // Clic gauche simple (sans glisser, sans modificateur) : sélection d'une image de frustum.
+      const isPlainClick =
+        event.type === "pointerup" &&
+        mouseDrag.mode === "orbit" &&
+        mouseDrag.button === 0 &&
+        !mouseDrag.moved &&
+        !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+      if (isPlainClick) pickImageAt?.(event.clientX, event.clientY);
       finishMouseDrag({ commitZoom: event.type === "pointerup" });
     };
 

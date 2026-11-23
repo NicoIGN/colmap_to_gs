@@ -25,10 +25,24 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
+
+test("a click ray picks the single pinhole frustum it crosses, and the far face resets it", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const camera = { modelName: "PINHOLE", width: 100, height: 100, params: [100, 100, 50, 50] };
+  const depth = 10;
+  // Rayon axial : entre dans la pyramide à t = 5 (apex à z = 0 et plan lointain à z = depth).
+  assert.equal(rayFrustumEntry(image, camera, depth, [0, 0, -5], [0, 0, 1]), 5);
+  // Rayon parallèle à l'axe mais hors du cadre latéral.
+  assert.equal(rayFrustumEntry(image, camera, depth, [100, 0, -5], [0, 0, 1]), null);
+  // Rayon qui s'éloigne de la pyramide.
+  assert.equal(rayFrustumEntry(image, camera, depth, [0, 0, -5], [0, 0, -1]), null);
+  assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0, 1]), true);
+  assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0.8, 1]), false);
+});
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {
   const previousDocument = globalThis.document;
