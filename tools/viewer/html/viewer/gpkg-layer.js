@@ -128,8 +128,8 @@ function subdivideIcosahedron(vertices, faces) {
 const SPHERE = subdivideIcosahedron(ICO_VERTICES, ICO_FACES);
 const SPHERE_VERTICES = SPHERE.vertices.length;
 // Rayon des sphères en proportion de l'emprise de la couche (unités des données).
-const POINT_RADIUS_RATIO = 0.004;
-const POINT_RADIUS_DEFAULT = 0.5;
+const POINT_RADIUS_RATIO = 0.002;
+const POINT_RADIUS_DEFAULT = 0.25;
 // Valeur par défaut du curseur « Taille des points » ; les sphères grossissent ou rétrécissent proportionnellement.
 export const DEFAULT_POINT_SIZE = 2;
 
