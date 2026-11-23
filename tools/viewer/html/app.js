@@ -1047,7 +1047,11 @@ async function handleDroppedFiles(fileList, items) {
 }
 
 function pickImageAtPixel(clientX, clientY) {
-  if (!colmapLayer || !canvas) return;
+  if (!canvas || !cameraEntity) return;
+  if (!colmapLayer) {
+    setStatus("Clic frustum : aucune donnée COLMAP chargée.", true);
+    return;
+  }
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
   camera.updateMatrixWorld();

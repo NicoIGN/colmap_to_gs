@@ -1904,14 +1904,25 @@ export function createColmapLayer({
     // Clic (sans glisser) dans l'espace de la vue : affiche l'image du frustum traversé s'il est seul.
     // Un clic sur l'image affichée rétablit la sélection automatique.
     pickImageRay(origin, direction) {
-      if (!imageIndex) return false;
+      const say = (message, isError = false) => {
+        console.log("[images] clic :", message);
+        setStatus(message, isError);
+      };
+      if (!imageIndex) {
+        say("Clic frustum : aucune image chargée. Importer le dossier d'images d'abord.", true);
+        return;
+      }
       const flip = getFlipUp?.();
       const toModel = (v) => (flip ? [v[0], -v[1], -v[2]] : v);
       const o = toModel(origin);
       const d = toModel(direction);
-      let handled = false;
-      for (const model of models.values()) {
-        if (!model.imagesOn) continue;
+      const active = [...models.values()].filter((model) => model.imagesOn);
+      if (!active.length) {
+        say("Clic frustum : le mode Images est désactivé pour tous les modèles COLMAP.", true);
+        return;
+      }
+      let reported = false;
+      for (const model of active) {
         const depth = model.depth * IMAGE_FRUSTUM_SCALE;
         const current = model.overrideIndex ?? null;
         if (current !== null) {
@@ -1920,23 +1931,39 @@ export function createColmapLayer({
           if (camera && rayHitsFarFace(image, camera, depth, o, d)) {
             model.overrideIndex = null;
             model.pickedKey = null;
-            handled = true;
+            say(`Clic sur l'image ${image.name} : retour au choix automatique.`);
+            reported = true;
             continue;
           }
         }
         const hits = [];
+        let withoutImage = 0;
         model.colmapImages.forEach((image, i) => {
           const camera = model.cameras.get(image.cameraId);
-          if (!camera || isPanorama(camera) || !findImageFile(imageIndex, image.name)) return;
-          if (rayFrustumEntry(image, camera, depth, o, d) !== null) hits.push(i);
+          if (!camera || isPanorama(camera)) return;
+          if (rayFrustumEntry(image, camera, depth, o, d) === null) return;
+          if (!findImageFile(imageIndex, image.name)) withoutImage++;
+          else hits.push(i);
         });
-        if (hits.length === 1 && hits[0] !== current) {
-          model.overrideIndex = hits[0];
-          model.pickedKey = null;
-          handled = true;
+        if (hits.length === 1) {
+          const name = model.colmapImages[hits[0]].name;
+          if (hits[0] === current) {
+            say(`Image ${name} déjà affichée (cliquer dessus pour revenir au choix automatique).`);
+          } else {
+            model.overrideIndex = hits[0];
+            model.pickedKey = null;
+            say(`Image ${name} affichée (cliquer dessus pour revenir au choix automatique).`);
+          }
+          reported = true;
+        } else if (hits.length > 1) {
+          say(`Clic ambigu : ${hits.length} frustums avec image traversés par le rayon. Zoomer pour désambiguïser.`, true);
+          reported = true;
+        } else if (withoutImage) {
+          say(`Clic : ${withoutImage} frustum(s) traversé(s) mais sans fichier image correspondant.`, true);
+          reported = true;
         }
       }
-      return handled;
+      if (!reported) say("Clic : aucun frustum traversé par le rayon.");
     },
 
     getPivotSources() {
