@@ -15,6 +15,22 @@ un filtre peut aussi supprimer des éléments réels. L'entrée n'est pas écras
 
 ## Exporter un splat filtré avec les points COLMAP
 
+Export d'un checkpoint (`export_ply.py`, appelé par `run_spirula_block.sh`) avec filtrage :
+
+```bash
+python "$GIT_ROOT/tools/postprocess/export_ply.py" \
+  --in-ply "$GS_BLOCK/chkpt/chkpt_step-000040000.ply" \
+  --points "$OUTPUT/sparse/0/points3D.bin" \
+  --transform "$GS_BLOCK/chkpt/scene_transform.json" \
+  --out-ply "$GS_BLOCK/splats/block_000.splat" --format splat \
+  --radius-factor 5 --min-opacity 0 --batch-size 200000 --overwrite \
+  --filter-mode "${POSTPROCESS_FILTER_MODE:-apply}"
+```
+
+`--filter-mode apply` (défaut) n'écrit que le splat nettoyé. `diagnostic` écrit en plus
+`.rejected.splat` et `.filter.json` à côté de la sortie. `off` désactive le filtre.
+Le chemin du checkpoint est le dernier `chkpt_step-*.ply` de `chkpt/`.
+
 ```bash
 python "$GIT_ROOT/tools/postprocess/filter_splats.py" \
   --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/scene.clean.splat" \

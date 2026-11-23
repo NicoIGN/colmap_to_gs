@@ -531,7 +531,9 @@ def main():
         "n'interviennent plus dans le nettoyage.")
     rejected_path = output.with_suffix(".rejected.splat")
     report_path = output.with_suffix(".filter.json")
-    for sidecar in (rejected_path, report_path):
+    # Les sidecars ne sont écrits qu'en diagnostic ; apply et off n'exportent que le splat.
+    write_sidecars = args.filter_mode == "diagnostic"
+    for sidecar in ((rejected_path, report_path) if write_sidecars else ()):
         if sidecar in (source, points_path, transform_path) or (
             sidecar.exists() and any(os.path.samefile(sidecar, p)
                                      for p in (source, points_path, transform_path))
@@ -561,8 +563,9 @@ def main():
     write_world_splat(
         splats, output, matrix, rotation, scale, args.batch_size
     )
-    write_world_splat(rejected, rejected_path, matrix, rotation, scale, args.batch_size)
-    report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    if write_sidecars:
+        write_world_splat(rejected, rejected_path, matrix, rotation, scale, args.batch_size)
+        report_path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     log(f"Export terminé : {output}")
     log(f"Repère : monde COLMAP ; Gaussians : {len(splats['means'])}")
