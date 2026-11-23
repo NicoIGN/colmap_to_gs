@@ -20,7 +20,7 @@ import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
-import { findPivotAtPixel } from "./viewer/pivot.js";
+import { findPivotAtPixel, findVertexAtPixel } from "./viewer/pivot.js";
 import { setOverlayOcclusion } from "./viewer/overlay-depth.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
 import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
@@ -1847,6 +1847,21 @@ async function initialize() {
       container,
       camera,
       getCenters: () => centers,
+      getVertexAt: (clientX, clientY) => {
+        const rect = canvas.getBoundingClientRect();
+        return findVertexAtPixel({
+          sources: collectPivotSources(),
+          camera: {
+            matrix: cameraEntity.getWorldTransform().data,
+            fov: cameraEntity.camera.fov,
+            horizontalFov: cameraEntity.camera.horizontalFov,
+          },
+          px: clientX - rect.left,
+          py: clientY - rect.top,
+          width: rect.width,
+          height: rect.height,
+        });
+      },
 
       getAbsoluteCoordinates: (point) =>
         sceneTools.getAbsoluteCoordinates(point),
