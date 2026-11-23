@@ -3,19 +3,21 @@ set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/redo.sh"
 source "$repo_root/tools/libs/scripts/georef_phase.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
-  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
-images=""; phase=all; block=""; validate_only=false
+images=""; phase=all; block=""; validate_only=false; redo=false
 while (($#)); do
   case "$1" in
     --validate-only) validate_only=true; shift ;;
+    --redo) redo=true; shift ;;
     --images|--phase|--block)
       [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 1; }
       case "$1" in
@@ -35,6 +37,9 @@ if [[ "$phase" == train-block ]]; then
     die "--block doit être compris entre 0 et $((SPLIT_NUM_BLOCKS - 1))."
 elif [[ -n "$block" ]]; then
   die "--block nécessite --phase train-block."
+fi
+if [[ "$redo" == true ]]; then
+  redo_check_phase "$phase"
 fi
 command -v "$PYTHON_BIN" >/dev/null || die "Python introuvable : $PYTHON_BIN"
 lidar_pipeline_hook preflight
@@ -120,6 +125,7 @@ pipeline_report_phase "$stage"
 trap 'status=$?; echo "[ERREUR] Étape $stage, code $status, ligne $LINENO" >&2; exit "$status"' ERR
 exec > >(tee -a "$OUTPUT_DIR/logs/${phase}-${block:-all}.log") 2>&1
 export PYTHONUNBUFFERED=1
+export POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
 sfm="$OUTPUT_DIR/sfm"
 sfm_masks="$OUTPUT_DIR/feature_masks"
 train_masks="$OUTPUT_DIR/train_masks"
@@ -137,7 +143,7 @@ georef_input() {
     echo "$sfm_model"
   fi
 }
-# Renseigne sparse (entrée du découpage et du recadrage) et lidar_input (entrée du recalage LiDAR).
+# Renseigne sparse (entrée du découpage) et lidar_input (entrée du recalage LiDAR).
 select_sparse() {
   sparse="$(georef_input)"
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
@@ -222,6 +228,12 @@ else
 fi
 [[ "$phase" != prepare ]] || exit 0
 
+if [[ "$redo" == true ]]; then
+  [[ "$phase" != merge ]] || redo_check_blocks "$gs_root" "$SPLIT_NUM_BLOCKS"
+  set_stage "nettoyage des sorties à refaire ($phase)"
+  redo_clean_merge_outputs "$OUTPUT_DIR" "$gs_root" "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS"
+fi
+
 if [[ "$phase" == all || "$phase" == train-block ]]; then
   first="${block:-0}"; last="$SPLIT_NUM_BLOCKS"
   [[ "$phase" != train-block ]] || last=$((block + 1))
@@ -230,7 +242,8 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     set_stage "entraînement $id"
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$gs_root/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
-          --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}" --name "$id.splat")
+          --export-filter-mode "${POSTPROCESS_FILTER_MODE:-apply}" --name "$id.splat")
+    [[ "$redo" != true ]] || args+=(--clean)
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
@@ -239,32 +252,6 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
 fi
 [[ "$phase" != train-block ]] || exit 0
 
-inputs=()
-for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
-  printf -v id 'block_%03d' "$index"
-  raw="$gs_root/$id/splats/$id.splat"
-  [[ -s "$raw" ]] || die "Splat brut absent : $raw"
-  [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
-  set_stage "recadrage COLMAP $id avant fusion"
-  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" != off || "$POSTPROCESS_SPARSE_SUPPORT_MODE" != off ]]; then
-    cropped="$gs_root/$id/splats/$id.bbox.splat"
-    crop_splat_to_sparse "$raw" "$cropped" "$sparse" \
-      "$POSTPROCESS_SPARSE_BBOX_MODE" "$POSTPROCESS_SPARSE_BBOX_MARGIN" \
-      --sparse-bbox-quantile "$POSTPROCESS_SPARSE_BBOX_QUANTILE" \
-      --sparse-bbox-scope "$POSTPROCESS_SPARSE_BBOX_SCOPE" \
-      --sparse-cameras "$sparse/images.bin" \
-      --sparse-support-mode "$POSTPROCESS_SPARSE_SUPPORT_MODE" \
-      --sparse-support-distance-factor "$POSTPROCESS_SPARSE_SUPPORT_DISTANCE_FACTOR" \
-      --sparse-support-isolation-factor "$POSTPROCESS_SPARSE_SUPPORT_ISOLATION_FACTOR" \
-      --sparse-support-min-opacity "$POSTPROCESS_SPARSE_SUPPORT_MIN_OPACITY" \
-      --max-removal-fraction "$POSTPROCESS_MAX_REMOVAL_FRACTION"
-    inputs+=("$cropped")
-  else
-    inputs+=("$raw")
-  fi
-done
-set_stage "fusion des blocs"
-merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${inputs[@]}"
-set_stage "export de la référence géographique et nettoyage LiDAR"
-finalize_splat "$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
+finish_block_splats "$gs_root" "$SPLIT_NUM_BLOCKS" "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" \
+  images_to_3dgs "$OUTPUT_DIR/georef/0/georef_stats.json"
 echo "[TERMINE] $OUTPUT_DIR/$EXPORT_SPLAT_NAME"

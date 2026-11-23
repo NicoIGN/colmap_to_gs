@@ -469,10 +469,10 @@ export_world_splat() {
   
   local export_cmd=(
       "$python_bin" "$export_script"
-      --in-ply "$final_ckpt"
+      --input "$final_ckpt"
       --points "$export_points"
       --transform "$export_transform"
-      --out-ply "$world_splat"
+      --output "$world_splat"
       --format splat
       --radius-factor "$radius_factor"
       --min-opacity "$min_opacity"

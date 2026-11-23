@@ -39,6 +39,8 @@ export function createNavigationSystem({
   syncCamera,
   requestGifCapture,
   selectPointInView,
+  selectPivotAt,
+  pickImageAt,
   setStatus,
 }) {
   const pressedKeys = new Set();
@@ -549,6 +551,9 @@ export function createNavigationSystem({
       lastPointer.x = event.clientX;
       lastPointer.y = event.clientY;
 
+      // Un keyup perdu (capture d'écran, Alt/Shift) laisse Shift coincé.
+      if (!event.shiftKey) pressedKeys.delete("shift");
+
       if (!getCanNavigate()) return;
 
       // Un glissement resté ouvert (relâchement non reçu) bloquerait
@@ -559,7 +564,7 @@ export function createNavigationSystem({
       // flouter un champ ou capturer le pointeur.
       if (event.metaKey || event.shiftKey) return;
 
-      // Alt + clic gauche : orbite autour du centre de scène, axe principal fixe.
+      // Alt + clic gauche : pivot sous le clic, puis rotation autour de l'axe principal.
       const centerOrbit =
         event.altKey && event.button === 0 && !event.ctrlKey;
       // Alt + clic droit : roulis autour de l'axe caméra → centre de vue.
@@ -592,12 +597,6 @@ export function createNavigationSystem({
       event.preventDefault();
       clearNavigation();
 
-      if (mode === "centerOrbit") {
-        target.copy(getSceneCenter());
-        camera.lookAt(target);
-        camera.updateMatrixWorld(true);
-      }
-
       if (document.activeElement instanceof HTMLElement) {
         document.activeElement.blur();
       }
@@ -609,8 +608,20 @@ export function createNavigationSystem({
         requiresControl: mode === "look",
         x: event.clientX,
         y: event.clientY,
+        downX: event.clientX,
+        downY: event.clientY,
         moved: false,
       };
+      if (mode === "centerOrbit") {
+        // La rotation attend le pivot résolu sous le clic (splat, LiDAR, COLMAP ou vecteur).
+        const drag = mouseDrag;
+        drag.pivotReady = false;
+        Promise.resolve(selectPivotAt(event.clientX, event.clientY))
+          .catch(() => false)
+          .finally(() => {
+            drag.pivotReady = true;
+          });
+      }
       if (mode === "zoom") {
         mouseDrag.start = { x: event.clientX, y: event.clientY };
         const overlay = document.createElement("div");
@@ -684,7 +695,7 @@ export function createNavigationSystem({
         });
         return;
       } else if (drag.mode === "centerOrbit") {
-        orbitScene(dx, dy, true);
+        if (drag.pivotReady) orbitScene(dx, dy, true);
       } else if (drag.mode === "orbit") {
         orbitScene(dx, dy);
       } else if (drag.mode === "look") {
@@ -706,6 +717,19 @@ export function createNavigationSystem({
       if (mouseDrag.mode === "zoom" && event.type === "pointerup") {
         mouseDrag.x = event.clientX;
         mouseDrag.y = event.clientY;
+      }
+      // Clic gauche simple (sans glisser, sans modificateur) : sélection d'une image de frustum.
+      // Seuil en distance depuis le point de pression : un clic réel dérive de quelques pixels.
+      const travel = Math.hypot(event.clientX - mouseDrag.downX, event.clientY - mouseDrag.downY);
+      const isPlainClick =
+        event.type === "pointerup" &&
+        mouseDrag.mode === "orbit" &&
+        mouseDrag.button === 0 &&
+        travel < 4 &&
+        !event.altKey && !event.ctrlKey && !event.shiftKey && !event.metaKey;
+      if (isPlainClick) pickImageAt?.(event.clientX, event.clientY);
+      else if (event.type === "pointerup" && mouseDrag.button === 0 && travel >= 4) {
+        console.log(`[images] clic ignoré : glissement de ${travel.toFixed(1)} px (seuil 4 px)`);
       }
       finishMouseDrag({ commitZoom: event.type === "pointerup" });
     };

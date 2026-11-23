@@ -1,4 +1,5 @@
 import * as pc from "playcanvas";
+import { registerOverlayMaterial } from "./overlay-depth.js";
 import {
   findImageFile,
   indexImageFiles,
@@ -6,8 +7,8 @@ import {
   selectNearestImages,
 } from "./colmap-images.js";
 
-// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x5 (5 %).
-const IMAGE_FRUSTUM_SCALE = 5;
+// Mode Images : frustums normaux = 1 % de l'étendue ; cadre des images affichées = x3,5 (3,5 %).
+const IMAGE_FRUSTUM_SCALE = 3.5;
 // Une image s'affiche dès que son cadre (taille nominale) atteint cette taille à l'écran.
 const IMAGE_MIN_SCREEN_PX = 32;
 // Nombre d'images affichées à la fois ; les textures des 10 dernières restent en mémoire.
@@ -459,7 +460,8 @@ function makeColmapMaterial(app, { points = false, pointSize = 3, onTop = false 
   material.setParameter("uHighlight", 0);
 
   material.cull = pc.CULLFACE_NONE;
-  material.depthTest = !onTop;
+  if (onTop) registerOverlayMaterial(material, "colmap");
+  else material.depthTest = true;
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
@@ -576,6 +578,72 @@ function frustumCorners(image, camera, near) {
     const rotated = mulMat3Vec3(rwc, point);
     return [rotated[0] + center[0], rotated[1] + center[1], rotated[2] + center[2]];
   });
+}
+
+// Repère caméra du rayon (origine, direction) par rapport à une caméra pinhole, et demi-largeurs
+// relatives du cadre : la pyramide du frustum est { 0 ≤ z ≤ depth, |x| ≤ a·z, |y| ≤ b·z }.
+function rayInCameraFrame(image, camera, origin, dir) {
+  const { fx, fy } = getFxFy(camera);
+  const rcw = qvecToMat3(image.qvec);
+  const center = getCameraCenter(image);
+  const o = mulMat3Vec3(rcw, [origin[0] - center[0], origin[1] - center[1], origin[2] - center[2]]);
+  const d = mulMat3Vec3(rcw, dir);
+  return { o, d, a: camera.width / (2 * fx), b: camera.height / (2 * fy) };
+}
+
+// Distance t ≥ 0 d'entrée du rayon dans la pyramide du frustum (null si elle n'est pas traversée).
+export function rayFrustumEntry(image, camera, depth, origin, dir) {
+  const { o, d, a, b } = rayInCameraFrame(image, camera, origin, dir);
+  // Contraintes linéaires g(t) = g0 + g1·t ≥ 0 : z ≥ 0, z ≤ depth, et les quatre faces latérales.
+  const constraints = [
+    [o[2], d[2]],
+    [depth - o[2], -d[2]],
+    [a * o[2] - o[0], a * d[2] - d[0]],
+    [a * o[2] + o[0], a * d[2] + d[0]],
+    [b * o[2] - o[1], b * d[2] - d[1]],
+    [b * o[2] + o[1], b * d[2] + d[1]],
+  ];
+  let tMin = 0;
+  let tMax = Infinity;
+  for (const [g0, g1] of constraints) {
+    if (Math.abs(g1) < 1e-12) {
+      if (g0 < 0) return null;
+      continue;
+    }
+    const t = -g0 / g1;
+    if (g1 > 0) tMin = Math.max(tMin, t);
+    else tMax = Math.min(tMax, t);
+  }
+  return tMin <= tMax ? tMin : null;
+}
+
+// Vrai si le rayon traverse le plan lointain (le cadre affiché) du frustum.
+export function rayHitsFarFace(image, camera, depth, origin, dir) {
+  const { o, d, a, b } = rayInCameraFrame(image, camera, origin, dir);
+  if (Math.abs(d[2]) < 1e-12) return false;
+  const t = (depth - o[2]) / d[2];
+  if (t < 0) return false;
+  const x = o[0] + t * d[0];
+  const y = o[1] + t * d[1];
+  return Math.abs(x) <= a * depth && Math.abs(y) <= b * depth;
+}
+
+// Vrai si le rayon traverse la boîte alignée sur le modèle, centrée sur `center` de demi-côté `r`.
+export function rayBoxHit(center, r, origin, dir) {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  for (let k = 0; k < 3; k++) {
+    const oc = origin[k] - center[k];
+    if (Math.abs(dir[k]) < 1e-12) {
+      if (Math.abs(oc) > r) return false;
+      continue;
+    }
+    const t1 = (-r - oc) / dir[k];
+    const t2 = (r - oc) / dir[k];
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+  return tMin <= tMax && tMax >= 0;
 }
 
 // Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
@@ -1409,6 +1477,8 @@ export function createColmapLayer({
         imageInFrontOfViewer(model, pinholeCurrent, viewer, forward) &&
         viewerOnApexSide(model.colmapImages[pinholeCurrent], model.depth * IMAGE_FRUSTUM_SCALE, viewer)
       ) chosen = [pinholeCurrent];
+      // Choix explicite par clic dans un frustum : remplace la sélection automatique.
+      if (model.overrideIndex !== null && model.overrideIndex !== undefined) chosen = [model.overrideIndex];
       const key = chosen.join(",");
       if (key !== model.pickedKey) {
         model.pickedKey = key;
@@ -1654,6 +1724,7 @@ export function createColmapLayer({
       frustumsTotal: frustums.total,
       frustumsShown: frustums.shown,
       rootEntity,
+      pivotPositions: points.positions,
       colmapImages: images,
       cameras,
       depth: depth * frustumFactor,
@@ -1846,6 +1917,90 @@ export function createColmapLayer({
         return imageViewPose(model, model.colmapImages[index]);
       }
       return null;
+    },
+
+    // Clic (sans glisser) dans l'espace de la vue : affiche l'image du frustum traversé s'il est seul.
+    // Un clic sur l'image affichée rétablit la sélection automatique.
+    pickImageRay(origin, direction) {
+      const say = (message, isError = false) => {
+        console.log("[images] clic :", message);
+        setStatus(message, isError);
+      };
+      if (!imageIndex) {
+        say("Clic frustum : aucune image chargée. Importer le dossier d'images d'abord.", true);
+        return;
+      }
+      const flip = getFlipUp?.();
+      const toModel = (v) => (flip ? [v[0], -v[1], -v[2]] : v);
+      const o = toModel(origin);
+      const d = toModel(direction);
+      const active = [...models.values()].filter((model) => model.imagesOn);
+      if (!active.length) {
+        say("Clic frustum : le mode Images est désactivé pour tous les modèles COLMAP.", true);
+        return;
+      }
+      let reported = false;
+      for (const model of active) {
+        const depth = model.depth * IMAGE_FRUSTUM_SCALE;
+        const current = model.overrideIndex ?? null;
+        if (current !== null) {
+          const image = model.colmapImages[current];
+          const camera = model.cameras.get(image.cameraId);
+          const onImage = camera && (isPanorama(camera)
+            ? rayBoxHit(getCameraCenter(image), model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR, o, d)
+            : rayHitsFarFace(image, camera, depth, o, d));
+          if (onImage) {
+            model.overrideIndex = null;
+            model.pickedKey = null;
+            say(`Clic sur l'image ${image.name} : retour au choix automatique.`);
+            reported = true;
+            continue;
+          }
+        }
+        const hits = [];
+        let withoutImage = 0;
+        model.colmapImages.forEach((image, i) => {
+          const camera = model.cameras.get(image.cameraId);
+          if (!camera) return;
+          const hit = isPanorama(camera)
+            ? rayBoxHit(
+                getCameraCenter(image),
+                model.slots.some((slot) => slot.shown === i)
+                  ? model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR
+                  : model.depth * PANORAMA_MARKER_FACTOR,
+                o,
+                d
+              )
+            : rayFrustumEntry(image, camera, depth, o, d) !== null;
+          if (!hit) return;
+          if (!findImageFile(imageIndex, image.name)) withoutImage++;
+          else hits.push(i);
+        });
+        if (hits.length === 1) {
+          const name = model.colmapImages[hits[0]].name;
+          if (hits[0] === current) {
+            say(`Image ${name} déjà affichée (cliquer dessus pour revenir au choix automatique).`);
+          } else {
+            model.overrideIndex = hits[0];
+            model.pickedKey = null;
+            say(`Image ${name} affichée (cliquer dessus pour revenir au choix automatique).`);
+          }
+          reported = true;
+        } else if (hits.length > 1) {
+          say(`Clic ambigu : ${hits.length} frustums avec image traversés par le rayon. Zoomer pour désambiguïser.`, true);
+          reported = true;
+        } else if (withoutImage) {
+          say(`Clic : ${withoutImage} frustum(s) traversé(s) mais sans fichier image correspondant.`, true);
+          reported = true;
+        }
+      }
+      if (!reported) say("Clic : aucun frustum traversé par le rayon.");
+    },
+
+    getPivotSources() {
+      return [...models.values()]
+        .filter((model) => model.rootEntity?.enabled && model.pivotPositions)
+        .map((model) => ({ label: "COLMAP", positions: model.pivotPositions, entity: model.rootEntity }));
     },
 
     setFlipUp(flip) {

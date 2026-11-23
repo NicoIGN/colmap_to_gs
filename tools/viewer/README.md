@@ -69,8 +69,10 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   sphère vue de l'intérieur ; le cadre de sélection est un cadre nominal de 90°.
   Le panneau « Options » (haut droite) permet de passer à un cube map (six faces
   rééchantillonnées depuis l'équirectangulaire) si la sphère déforme trop l'image.
-- Les fichiers `.splat` et `.ply` ajoutés par glisser-déposer s'ajoutent à la
-  scène déjà ouverte. Le bouton d'ouverture remplace la scène.
+- Les fichiers `.splat`, `.ply`, `.sog` et `.ksplat` ajoutés par glisser-déposer s'ajoutent à la
+  scène déjà ouverte. Le bouton d'ouverture remplace la scène. Déposés avec
+  `<nom>.metadata.json` (ou `<nom>.georef.json`), ils sont géoréférencés comme le
+  fichier de référence le décrit ; un fichier de métadonnées sans `output_reference` est ignoré.
 - Un nuage LiDAR `.laz` ou `.las` ajouté par glisser-déposer apparaît comme une
   couche dans la liste des couches. Il est placé via le géoréférencement JSON
   s'il a le même CRS (EPSG) ; sinon il est centré à l'origine et un message le
@@ -80,7 +82,16 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
 - Un GeoJSON `.geojson` déposé seul est lu comme un GeoPackage (filaire, une
   sous-couche par fichier). Sans membre `crs`, les coordonnées sont supposées en
   WGS84 (EPSG:4326) ; sinon le code EPSG est lu dans `crs` (ex. `EPSG:2154`).
-  Un `.json` n'est pas pris en charge ici, car il sert au géoréférencement.
+  Un `.json` n'est pas un GeoJSON : s'il contient `"type": "CityJSON"`, il est
+  importé comme volumes ombrés (surfaces triangulées, faces extérieures seules ;
+  trous ignorés, géométries `GeometryInstance` et multi-points non prises en
+  charge). Le CRS vient de `metadata.referenceSystem`, la couleur et l'opacité se
+  règlent dans « Options » (curseurs « Opacité toits » et « Opacité façades », 100 % par défaut). Sous la couche, dans le panneau
+  d'informations, les cases « Toits » et « Façades » (cochées par défaut) affichent l'un ou l'autre type : un triangle est un toit si sa normale
+  pointe vers le haut (Z ≥ 0,5), sinon façade (sols compris). Le LoD0 est ignoré. Limite : 1,5 million de
+  triangles. Les autres `.json` servent toujours au géoréférencement.
+  Option « Splats masquent les volumes 3D » (activée par défaut) : active `depthWrite` sur le matériau interne des splats PlayCanvas 2.23.1 (accès non public, à revérifier à chaque mise à jour du moteur).
+  Option « Masquer façades près des splats » (désactivée par défaut) : retire les triangles de façade dont un côté, projeté en plan, passe à moins d'environ 1 m d'un centre de splat (grille en cellules de 1 m, approximation). La grille est calculée à l'activation et au rendu d'un CityJSON ; elle n'est pas recalculée quand on charge de nouveaux splats après coup (recocher la case).
 - Un GeoPackage `.gpkg` déposé seul (par ex. produit par `tools/vector`) apparaît
   en données 3D filaires : chaque table d'entités devient une sous-couche de
   lignes (polylignes et contours de polygones) ; les points (simples ou multiples)

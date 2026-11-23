@@ -115,7 +115,7 @@ SLURM_ENV_SETUP="/chemin/absolu/vers/setup-cuda.sh"
 Ce script Bash de confiance doit charger les modules CUDA 12.8 et compilateur
 du **site** (leurs noms dépendent du cluster). Il est chargé avant Conda.
 Pour utiliser le filtre contextuel, mettre `POSTPROCESS_CLEANER="contextual"`.
-Les options `SPLAT_FILTER_*` et `SPLAT_SPARSE_BBOX_*` n'agissent pas en mode
+Les options `SPLAT_FILTER_*` n'agissent pas en mode
 `cleangs`. Le diagnostic produit le `.splat` final sans suppressions ;
 `CLEANGS_MODE="apply"` active le nettoyage avec la limite indiquée.
 

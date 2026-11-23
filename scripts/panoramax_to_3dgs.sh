@@ -4,11 +4,12 @@ set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/panoramax"
 source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/redo.sh"
 
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge]
+  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge] [--redo]
 
 The config is a trusted Bash file. It overrides config/defaults/*.default.sh and
 tools/panoramax/config.default.sh, which are always loaded first; only set the variables you want to change.
@@ -43,19 +44,27 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   usage
   exit 0
 fi
-[[ $# -ge 1 && $# -le 3 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
-config_path="$1"
-phase="${2:-all}"
+redo=false
+args=()
+while (($#)); do
+  if [[ "$1" == --redo ]]; then redo=true; else args+=("$1"); fi
+  shift
+done
+argc="${#args[@]}"
+[[ $argc -ge 1 && $argc -le 3 ]] || { usage >&2; die "Un fichier de configuration est requis."; }
+config_path="${args[0]}"
+phase="${args[1]:-all}"
 phase_args=()
 case "$phase" in
   all|prepare|merge)
-    [[ $# -le 2 ]] || die "Trop d'arguments pour $phase." ;;
+    [[ $argc -le 2 ]] || die "Trop d'arguments pour $phase." ;;
   train-block)
-    [[ $# -eq 3 && "$3" =~ ^(0|[1-9][0-9]*)$ ]] ||
+    [[ $argc -eq 3 && "${args[2]}" =~ ^(0|[1-9][0-9]*)$ ]] ||
       die "train-block attend un indice de bloc entier positif ou nul."
-    phase_args=(--block "$3") ;;
+    phase_args=(--block "${args[2]}") ;;
   *) die "Étape inconnue : $phase" ;;
 esac
+[[ "$redo" != true ]] || redo_check_phase "$phase"
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
 source "$repo_root/tools/libs/scripts/pipeline_config.sh"
 load_pipeline_defaults "$repo_root" panoramax
@@ -124,17 +133,7 @@ SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
 TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
 EXPORT_SPLAT_NAME="${EXPORT_SPLAT_NAME:-panoramax.splat}"
 MERGE_STRENGTH="${MERGE_STRENGTH:-1.0}"
-POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
-POSTPROCESS_FILTER_SIZE_FACTOR="${POSTPROCESS_FILTER_SIZE_FACTOR:-10}"
-POSTPROCESS_CLEANER="${POSTPROCESS_CLEANER:-contextual}"
-CLEANGS_PYTHON="${CLEANGS_PYTHON:-$PYTHON_BIN}"
-CLEANGS_MODEL="${CLEANGS_MODEL:-}"
-CLEANGS_MODE="${CLEANGS_MODE:-diagnostic}"
-CLEANGS_MIN_VIEWS="${CLEANGS_MIN_VIEWS:-2}"
-CLEANGS_SKY_CONFIDENCE="${CLEANGS_SKY_CONFIDENCE:-0.9}"
-CLEANGS_MAX_REMOVAL_FRACTION="${CLEANGS_MAX_REMOVAL_FRACTION:-0.2}"
-POSTPROCESS_SPARSE_BBOX_MODE="${POSTPROCESS_SPARSE_BBOX_MODE:-apply}"
-POSTPROCESS_SPARSE_BBOX_MARGIN="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.05}"
+export POSTPROCESS_FILTER_MODE="${POSTPROCESS_FILTER_MODE:-apply}"
 TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
 TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
 TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
@@ -351,12 +350,22 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare_images
 fi
 
+if [[ "$phase" == merge ]]; then
+  redo_check_blocks "$GS_ROOT" "$SPLIT_NUM_BLOCKS"
+fi
+if [[ "$redo" == true ]]; then
+  set_pipeline_stage "nettoyage des sorties de fusion à refaire ($phase)"
+  redo_clean_merge_outputs "$OUTPUT_DIR" "$GS_ROOT" "$EXPORT_SPLAT_NAME" "$SPLIT_NUM_BLOCKS"
+fi
+
+train_clean="$TRAIN_CLEAN"
+[[ "$redo" != true ]] || train_clean=true
 if [[ "$phase" != merge ]]; then
   if [[ "$phase" == prepare ]]; then
     phase_args=(--prepare-only)
     set_pipeline_stage "reconstruction SfM et découpage COLMAP"
   elif [[ "$phase" == train-block ]]; then
-    set_pipeline_stage "entraînement du bloc $3"
+    set_pipeline_stage "entraînement du bloc ${args[2]}"
   else
     set_pipeline_stage "reconstruction SfM, découpage COLMAP et entraînement des blocs"
   fi
@@ -416,7 +425,7 @@ if [[ "$phase" != merge ]]; then
   SFM_SP_BA_LOSS_PARAM="$SFM_SP_BA_LOSS_PARAM" \
   SFM_SP_PAIR_MAX_DISTANCE="$SFM_SP_PAIR_MAX_DISTANCE" \
   SPLIT_OVERLAP_MAX_FRACTION="$SPLIT_OVERLAP_MAX_FRACTION" \
-  TRAIN_CLEAN="$TRAIN_CLEAN" \
+  TRAIN_CLEAN="$train_clean" \
   SPIRULA_DEVICE="$SPIRULA_DEVICE" \
   SFM_MASKS="${SFM_MASKS:-off}" \
   SFM_MASKS_BACKEND="${SFM_MASKS_BACKEND:-$TRAIN_MASKS_BACKEND}" \
@@ -451,54 +460,7 @@ LIDAR_SPARSE="$SFM_DIR/sparse/0"
 [[ "$LIDAR_COLMAP_ALIGN" != true ]] || LIDAR_SPARSE="$OUTPUT_DIR/colmap_lidar"
 lidar_pipeline_hook check --workspace "$OUTPUT_DIR" --model "$SFM_DIR/sparse/0" --images "$IMAGES_DIR"
 
-set_pipeline_stage "vérification des splats avant fusion"
-rm -f -- "$OUTPUT_DIR/.merge_done"
-MERGE_INPUTS=()
-for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
-  block_id="$(printf '%03d' "$index")"
-  splat="$GS_ROOT/block_$block_id/splats/block_${block_id}.splat"
-  [[ -s "$splat" ]] || die "Splat du bloc absent ou vide : $splat"
-  if [[ "$POSTPROCESS_SPARSE_BBOX_MODE" == apply ]]; then
-    set_pipeline_stage "recadrage bbox COLMAP du bloc $block_id avant fusion"
-    cropped="$GS_ROOT/block_$block_id/splats/block_${block_id}.bbox.splat"
-    crop_splat_to_sparse "$splat" "$cropped" "$LIDAR_SPARSE" \
-      apply "$POSTPROCESS_SPARSE_BBOX_MARGIN"
-    splat="$cropped"
-  fi
-  MERGE_INPUTS+=("$splat")
-done
-
 FINAL_SPLAT="$OUTPUT_DIR/$EXPORT_SPLAT_NAME"
-UNFILTERED_SPLAT="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.unfiltered.splat"
-printf '[pipeline] Fusion des blocs vers %s\n' "$UNFILTERED_SPLAT"
-set_pipeline_stage "fusion des splats des blocs"
-merge_pipeline_splats "$UNFILTERED_SPLAT" "$MERGE_STRENGTH" "${MERGE_INPUTS[@]}"
-if [[ "$POSTPROCESS_CLEANER" == cleangs ]]; then
-  set_pipeline_stage "filtre Clean-GS multivues"
-  CLEAN_SCENE="$SFM_DIR"
-  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
-    CLEAN_SCENE="$OUTPUT_DIR/lidar_scene"
-    mkdir -p "$CLEAN_SCENE/sparse"
-    [[ -e "$CLEAN_SCENE/sparse/0" ]] || ln -s "$LIDAR_SPARSE" "$CLEAN_SCENE/sparse/0"
-    [[ -e "$CLEAN_SCENE/images" ]] || ln -s "$IMAGES_DIR" "$CLEAN_SCENE/images"
-  fi
-  "$CLEANGS_PYTHON" "$repo_root/tools/clean_gs/clean_sky.py" \
-    --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-    --scene "$CLEAN_SCENE" --model "$CLEANGS_MODEL" --mode "$CLEANGS_MODE" \
-    --min-views "$CLEANGS_MIN_VIEWS" --sky-confidence "$CLEANGS_SKY_CONFIDENCE" \
-    --max-removal-fraction "$CLEANGS_MAX_REMOVAL_FRACTION" --overwrite
-else
-  set_pipeline_stage "filtre contextuel global des splats"
-  "$PYTHON_BIN" "$repo_root/tools/postprocess/filter_splats.py" \
-    --input "$UNFILTERED_SPLAT" --output "$FINAL_SPLAT" \
-    --mode "$POSTPROCESS_FILTER_MODE" --size-factor "$POSTPROCESS_FILTER_SIZE_FACTOR" \
-    --sparse-points "$LIDAR_SPARSE/points3D.bin" \
-    --sparse-bbox-mode "$POSTPROCESS_SPARSE_BBOX_MODE" \
-    --sparse-bbox-margin "$POSTPROCESS_SPARSE_BBOX_MARGIN" --overwrite
-fi
-[[ -s "$FINAL_SPLAT" ]] || die "Splat final absent ou vide : $FINAL_SPLAT"
-touch -- "$OUTPUT_DIR/.merge_done"
-
 # Keep the georeferencing evidence alongside the final world-coordinate splat.
 GEOREF_DIR="$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.georef"
 set_pipeline_stage "copie des références de géoréférencement"
@@ -513,7 +475,6 @@ done
 mkdir -p "$GEOREF_DIR/sparse"
 cp -R "$LIDAR_SPARSE/." "$GEOREF_DIR/sparse/"
 cp "$BLOCKS_DIR/manifest.json" "$GEOREF_DIR/blocks_manifest.json"
-cp "$OUTPUT_DIR/${EXPORT_SPLAT_NAME%.splat}.filter.json" "$GEOREF_DIR/splat_filter_summary.json"
 if [[ -f "$SFM_DIR/.gps_filter_done" ]]; then
   cp "$SFM_DIR/.gps_filter_done" "$GEOREF_DIR/gps_filter_signature.txt"
 fi
@@ -550,7 +511,6 @@ data = {
         "colmap_sparse_model": "sparse/",
         "block_partition": "blocks_manifest.json",
         "training_transforms": "scene_transforms/",
-        "splat_filter_summary": "splat_filter_summary.json",
     },
     "num_blocks": int(blocks),
     "num_iterations_per_block": int(iterations),
@@ -566,8 +526,8 @@ if reference_path.is_file():
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 
-set_pipeline_stage "export de la référence géographique et nettoyage LiDAR"
-finalize_splat "$FINAL_SPLAT"
+finish_block_splats "$GS_ROOT" "$SPLIT_NUM_BLOCKS" "$FINAL_SPLAT" panoramax_to_3dgs \
+  "$GEOREF_DIR/sparse/georef_stats.json"
 printf '[pipeline] Terminé.\n'
 printf '[pipeline] Splat final : %s\n' "$FINAL_SPLAT"
 printf '[pipeline] Géoréférencement et références : %s\n' "$GEOREF_DIR"

@@ -1,9 +1,9 @@
 import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
-import { placementFor, worldPositions } from "./lidar-layer.js";
+import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
+import { registerOverlayMaterial } from "./overlay-depth.js";
 import { readGeojsonLayers } from "./geojson-geometry.js";
-import { parseGeoref } from "./georef.js";
 
 export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
@@ -81,7 +81,7 @@ function makeUnlitMaterial(color) {
   mat.emissive.copy(color);
   mat.diffuse.copy(color);
   mat.cull = pc.CULLFACE_NONE;
-  mat.depthTest = false;
+  registerOverlayMaterial(mat, "vectors");
   mat.depthWrite = false;
   mat.blendType = pc.BLEND_NORMAL;
   mat.update();
@@ -129,8 +129,8 @@ function subdivideIcosahedron(vertices, faces) {
 const SPHERE = subdivideIcosahedron(ICO_VERTICES, ICO_FACES);
 const SPHERE_VERTICES = SPHERE.vertices.length;
 // Rayon des sphères en proportion de l'emprise de la couche (unités des données).
-const POINT_RADIUS_RATIO = 0.004;
-const POINT_RADIUS_DEFAULT = 0.5;
+const POINT_RADIUS_RATIO = 0.002;
+const POINT_RADIUS_DEFAULT = 0.25;
 // Valeur par défaut du curseur « Taille des points » ; les sphères grossissent ou rétrécissent proportionnellement.
 export const DEFAULT_POINT_SIZE = 2;
 
@@ -223,7 +223,7 @@ function makeSphereMaterial(color) {
   });
   material.setParameter("uColor", [color.r, color.g, color.b]);
   material.cull = pc.CULLFACE_BACK;
-  material.depthTest = false;
+  registerOverlayMaterial(material, "vectors");
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
@@ -234,7 +234,6 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
-  let viewGeoref = null;
   let wireColor = new pc.Color().fromString(DEFAULT_WIRE_COLOR);
   let pointSize = DEFAULT_POINT_SIZE;
   const layers = new Map();
@@ -272,22 +271,10 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     }
   }
 
-  // Sans géoréférencement, le centre de la première couche sert de translation (georef « projected »
-  // interne) : les coordonnées restent exactes en float64 avant d'être converties en float32.
+  // Sans géoréférencement de scène, le pivot partagé avec le LiDAR sert de repère (cf. lidar-layer.js).
   function render(child, georef) {
     destroyRender(child);
-    if (!georef && !viewGeoref) {
-      const [x, y, h] = child.source.centre;
-      viewGeoref = parseGeoref({
-        output_reference: {
-          type: "projected",
-          units: "m",
-          epsg: child.source.epsg,
-          origin_projected: { x, y, h },
-        },
-      });
-    }
-    const placement = placementFor(child.source, georef ?? viewGeoref);
+    const placement = placementFor(child.source, resolvePivot(child.source, georef));
     child.placement = placement;
     child.bounds = null;
     const hasLines = child.source.count > 0;
@@ -312,6 +299,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       meshes.push(pointMesh);
     }
     child.bounds = colmapBounds(positionSets, false);
+    child.pivotPositions = positionSets;
 
     const material = makeUnlitMaterial(wireColor);
     const sphereMaterial = pointMesh ? makeSphereMaterial(wireColor) : null;
@@ -429,6 +417,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       render(child, georef);
     }
     layers.set(id, layer);
+    retainPivot(id);
     emitBounds(true);
 
     const unregister = registerGroup?.({
@@ -450,6 +439,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         unregister?.();
         for (const child of layer.children) destroyRender(child);
         layers.delete(id);
+        releasePivot(id);
         emitBounds(false);
       },
     }) ?? null;
@@ -462,9 +452,9 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   function clear() {
     for (const layer of layers.values()) {
       for (const child of layer.children) destroyRender(child);
+      releasePivot(layer.id);
     }
     layers.clear();
-    viewGeoref = null;
     emitBounds(false);
   }
 
@@ -472,6 +462,19 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     loadFile,
     clear,
     refreshPlacement,
+
+    getPivotSources() {
+      const sources = [];
+      for (const layer of layers.values()) {
+        for (const child of layer.children) {
+          if (!child.root?.enabled || !child.pivotPositions) continue;
+          for (const positions of child.pivotPositions) {
+            sources.push({ label: "vecteur", positions, entity: child.root });
+          }
+        }
+      }
+      return sources;
+    },
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {

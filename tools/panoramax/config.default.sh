@@ -95,9 +95,6 @@ POSTPROCESS_SHAPE_ISOLATION_FACTOR=""
 # rien : il faut aussi une position périphérique et un faible support.
 POSTPROCESS_FILTER_SIZE_FACTOR="10"
 
-# Défaut : 0.05 (sinon 0.02 du défaut commun). Marge de bbox = fraction du plus grand côté.
-POSTPROCESS_SPARSE_BBOX_MARGIN="0.05"
-
 # --- Propre à Panoramax : nettoyage cleangs (ignoré si POSTPROCESS_CLEANER=contextual) ---
 # Défaut : "" (repli PYTHON_BIN). Commande/chemin du Python du venv Clean-GS,
 # affiché par bash tools/clean_gs/install.sh.

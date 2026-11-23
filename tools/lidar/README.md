@@ -326,6 +326,44 @@ des splats résident en RAM. `--lidar-stride N` réduit la mémoire en gardant u
 point sur N (par défaut 1) ; pour le nettoyage, cela augmente les distances
 au plus proche voisin. Préparer une zone LAZ adaptée pour les grandes acquisitions.
 
+### Fusion LiDAR + 3DGS (`fuse_lidar_splats.py`)
+
+Entrée et sortie en `.splat` ou `.ply` (même extension). Par défaut, seule la
+règle 1 s'applique, plus le nettoyage planimétrique :
+
+0. Un splat dont le support planimétrique (`--footprint-sigmas` × σ, 3 par défaut)
+   n'atteint pas le LiDAR le plus proche en XY est retiré (il déborde du LAZ).
+   `--footprint-sigmas 0` désactive ce nettoyage.
+   Passe bbox (toujours active) : tout splat dont le support (même demi-taille) sort de
+   la bbox globale du LAZ, élargie de `--z-radius` dans toutes les directions (X, Y, Z),
+   est retiré. Compteur `removed_outside_bbox`.
+
+1. Un splat dont le Z (ou le support vertical, `--footprint-sigmas` × σ) sort de la bande
+   Z LiDAR locale, à `--z-margin` près, est retiré. Un grand splat de bord qui descend
+   sous le LiDAR est donc retiré même si son centre reste dans la bande. La bande est
+   le min/max des `--z-neighbours` points les plus proches en XY dans `--z-radius`
+   (par défaut 64 points dans 5 m), élargi au support horizontal du splat si celui-ci
+   est plus grand. Un grand voisinage évite de retirer les objets (bâtiments,
+   végétation) à cause d'un LiDAR sol trop étroit. Un splat sans LiDAR dans ce rayon
+   est conservé. `--z-offset` ajoute un décalage
+   vertical aux splats pour ce test seulement (utile si le datum diffère du LAZ) ;
+   le fichier de sortie garde les Z d'origine.
+2. Avec `--fill-holes`, dans chaque voxel `--voxel` où les splats sont moins nombreux que
+   `--density-ratio` × points LiDAR, un point LiDAR est ajouté comme splat
+   (écart-type `--scale-factor` × distance LiDAR au plus proche, opacité `--opacity`).
+   Sa couleur est la moyenne des splats conservés dans `--colour-radius`, sinon gris (128).
+   `--min-splat-distance` écarte les points LiDAR situés à moins de cette distance d'un
+   splat conservé, pour ne garder que les zones isolées.
+
+```bash
+python tools/lidar/fuse_lidar_splats.py \
+  --lidar terrain.laz --input scene.ply --output scene_fused.ply \
+  --origin 650000,6860000,0 --z-margin 0.5 --voxel 0.5 --fill-holes
+```
+
+Le rapport JSON (`scene_fused.ply.json`) compte les retraits, ajouts et couleurs
+propagées ou grises. `--dry-run` écrit uniquement le rapport.
+
 ## Tests
 
 ```bash

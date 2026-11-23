@@ -17,7 +17,7 @@ python3 tools/postprocess/export_ply.py --help
 | Outil | Fonction |
 |---|---|
 | `export_splat_to_ply.sh` | Export [Nerfstudio](../../doc/nerfstudio.md) via `ns-export` |
-| `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP |
+| `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP : distance aux points, et support gaussien (`--support-sigmas` × échelle) hors bbox des points élargie de `--bbox-margin` retiré |
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
 | `export_ply_legacy.py` | Exporteur alternatif : filtre par BBOX et seuil global de taille |
 | `filter_splats.py` | Diagnostic/nettoyage contextuel d'un `.splat`, sans seuil de distance absolu |
@@ -51,8 +51,9 @@ bash tools/postprocess/clean_ply.sh --help
 Les scripts de `tools/postprocess/` exportent les modèles, fusionnent les blocs
 et proposent des filtres pour retirer certains splats indésirables.
 
-- `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides,
-  mais ne supprime pas automatiquement les splats éloignés des points COLMAP.
+- `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides et,
+  en mode `apply`/`diagnostic`, les splats dont le support (rayon `--bbox-sigma`,
+  3 sigma par défaut) sort de la BBOX des points COLMAP (`--points`, marge `--dist`).
 - `filter_splats.py` repère les splats anormalement grands, situés en bordure
   de scène et sans support clair sur une surface voisine.
 - Ce filtre est une heuristique, pas une reconnaissance d'objets ni une mesure

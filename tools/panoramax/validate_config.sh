@@ -164,14 +164,10 @@ validate_config() {
   [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
     awk -v x="$value" 'BEGIN { exit !(x >= 0 && x < 1) }' ||
     config_error "CLEANGS_MAX_REMOVAL_FRACTION='$value' doit être dans [0,1[."
-  config_choice POSTPROCESS_SPARSE_BBOX_MODE "${POSTPROCESS_SPARSE_BBOX_MODE:-apply}" 'apply|diagnostic|off'
   if [[ "$train_backend" == spirula ]]; then
     value="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
     [[ -z "$value" ]] || config_positive_integer TRAIN_SP_SPLATS_PER_IMAGE "$value"
   fi
-  value="${POSTPROCESS_SPARSE_BBOX_MARGIN:-0.05}"
-  [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
-    config_error "POSTPROCESS_SPARSE_BBOX_MARGIN='$value' doit être un nombre >= 0 (fraction de la bbox)."
   if [[ "$train_backend" == spirula ]]; then
     value="${TRAIN_SP_GROWTH_FACTOR:-}"
     [[ -z "$value" ]] || {

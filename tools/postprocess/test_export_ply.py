@@ -101,5 +101,36 @@ class CleanupTest(unittest.TestCase):
         self.assertEqual(len(result["means"]), 99)
 
 
+spec_new = importlib.util.spec_from_file_location(
+    "export_ply", Path(__file__).with_name("export_ply.py")
+)
+export_new = importlib.util.module_from_spec(spec_new)
+spec_new.loader.exec_module(export_new)
+
+
+class BboxSupportTest(unittest.TestCase):
+    def test_support_crossing_the_points_box_is_rejected(self):
+        points = np.array([[-1.0] * 3, [1.0] * 3])
+        means = np.array([[0.0, 0, 0], [0.9, 0, 0], [0.0, 0, 0]])
+        scales = np.log(np.array([[0.1] * 3, [0.1] * 3, [0.6] * 3]))
+        quats = np.tile([1.0, 0, 0, 0], (3, 1))
+        rejected, report = export_new.bbox_support_mask(means, scales, quats, points, sigma=3.0)
+        self.assertEqual(rejected.tolist(), [False, True, True])
+        self.assertEqual(report["outside_bbox"], 2)
+        rejected, _ = export_new.bbox_support_mask(means, scales, quats, points, margin=0.5, sigma=3.0)
+        self.assertEqual(rejected.tolist(), [False, False, True])
+
+    def test_rotated_gaussian_uses_axis_aligned_extent(self):
+        points = np.array([[-1.0, -1, -1], [1.0, 1, 1]])
+        means = np.array([[0.0, 0, 0.9]])
+        scales = np.log(np.array([[0.5, 0.01, 0.01]]))
+        flat = np.array([[1.0, 0, 0, 0]])
+        turned = np.array([[np.cos(np.pi / 4), 0, np.sin(np.pi / 4), 0]])
+        rejected, _ = export_new.bbox_support_mask(means, scales, flat, points, sigma=1.0)
+        self.assertFalse(rejected[0])
+        rejected, _ = export_new.bbox_support_mask(means, scales, turned, points, sigma=1.0)
+        self.assertTrue(rejected[0])
+
+
 if __name__ == "__main__":
     unittest.main()

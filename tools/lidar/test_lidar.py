@@ -15,7 +15,7 @@ from common import (Scene, class_codes, fit_similarity, load_lidar, register, sh
                     support_radii, transform_records, write_scene)
 from filter_splats_by_lidar import (HeightGrid, MAX_SUPPORT_POINTS, aerial_guard,
                                    distance_mask, ellipsoid_distances, support_mask)
-from merge_splats import BASE_DTYPE, SPLAT_DTYPE
+from merge_splats import BASE_DTYPE, C0, SPLAT_DTYPE
 
 
 class LidarTests(unittest.TestCase):
@@ -426,6 +426,116 @@ class LidarTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(aligned.with_suffix(".splat.json").read_text())
             self.assertLess(report["rmse_after"], 0.001)
+
+    def test_z_band_extent_removes_splats_whose_support_leaves_the_band(self):
+        from fuse_lidar_splats import z_band_mask
+        lidar = np.column_stack([np.random.rand(500, 2) * 10, np.zeros(500)])
+        xyz = np.array([[5.0, 5.0, 0.0], [5.0, 5.0, 0.0]])
+        remove, _ = z_band_mask(xyz, lidar, 5.0, 64, 0.5, extent=np.array([0.0, 2.0]))
+        self.assertEqual(remove.tolist(), [False, True])
+
+    def test_z_band_extent_reaches_lidar_beyond_radius(self):
+        from fuse_lidar_splats import z_band_mask
+        lidar = np.array([[-1.0, 5.0, 0.0], [-1.0, 5.5, 0.0]])
+        xyz = np.array([[5.0, 5.0, -3.0]])
+        remove, evidence = z_band_mask(xyz, lidar, 5.0, 64, 0.5, extent=np.array([7.0]))
+        self.assertEqual((remove.tolist(), evidence.tolist()), ([True], [True]))
+
+    def test_bbox_removes_splats_whose_support_leaves_lidar_extent(self):
+        from fuse_lidar_splats import bbox_mask
+        lidar = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 5.0]])
+        xyz = np.array([[5.0, 5.0, 2.5], [0.5, 5.0, 2.5], [5.0, 5.0, 4.9]])
+        support = np.array([1.0, 1.0, 1.0])
+        self.assertEqual(bbox_mask(xyz, support, lidar).tolist(), [False, True, True])
+        self.assertEqual(bbox_mask(xyz, support, lidar, margin=1.0).tolist(),
+                         [False, False, False])
+
+    def test_footprint_removes_splats_whose_support_misses_lidar(self):
+        from fuse_lidar_splats import footprint_mask
+        lidar = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+        xyz = np.array([[0.5, 0.0, 0.0], [4.0, 0.0, 0.0]])
+        sigma = np.array([0.5, 0.5])
+        self.assertEqual(footprint_mask(xyz, sigma, lidar, 3.0).tolist(), [False, True])
+
+    def test_z_offset_stats_reports_residual_to_local_lidar(self):
+        from fuse_lidar_splats import z_offset_stats
+        lidar = np.column_stack([np.random.rand(2000, 2) * 10, np.zeros(2000)])
+        splats = np.column_stack([np.random.rand(300, 2) * 10, np.full(300, 3.0)])
+        stats = z_offset_stats(splats, lidar, 5.0, 64)
+        self.assertAlmostEqual(stats["residual_to_local_lidar_median"]["p50"], 3.0)
+        self.assertEqual(stats["lidar_z"]["p50"], 0.0)
+
+    def test_fusion_removes_outside_z_and_fills_sparse_voxels_in_both_formats(self):
+        lidar_xyz = np.array([[.5, .5, 0], [1., .5, 0], [10.5, .5, 0], [10.7, .5, 0],
+                              [-30., -30., -1.], [30., 30., 6.]])
+        fuse = str(Path(__file__).with_name("fuse_lidar_splats.py"))
+
+        def write_scene(path, positions, rgb):
+            n = len(positions)
+            if path.suffix == ".splat":
+                raw = np.zeros(n, dtype=SPLAT_DTYPE)
+                raw["position"] = positions
+                raw["scale"] = .01
+                raw["rotation"] = [255, 128, 128, 128]
+                raw["rgba"][:, :3] = rgb
+                raw["rgba"][:, 3] = 230
+                raw.tofile(path)
+            else:
+                raw = np.zeros(n, dtype=BASE_DTYPE)
+                for i, name in enumerate("xyz"):
+                    raw[name] = positions[:, i]
+                raw["f_dc_0"] = raw["f_dc_1"] = raw["f_dc_2"] = 0
+                raw["f_dc_0"], raw["f_dc_1"], raw["f_dc_2"] = [
+                    (c / 255 - .5) / C0 for c in rgb]
+                raw["opacity"] = 2.
+                for i in range(3):
+                    raw[f"scale_{i}"] = np.log(.01)
+                raw["rot_0"] = 1
+                PlyData([PlyElement.describe(raw, "vertex")], byte_order="<").write(str(path))
+
+        def read_scene(path):
+            if path.suffix == ".splat":
+                raw = np.fromfile(path, dtype=SPLAT_DTYPE)
+                return raw["position"], raw["rgba"][:, :3].astype(float)
+            data = PlyData.read(str(path))["vertex"].data
+            xyz = np.column_stack([data["x"], data["y"], data["z"]])
+            dc = np.column_stack([data["f_dc_0"], data["f_dc_1"], data["f_dc_2"]])
+            return xyz, np.clip((dc * C0 + .5) * 255, 0, 255)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            cloud = laspy.LasData(laspy.LasHeader(point_format=6, version="1.4"))
+            cloud.x, cloud.y, cloud.z = lidar_xyz.T
+            laz = root / "lidar.laz"
+            cloud.write(laz)
+            for suffix in (".splat", ".ply"):
+                with self.subTest(suffix=suffix):
+                    source, output = root / f"in{suffix}", root / f"out{suffix}"
+                    write_scene(source, np.array([[.5, .5, .2], [.5, .5, 5.]]), (200, 0, 0))
+                    base = [sys.executable, fuse, "--lidar", str(laz), "--input", str(source),
+                            "--voxel", "1", "--colour-radius", "2"]
+                    plain = root / f"plain{suffix}"
+                    result = subprocess.run(base + ["--output", str(plain)],
+                                            capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(json.loads(plain.with_suffix(suffix + ".json").read_text())
+                                     ["added_splats"], 0)
+                    self.assertEqual(len(read_scene(plain)[0]), 1)
+                    command = base + ["--output", str(output), "--fill-holes"]
+                    result = subprocess.run(command, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    report = json.loads(output.with_suffix(suffix + ".json").read_text())
+                    self.assertEqual(report["removed_outside_z"], 1)
+                    self.assertEqual(report["added_splats"], 4)
+                    self.assertEqual(report["added_coloured_from_splats"], 1)
+                    self.assertEqual(report["added_default_grey"], 3)
+                    xyz, rgb = read_scene(output)
+                    self.assertEqual(len(xyz), 5)
+                    self.assertTrue(np.all(xyz[np.abs(xyz[:, 0]) < 20, 2] < 1))
+                    near = np.argmin(np.abs(xyz[:, 0] - 1.))
+                    far = np.argmin(np.abs(xyz[:, 0] - 10.5))
+                    np.testing.assert_allclose(rgb[near], (200, 0, 0), atol=2)
+                    np.testing.assert_allclose(rgb[far], (128, 128, 128), atol=2)
 
 
 if __name__ == "__main__":

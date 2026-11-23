@@ -371,6 +371,33 @@
         <input type="color" id="wireColor" value="#00e5ff" />
       </div>
 
+      <label class="slider stacked" for="cityRoofOpacity">
+        <span>Opacité toits</span>
+        <input type="range" id="cityRoofOpacity" min="0" max="100" step="5" value="100" />
+        <output id="cityRoofOpacityValue" for="cityRoofOpacity">100 %</output>
+      </label>
+
+      <label class="slider stacked" for="cityFacadeOpacity">
+        <span>Opacité façades</span>
+        <input type="range" id="cityFacadeOpacity" min="0" max="100" step="5" value="100" />
+        <output id="cityFacadeOpacityValue" for="cityFacadeOpacity">100 %</output>
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="splatOcclusion" checked />
+        Splats masquent les volumes 3D
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="colmapOcclusion" checked />
+        Splats masquent les données COLMAP
+      </label>
+
+      <label class="check">
+        <input type="checkbox" id="facadeNearSplats" />
+        Masquer façades près des splats (1 m)
+      </label>
+
       <label class="check">
         <input type="checkbox" id="flipUp" />
         Axe Y vers le bas — COLMAP

@@ -188,6 +188,22 @@ def load_ply(path):
     return xyz, ply
 
 
+def splat_half_extent(ply, sigmas):
+    """Per-axis half-size of each gaussian support: sigmas × exp(scale_k), zero if absent."""
+    v = ply["vertex"].data
+    names = [f"scale_{k}" for k in range(3)]
+    if not all(name in v.dtype.names for name in names):
+        return np.zeros((len(v), 3), dtype=np.float64)
+    return sigmas * np.exp(np.column_stack([v[name] for name in names]).astype(np.float64))
+
+
+def bbox_support_mask(xyz, half, bbox_min, bbox_max, margin):
+    """True where the gaussian support (centre ± half) leaves the bbox grown by margin."""
+    lo = bbox_min - margin
+    hi = bbox_max + margin
+    return ((xyz - half < lo) | (xyz + half > hi)).any(axis=1)
+
+
 # ======================
 # WRITE
 # ======================
@@ -209,6 +225,10 @@ def main():
     parser.add_argument("--dist", type=float, default=None)
     parser.add_argument("--out-ply", required=True)
     parser.add_argument("--outlier-percent", type=float, default=97)
+    parser.add_argument("--bbox-margin", type=float, default=0.5,
+                        help="Marge (unités du repère COLMAP) ajoutée à la bbox des points")
+    parser.add_argument("--support-sigmas", type=float, default=3.0,
+                        help="Support de la gaussienne : nombre d'écarts-types testés")
 
     args = parser.parse_args()
 
@@ -261,19 +281,17 @@ def main():
     mask_dist[idx] = d < dist
 
     # ======================
-    # BBOX FILTER
+    # BBOX FILTER (support, not only centre)
     # ======================
-    inside_bbox = (
-        (gaussians[:, 0] >= bbox_min[0]) & (gaussians[:, 0] <= bbox_max[0]) &
-        (gaussians[:, 1] >= bbox_min[1]) & (gaussians[:, 1] <= bbox_max[1]) &
-        (gaussians[:, 2] >= bbox_min[2]) & (gaussians[:, 2] <= bbox_max[2])
-    )
+    half = splat_half_extent(ply, args.support_sigmas)
+    outside_bbox = bbox_support_mask(gaussians.astype(np.float64), half,
+                                     bbox_min, bbox_max, args.bbox_margin)
+    log(f"Outside bbox (support, margin {args.bbox_margin}): {outside_bbox.sum()}")
 
     # ======================
     # FINAL MASK
     # ======================
-    # mask = mask_dist | inside_bbox
-    mask = mask_dist & inside_bbox
+    mask = mask_dist & ~outside_bbox
 
     log(f"Kept: {mask.sum()} / {len(mask)}")
 

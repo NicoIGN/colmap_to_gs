@@ -4,9 +4,12 @@ import test from "node:test";
 
 const imagesSource = await readFile(new URL("./html/viewer/colmap-images.js", import.meta.url), "utf8");
 const imagesModuleUrl = `data:text/javascript;base64,${Buffer.from(imagesSource).toString("base64")}`;
+const overlaySource = await readFile(new URL("./html/viewer/overlay-depth.js", import.meta.url), "utf8");
+const overlayModuleUrl = `data:text/javascript;base64,${Buffer.from(overlaySource).toString("base64")}`;
 const source = (await readFile(new URL("./html/viewer/colmap.js", import.meta.url), "utf8"))
   .replace('import * as pc from "playcanvas";', "const pc = globalThis.testPlayCanvas;")
-  .replace('from "./colmap-images.js"', `from "${imagesModuleUrl}"`);
+  .replace('from "./colmap-images.js"', `from "${imagesModuleUrl}"`)
+  .replace('from "./overlay-depth.js"', `from "${overlayModuleUrl}"`);
 class TestEntity {
   addChild(child) { child.parent = this; }
   removeChild(child) { child.parent = null; }
@@ -22,10 +25,24 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
+
+test("a click ray picks the single pinhole frustum it crosses, and the far face resets it", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const camera = { modelName: "PINHOLE", width: 100, height: 100, params: [100, 100, 50, 50] };
+  const depth = 10;
+  // Rayon axial : entre dans la pyramide à t = 5 (apex à z = 0 et plan lointain à z = depth).
+  assert.equal(rayFrustumEntry(image, camera, depth, [0, 0, -5], [0, 0, 1]), 5);
+  // Rayon parallèle à l'axe mais hors du cadre latéral.
+  assert.equal(rayFrustumEntry(image, camera, depth, [100, 0, -5], [0, 0, 1]), null);
+  // Rayon qui s'éloigne de la pyramide.
+  assert.equal(rayFrustumEntry(image, camera, depth, [0, 0, -5], [0, 0, -1]), null);
+  assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0, 1]), true);
+  assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0.8, 1]), false);
+});
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {
   const previousDocument = globalThis.document;
@@ -223,4 +240,10 @@ test("the view ray must cross the enlarged frustum to count as covering the cent
   assert.equal(coversViewCenter(image, camera, 5, [0, 0, 6], [0, 0, 1]), false);
   // Point de vue derrière le plan de l'image, regardant vers elle : l'image ne doit pas être choisie.
   assert.equal(coversViewCenter(image, camera, 5, [0, 0, 6], [0, 0, -1]), false);
+});
+
+test("a click ray hits a panorama marker box only when it crosses it", () => {
+  assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, 1]), true);
+  assert.equal(rayBoxHit([0, 0, 10], 2, [3, 0, 0], [0, 0, 1]), false);
+  assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, -1]), false);
 });

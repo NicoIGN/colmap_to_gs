@@ -20,7 +20,11 @@ import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
+import { findPivotAtPixel } from "./viewer/pivot.js";
+import { setOverlayOcclusion } from "./viewer/overlay-depth.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
+import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
+import { isCityJsonText } from "./viewer/cityjson-geometry.js";
 
 const $ = (id) => document.getElementById(id);
 const container = $("viewer");
@@ -96,6 +100,7 @@ let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
 
 let pickSerial = 0;
+let pivotSerial = 0;
 let picking = false;
 
 let navigation = null;
@@ -109,6 +114,7 @@ let colmapLayer = null;
 let gpsLayer = null;
 let lidarLayer = null;
 let gpkgLayer = null;
+let cityLayer = null;
 
 
 const canvas = document.createElement("canvas");
@@ -215,6 +221,24 @@ function hexToColor(hex) {
   );
 }
 
+// Les matériaux splat sont créés par le moteur par caméra et par couche :
+// on réapplique l'option à chaque frame pour suivre leur recréation.
+function applySplatDepthWrite() {
+  const enabled = $("splatOcclusion").checked;
+  const director = app?.renderer?.gsplatDirector;
+  for (const cameraData of director?.camerasMap?.values() ?? []) {
+    for (const layerData of cameraData.layersMap?.values() ?? []) {
+      const material = layerData.gsplatManager?.material;
+      if (material && material.depthWrite !== enabled) material.depthWrite = enabled;
+    }
+  }
+}
+
+function applyOverlayOcclusion() {
+  setOverlayOcclusion("vectors", $("splatOcclusion").checked);
+  setOverlayOcclusion("colmap", $("colmapOcclusion").checked);
+}
+
 function applyBackgroundColor() {
   const hex = $("backgroundColor").value;
   document.body.style.background = hex;
@@ -248,7 +272,10 @@ function refreshUI() {
         element.id === "fileInput" ||
         element.id === "colmapFolderInput" ||
         element.id === "colmapPointSize" ||
-        element.id === "colmapCameraSize"
+        element.id === "colmapCameraSize" ||
+        element.id === "cityRoofOpacity" ||
+        element.id === "cityFacadeOpacity" ||
+        element.id === "facadeNearSplats"
       ) {
         return;
       }
@@ -497,6 +524,7 @@ function releaseScene() {
   colmapLayer?.clear();
   lidarLayer?.clear();
   gpkgLayer?.clear();
+  cityLayer?.clear();
   gpsLayer?.clear();
   layerManager?.clear();
 
@@ -565,11 +593,11 @@ function keepPivotOnCenter(previousCenter, previousTarget) {
   syncCamera();
 }
 
-function computeSceneBounds() {
+function gatherSplatCoordinates(layers, keep = null) {
   const coordinates = [[], [], []];
   const point = new THREE.Vector3();
 
-  for (const layer of splatLayers) {
+  for (const layer of layers) {
     const count = layer.centers.length / 3;
     const stride = Math.max(1, Math.ceil(count / 100_000));
     const matrix = new THREE.Matrix4().fromArray(
@@ -582,13 +610,51 @@ function computeSceneBounds() {
         layer.centers[i * 3 + 2]
       ).applyMatrix4(matrix);
       if (![point.x, point.y, point.z].every(Number.isFinite)) continue;
+      if (keep && !keep(point)) continue;
       coordinates[0].push(point.x);
       coordinates[1].push(point.y);
       coordinates[2].push(point.z);
     }
   }
+  return coordinates;
+}
 
+// Boîte au 1er/99e percentile pour ignorer les points isolés.
+function percentileBox(coordinates, box) {
   const valid = coordinates[0].length;
+  const sorted = coordinates.map((values) => values.sort((a, b) => a - b));
+
+  const percentile = (values, q) =>
+    values[Math.min(valid - 1, Math.floor(valid * q))];
+
+  box.set(
+    new THREE.Vector3(...sorted.map((values) => percentile(values, 0.01))),
+    new THREE.Vector3(...sorted.map((values) => percentile(values, 0.99)))
+  );
+
+  const size = box.getSize(new THREE.Vector3());
+
+  box.expandByScalar(
+    Math.max(size.x, size.y, size.z, 1e-3) * 1e-3
+  );
+  return box;
+}
+
+// Centre du pivot de navigation : boîte des splats réellement affichés dans le frustum de la caméra.
+function getVisibleSceneCenter() {
+  camera.updateMatrixWorld(true);
+  const frustum = new THREE.Frustum().setFromProjectionMatrix(
+    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+  );
+  const visible = splatLayers.filter((layer) => layer.entity.enabledInHierarchy);
+  const coordinates = gatherSplatCoordinates(visible, (point) => frustum.containsPoint(point));
+  if (!coordinates[0].length) return sceneCenter;
+  return percentileBox(coordinates, new THREE.Box3()).getCenter(new THREE.Vector3());
+}
+
+function computeSceneBounds() {
+  const valid = gatherSplatCoordinates(splatLayers)[0].length;
+
   if (!splatLayers.length && hasFreeData()) {
     sceneBox.makeEmpty();
     for (const box of [colmapBox, lidarBox, wireBox]) {
@@ -600,25 +666,7 @@ function computeSceneBounds() {
       new THREE.Vector3(1, 1, 1)
     );
   } else {
-    const sorted = coordinates.map((values) => values.sort((a, b) => a - b));
-
-    const percentile = (values, q) =>
-      values[Math.min(valid - 1, Math.floor(valid * q))];
-
-    sceneBox.set(
-      new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, 0.01))
-      ),
-      new THREE.Vector3(
-        ...sorted.map((values) => percentile(values, 0.99))
-      )
-    );
-
-    const size = sceneBox.getSize(new THREE.Vector3());
-
-    sceneBox.expandByScalar(
-      Math.max(size.x, size.y, size.z, 1e-3) * 1e-3
-    );
+    percentileBox(gatherSplatCoordinates(splatLayers), sceneBox);
   }
 
   sceneBox.getCenter(sceneCenter);
@@ -868,6 +916,26 @@ async function loadFile(file) {
   await resetAndLoad(file, file.name);
 }
 
+// Fichiers qui géoréférencent un splat déposé avec lui.
+function isGeorefSidecarName(name, base) {
+  const lower = name.toLowerCase();
+  return (
+    lower === `${base}.georef.json` ||
+    lower === `${base}.metadata.json` ||
+    lower === "gauge.txt" ||
+    lower === "georef_stats.json"
+  );
+}
+
+// Un métadonnées sans output_reference (pas de géoréférencement) ne doit pas provoquer d'erreur.
+async function hasOutputReference(file) {
+  try {
+    return "output_reference" in JSON.parse(await file.text());
+  } catch {
+    return false;
+  }
+}
+
 async function appendScene(source, name) {
   if (!sceneReady && !hasFreeData()) {
     await resetAndLoad(source, name);
@@ -910,20 +978,15 @@ async function handleDroppedFiles(fileList, items) {
     const sceneFile = files.find((f) => isSupportedSceneName(f.name));
     if (sceneFile && files.length === 2) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
-      const georefFile = files.find((f) => f !== sceneFile && f.name.toLowerCase() === `${base}.georef.json`);
-      console.log("[georef] scan", {
-        scene: sceneFile.name,
-        expected: `${base}.georef.json`,
-        found: georefFile?.name ?? null,
-        files: files.map((f) => f.name),
-      });
+      const georefFile = files.find((f) => f !== sceneFile && isGeorefSidecarName(f.name, base));
       if (georefFile) {
-        await loadFile(sceneFile);
-        console.log("[georef] scène chargée, import du georef", georefFile.name, {
-          ready: sceneTools?.getState?.().ready,
-        });
-        await sceneTools.importFile(georefFile);
-        console.log("[georef] importFile terminé", { georef: sceneTools?.getGeoref?.() ? "présent" : "absent" });
+        // Le splat s'ajoute à la vue courante : son propre géoréférencement prend le relais.
+        await appendScene(sceneFile, sceneFile.name);
+        if (/\.txt$/i.test(georefFile.name)) {
+          await sceneTools.importGaugeFile(georefFile);
+        } else if (!/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile))) {
+          await sceneTools.importFile(georefFile);
+        }
         return;
       }
     }
@@ -954,9 +1017,23 @@ async function handleDroppedFiles(fileList, items) {
       );
     }
 
+    if (/\.json$/i.test(file.name)) {
+      const text = await file.text();
+      if (isCityJsonText(text)) {
+        if (!cityLayer) throw new Error("L’importeur CityJSON n’est pas initialisé.");
+        await cityLayer.loadText(text, file.name);
+        return;
+      }
+    }
+
     if (/\.(json|gpx)$/i.test(file.name)) {
       await sceneTools.importFile(file);
-    } else if (/\.(splat|ply)$/i.test(file.name)) {
+    } else if (isSupportedSceneName(file.name)) {
+      if (sceneTools?.getGeoref?.()) {
+        throw new Error(
+          "La scène est déjà géoréférencée : ajoute le splat avec son gauge.txt ou son georef_stats.json."
+        );
+      }
       await appendScene(file, file.name);
     } else {
       await loadFile(file);
@@ -967,6 +1044,97 @@ async function handleDroppedFiles(fileList, items) {
     console.error("Import :", error);
     setStatus(`Import impossible : ${error?.message || error}`, true);
   }
+}
+
+function pickImageAtPixel(clientX, clientY) {
+  if (!canvas || !cameraEntity) return;
+  if (!colmapLayer) {
+    setStatus("Clic frustum : aucune donnée COLMAP chargée.", true);
+    return;
+  }
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  camera.updateMatrixWorld();
+  const ndc = new THREE.Vector2(
+    ((clientX - rect.left) / rect.width) * 2 - 1,
+    -((clientY - rect.top) / rect.height) * 2 + 1
+  );
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(ndc, camera);
+  colmapLayer.pickImageRay(raycaster.ray.origin.toArray(), raycaster.ray.direction.toArray());
+}
+
+async function selectPivotAtPixel(clientX, clientY) {
+  if (!sceneReady || disposed || !cameraEntity) return false;
+  const serial = ++pivotSerial;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+
+  let pivot = null;
+  if (splatLayers.length) {
+    try {
+      await nextRenderedFrame();
+      if (disposed || serial !== pivotSerial) return false;
+      picker.resize(Math.max(1, canvas.width), Math.max(1, canvas.height));
+      const layer = app.scene.layers.getLayerByName("World");
+      picker.prepare(cameraEntity.camera, app.scene, [layer]);
+      const hit = await picker.getWorldPointAsync(
+        Math.floor((px * canvas.width) / rect.width),
+        Math.floor((py * canvas.height) / rect.height)
+      );
+      if (disposed || serial !== pivotSerial) return false;
+      if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.y) && Number.isFinite(hit.z)) {
+        pivot = { point: [hit.x, hit.y, hit.z], label: "splat" };
+      }
+    } catch (error) {
+      console.error("Picking :", error);
+    }
+  }
+
+  if (!pivot) {
+    const sources = collectPivotSources();
+    if (sources.length) {
+      pivot = findPivotAtPixel({
+        sources,
+        camera: {
+          matrix: cameraEntity.getWorldTransform().data,
+          fov: cameraEntity.camera.fov,
+          horizontalFov: cameraEntity.camera.horizontalFov,
+        },
+        px,
+        py,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+  }
+
+  if (!pivot) {
+    setStatus("Aucune donnée sous le clic : pivot conservé.");
+    return false;
+  }
+
+  const [x, y, z] = pivot.point;
+  const next = new THREE.Vector3(x, y, z);
+  if (next.distanceToSquared(camera.position) < 1e-12) return false;
+  target.copy(next);
+  syncCamera();
+  requestGifCapture();
+  setStatus(`Pivot sur ${pivot.label} · axe ${getPrincipalAxisLabel()}.`);
+  return true;
+}
+
+function collectPivotSources() {
+  const layers = [lidarLayer, colmapLayer, gpkgLayer, cityLayer];
+  return layers.flatMap((layer) =>
+    (layer?.getPivotSources?.() ?? []).map((source) => ({
+      label: source.label,
+      positions: source.positions,
+      matrix: source.entity.getWorldTransform().data,
+    }))
+  );
 }
 
 async function selectPointInView(key, button) {
@@ -1368,6 +1536,12 @@ function installUI() {
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
   $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
+  for (const kind of ["roof", "facade"]) {
+    $(`city${kind === "roof" ? "Roof" : "Facade"}Opacity`).addEventListener("input", (event) => {
+      cityLayer?.setOpacity(kind, Number(event.target.value));
+      $(`city${kind === "roof" ? "Roof" : "Facade"}OpacityValue`).value = `${event.target.value} %`;
+    });
+  }
 
   $("togglePanel").addEventListener("click", () => {
     navigation.clearNavigation();
@@ -1395,6 +1569,7 @@ function installUI() {
     colmapLayer?.setFlipUp($("flipUp").checked);
     lidarLayer?.setFlipUp($("flipUp").checked);
     gpkgLayer?.setFlipUp($("flipUp").checked);
+    cityLayer?.setFlipUp($("flipUp").checked);
 
     computeSceneBounds();
     syncCamera();
@@ -1552,6 +1727,12 @@ async function initialize() {
     );
 
     app.scene.gsplatCentersEnabled = true;
+  app.on("update", applySplatDepthWrite);
+  $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
+  applyOverlayOcclusion();
+  $("splatOcclusion").addEventListener("change", applyOverlayOcclusion);
+  $("colmapOcclusion").addEventListener("change", applyOverlayOcclusion);
+  $("facadeNearSplats").addEventListener("change", () => cityLayer?.setFacadeNearSplats($("facadeNearSplats").checked));
     layerManager = createLayerManager($("layerList"));
 
     cameraEntity = new pc.Entity("Camera");
@@ -1599,7 +1780,7 @@ async function initialize() {
       target,
       inputBindings: NAVIGATION_INPUT_BINDINGS,
       getSceneRadius: () => sceneRadius,
-      getSceneCenter: () => sceneCenter,
+      getSceneCenter: getVisibleSceneCenter,
       getSceneBox: () => sceneBox,
       getCanNavigate: canNavigate,
       getCanDefineVertical: canDefineVertical,
@@ -1631,6 +1812,8 @@ async function initialize() {
       syncCamera,
       requestGifCapture,
       selectPointInView,
+      selectPivotAt: selectPivotAtPixel,
+      pickImageAt: pickImageAtPixel,
       setStatus,
     });
 
@@ -1723,6 +1906,7 @@ async function initialize() {
       gpsLayer = createGpsLayer({
         app,
         registerLayer: (layer) => layerManager.add(layer),
+        onClear: () => sceneTools?.clearGpsTrack(),
       });
 
       lidarLayer = createLidarLayer({
@@ -1748,6 +1932,21 @@ async function initialize() {
       gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
       gpkgLayer.setPointSize(Number($("colmapPointSize").value));
 
+      cityLayer = createCityJsonLayer({
+        app,
+        setStatus,
+        getFlipUp: () => $("flipUp").checked,
+        getSplatCenters: () => splatLayers.map((layer) => layer.centers),
+        getGeoref: () => sceneTools?.getGeoref() ?? null,
+        registerGroup: (group) => layerManager.addGroup(group),
+        onBoundsChanged: (bounds, frame) => {
+          const framed = frame && !hasFreeData() && !splatLayers.length;
+          applyFreeBounds(wireBox, bounds, framed);
+        },
+      });
+      cityLayer.setOpacity("roof", Number($("cityRoofOpacity").value));
+      cityLayer.setOpacity("facade", Number($("cityFacadeOpacity").value));
+
       installUI();
       installDnD();
 
@@ -1758,6 +1957,7 @@ async function initialize() {
         sceneTools?.frame(dt);
         lidarLayer?.refreshPlacement();
         gpkgLayer?.refreshPlacement();
+        cityLayer?.refreshPlacement();
         colmapLayer?.frame();
 
         // Peut être null pendant init/teardown.
@@ -1821,6 +2021,9 @@ async function initialize() {
 
         gpkgLayer?.dispose();
         gpkgLayer = null;
+
+        cityLayer?.dispose();
+        cityLayer = null;
     
       progress.dispose();
       app?.destroy();

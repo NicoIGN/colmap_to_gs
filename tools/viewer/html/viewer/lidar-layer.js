@@ -1,6 +1,7 @@
 import * as pc from "playcanvas";
 import { colmapBounds, makePointMesh, setMeshHighlight } from "./colmap.js";
 import { classColor, decodePointRecord, parseLasHeader } from "./las-header.js";
+import { parseGeoref } from "./georef.js";
 
 export const LAZ_PERF_URL = "https://cdn.jsdelivr.net/npm/laz-perf@0.0.7/lib/web/laz-perf.js";
 export const MAX_DISPLAY_POINTS = 2_000_000;
@@ -176,6 +177,37 @@ function buildSource(name, header, decoded) {
   };
 }
 
+// Pivot partagé par les couches sans géoréférencement de scène (LiDAR, vecteurs) : construit
+// depuis le centre de la première couche, il garde toutes les couches dans le même repère.
+const scenePivot = { georef: null, owners: new Set() };
+
+function pivotGeoref(source) {
+  const [x, y, h] = source.centre;
+  return parseGeoref({
+    output_reference: {
+      type: "projected",
+      units: "m",
+      epsg: source.epsg,
+      origin_projected: { x, y, h },
+    },
+  });
+}
+
+export function resolvePivot(source, georef) {
+  if (georef) return georef;
+  if (!scenePivot.georef && source.epsg) scenePivot.georef = pivotGeoref(source);
+  return scenePivot.georef;
+}
+
+export function retainPivot(owner) {
+  scenePivot.owners.add(owner);
+}
+
+export function releasePivot(owner) {
+  scenePivot.owners.delete(owner);
+  if (!scenePivot.owners.size) scenePivot.georef = null;
+}
+
 // Transformation affine LAZ (CRS projeté) → repère monde de la scène.
 export function placementFor(source, georef) {
   if (!georef) {
@@ -231,7 +263,6 @@ export function worldPositions(source, placement) {
 export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
-  let lastGeoref = null;
   const layers = new Map();
 
   function emitBounds(frame) {
@@ -252,10 +283,13 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
 
   function render(layer, georef) {
     destroyRender(layer);
-    const placement = placementFor(layer.source, georef);
+    const pivot = resolvePivot(layer.source, georef);
+    layer.pivot = pivot;
+    const placement = placementFor(layer.source, pivot);
     layer.placement = placement;
     const positions = worldPositions(layer.source, placement);
     layer.bounds = colmapBounds([positions], false);
+    layer.pivotPositions = positions;
 
     layer.resource = makePointMesh(app, positions, layer.source.colors, POINT_SIZE);
     setMeshHighlight(layer.resource, layer.highlighted);
@@ -277,10 +311,13 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
   function refreshPlacement() {
     if (disposed) return;
     const georef = getGeoref?.() ?? null;
-    if (georef === lastGeoref) return;
-    lastGeoref = georef;
-    for (const layer of layers.values()) render(layer, georef);
-    emitBounds(false);
+    let changed = false;
+    for (const layer of layers.values()) {
+      if (layer.pivot === resolvePivot(layer.source, georef)) continue;
+      render(layer, georef);
+      changed = true;
+    }
+    if (changed) emitBounds(false);
   }
 
   async function loadFile(file, sidecarFile = null) {
@@ -314,12 +351,13 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       root: null,
       resource: null,
       placement: null,
+      pivot: null,
       unregister: null,
     };
     layers.set(id, layer);
+    retainPivot(id);
 
     const georef = getGeoref?.() ?? null;
-    lastGeoref = georef;
     const placement = render(layer, georef);
 
     layer.unregister = registerGroup?.({
@@ -341,6 +379,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
         layer.unregister?.();
         destroyRender(layer);
         layers.delete(id);
+        releasePivot(id);
         emitBounds(false);
       },
     }) ?? null;
@@ -358,6 +397,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     for (const layer of layers.values()) {
       layer.unregister?.();
       destroyRender(layer);
+      releasePivot(layer.id);
     }
     layers.clear();
     emitBounds(false);
@@ -367,6 +407,12 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     loadFile,
     clear,
     refreshPlacement,
+
+    getPivotSources() {
+      return [...layers.values()]
+        .filter((layer) => layer.root?.enabled && layer.pivotPositions)
+        .map((layer) => ({ label: "LiDAR", positions: layer.pivotPositions, entity: layer.root }));
+    },
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {
