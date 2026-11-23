@@ -166,7 +166,7 @@ elif name == "colmap_split_blocks.py":
         "parameters": {"overlap_max_fraction": float(get("--overlap-max-fraction"))}}))
 elif name == "export_ply.py":
     assert get("--filter-mode") == "off"
-    Path(get("--out-ply")).write_bytes(b"raw-splat")
+    Path(get("--output")).write_bytes(b"raw-splat")
 elif name == "filter_splats.py":
     assert get("--mode") == "off"
     expected = "/georef/0/points3D.bin" if os.environ.get("GEOREF_GPX_FILE") else "/sfm/sparse/0/points3D.bin"

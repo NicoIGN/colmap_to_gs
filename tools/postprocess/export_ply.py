@@ -265,6 +265,35 @@ def shape_isolation_mask(means, log_scales, *, max_aspect_ratio, isolation_facto
     return rejected, report
 
 
+def bbox_support_mask(means, log_scales, quats, points, *, margin=0.0, sigma=3.0, batch_size=20000):
+    """Reject Gaussians whose support crosses the box of the COLMAP points.
+
+    The support is the axis-aligned half-extent of the sigma-ellipsoid of each
+    Gaussian, in the training frame where points and means are expressed.
+    """
+    if not np.isfinite(margin) or margin < 0:
+        raise ValueError("La marge BBOX doit être finie et >= 0")
+    if not np.isfinite(sigma) or sigma <= 0:
+        raise ValueError("Le rayon de support doit être fini et > 0")
+    if len(points) == 0:
+        raise ValueError("Aucun point COLMAP pour la BBOX")
+    low = points.min(axis=0) - margin
+    high = points.max(axis=0) + margin
+    rejected = np.zeros(len(means), dtype=bool)
+    for start in range(0, len(means), batch_size):
+        stop = min(start + batch_size, len(means))
+        rotation = Rotation.from_quat(quats[start:stop][:, [1, 2, 3, 0]]).as_matrix()
+        scales = np.exp(log_scales[start:stop])
+        half = sigma * np.sqrt(((rotation * scales[:, None, :]) ** 2).sum(axis=2))
+        centres = means[start:stop]
+        rejected[start:stop] = np.any((centres - half < low) | (centres + half > high), axis=1)
+    report = dict(
+        bbox_min=low.tolist(), bbox_max=high.tolist(), margin=float(margin),
+        sigma=float(sigma), outside_bbox=int(rejected.sum()),
+    )
+    return rejected, report
+
+
 def clean_gaussians(
     splats,
     colmap,
@@ -278,11 +307,16 @@ def clean_gaussians(
     max_removal_fraction=0.2,
     max_aspect_ratio=None,
     isolation_factor=None,
+    support_sigma=3.0,
     filter_mode="diagnostic",
     return_rejected=False,
     seed=0,
 ):
-    """Sanitize attributes; optionally diagnose/apply contextual geometry filtering."""
+    """Sanitize attributes; optionally diagnose/apply BBOX and contextual geometry filtering.
+
+    colmap : points COLMAP dans le repère d'entraînement (None désactive la BBOX).
+    distance : marge de la BBOX, dans le repère d'entraînement (None = 0).
+    """
     if not np.isfinite(world_scale) or world_scale <= 0:
         raise ValueError("L'échelle monde -> entraînement est invalide")
     if max_world_scale is not None:
@@ -329,6 +363,14 @@ def clean_gaussians(
         )
         rejected |= shape_rejected
         report["shape"] = shape_report
+    if filter_mode != "off" and colmap is not None:
+        bbox_rejected, bbox_report = bbox_support_mask(
+            valid["means"], valid["scales"], valid["quats"], colmap,
+            margin=0.0 if distance is None else distance, sigma=support_sigma,
+            batch_size=min(batch_size, 20000),
+        )
+        rejected |= bbox_rejected
+        report["bbox"] = bbox_report
     report.update(mode=filter_mode, applied_rejections=int(rejected.sum()) if filter_mode == "apply" else 0)
     log("Filtre contextuel : " + json.dumps(report, ensure_ascii=False))
     if "warning" in report:
@@ -444,16 +486,18 @@ def main():
             "et export SPLAT binaire"
         )
     )
-    parser.add_argument("--in-ply", required=True)
-    parser.add_argument("--points", required=True, help="Référence COLMAP conservée pour compatibilité ; pas de test de proximité")
+    parser.add_argument("--input", "--in-ply", dest="input", required=True, help="Checkpoint .ply (3DGS standard)")
+    parser.add_argument("--points", required=True, help="points3D.bin COLMAP : BBOX de référence du support des splats (repère monde)")
     parser.add_argument("--transform", required=True, help="scene_transform.json")
-    parser.add_argument("--out-ply", required=True, help="Sortie .splat")
+    parser.add_argument("--output", "--out-ply", dest="output", required=True, help="Sortie .splat")
     parser.add_argument("--format", choices=["splat"], default="splat")
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--filter-mode", choices=("diagnostic", "apply", "off"), default="diagnostic")
-    parser.add_argument("--dist", type=float, default=None)
+    parser.add_argument("--dist", type=float, default=None, help="Marge BBOX dans le repère d'entraînement (défaut 0)")
+    parser.add_argument("--bbox-sigma", type=float, default=3.0,
+                        help="Rayon de support en sigma comparé à la BBOX des points COLMAP (défaut 3)")
     parser.add_argument("--outlier-percent", type=float, default=97.0)
-    parser.add_argument("--radius-factor", type=float, default=3.0)
+    parser.add_argument("--radius-factor", type=float, default=3.0, help="Non utilisé ; conservé pour compatibilité")
     parser.add_argument("--max-points", type=int, default=4_000_000)
     parser.add_argument("--batch-size", type=int, default=100_000)
     parser.add_argument("--seed", type=int, default=0)
@@ -488,10 +532,10 @@ def main():
     )
     args = parser.parse_args()
 
-    source = Path(args.in_ply).expanduser().resolve()
+    source = Path(args.input).expanduser().resolve()
     points_path = Path(args.points).expanduser().resolve()
     transform_path = Path(args.transform).expanduser().resolve()
-    output = Path(args.out_ply).expanduser().resolve()
+    output = Path(args.output).expanduser().resolve()
 
     for path in (source, points_path, transform_path):
         if not path.is_file():
@@ -526,9 +570,11 @@ def main():
 
     if args.max_world_scale is not None:
         parser.error("--max-world-scale : utiliser export_ply_legacy.py pour le filtre absolu")
-    log("Nouveau filtre : pas de suppression BBOX ni de proximité COLMAP ; "
-        "--points/--dist/--radius-factor/--outlier-percent/--max-points "
-        "n'interviennent plus dans le nettoyage.")
+    colmap = None
+    if args.filter_mode != "off":
+        colmap = filter_outliers(load_colmap_points(points_path, matrix, args.max_points), args.outlier_percent)
+    log("Filtre BBOX : support des splats (rayon sigma) contre la BBOX des points COLMAP ; "
+        "--radius-factor n'intervient plus.")
     rejected_path = output.with_suffix(".rejected.splat")
     report_path = output.with_suffix(".filter.json")
     # Les sidecars ne sont écrits qu'en diagnostic ; apply et off n'exportent que le splat.
@@ -544,8 +590,8 @@ def main():
     splats = load_gaussians(source)
     splats, rejected, report = clean_gaussians(
         splats,
-        None,
-        None,
+        colmap,
+        args.dist,
         args.batch_size,
         world_scale=scale,
         max_world_scale=args.max_world_scale,
@@ -554,6 +600,7 @@ def main():
         max_removal_fraction=args.max_removal_fraction,
         max_aspect_ratio=args.max_aspect_ratio,
         isolation_factor=args.isolation_factor,
+        support_sigma=args.bbox_sigma,
         filter_mode=args.filter_mode,
         return_rejected=True,
         seed=args.seed,

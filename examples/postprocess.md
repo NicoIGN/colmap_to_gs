@@ -19,16 +19,18 @@ Export d'un checkpoint (`export_ply.py`, appelé par `run_spirula_block.sh`) ave
 
 ```bash
 python "$GIT_ROOT/tools/postprocess/export_ply.py" \
-  --in-ply "$GS_BLOCK/chkpt/chkpt_step-000040000.ply" \
+  --input "$GS_BLOCK/chkpt/chkpt_step-000040000.ply" \
   --points "$OUTPUT/sparse/0/points3D.bin" \
   --transform "$GS_BLOCK/chkpt/scene_transform.json" \
-  --out-ply "$GS_BLOCK/splats/block_000.splat" --format splat \
-  --radius-factor 5 --min-opacity 0 --batch-size 200000 --overwrite \
+  --output "$GS_BLOCK/splats/block_000.splat" --format splat \
+  --dist 0 --bbox-sigma 3 --min-opacity 0 --batch-size 200000 --overwrite \
   --filter-mode "${POSTPROCESS_FILTER_MODE:-apply}"
 ```
 
 `--filter-mode apply` (défaut) n'écrit que le splat nettoyé. `diagnostic` écrit en plus
 `.rejected.splat` et `.filter.json` à côté de la sortie. `off` désactive le filtre.
+Le filtre BBOX retire les splats dont le support à `--bbox-sigma` sigma sort de la
+BBOX des points de `--points` (marge `--dist`, repère d'entraînement).
 Le chemin du checkpoint est le dernier `chkpt_step-*.ply` de `chkpt/`.
 
 ```bash

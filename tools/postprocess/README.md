@@ -51,8 +51,9 @@ bash tools/postprocess/clean_ply.sh --help
 Les scripts de `tools/postprocess/` exportent les modèles, fusionnent les blocs
 et proposent des filtres pour retirer certains splats indésirables.
 
-- `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides,
-  mais ne supprime pas automatiquement les splats éloignés des points COLMAP.
+- `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides et,
+  en mode `apply`/`diagnostic`, les splats dont le support (rayon `--bbox-sigma`,
+  3 sigma par défaut) sort de la BBOX des points COLMAP (`--points`, marge `--dist`).
 - `filter_splats.py` repère les splats anormalement grands, situés en bordure
   de scène et sans support clair sur une surface voisine.
 - Ce filtre est une heuristique, pas une reconnaissance d'objets ni une mesure
