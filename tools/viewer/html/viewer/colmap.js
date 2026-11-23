@@ -628,6 +628,24 @@ export function rayHitsFarFace(image, camera, depth, origin, dir) {
   return Math.abs(x) <= a * depth && Math.abs(y) <= b * depth;
 }
 
+// Vrai si le rayon traverse la boîte alignée sur le modèle, centrée sur `center` de demi-côté `r`.
+export function rayBoxHit(center, r, origin, dir) {
+  let tMin = -Infinity;
+  let tMax = Infinity;
+  for (let k = 0; k < 3; k++) {
+    const oc = origin[k] - center[k];
+    if (Math.abs(dir[k]) < 1e-12) {
+      if (Math.abs(oc) > r) return false;
+      continue;
+    }
+    const t1 = (-r - oc) / dir[k];
+    const t2 = (r - oc) / dir[k];
+    tMin = Math.max(tMin, Math.min(t1, t2));
+    tMax = Math.min(tMax, Math.max(t1, t2));
+  }
+  return tMin <= tMax && tMax >= 0;
+}
+
 // Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
 // symbolisée par ses parallèles et méridiens, centrés sur `center`.
 function appendPanoramaMarker(out, center, radius, cube) {
@@ -1928,7 +1946,10 @@ export function createColmapLayer({
         if (current !== null) {
           const image = model.colmapImages[current];
           const camera = model.cameras.get(image.cameraId);
-          if (camera && rayHitsFarFace(image, camera, depth, o, d)) {
+          const onImage = camera && (isPanorama(camera)
+            ? rayBoxHit(getCameraCenter(image), model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR, o, d)
+            : rayHitsFarFace(image, camera, depth, o, d));
+          if (onImage) {
             model.overrideIndex = null;
             model.pickedKey = null;
             say(`Clic sur l'image ${image.name} : retour au choix automatique.`);
@@ -1940,8 +1961,18 @@ export function createColmapLayer({
         let withoutImage = 0;
         model.colmapImages.forEach((image, i) => {
           const camera = model.cameras.get(image.cameraId);
-          if (!camera || isPanorama(camera)) return;
-          if (rayFrustumEntry(image, camera, depth, o, d) === null) return;
+          if (!camera) return;
+          const hit = isPanorama(camera)
+            ? rayBoxHit(
+                getCameraCenter(image),
+                model.slots.some((slot) => slot.shown === i)
+                  ? model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR
+                  : model.depth * PANORAMA_MARKER_FACTOR,
+                o,
+                d
+              )
+            : rayFrustumEntry(image, camera, depth, o, d) !== null;
+          if (!hit) return;
           if (!findImageFile(imageIndex, image.name)) withoutImage++;
           else hits.push(i);
         });

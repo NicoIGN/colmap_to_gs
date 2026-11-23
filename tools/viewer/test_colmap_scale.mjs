@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -240,4 +240,10 @@ test("the view ray must cross the enlarged frustum to count as covering the cent
   assert.equal(coversViewCenter(image, camera, 5, [0, 0, 6], [0, 0, 1]), false);
   // Point de vue derrière le plan de l'image, regardant vers elle : l'image ne doit pas être choisie.
   assert.equal(coversViewCenter(image, camera, 5, [0, 0, 6], [0, 0, -1]), false);
+});
+
+test("a click ray hits a panorama marker box only when it crosses it", () => {
+  assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, 1]), true);
+  assert.equal(rayBoxHit([0, 0, 10], 2, [3, 0, 0], [0, 0, 1]), false);
+  assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, -1]), false);
 });
