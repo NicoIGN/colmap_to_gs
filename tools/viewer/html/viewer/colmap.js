@@ -1654,6 +1654,7 @@ export function createColmapLayer({
       frustumsTotal: frustums.total,
       frustumsShown: frustums.shown,
       rootEntity,
+      pivotPositions: points.positions,
       colmapImages: images,
       cameras,
       depth: depth * frustumFactor,
@@ -1846,6 +1847,12 @@ export function createColmapLayer({
         return imageViewPose(model, model.colmapImages[index]);
       }
       return null;
+    },
+
+    getPivotSources() {
+      return [...models.values()]
+        .filter((model) => model.rootEntity?.enabled && model.pivotPositions)
+        .map((model) => ({ label: "COLMAP", positions: model.pivotPositions, entity: model.rootEntity }));
     },
 
     setFlipUp(flip) {

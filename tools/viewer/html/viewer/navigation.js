@@ -39,6 +39,7 @@ export function createNavigationSystem({
   syncCamera,
   requestGifCapture,
   selectPointInView,
+  selectPivotAt,
   setStatus,
 }) {
   const pressedKeys = new Set();
@@ -562,7 +563,7 @@ export function createNavigationSystem({
       // flouter un champ ou capturer le pointeur.
       if (event.metaKey || event.shiftKey) return;
 
-      // Alt + clic gauche : rotation autour de l'axe principal, autour du pivot courant.
+      // Alt + clic gauche : pivot sous le clic, puis rotation autour de l'axe principal.
       const centerOrbit =
         event.altKey && event.button === 0 && !event.ctrlKey;
       // Alt + clic droit : roulis autour de l'axe caméra → centre de vue.
@@ -608,6 +609,16 @@ export function createNavigationSystem({
         y: event.clientY,
         moved: false,
       };
+      if (mode === "centerOrbit") {
+        // La rotation attend le pivot résolu sous le clic (splat, LiDAR, COLMAP ou vecteur).
+        const drag = mouseDrag;
+        drag.pivotReady = false;
+        Promise.resolve(selectPivotAt(event.clientX, event.clientY))
+          .catch(() => false)
+          .finally(() => {
+            drag.pivotReady = true;
+          });
+      }
       if (mode === "zoom") {
         mouseDrag.start = { x: event.clientX, y: event.clientY };
         const overlay = document.createElement("div");
@@ -681,7 +692,7 @@ export function createNavigationSystem({
         });
         return;
       } else if (drag.mode === "centerOrbit") {
-        orbitScene(dx, dy, true);
+        if (drag.pivotReady) orbitScene(dx, dy, true);
       } else if (drag.mode === "orbit") {
         orbitScene(dx, dy);
       } else if (drag.mode === "look") {

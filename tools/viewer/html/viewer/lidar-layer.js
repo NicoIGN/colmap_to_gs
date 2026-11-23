@@ -289,6 +289,7 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     layer.placement = placement;
     const positions = worldPositions(layer.source, placement);
     layer.bounds = colmapBounds([positions], false);
+    layer.pivotPositions = positions;
 
     layer.resource = makePointMesh(app, positions, layer.source.colors, POINT_SIZE);
     setMeshHighlight(layer.resource, layer.highlighted);
@@ -406,6 +407,12 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     loadFile,
     clear,
     refreshPlacement,
+
+    getPivotSources() {
+      return [...layers.values()]
+        .filter((layer) => layer.root?.enabled && layer.pivotPositions)
+        .map((layer) => ({ label: "LiDAR", positions: layer.pivotPositions, entity: layer.root }));
+    },
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {

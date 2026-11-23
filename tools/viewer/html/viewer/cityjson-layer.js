@@ -155,7 +155,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
       root.setLocalEulerAngles(getFlipUp() ? 180 : 0, 0, 0);
       root.enabled = partShown[kind];
       app.root.addChild(root);
-      child.parts.push({ kind, mesh, material, root });
+      child.parts.push({ kind, mesh, material, root, positions });
     }
     child.bounds = colmapBounds(allPositions, false);
     child.placement = placement;
@@ -273,6 +273,18 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
     loadText,
     clear,
     refreshPlacement,
+
+    getPivotSources() {
+      const sources = [];
+      for (const layer of layers.values()) {
+        for (const child of layer.children) {
+          for (const part of child.parts) {
+            if (part.root.enabled) sources.push({ label: "vecteur", positions: part.positions, entity: part.root });
+          }
+        }
+      }
+      return sources;
+    },
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {

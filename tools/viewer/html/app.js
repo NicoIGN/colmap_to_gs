@@ -20,6 +20,7 @@ import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
+import { findPivotAtPixel } from "./viewer/pivot.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
 import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
 import { isCityJsonText } from "./viewer/cityjson-geometry.js";
@@ -98,6 +99,7 @@ let pendingCamera = params.get("camera_pos");
 let pendingUp = params.get("camera_up");
 
 let pickSerial = 0;
+let pivotSerial = 0;
 let picking = false;
 
 let navigation = null;
@@ -1038,6 +1040,79 @@ async function handleDroppedFiles(fileList, items) {
   }
 }
 
+async function selectPivotAtPixel(clientX, clientY) {
+  if (!sceneReady || disposed || !cameraEntity) return false;
+  const serial = ++pivotSerial;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return false;
+  const px = clientX - rect.left;
+  const py = clientY - rect.top;
+
+  let pivot = null;
+  if (splatLayers.length) {
+    try {
+      await nextRenderedFrame();
+      if (disposed || serial !== pivotSerial) return false;
+      picker.resize(Math.max(1, canvas.width), Math.max(1, canvas.height));
+      const layer = app.scene.layers.getLayerByName("World");
+      picker.prepare(cameraEntity.camera, app.scene, [layer]);
+      const hit = await picker.getWorldPointAsync(
+        Math.floor((px * canvas.width) / rect.width),
+        Math.floor((py * canvas.height) / rect.height)
+      );
+      if (disposed || serial !== pivotSerial) return false;
+      if (hit && Number.isFinite(hit.x) && Number.isFinite(hit.y) && Number.isFinite(hit.z)) {
+        pivot = { point: [hit.x, hit.y, hit.z], label: "splat" };
+      }
+    } catch (error) {
+      console.error("Picking :", error);
+    }
+  }
+
+  if (!pivot) {
+    const sources = collectPivotSources();
+    if (sources.length) {
+      pivot = findPivotAtPixel({
+        sources,
+        camera: {
+          matrix: cameraEntity.getWorldTransform().data,
+          fov: cameraEntity.camera.fov,
+          horizontalFov: cameraEntity.camera.horizontalFov,
+        },
+        px,
+        py,
+        width: rect.width,
+        height: rect.height,
+      });
+    }
+  }
+
+  if (!pivot) {
+    setStatus("Aucune donnée sous le clic : pivot conservé.");
+    return false;
+  }
+
+  const [x, y, z] = pivot.point;
+  const next = new THREE.Vector3(x, y, z);
+  if (next.distanceToSquared(camera.position) < 1e-12) return false;
+  target.copy(next);
+  syncCamera();
+  requestGifCapture();
+  setStatus(`Pivot sur ${pivot.label} · axe ${getPrincipalAxisLabel()}.`);
+  return true;
+}
+
+function collectPivotSources() {
+  const layers = [lidarLayer, colmapLayer, gpkgLayer, cityLayer];
+  return layers.flatMap((layer) =>
+    (layer?.getPivotSources?.() ?? []).map((source) => ({
+      label: source.label,
+      positions: source.positions,
+      matrix: source.entity.getWorldTransform().data,
+    }))
+  );
+}
+
 async function selectPointInView(key, button) {
   // Sans splat, rien n'est pickable : le pivot est le centre des données COLMAP.
   if (!splatLayers.length) {
@@ -1710,6 +1785,7 @@ async function initialize() {
       syncCamera,
       requestGifCapture,
       selectPointInView,
+      selectPivotAt: selectPivotAtPixel,
       setStatus,
     });
 

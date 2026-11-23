@@ -298,6 +298,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       meshes.push(pointMesh);
     }
     child.bounds = colmapBounds(positionSets, false);
+    child.pivotPositions = positionSets;
 
     const material = makeUnlitMaterial(wireColor);
     const sphereMaterial = pointMesh ? makeSphereMaterial(wireColor) : null;
@@ -460,6 +461,19 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     loadFile,
     clear,
     refreshPlacement,
+
+    getPivotSources() {
+      const sources = [];
+      for (const layer of layers.values()) {
+        for (const child of layer.children) {
+          if (!child.root?.enabled || !child.pivotPositions) continue;
+          for (const positions of child.pivotPositions) {
+            sources.push({ label: "vecteur", positions, entity: child.root });
+          }
+        }
+      }
+      return sources;
+    },
 
     setFlipUp(flip) {
       for (const layer of layers.values()) {
