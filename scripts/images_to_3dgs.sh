@@ -7,15 +7,16 @@ source "$repo_root/tools/libs/scripts/georef_phase.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
-  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX]"
+  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
-images=""; phase=all; block=""; validate_only=false
+images=""; phase=all; block=""; validate_only=false; redo=false
 while (($#)); do
   case "$1" in
     --validate-only) validate_only=true; shift ;;
+    --redo) redo=true; shift ;;
     --images|--phase|--block)
       [[ $# -ge 2 && -n "$2" ]] || { usage >&2; exit 1; }
       case "$1" in
@@ -35,6 +36,10 @@ if [[ "$phase" == train-block ]]; then
     die "--block doit être compris entre 0 et $((SPLIT_NUM_BLOCKS - 1))."
 elif [[ -n "$block" ]]; then
   die "--block nécessite --phase train-block."
+fi
+if [[ "$redo" == true ]]; then
+  [[ "$phase" == train-block || "$phase" == merge ]] ||
+    die "--redo nécessite --phase train-block ou merge."
 fi
 command -v "$PYTHON_BIN" >/dev/null || die "Python introuvable : $PYTHON_BIN"
 lidar_pipeline_hook preflight
@@ -222,6 +227,27 @@ else
 fi
 [[ "$phase" != prepare ]] || exit 0
 
+clean_merge_outputs() {
+  local stem="${EXPORT_SPLAT_NAME%.splat}" index id
+  rm -f -- "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$OUTPUT_DIR/$stem.metadata.json" "$OUTPUT_DIR/$stem.georef.json"
+  for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
+    printf -v id 'block_%03d' "$index"
+    rm -f -- "$gs_root/$id/splats/$id.bbox.splat"
+  done
+}
+
+if [[ "$redo" == true ]]; then
+  if [[ "$phase" == merge ]]; then
+    for ((index=0; index<SPLIT_NUM_BLOCKS; index++)); do
+      printf -v id 'block_%03d' "$index"
+      [[ -s "$gs_root/$id/splats/$id.splat" ]] || die "Splat brut absent : $gs_root/$id/splats/$id.splat"
+      [[ -f "$gs_root/$id/.export_done" ]] || die "Export du bloc incomplet : $id"
+    done
+  fi
+  set_stage "nettoyage des sorties à refaire ($phase)"
+  clean_merge_outputs
+fi
+
 if [[ "$phase" == all || "$phase" == train-block ]]; then
   first="${block:-0}"; last="$SPLIT_NUM_BLOCKS"
   [[ "$phase" != train-block ]] || last=$((block + 1))
@@ -231,6 +257,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     args=(--sparse-dir "$blocks/$id" --images-dir "$selected" --output-dir "$gs_root/$id"
           --spirula-bin "$SPIRULA_BIN" --python-bin "$PYTHON_BIN"
           --export-filter-mode "${POSTPROCESS_FILTER_MODE:-off}" --name "$id.splat")
+    [[ "$redo" != true ]] || args+=(--clean)
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")

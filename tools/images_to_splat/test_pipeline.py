@@ -411,6 +411,29 @@ if "--wait" in args:
         self.assertEqual((self.output / "gs/block_000/splats/block_000.splat").read_bytes(),
                          b"raw-splat")
 
+    def test_redo_merge_reruns_only_merge(self):
+        self.assert_ok(self.run_pipeline())
+        before = len(self.commands())
+        self.assert_ok(self.run_pipeline("--phase", "merge", "--redo"))
+        commands = self.commands()[before:]
+        self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 0)
+        self.assertEqual([cmd[0] for cmd in commands],
+                         ["filter_splats.py"] * 4 + ["merge_splats.py"])
+        self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
+
+    def test_redo_train_block_cleans_block_and_downstream_outputs(self):
+        self.assert_ok(self.run_pipeline())
+        before = len(self.commands())
+        self.assert_ok(self.run_pipeline("--phase", "train-block", "--block", "1", "--redo"))
+        commands = self.commands()[before:]
+        self.assertEqual(sum(cmd[:2] == ["spirula", "train"] for cmd in commands), 1)
+        self.assertFalse((self.output / "scene.splat").exists())
+        self.assertTrue((self.output / "gs/block_000/.export_done").exists())
+
+    def test_redo_rejects_other_phases(self):
+        result = self.run_pipeline("--phase", "all", "--redo")
+        self.assertNotEqual(result.returncode, 0)
+
     def test_exif_gps_enables_full_metric_reconstruction(self):
         self.add_gps(altitude_images=(0, 1, 2))
         self.assert_ok(self.run_pipeline("--phase", "prepare"))

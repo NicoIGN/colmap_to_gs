@@ -545,6 +545,21 @@ bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
 bash scripts/images_to_3dgs.sh /chemin/config.sh --phase merge
 ```
 
+Pour refaire une phase sans nettoyer à la main, ajouter `--redo` à `train-block`
+(avec `--block N` ou sans, pour tous les blocs) ou à `merge` :
+
+```bash
+bash scripts/images_to_3dgs.sh /chemin/config.sh --phase merge --redo
+bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 1 --redo
+```
+
+Les entrées de fusion (brut et `.export_done` de chaque bloc) sont vérifiées avant tout
+nettoyage. `--redo merge` supprime le splat final, son `.metadata.json`, son `.georef.json`
+et les `.bbox.splat` recadrés. `--redo train-block` appelle
+`--clean` sur le ou les blocs (`splats/`, `.train_done`, `.export_done`) et supprime
+en plus les sorties de fusion. Le SfM n'est jamais touché. Sans `--redo`, la fusion
+est toujours recalculée et un export dont la commande a changé est relancé automatiquement.
+
 La fusion seule exige tous les blocs terminés. Elle recadre chaque brut vers
 `gs/block_NNN/splats/block_NNN.bbox.splat`, avec les points **globaux**
 `sfm/sparse/0/points3D.bin` : les recouvrements entre blocs sont préservés.
