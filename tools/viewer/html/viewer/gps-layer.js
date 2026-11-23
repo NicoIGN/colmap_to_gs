@@ -1,5 +1,6 @@
 import * as pc from "playcanvas";
 import { getOverlayLayer } from "./colmap.js";
+import { registerOverlayMaterial } from "./overlay-depth.js";
 
 const LINE_COLOR = new pc.Color(140 / 255, 230 / 255, 0); // vert pomme
 const SPHERE_COLOR = new pc.Color(140 / 255, 230 / 255, 0);
@@ -61,7 +62,7 @@ export function createGpsLayer({ app, registerLayer, onClear }) {
     mat.emissive.copy(color);
     mat.diffuse.copy(color);
     mat.cull = pc.CULLFACE_NONE;
-    mat.depthTest = false;
+    registerOverlayMaterial(mat);
     mat.depthWrite = false;
     mat.blendType = pc.BLEND_NORMAL;
     mat.update();

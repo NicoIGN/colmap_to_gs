@@ -21,6 +21,7 @@ import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
 import { findPivotAtPixel } from "./viewer/pivot.js";
+import { setOverlayOcclusion } from "./viewer/overlay-depth.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
 import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
 import { isCityJsonText } from "./viewer/cityjson-geometry.js";
@@ -224,6 +225,7 @@ function hexToColor(hex) {
 // on réapplique l'option à chaque frame pour suivre leur recréation.
 function applySplatDepthWrite() {
   const enabled = $("splatOcclusion").checked;
+  setOverlayOcclusion(enabled);
   const director = app?.renderer?.gsplatDirector;
   for (const cameraData of director?.camerasMap?.values() ?? []) {
     for (const layerData of cameraData.layersMap?.values() ?? []) {

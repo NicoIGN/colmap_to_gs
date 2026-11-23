@@ -2,6 +2,7 @@ import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
 import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
+import { registerOverlayMaterial } from "./overlay-depth.js";
 import { readGeojsonLayers } from "./geojson-geometry.js";
 
 export const SQL_JS_BASE_URL = "https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/";
@@ -80,7 +81,7 @@ function makeUnlitMaterial(color) {
   mat.emissive.copy(color);
   mat.diffuse.copy(color);
   mat.cull = pc.CULLFACE_NONE;
-  mat.depthTest = false;
+  registerOverlayMaterial(mat);
   mat.depthWrite = false;
   mat.blendType = pc.BLEND_NORMAL;
   mat.update();
@@ -222,7 +223,7 @@ function makeSphereMaterial(color) {
   });
   material.setParameter("uColor", [color.r, color.g, color.b]);
   material.cull = pc.CULLFACE_BACK;
-  material.depthTest = false;
+  registerOverlayMaterial(material);
   material.depthWrite = false;
   material.blendType = pc.BLEND_NONE;
   material.update();
