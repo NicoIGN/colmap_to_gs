@@ -1196,6 +1196,8 @@ export function createSceneTools({
         importGaugeFile,
         attachSplatReference,
         adoptFrame,
+        rebuildTrack,
+        refreshUI,
         frame,
         reset,
         moveAlongTrackFromWorldDelta,
