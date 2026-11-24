@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { readGaugeFile, readGeorefFile } from "./georef.js";
+import { frameAlignment } from "./splat-alignment.js";
 
 /**
  * Géoréférencement, GPX et encart d’informations.
@@ -796,11 +797,25 @@ export function createSceneTools({
     refreshAppUI();
   }
 
+  // Le repère commun est fixé par la première donnée géographique importée.
+  function warnFrameFixed() {
+    setStatus(
+      `Repère commun déjà fixé (EPSG:${georef.epsg}) : ` +
+      "recharge la scène pour en changer.",
+      "warning"
+    );
+  }
+
   // Le JSON de géoréférencement ne dépend pas d'une scène splat : il s'applique aussi seul.
   async function importGeorefFile(file) {
     setStatus(`Lecture de ${file.name}…`);
     const reference = await readGeorefFile(file);
     if (disposed) return;
+
+    if (georef) {
+      warnFrameFixed();
+      return;
+    }
 
     applyGeoref(reference);
     setStatus(
@@ -813,8 +828,43 @@ export function createSceneTools({
     const reference = await readGaugeFile(file);
     if (disposed) return null;
 
+    if (georef) {
+      warnFrameFixed();
+      return georef;
+    }
+
     applyGeoref(reference);
     return reference;
+  }
+
+  /**
+   * Lit le géoréférencement d’un splat. Sans repère commun, cette référence le fixe
+   * (pose identité) ; sinon le splat est recalé sur le repère existant.
+   * Retourne la pose à appliquer au splat, ou null pour l’identité.
+   */
+  async function attachSplatReference(file) {
+    setStatus(`Lecture de ${file.name}…`);
+    const reference = /\.txt$/i.test(file.name)
+      ? await readGaugeFile(file)
+      : await readGeorefFile(file);
+    if (disposed) return null;
+
+    if (!georef) {
+      applyGeoref(reference);
+      setStatus(
+        `Repère commun fixé — EPSG:${reference.epsg} (première donnée géographique).`,
+        "success"
+      );
+      return null;
+    }
+
+    const alignment = frameAlignment(georef, reference);
+    const shift = Math.hypot(...alignment.translation);
+    setStatus(
+      `${file.name} recalé sur le repère commun (décalage ${shift.toFixed(1)} m).`,
+      "success"
+    );
+    return alignment;
   }
 
   async function importFile(file) {
@@ -1138,7 +1188,7 @@ export function createSceneTools({
         getAbsoluteCoordinates,
         importFile,
         importGaugeFile,
-        refreshUI,
+        attachSplatReference,
         rebuildTrack,
         frame,
         reset,

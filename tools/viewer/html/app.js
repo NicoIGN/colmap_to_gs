@@ -14,6 +14,7 @@ import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
+import { splatPlacement } from "./viewer/splat-alignment.js";
 import { createColmapLayer } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
 import { isImageFileName } from "./viewer/colmap-images.js";
@@ -483,10 +484,14 @@ function requestGifCapture() {
   }
 }
 
+function applySplatPlacement(layer) {
+  const { position, quaternion } = splatPlacement(layer.alignment ?? null, $("flipUp").checked);
+  layer.entity.setLocalPosition(...position);
+  layer.entity.setLocalRotation(...quaternion);
+}
+
 function applyUpFlip() {
-  for (const layer of splatLayers) {
-    layer.entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
-  }
+  for (const layer of splatLayers) applySplatPlacement(layer);
 }
 
 async function removeSplatLayer(layer) {
@@ -733,10 +738,10 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
     const entity = new pc.Entity(name);
     entity.addComponent("gsplat", { asset, unified: true });
     app.root.addChild(entity);
-    entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
     newLayer = {
       name, count, centers: layerCenters, entity, importer: sceneImporter,
     };
+    applySplatPlacement(newLayer);
     newLayer.unregister = layerManager?.add({
       id: `splat-${nextSplatLayerId++}`,
       name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
@@ -939,9 +944,10 @@ async function hasOutputReference(file) {
 async function appendScene(source, name) {
   if (!sceneReady && !hasFreeData()) {
     await resetAndLoad(source, name);
-    return;
+    return splatLayers.at(-1);
   }
   await loadSceneInternal(source, name, { append: true });
+  return splatLayers.at(-1);
 }
 
 async function handleDroppedFiles(fileList, items) {
@@ -980,12 +986,13 @@ async function handleDroppedFiles(fileList, items) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
       const georefFile = files.find((f) => f !== sceneFile && isGeorefSidecarName(f.name, base));
       if (georefFile) {
-        // Le splat s'ajoute à la vue courante : son propre géoréférencement prend le relais.
-        await appendScene(sceneFile, sceneFile.name);
-        if (/\.txt$/i.test(georefFile.name)) {
-          await sceneTools.importGaugeFile(georefFile);
-        } else if (!/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile))) {
-          await sceneTools.importFile(georefFile);
+        // Le splat s'ajoute à la vue courante ; son géoréférencement le recale sur le repère commun.
+        const layer = await appendScene(sceneFile, sceneFile.name);
+        const hasReference = !/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile));
+        if (hasReference) {
+          if (!layer) throw new Error("Le splat n’a pas été chargé : réessaie.");
+          layer.alignment = await sceneTools.attachSplatReference(georefFile);
+          applySplatPlacement(layer);
         }
         return;
       }

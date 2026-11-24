@@ -73,6 +73,9 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   scène déjà ouverte. Le bouton d'ouverture remplace la scène. Déposés avec
   `<nom>.metadata.json` (ou `<nom>.georef.json`), ils sont géoréférencés comme le
   fichier de référence le décrit ; un fichier de métadonnées sans `output_reference` est ignoré.
+  Le premier géoréférencement importé fixe le repère commun de la scène ; chaque splat
+  suivant est recalé sur ce repère (rotation + translation via les origines WGS84). Un
+  autre géoréférencement JSON ou gauge.txt déposé seul est alors ignoré : recharge la scène pour changer de repère.
 - Un nuage LiDAR `.laz` ou `.las` ajouté par glisser-déposer apparaît comme une
   couche dans la liste des couches. Il est placé via le géoréférencement JSON
   s'il a le même CRS (EPSG) ; sinon il est centré à l'origine et un message le
