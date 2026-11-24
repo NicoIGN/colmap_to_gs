@@ -57,26 +57,23 @@ test("sphere panoramas keep their radius around the camera centre when oriented 
   assert.ok([...uvs].every((v) => v >= -1e-6 && v <= 1 + 1e-6));
 });
 
-test("cube panoramas pivot around the view axis with the image centre on it", () => {
-  const det = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+test("cube panoramas stay flat on the ground and only yaw with the view", () => {
   const forward = [0.3, -0.5, -0.8];
   const m = alignCubeToView(forward);
-  const n = Math.hypot(...forward);
-  // Image centre (-z) sur le regard.
-  assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - forward[k] / n) < 1e-9));
-  assert.ok(Math.abs(det(m) - 1) < 1e-9);
-  // Verticale du cube : projection de la verticale monde sur le plan perpendiculaire au regard.
-  const down = [m[1], m[4], m[7]];
-  const along = forward[1] / n;
-  const expected = [0 - along * forward[0] / n, 1 - along * forward[1] / n, 0 - along * forward[2] / n];
-  const el = Math.hypot(...expected);
-  assert.ok(down.every((v, k) => Math.abs(v - expected[k] / el) < 1e-9));
-  // Continuité : un petit changement de regard ne fait pas tourner le cube brutalement.
-  const near = alignCubeToView([0.31, -0.5, -0.8]);
-  assert.ok(Math.max(...m.map((v, k) => Math.abs(v - near[k]))) < 0.05);
+  // Verticale du cube = verticale monde : aucune composante de tangage ni de roulis.
+  assert.deepEqual([m[1], m[4], m[7]].map((v) => Math.round(v * 1e9) / 1e9), [0, 1, 0]);
+  // Image centre (-z) sur la projection horizontale du regard.
+  const h = [forward[0], 0, forward[2]];
+  const hl = Math.hypot(...h);
+  assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - h[k] / hl) < 1e-9));
+  // Rotation propre (déterminant 1).
+  const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  assert.ok(Math.abs(det - 1) < 1e-9);
+  // Le regard varie en hauteur seulement : le cube ne bouge pas.
+  assert.ok(alignCubeToView([0.3, 0.9, -0.8]).every((v, k) => Math.abs(v - m[k]) < 1e-9));
 });
 
-test("cube orientation stays orthonormal when the view axis is parallel to the world vertical", () => {
+test("cube orientation stays orthonormal and defined when the view is vertical", () => {
   const m = alignCubeToView([0, -1, 0]);
   const dot = (i, j) => m[i] * m[j] + m[i + 3] * m[j + 3] + m[i + 6] * m[j + 6];
   assert.ok(Math.abs(dot(0, 0) - 1) < 1e-9 && Math.abs(dot(1, 1) - 1) < 1e-9 && Math.abs(dot(2, 2) - 1) < 1e-9);

@@ -793,25 +793,22 @@ function mulMat3(a, b) {
   return out;
 }
 
-// Cube : rotation mondiale qui place l'axe de l'image (-z) sur l'axe principal de la vue (`forward`).
-// Le cube pivote autour de cet axe ; sa verticale est `up` (axe monde fixe) projeté sur le plan
-// perpendiculaire au regard. Ainsi, seule la direction de vue change l'image.
+// Cube : rotation de lacet pure autour de la verticale monde `up`. Le cube reste posé à plat sur le sol
+// et ne pivote que selon le cap du regard (`forward` projeté à l'horizontale) : pas de tangage ni de roulis.
 export function alignCubeToView(forward, up = [0, 1, 0]) {
-  const len = Math.hypot(...forward);
-  const f = forward.map((c) => c / len);
-  const project = (v) => {
-    const proj = v[0] * f[0] + v[1] * f[1] + v[2] * f[2];
-    return [0, 1, 2].map((k) => v[k] - proj * f[k]);
-  };
-  let d0 = project(up);
-  // Regard parallèle à la verticale : repli sur l'axe Z monde.
-  if (Math.hypot(...d0) < 1e-9) d0 = project([0, 0, 1]);
-  const dl = Math.hypot(...d0);
-  const d = d0.map((c) => c / dl);
-  const b = f.map((c) => -c);
-  // Repère droit : x = y × z, avec y = d et z = -f.
-  const r = [d[1] * b[2] - d[2] * b[1], d[2] * b[0] - d[0] * b[2], d[0] * b[1] - d[1] * b[0]];
-  return [r[0], d[0], b[0], r[1], d[1], b[1], r[2], d[2], b[2]];
+  const ul = Math.hypot(...up);
+  const y = up.map((c) => c / ul);
+  const fLen = Math.hypot(...forward);
+  const f = forward.map((c) => c / fLen);
+  const along = f[0] * y[0] + f[1] * y[1] + f[2] * y[2];
+  const h = [0, 1, 2].map((k) => f[k] - along * y[k]);
+  const hl = Math.hypot(...h);
+  // Regard vertical : pas de cap défini, le cube garde son orientation de base.
+  if (hl < 1e-9) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  const z = h.map((c) => -c / hl);
+  // Repère droit : x = y × z.
+  const x = [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]];
+  return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
 }
 
 // Coordonnées UV de l'atlas (cf. equirectToCubeAtlas) pour une direction q dans le repère caméra COLMAP.
