@@ -810,25 +810,21 @@ export function snapOrientation(rwc, forward) {
   return best;
 }
 
-// Cube : rotation continue rwc·S telle que l'axe de l'image (-z) pointe sur `axis` (point de vue → centre de prise de vue).
-// S est la rotation minimale qui amène -z sur l'axe image, donc pas de saut entre faces pendant l'orbite.
-export function alignCubeToAxis(rwc, axis) {
-  const d = mulMat3Vec3(transpose3(rwc), axis);
-  const cos = -d[2];
-  const sin2 = d[0] * d[0] + d[1] * d[1];
-  let s;
-  if (sin2 < 1e-18) {
-    s = cos > 0 ? [1, 0, 0, 0, 1, 0, 0, 0, 1] : [-1, 0, 0, 0, 1, 0, 0, 0, -1];
-  } else {
-    // Rodrigues entre -z et d : v = (-z) × d = (d1, -d0, 0), R = I + [v]x + [v]x²·(1-c)/|v|².
-    const vx = d[1];
-    const vy = -d[0];
-    const K = [0, 0, vy, 0, 0, -vx, -vy, vx, 0];
-    const K2 = mulMat3(K, K);
-    const k = (1 - cos) / sin2;
-    s = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (i % 4 === 0 ? 1 : 0) + K[i] + K2[i] * k);
-  }
-  return mulMat3(rwc, s);
+// Cube : rotation mondiale qui place l'axe de l'image (-z) sur l'axe principal de la vue (`forward`).
+// Le cube pivote autour de cet axe : la verticale reste celle de la caméra COLMAP (horizon conservé).
+export function alignCubeToView(rwc, forward) {
+  const len = Math.hypot(...forward);
+  const f = forward.map((c) => c / len);
+  const down0 = mulMat3Vec3(rwc, [0, 1, 0]);
+  const proj = down0[0] * f[0] + down0[1] * f[1] + down0[2] * f[2];
+  const d0 = [0, 1, 2].map((k) => down0[k] - proj * f[k]);
+  const dl = Math.hypot(...d0);
+  if (dl < 1e-9) return rwc;
+  const d = d0.map((c) => c / dl);
+  const b = f.map((c) => -c);
+  // Repère droit : x = y × z, avec y = d et z = -f.
+  const r = [d[1] * b[2] - d[2] * b[1], d[2] * b[0] - d[0] * b[2], d[0] * b[1] - d[1] * b[0]];
+  return [r[0], d[0], b[0], r[1], d[1], b[1], r[2], d[2], b[2]];
 }
 
 function panoramaCube(image, radius, orient = null) {
@@ -1479,9 +1475,11 @@ export function createColmapLayer({
     rebuildFrustums(model, new Set());
   }
 
-  // Le panorama s'oriente selon l'axe point de vue → centre de prise de vue de la photo (et non le regard) :
-  // sa direction ne change plus quand on tourne autour du frustum.
+  // Panorama cube : pivote autour de l'axe principal de la vue (regard de l'observateur).
+  // Sphère : le panorama s'oriente selon l'axe point de vue → centre de prise de vue (snap sur 90°).
   function panoramaOrient(model, image, forward, cube) {
+    const rwc = transpose3(qvecToMat3(image.qvec));
+    if (cube) return forward ? alignCubeToView(rwc, forward) : null;
     const v = model.lastViewer;
     if (!v) return null;
     const center = getCameraCenter(image);
@@ -1493,8 +1491,7 @@ export function createColmapLayer({
     } else {
       axis = axis.map((c) => c / length);
     }
-    const rwc = transpose3(qvecToMat3(image.qvec));
-    return cube ? alignCubeToAxis(rwc, axis) : snapOrientation(rwc, axis);
+    return snapOrientation(rwc, axis);
   }
 
   // Appelée à chaque frame : sélectionne les caméras dont le cadre atteint IMAGE_MIN_SCREEN_PX.

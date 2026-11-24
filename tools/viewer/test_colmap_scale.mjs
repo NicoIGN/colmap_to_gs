@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, snapOrientation, alignCubeToAxis } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, snapOrientation, alignCubeToView } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -57,26 +57,25 @@ test("panoramas snap to the 90° orientation whose image axis is closest to the 
   assert.ok(Math.abs(det - 1) < 1e-9);
 });
 
-test("cube panoramas keep the image axis on the viewpoint-to-center axis without jumps", () => {
-  const rot = (a, b, c) => [
-    Math.cos(b) * Math.cos(c), -Math.cos(b) * Math.sin(c), Math.sin(b),
-    Math.sin(a) * Math.sin(b) * Math.cos(c) + Math.cos(a) * Math.sin(c), -Math.sin(a) * Math.sin(b) * Math.sin(c) + Math.cos(a) * Math.cos(c), -Math.sin(a) * Math.cos(b),
-    -Math.cos(a) * Math.sin(b) * Math.cos(c) + Math.sin(a) * Math.sin(c), Math.cos(a) * Math.sin(b) * Math.sin(c) + Math.sin(a) * Math.cos(c), Math.cos(a) * Math.cos(b),
-  ];
+test("cube panoramas pivot around the view axis with the image centre on it", () => {
+  const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
   const det = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
-  const rwc = rot(0.3, -0.7, 1.1);
-  for (const axis of [[0, 0, -1], [1, 0, 0], [0, 0, 1], [0.3, -0.6, 0.74]]) {
-    const n = Math.hypot(...axis);
-    const u = axis.map((c) => c / n);
-    const m = alignCubeToAxis(rwc, u);
-    const dir = [-m[2], -m[5], -m[8]];
-    assert.ok(dir.every((v, k) => Math.abs(v - u[k]) < 1e-9));
-    assert.ok(Math.abs(det(m) - 1) < 1e-9);
-  }
-  // Continuité : un petit déplacement du point de vue ne fait pas tourner le cube de 90°.
-  const a = alignCubeToAxis(rwc, [0, 0, -1]);
-  const b = alignCubeToAxis(rwc, [0.01, 0, -1]);
-  assert.ok(Math.max(...a.map((v, k) => Math.abs(v - b[k]))) < 0.05);
+  const forward = [0.3, -0.5, -0.8];
+  const m = alignCubeToView(rwc, forward);
+  const n = Math.hypot(...forward);
+  // Image centre (-z) sur le regard.
+  assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - forward[k] / n) < 1e-9));
+  assert.ok(Math.abs(det(m) - 1) < 1e-9);
+  // Verticale du cube : projection de la verticale caméra sur le plan perpendiculaire au regard.
+  const down = [m[1], m[4], m[7]];
+  const camDown = [rwc[1], rwc[4], rwc[7]];
+  const along = camDown.reduce((acc, c, k) => acc + c * forward[k] / n, 0);
+  const expected = camDown.map((c, k) => c - along * forward[k] / n);
+  const el = Math.hypot(...expected);
+  assert.ok(down.every((v, k) => Math.abs(v - expected[k] / el) < 1e-9));
+  // Continuité : un petit changement de regard ne fait pas tourner le cube brutalement.
+  const near = alignCubeToView(rwc, [0.31, -0.5, -0.8]);
+  assert.ok(Math.max(...m.map((v, k) => Math.abs(v - near[k]))) < 0.05);
 });
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {
