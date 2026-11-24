@@ -1183,9 +1183,8 @@ export function createColmapLayer({
     const axis = camera && isPanorama(camera) ? [0, 0, -1] : [0, 0, 1];
     const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, axis))), cameraWorld));
     const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
-    // Cube 360° : l'observateur est au centre du cube (sans recul), pour voir son image sans parallaxe.
-    const cube = camera && isPanorama(camera) && panoramaMode === "cube";
-    const back = cube ? 0 : radius * 0.02;
+    // Léger recul derrière le centre de la caméra pour comparer l'image et le rendu 3D.
+    const back = radius * 0.02;
     const targetDistance = radius * 0.2;
     return {
       position: cameraWorld.map((value, axis) => value - forward[axis] * back),
