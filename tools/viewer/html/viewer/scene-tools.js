@@ -806,6 +806,12 @@ export function createSceneTools({
     );
   }
 
+  // Une couche projetée (LiDAR, vecteurs) adopte son repère si la vue n'en a pas encore.
+  function adoptFrame(frame) {
+    if (!georef) applyGeoref(frame);
+    return georef;
+  }
+
   // Le JSON de géoréférencement ne dépend pas d'une scène splat : il s'applique aussi seul.
   async function importGeorefFile(file) {
     setStatus(`Lecture de ${file.name}…`);
@@ -1189,7 +1195,7 @@ export function createSceneTools({
         importFile,
         importGaugeFile,
         attachSplatReference,
-        rebuildTrack,
+        adoptFrame,
         frame,
         reset,
         moveAlongTrackFromWorldDelta,

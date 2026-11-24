@@ -1936,6 +1936,7 @@ async function initialize() {
         setStatus,
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => applyFreeBounds(lidarBox, bounds, frame),
       });
@@ -1945,6 +1946,7 @@ async function initialize() {
         setStatus,
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
           const framed = frame && !hasFreeData() && !splatLayers.length;
@@ -1960,6 +1962,7 @@ async function initialize() {
         getFlipUp: () => $("flipUp").checked,
         getSplatCenters: () => splatLayers.map((layer) => layer.centers),
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
           const framed = frame && !hasFreeData() && !splatLayers.length;

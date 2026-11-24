@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { parseGeoref } from "./html/viewer/georef.js";
+import { createProjectedFrame, layerPlacement, parseGeoref } from "./html/viewer/georef.js";
 import { frameAlignment, splatPlacement } from "./html/viewer/splat-alignment.js";
+
+const SCENE_ORIGIN = [651652.2542795899, 6864123.4116957905, 78.5];
 
 function metadataAt(lat, lon, h) {
   return {
@@ -17,9 +19,9 @@ function metadataAt(lat, lon, h) {
       origin_geographic_crs: "EPSG:4979 (WGS84 supposé pour le GPX)",
       origin_projected: {
         epsg: 2154,
-        origin_x: 651652.2542795899,
-        origin_y: 6864123.4116957905,
-        origin_height: 78.5,
+        origin_x: SCENE_ORIGIN[0],
+        origin_y: SCENE_ORIGIN[1],
+        origin_height: SCENE_ORIGIN[2],
       },
     },
   };
@@ -27,26 +29,35 @@ function metadataAt(lat, lon, h) {
 
 const frame = parseGeoref(metadataAt(48.8753176, 2.3408312, 34.35));
 
-test("une origine identique donne une pose identité", () => {
-  const local = parseGeoref(metadataAt(48.8753176, 2.3408312, 34.35));
-  const { rotation, translation } = frameAlignment(frame, local);
+test("une origine identique donne une translation nulle ; la rotation suit la convergence des méridiens", () => {
+  const { rotation, translation } = frameAlignment(frame, parseGeoref(metadataAt(48.8753176, 2.3408312, 34.35)));
 
-  rotation.forEach((row, r) => row.forEach((value, c) => {
-    assert.ok(Math.abs(value - (r === c ? 1 : 0)) < 1e-6);
-  }));
   translation.forEach((value) => assert.ok(Math.abs(value) < 1e-3));
+  // Convergence des méridiens à Paris : ≈ 0,48°, soit 0,0083 rad.
+  assert.ok(Math.abs(rotation[0][1] - 0.0083) < 1e-3);
+  assert.ok(Math.abs(rotation[2][2] - 1) < 1e-6);
 });
 
-test("une origine 1 km au nord se recale sur le nord du repère commun", () => {
+test("une origine 1 km au nord se recale sur le nord du repère commun, sans écart vertical", () => {
   const dLat = 1000 / 111_195;
   const local = parseGeoref(metadataAt(48.8753176 + dLat, 2.3408312, 34.35));
-  const { rotation, translation } = frameAlignment(frame, local);
+  const { translation } = frameAlignment(frame, local);
 
-  assert.ok(Math.abs(translation[0]) < 1);
-  assert.ok(Math.abs(translation[1] - 1000) < 1);
-  // Courbure terrestre : à 1 km, le point est à environ s²/2R ≈ 8 cm sous le plan tangent.
-  assert.ok(Math.abs(translation[2] + 1000 ** 2 / (2 * 6_371_000)) < 0.01);
-  assert.ok(Math.abs(rotation[0][0] - 1) < 1e-5);
+  assert.ok(Math.abs(translation[1] - 1000) < 0.1);
+  // Convergence des méridiens : à 1 km au nord, le décalage Est est ≈ 8,35 m.
+  assert.ok(Math.abs(translation[0] - 8.35) < 0.1);
+  assert.ok(Math.abs(translation[2]) < 1e-3);
+});
+
+test("un splat ENU et une couche projetée de même origine se superposent, quelle que soit la vue", () => {
+  const splat = parseGeoref(metadataAt(48.8753176, 2.3408312, 34.35));
+  const lidar = createProjectedFrame(2154, SCENE_ORIGIN);
+
+  for (const view of [splat, lidar]) {
+    const fromSplat = layerPlacement(view, splat).origin;
+    const fromLidar = layerPlacement(view, lidar).origin;
+    assert.ok(Math.hypot(fromSplat[0] - fromLidar[0], fromSplat[1] - fromLidar[1]) < 0.01);
+  }
 });
 
 test("la pose avec flipUp inverse Y et Z, et la rotation reste un quaternion unitaire", () => {

@@ -1,6 +1,6 @@
 import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
-import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
+import { placementFor, worldPositions, frameFor } from "./lidar-layer.js";
 import { readCityJson, splitRoofFacade, buildNearSplatGrid, dropNearTriangles } from "./cityjson-geometry.js";
 
 export const MAX_FILE_BYTES = 512 * 1024 ** 2;
@@ -70,7 +70,7 @@ function applyOpacity(material, opacity) {
   material.update();
 }
 
-export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getSplatCenters, registerGroup, onBoundsChanged }) {
+export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getSplatCenters, adoptFrame, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   const color = new pc.Color().fromString(DEFAULT_VOLUME_COLOR);
@@ -118,12 +118,11 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
     return nearGrids.get(key);
   }
 
-  // Sans géoréférencement de scène, le pivot partagé avec LiDAR et vecteurs sert de repère.
-  function render(child, georef) {
+  function render(child) {
     destroyRender(child);
-    const pivot = resolvePivot(child.source, georef);
-    child.pivot = pivot;
-    const placement = placementFor(child.source, pivot);
+    const view = frameFor(child.source, getGeoref?.() ?? null, adoptFrame);
+    child.frame = view;
+    const placement = placementFor(child.source, view);
     child.bounds = null;
     if (!child.source.triangleCount) return;
 
@@ -173,12 +172,12 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
 
   function refreshPlacement() {
     if (disposed) return;
-    const georef = getGeoref?.() ?? null;
+    const view = getGeoref?.() ?? null;
     let changed = false;
     for (const layer of layers.values()) {
       for (const child of layer.children) {
-        if (child.pivot === resolvePivot(child.source, georef)) continue;
-        render(child, georef);
+        if (child.frame === view) continue;
+        render(child);
         changed = true;
       }
     }
@@ -197,19 +196,17 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
       throw new Error("Aucune surface exploitable dans ce CityJSON (géométries Solid ou MultiSurface attendues).");
     }
 
-    const georef = getGeoref?.() ?? null;
     const id = `cityjson-${nextId++}`;
     const child = {
       name: `${name} · ${source.objectCount.toLocaleString("fr-FR")} objets · ${source.triangleCount.toLocaleString("fr-FR")} triangles`,
       source,
       bounds: null,
-      pivot: null,
+      frame: null,
       parts: [],
     };
     const layer = { id, name, visible: true, children: [child] };
     layers.set(id, layer);
-    render(child, georef);
-    retainPivot(id);
+    render(child);
     emitBounds(true);
 
     const unregister = registerGroup?.({
@@ -238,7 +235,6 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
         unregister?.();
         destroyRender(child);
         layers.delete(id);
-        releasePivot(id);
         emitBounds(false);
       },
     }) ?? null;
@@ -262,7 +258,6 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
   function clear() {
     for (const layer of layers.values()) {
       for (const child of layer.children) destroyRender(child);
-      releasePivot(layer.id);
     }
     layers.clear();
     emitBounds(false);
@@ -310,7 +305,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
       hideNearSplats = enabled;
       nearGrids.clear();
       for (const layer of layers.values()) {
-        for (const child of layer.children) render(child, getGeoref?.() ?? null);
+        for (const child of layer.children) render(child);
       }
     },
 

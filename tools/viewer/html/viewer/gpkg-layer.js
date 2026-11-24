@@ -1,6 +1,6 @@
 import * as pc from "playcanvas";
 import { colmapBounds, getOverlayLayer } from "./colmap.js";
-import { placementFor, worldPositions, resolvePivot, retainPivot, releasePivot } from "./lidar-layer.js";
+import { placementFor, worldPositions, frameFor } from "./lidar-layer.js";
 import { polylinesToSegments, readGpkgLayers } from "./gpkg-geometry.js";
 import { registerOverlayMaterial } from "./overlay-depth.js";
 import { readGeojsonLayers } from "./geojson-geometry.js";
@@ -230,7 +230,7 @@ function makeSphereMaterial(color) {
   return material;
 }
 
-export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
+export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, adoptFrame, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   let lastGeoref = null;
@@ -271,10 +271,10 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     }
   }
 
-  // Sans géoréférencement de scène, le pivot partagé avec le LiDAR sert de repère (cf. lidar-layer.js).
-  function render(child, georef) {
+  function render(child) {
     destroyRender(child);
-    const placement = placementFor(child.source, resolvePivot(child.source, georef));
+    const view = frameFor(child.source, getGeoref?.() ?? null, adoptFrame);
+    const placement = placementFor(child.source, view);
     child.placement = placement;
     child.bounds = null;
     const hasLines = child.source.count > 0;
@@ -341,7 +341,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
     if (georef === lastGeoref) return;
     lastGeoref = georef;
     for (const layer of layers.values()) {
-      for (const child of layer.children) render(child, georef);
+      for (const child of layer.children) render(child);
     }
     emitBounds(false);
   }
@@ -376,8 +376,6 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       throw new Error("Aucune géométrie linéaire, surfacique ou ponctuelle dans ce fichier.");
     }
 
-    const georef = getGeoref?.() ?? null;
-    lastGeoref = georef;
     const id = `gpkg-${nextId++}`;
     const layer = { id, name: file.name, visible: true, children: [] };
     let truncated = false;
@@ -414,10 +412,10 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         placement: null,
       };
       layer.children.push(child);
-      render(child, georef);
+      render(child);
     }
     layers.set(id, layer);
-    retainPivot(id);
+    lastGeoref = getGeoref?.() ?? null;
     emitBounds(true);
 
     const unregister = registerGroup?.({
@@ -439,7 +437,6 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
         unregister?.();
         for (const child of layer.children) destroyRender(child);
         layers.delete(id);
-        releasePivot(id);
         emitBounds(false);
       },
     }) ?? null;
@@ -452,7 +449,6 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
   function clear() {
     for (const layer of layers.values()) {
       for (const child of layer.children) destroyRender(child);
-      releasePivot(layer.id);
     }
     layers.clear();
     emitBounds(false);
@@ -503,7 +499,7 @@ export function createGpkgLayer({ app, setStatus, getFlipUp, getGeoref, register
       pointSize = size;
       for (const layer of layers.values()) {
         for (const child of layer.children) {
-          if (child.source.pointCount) render(child, lastGeoref);
+          if (child.source.pointCount) render(child);
         }
       }
     },

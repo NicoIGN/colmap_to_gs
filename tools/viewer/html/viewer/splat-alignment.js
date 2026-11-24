@@ -1,5 +1,7 @@
-// Repère commun : la première référence géographique importée fixe le repère de la scène.
-// Chaque autre splat reçoit une pose rigide (rotation + translation) vers ce repère.
+// Repère commun : la première référence géographique importée fixe la vue (origine et grille).
+// Chaque couche (splat, LiDAR, vecteurs) a sa propre origine et se pose dans la vue par
+// une rotation + une translation.
+import { layerPlacement } from "./georef.js";
 
 const IDENTITY = [
   [1, 0, 0],
@@ -11,7 +13,6 @@ const FLIP_UP = [
   [0, -1, 0],
   [0, 0, -1],
 ];
-const PROBE_M = 100;
 
 function dot(a, b) {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
@@ -42,35 +43,20 @@ function mulVec(m, v) {
 }
 
 /**
- * Pose d’un splat (repère local `local`) dans le repère `frame` :
- * p_frame = rotation · p_local + translation.
+ * Pose d’un splat (repère local `local`) dans le repère de la vue `frame` :
+ * p_vue = rotation · p_local + translation. Rotation orthonormalisée (Gram-Schmidt).
  */
 export function frameAlignment(frame, local) {
-  const origin = local.worldToGeographic(0, 0, 0);
-  const base = frame.geographicToWorld(origin.lat, origin.lon, origin.h);
+  const { origin, linear } = layerPlacement(frame, local);
 
-  // Images des axes E, N, U du splat dans le repère commun, par différences finies.
-  const axes = [0, 1, 2].map((axis) => {
-    const probe = [0, 0, 0];
-    probe[axis] = PROBE_M;
-    const geo = local.worldToGeographic(...probe);
-    const moved = frame.geographicToWorld(geo.lat, geo.lon, geo.h);
-    return [
-      (moved.x - base.x) / PROBE_M,
-      (moved.y - base.y) / PROBE_M,
-      (moved.h - base.h) / PROBE_M,
-    ];
-  });
-
-  // Orthonormalisation (Gram-Schmidt) : absorbe les erreurs d’arrondi et de linéarisation.
-  const u0 = normalize(axes[0]);
-  const second = axes[1].map((value, i) => value - dot(axes[1], u0) * u0[i]);
-  const u1 = normalize(second);
+  const u0 = normalize([linear[0][0], linear[1][0], linear[2][0]]);
+  const second = [linear[0][1], linear[1][1], linear[2][1]];
+  const u1 = normalize(second.map((value, i) => value - dot(second, u0) * u0[i]));
   const u2 = cross(u0, u1);
 
   return {
     rotation: [0, 1, 2].map((row) => [u0[row], u1[row], u2[row]]),
-    translation: [base.x, base.y, base.h],
+    translation: origin,
   };
 }
 
