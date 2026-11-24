@@ -1214,6 +1214,7 @@ export function createColmapLayer({
         continue;
       }
       slot.label.textContent = image.name;
+      slot.label.style.opacity = String(imageOpacity);
       slot.label.style.left = `${glCanvas.offsetLeft + s.x}px`;
       slot.label.style.top = `${glCanvas.offsetTop + s.y}px`;
       slot.label.style.display = "block";
