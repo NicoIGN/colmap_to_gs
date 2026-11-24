@@ -38,19 +38,6 @@ const PANORAMA_CUBE_FACE = 512;
 const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
 const CUBE_GRID = 32;
 
-// TEMPORAIRE : hypothèses de repère pour le cube (sélection via le menu « Hypothèse cube »).
-// sign : sens de l'axe de la vue (±forward) ; inverse : matrice de correspondance rwcᵀ·R (false) ou Rᵀ·rwc (true) ;
-// fixQ : applique la symétrie gauche/droite à la direction source.
-const CUBE_HYPOTHESES = [
-  { label: "H1 : +forward, rwcᵀR, symétrie", sign: 1, inverse: false, fixQ: true },
-  { label: "H2 : +forward, rwcᵀR, sans symétrie", sign: 1, inverse: false, fixQ: false },
-  { label: "H3 : +forward, Rᵀrwc, symétrie", sign: 1, inverse: true, fixQ: true },
-  { label: "H4 : +forward, Rᵀrwc, sans symétrie", sign: 1, inverse: true, fixQ: false },
-  { label: "H5 : -forward, rwcᵀR, symétrie", sign: -1, inverse: false, fixQ: true },
-  { label: "H6 : -forward, rwcᵀR, sans symétrie", sign: -1, inverse: false, fixQ: false },
-  { label: "H7 : -forward, Rᵀrwc, symétrie", sign: -1, inverse: true, fixQ: true },
-  { label: "H8 : -forward, Rᵀrwc, sans symétrie", sign: -1, inverse: true, fixQ: false },
-];
 
 // Faces d'un cube dans le repère caméra : centre, axe droit et axe bas de chaque face à 90°.
 const CUBE_FACES = [
@@ -865,11 +852,11 @@ function cubeAtlasUv(q) {
 
 // Cube maillé (CUBE_GRID × CUBE_GRID par face). Chaque sommet reçoit l'UV de la direction de la
 // panorama vue à cet endroit du cube après rotation : la texture suit donc la rotation du cube.
-function panoramaCube(image, radius, orient = null, hypothesis = CUBE_HYPOTHESES[0]) {
+function panoramaCube(image, radius, orient = null) {
   const rwc = transpose3(qvecToMat3(image.qvec));
   const rotation = orient ?? rwc;
-  // Passage du repère du cube tourné vers le repère caméra COLMAP d'origine.
-  const toSource = hypothesis.inverse ? mulMat3(transpose3(rotation), rwc) : mulMat3(transpose3(rwc), rotation);
+  // Passage du repère du cube tourné vers le repère caméra COLMAP d'origine (hypothèse H3 : Rᵀ·rwc).
+  const toSource = mulMat3(transpose3(rotation), rwc);
   const center = getCameraCenter(image);
   const n = CUBE_GRID;
   const positions = [];
@@ -887,7 +874,7 @@ function panoramaCube(image, radius, orient = null, hypothesis = CUBE_HYPOTHESES
         positions.push(world[0] * radius + center[0], world[1] * radius + center[1], world[2] * radius + center[2]);
         // Direction de la panorama affichée à cet endroit : rwc·fix(q) = world.
         const q = mulMat3Vec3(toSource, local);
-        if (hypothesis.fixQ) applyPanoramaYawFix(q);
+        applyPanoramaYawFix(q);
         uvs.push(...cubeAtlasUv(q));
       }
     }
@@ -998,8 +985,6 @@ export function createColmapLayer({
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
   let panoramaMirror = panoramaMirrorInput?.checked ?? false;
-  let cubeHypothesis = CUBE_HYPOTHESES[0];
-  const cubeHypothesisSelect = document.getElementById("colmapCubeHypothesis");
   const goToPositionSelect = document.getElementById("colmapGoToPosition");
   let goToBehind = (goToPositionSelect?.value ?? "behind") === "behind";
   const frustumSizeInput = document.getElementById("colmapFrustumSize");
@@ -1132,14 +1117,6 @@ export function createColmapLayer({
 
   function setGoToBehind(behind) {
     goToBehind = behind;
-  }
-
-  function setCubeHypothesis(index) {
-    cubeHypothesis = CUBE_HYPOTHESES[index] ?? CUBE_HYPOTHESES[0];
-    for (const model of models.values()) {
-      model.slots?.forEach(resetSlot);
-      rebuildFrustums(model, new Set());
-    }
   }
 
   function setPanoramaMirror(on) {
@@ -1462,7 +1439,7 @@ export function createColmapLayer({
     let geometry;
     const orient = isPanorama(camera) ? panoramaOrient(model, image, model.lastForward, cube) : null;
     if (cube) {
-      geometry = panoramaCube(image, radius, orient, cubeHypothesis);
+      geometry = panoramaCube(image, radius, orient);
     } else if (isPanorama(camera)) {
       geometry = panoramaSphere(image, radius, panoramaMirror, orient);
     } else {
@@ -1536,7 +1513,7 @@ export function createColmapLayer({
   // Sphère : le panorama s'oriente selon l'axe point de vue → centre de prise de vue (snap sur 90°).
   function panoramaOrient(model, image, forward, cube) {
     const rwc = transpose3(qvecToMat3(image.qvec));
-    if (cube) return forward ? alignCubeToView(rwc, forward.map((c) => c * cubeHypothesis.sign)) : null;
+    if (cube) return forward ? alignCubeToView(rwc, forward) : null;
     const v = model.lastViewer;
     if (!v) return null;
     const center = getCameraCenter(image);
@@ -1563,7 +1540,7 @@ export function createColmapLayer({
       const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
       const orient = panoramaOrient(model, image, forward, cube);
       const geometry = cube
-        ? panoramaCube(image, radius, orient, cubeHypothesis)
+        ? panoramaCube(image, radius, orient)
         : panoramaSphere(image, radius, panoramaMirror, orient);
       slot.mesh.setPositions(geometry.positions);
       slot.mesh.setUvs(0, geometry.uvs);
@@ -2136,12 +2113,6 @@ export function createColmapLayer({
     const onChange = () => setPanoramaMode(panoramaModeSelect.value);
     panoramaModeSelect.addEventListener("change", onChange);
     removers.push(() => panoramaModeSelect.removeEventListener("change", onChange));
-  }
-  if (cubeHypothesisSelect) {
-    cubeHypothesisSelect.innerHTML = CUBE_HYPOTHESES.map((h, i) => `<option value="${i}">${h.label}</option>`).join("");
-    const onChange = () => setCubeHypothesis(Number(cubeHypothesisSelect.value));
-    cubeHypothesisSelect.addEventListener("change", onChange);
-    removers.push(() => cubeHypothesisSelect.removeEventListener("change", onChange));
   }
   if (panoramaMirrorInput) {
     const onChange = () => setPanoramaMirror(panoramaMirrorInput.checked);
