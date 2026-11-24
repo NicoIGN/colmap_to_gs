@@ -1467,6 +1467,13 @@ function goToImageView() {
   // L'axe vertical reste celui de l'application (axe principal courant).
   const axis = getPrincipalAxis();
   applyCameraString([...pose.position, ...pose.target, axis.x, axis.y, axis.z].join(","));
+  // Même champ de vue que l'image : le rendu 3D se superpose à l'image affichée.
+  if (pose.horizontalFov) {
+    const aspect = canvas.clientWidth / canvas.clientHeight;
+    const halfH = (pose.horizontalFov * Math.PI) / 360;
+    camera.fov = (2 * Math.atan(Math.tan(halfH) / aspect) * 180) / Math.PI;
+    cameraEntity.camera.fov = camera.fov;
+  }
   rememberCamera();
   requestGifCapture();
   setStatus("Caméra placée sur la vue de l’image COLMAP.", "success");

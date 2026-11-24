@@ -1220,9 +1220,14 @@ export function createColmapLayer({
     // « Pile » : observateur exactement au centre de la caméra.
     const back = goToBehind ? radius * 0.02 : 0;
     const targetDistance = radius * 0.2;
+    // Champ de vue de l'image : 90° pour un panorama (face de cube), champ réel pour un pinhole.
+    const horizontalFov = !camera ? null
+      : isPanorama(camera) ? 90
+      : (2 * Math.atan(camera.width / (2 * getFxFy(camera).fx)) * 180) / Math.PI;
     return {
       position: cameraWorld.map((value, axis) => value - forward[axis] * back),
       target: cameraWorld.map((value, axis) => value + forward[axis] * targetDistance),
+      horizontalFov,
     };
   }
 
