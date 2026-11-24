@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, alignCubeToView, panoramaSphere, panoramaCube, frustumClipPlanes } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, alignCubeToView, panoramaSphere, panoramaCube } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -315,27 +315,4 @@ test("a click ray hits a panorama marker box only when it crosses it", () => {
   assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, 1]), true);
   assert.equal(rayBoxHit([0, 0, 10], 2, [3, 0, 0], [0, 0, 1]), false);
   assert.equal(rayBoxHit([0, 0, 10], 2, [0, 0, 0], [0, 0, -1]), false);
-});
-
-test("splat clip planes keep only the points inside the frustum pyramid", () => {
-  const corners = [
-    [0, 0, 0],
-    [-5, -5, 10],
-    [5, -5, 10],
-    [5, 5, 10],
-    [-5, 5, 10],
-  ];
-  const planes = frustumClipPlanes(corners);
-  const inside = (p) => {
-    for (let i = 0; i < planes.length; i += 4) {
-      if (planes[i] * p[0] + planes[i + 1] * p[1] + planes[i + 2] * p[2] + planes[i + 3] < 0) return false;
-    }
-    return true;
-  };
-  assert.equal(planes.length, 24);
-  assert.equal(inside([0, 0, 5]), true);
-  assert.equal(inside([2, 0, 5]), true);
-  assert.equal(inside([0, 0, -1]), false, "behind the observer");
-  assert.equal(inside([0, 0, 11]), false, "beyond the image plane");
-  assert.equal(inside([6, 0, 5]), false, "outside the lateral extent");
 });
