@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { readGaugeFile, readGeorefFile } from "./georef.js";
+import { createProjectedFrame, readGaugeFile, readGeorefFile } from "./georef.js";
 import { frameAlignment } from "./splat-alignment.js";
 
 /**
@@ -788,8 +788,17 @@ export function createSceneTools({
       return true;
     }
 
+  // La vue se règle sur la grille du SCR (E, N selon l’EPSG). Une référence ENU locale
+  // (axes tangents, décalés de la convergence des méridiens) est donc ramenée à son origine projetée.
+  function viewFrameOf(reference) {
+    if (reference.type === "projected") return reference;
+    const { x, y, h } = reference.origin;
+    return createProjectedFrame(reference.epsg, [x, y, h]);
+  }
+
   function applyGeoref(reference) {
-    georef = reference;
+    georef = viewFrameOf(reference);
+    if (reference.originGeographic) georef.originGeographic = reference.originGeographic;
     resetTrack();
     updateGeorefInfo();
     clearNavigation();
@@ -855,19 +864,15 @@ export function createSceneTools({
       : await readGeorefFile(file);
     if (disposed) return null;
 
-    if (!georef) {
-      applyGeoref(reference);
-      setStatus(
-        `Repère commun fixé — EPSG:${reference.epsg} (première donnée géographique).`,
-        "success"
-      );
-      return null;
-    }
+    const isFirst = !georef;
+    if (isFirst) applyGeoref(reference);
 
     const alignment = frameAlignment(georef, reference);
     const shift = Math.hypot(...alignment.translation);
     setStatus(
-      `${file.name} recalé sur le repère commun (décalage ${shift.toFixed(1)} m).`,
+      isFirst
+        ? `Repère commun fixé — EPSG:${reference.epsg} (première donnée géographique).`
+        : `${file.name} recalé sur le repère commun (décalage ${shift.toFixed(1)} m).`,
       "success"
     );
     return alignment;
