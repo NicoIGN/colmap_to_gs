@@ -47,7 +47,7 @@ test("a click ray picks the single pinhole frustum it crosses, and the far face 
 test("sphere panoramas keep their radius around the camera centre when oriented like the cube", () => {
   const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
   const forward = [0.3, -0.5, -0.8];
-  const orient = alignCubeToView(forward);
+  const orient = alignCubeToView(forward, [1, 0, 0, 0, 1, 0, 0, 0, 1]);
   const { positions, uvs } = panoramaSphere(image, 2, false, orient);
   const center = [0, 0, 0];
   for (let k = 0; k < positions.length; k += 3) {
@@ -57,37 +57,31 @@ test("sphere panoramas keep their radius around the camera centre when oriented 
   assert.ok([...uvs].every((v) => v >= -1e-6 && v <= 1 + 1e-6));
 });
 
-test("cube panoramas stay flat on the ground and only yaw with the view", () => {
+test("cube panoramas pivot around the view axis with the camera vertical", () => {
+  const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
   const forward = [0.3, -0.5, -0.8];
-  const m = alignCubeToView(forward);
-  // Verticale du cube = verticale monde : aucune composante de tangage ni de roulis.
-  assert.deepEqual([m[1], m[4], m[7]].map((v) => Math.round(v * 1e9) / 1e9), [0, 1, 0]);
-  // Image centre (-z) sur la projection horizontale du regard.
-  const h = [forward[0], 0, forward[2]];
-  const hl = Math.hypot(...h);
-  assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - h[k] / hl) < 1e-9));
-  // Rotation propre (déterminant 1).
+  const m = alignCubeToView(forward, rwc);
   const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
   assert.ok(Math.abs(det - 1) < 1e-9);
-  // Le regard varie en hauteur seulement : le cube ne bouge pas.
-  assert.ok(alignCubeToView([0.3, 0.9, -0.8]).every((v, k) => Math.abs(v - m[k]) < 1e-9));
+  // Image centre (-z) sur le regard.
+  const n = Math.hypot(...forward);
+  assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - forward[k] / n) < 1e-9));
+  // Verticale : projection de la verticale caméra sur le plan perpendiculaire au regard.
+  const camDown = [rwc[1], rwc[4], rwc[7]];
+  const along = camDown.reduce((acc, c, k) => acc + (c * forward[k]) / n, 0);
+  const expected = camDown.map((c, k) => c - (along * forward[k]) / n);
+  const el = Math.hypot(...expected);
+  assert.ok([m[1], m[4], m[7]].every((v, k) => Math.abs(v - expected[k] / el) < 1e-9));
 });
 
-test("every temporary cube orientation hypothesis gives a proper rotation", () => {
+test("cube orientation stays orthonormal when the view is vertical", () => {
   const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
-  for (const hypothesis of ["yaw", "world", "camera", "identity"]) {
-    const m = alignCubeToView([0.3, -0.5, -0.8], [0, 1, 0], hypothesis, rwc);
-    const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
-    assert.ok(Math.abs(det - 1) < 1e-9, hypothesis);
-  }
-});
-
-test("cube orientation stays orthonormal and defined when the view is vertical", () => {
-  const m = alignCubeToView([0, -1, 0]);
+  const m = alignCubeToView([0, -1, 0], rwc);
   const dot = (i, j) => m[i] * m[j] + m[i + 3] * m[j + 3] + m[i + 6] * m[j + 6];
   assert.ok(Math.abs(dot(0, 0) - 1) < 1e-9 && Math.abs(dot(1, 1) - 1) < 1e-9 && Math.abs(dot(2, 2) - 1) < 1e-9);
   assert.ok(Math.abs(dot(0, 1)) < 1e-9 && Math.abs(dot(1, 2)) < 1e-9 && Math.abs(dot(0, 2)) < 1e-9);
 });
+
 
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {

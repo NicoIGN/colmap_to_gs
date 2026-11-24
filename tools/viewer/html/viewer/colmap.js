@@ -793,35 +793,21 @@ function mulMat3(a, b) {
   return out;
 }
 
-// Cube : rotation de lacet pure autour de la verticale monde `up`. Le cube reste posé à plat sur le sol
-// et ne pivote que selon le cap du regard (`forward` projeté à l'horizontale) : pas de tangage ni de roulis.
-export function alignCubeToView(forward, up = [0, 1, 0], hypothesis = "yaw", rwc = null) {
-  if (hypothesis === "identity") return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+// Cube : pivote autour de l'axe principal de la vue (`forward`). Sa verticale est celle de la caméra
+// COLMAP (rwc·[0,1,0]) projetée sur le plan perpendiculaire au regard. Repli sur Z monde si le regard est vertical.
+export function alignCubeToView(forward, rwc) {
   const fLen = Math.hypot(...forward);
   const f = forward.map((c) => c / fLen);
   const normalize = (v) => {
     const l = Math.hypot(...v);
     return l < 1e-9 ? null : v.map((c) => c / l);
   };
-  // Projection perpendiculaire au regard.
   const project = (v) => {
     const along = v[0] * f[0] + v[1] * f[1] + v[2] * f[2];
     return [0, 1, 2].map((k) => v[k] - along * f[k]);
   };
-  let y;
-  let z;
-  if (hypothesis === "yaw") {
-    // Lacet pur : verticale monde fixe, cap = regard horizontal.
-    y = normalize(up);
-    const h = normalize([0, 1, 2].map((k) => -(f[k] - (f[0] * y[0] + f[1] * y[1] + f[2] * y[2]) * y[k])));
-    if (!h) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
-    z = h;
-  } else {
-    // Pivot autour du regard : verticale monde (`up`) ou caméra (`rwc`), projetée sur le plan perpendiculaire.
-    const vertical = hypothesis === "camera" && rwc ? mulMat3Vec3(rwc, [0, 1, 0]) : up;
-    y = normalize(project(vertical)) ?? normalize(project([0, 0, 1]));
-    z = f.map((c) => -c);
-  }
+  const y = normalize(project(mulMat3Vec3(rwc, [0, 1, 0]))) ?? normalize(project([0, 0, 1]));
+  const z = f.map((c) => -c);
   // Repère droit : x = y × z.
   const x = [y[1] * z[2] - y[2] * z[1], y[2] * z[0] - y[0] * z[2], y[0] * z[1] - y[1] * z[0]];
   return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
@@ -980,9 +966,6 @@ export function createColmapLayer({
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
   let panoramaMirror = panoramaMirrorInput?.checked ?? false;
-  // TEMPORAIRE : hypothèse d'orientation du cube (menu `colmapOrientHypothesis`), à retirer une fois choisie.
-  const orientHypothesisSelect = document.getElementById("colmapOrientHypothesis");
-  let orientHypothesis = orientHypothesisSelect?.value ?? "yaw";
   const goToPositionSelect = document.getElementById("colmapGoToPosition");
   let goToBehind = (goToPositionSelect?.value ?? "behind") === "behind";
   const frustumSizeInput = document.getElementById("colmapFrustumSize");
@@ -1115,17 +1098,6 @@ export function createColmapLayer({
 
   function setGoToBehind(behind) {
     goToBehind = behind;
-  }
-
-  // TEMPORAIRE : change l'hypothèse d'orientation et recalcule les panoramas affichés.
-  function setOrientHypothesis(value) {
-    if (orientHypothesis === value) return;
-    orientHypothesis = value;
-    for (const model of models.values()) {
-      model.slots?.forEach(resetSlot);
-      model.pickedKey = null;
-      if (model.lastForward) reorientPanoramas(model, model.lastForward);
-    }
   }
 
   function setPanoramaMirror(on) {
@@ -1523,7 +1495,7 @@ export function createColmapLayer({
   function panoramaOrient(model, image, forward) {
     if (!forward) return null;
     const rwc = transpose3(qvecToMat3(image.qvec));
-    return alignCubeToView(forward, model.lastUp, orientHypothesis, rwc);
+    return alignCubeToView(forward, rwc);
   }
 
   // Appelée à chaque frame : sélectionne les caméras dont le cadre atteint IMAGE_MIN_SCREEN_PX.
@@ -1603,8 +1575,6 @@ export function createColmapLayer({
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
       model.lastForward = forward;
-      // Verticale monde (écran) exprimée dans le repère des données, inversée comme le regard si flipUp.
-      model.lastUp = flip ? [0, -1, 0] : [0, 1, 0];
       const pose = [...viewer, ...forward];
       const tolerance = 1e-6 * Math.max(getSceneRadius?.() ?? 1, 1e-6);
       const moved = !model.lastPose || pose.some((v, k) => Math.abs(v - model.lastPose[k]) > tolerance);
@@ -2112,11 +2082,6 @@ export function createColmapLayer({
     const onChange = () => setPanoramaMode(panoramaModeSelect.value);
     panoramaModeSelect.addEventListener("change", onChange);
     removers.push(() => panoramaModeSelect.removeEventListener("change", onChange));
-  }
-  if (orientHypothesisSelect) {
-    const onChange = () => setOrientHypothesis(orientHypothesisSelect.value);
-    orientHypothesisSelect.addEventListener("change", onChange);
-    removers.push(() => orientHypothesisSelect.removeEventListener("change", onChange));
   }
   if (panoramaMirrorInput) {
     const onChange = () => setPanoramaMirror(panoramaMirrorInput.checked);
