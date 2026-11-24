@@ -73,6 +73,15 @@ test("cube panoramas stay flat on the ground and only yaw with the view", () => 
   assert.ok(alignCubeToView([0.3, 0.9, -0.8]).every((v, k) => Math.abs(v - m[k]) < 1e-9));
 });
 
+test("every temporary cube orientation hypothesis gives a proper rotation", () => {
+  const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
+  for (const hypothesis of ["yaw", "world", "camera", "identity"]) {
+    const m = alignCubeToView([0.3, -0.5, -0.8], [0, 1, 0], hypothesis, rwc);
+    const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+    assert.ok(Math.abs(det - 1) < 1e-9, hypothesis);
+  }
+});
+
 test("cube orientation stays orthonormal and defined when the view is vertical", () => {
   const m = alignCubeToView([0, -1, 0]);
   const dot = (i, j) => m[i] * m[j] + m[i + 3] * m[j + 3] + m[i + 6] * m[j + 6];
