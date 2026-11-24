@@ -950,6 +950,16 @@ async function appendScene(source, name) {
   return splatLayers.at(-1);
 }
 
+// Une donnée géoréférencée ne peut pas se poser dans une vue sans repère : le splat déjà
+// posé (sans métadonnées) resterait à l’identité, donc décalé.
+function assertGeoreferencedAllowed() {
+  if (!sceneTools?.getGeoref?.() && splatLayers.length) {
+    throw new Error(
+      "La vue n’est pas géoréférencée : ajoute d’abord le splat avec ses métadonnées, ou recharge la scène."
+    );
+  }
+}
+
 async function handleDroppedFiles(fileList, items) {
   if ((!fileList?.length && !items?.length) || !canStartLoad()) return;
 
@@ -969,6 +979,7 @@ async function handleDroppedFiles(fileList, items) {
       const sidecar = files.find((f) => f.name.toLowerCase() === sidecarName) ?? null;
       if (files.length === (sidecar ? 2 : 1)) {
         if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
+        assertGeoreferencedAllowed();
         await lidarLayer.loadFile(lidarFile, sidecar);
         return;
       }
@@ -977,6 +988,7 @@ async function handleDroppedFiles(fileList, items) {
     const gpkgFile = files.find((f) => /\.(gpkg|geojson)$/i.test(f.name));
     if (gpkgFile && files.length === 1) {
       if (!gpkgLayer) throw new Error("L’importeur de données filaires n’est pas initialisé.");
+      assertGeoreferencedAllowed();
       await gpkgLayer.loadFile(gpkgFile);
       return;
     }
@@ -1028,6 +1040,7 @@ async function handleDroppedFiles(fileList, items) {
       const text = await file.text();
       if (isCityJsonText(text)) {
         if (!cityLayer) throw new Error("L’importeur CityJSON n’est pas initialisé.");
+        assertGeoreferencedAllowed();
         await cityLayer.loadText(text, file.name);
         return;
       }
