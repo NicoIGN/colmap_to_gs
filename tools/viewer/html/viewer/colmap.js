@@ -1386,8 +1386,7 @@ export function createColmapLayer({
     const mesh = new pc.Mesh(app.graphicsDevice);
     const radius = model.depth * IMAGE_FRUSTUM_SCALE * (isPanorama(camera) ? PANORAMA_SIZE_FACTOR : 1);
     let geometry;
-    const rwc = transpose3(qvecToMat3(image.qvec));
-    const orient = isPanorama(camera) && model.lastForward ? snapOrientation(rwc, model.lastForward) : null;
+    const orient = isPanorama(camera) ? panoramaOrient(model, image, model.lastForward) : null;
     if (cube) {
       geometry = panoramaCube(image, radius, orient);
     } else if (isPanorama(camera)) {
@@ -1459,6 +1458,23 @@ export function createColmapLayer({
     rebuildFrustums(model, new Set());
   }
 
+  // Le panorama s'oriente selon l'axe point de vue → centre de prise de vue de la photo (et non le regard) :
+  // sa direction ne change plus quand on tourne autour du frustum.
+  function panoramaOrient(model, image, forward) {
+    const v = model.lastViewer;
+    if (!v) return null;
+    const center = getCameraCenter(image);
+    let axis = [center[0] - v[0], center[1] - v[1], center[2] - v[2]];
+    const length = Math.hypot(...axis);
+    if (length < 1e-9) {
+      if (!forward) return null;
+      axis = forward;
+    } else {
+      axis = axis.map((c) => c / length);
+    }
+    return snapOrientation(transpose3(qvecToMat3(image.qvec)), axis);
+  }
+
   // Appelée à chaque frame : sélectionne les caméras dont le cadre atteint IMAGE_MIN_SCREEN_PX.
   // Projette chaque panorama affiché sur l'axe le plus proche du regard courant (appelé à l'arrêt uniquement).
   function reorientPanoramas(model, forward) {
@@ -1469,7 +1485,7 @@ export function createColmapLayer({
       const camera = model.cameras.get(image.cameraId);
       if (!camera || !isPanorama(camera)) continue;
       const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
-      const orient = snapOrientation(transpose3(qvecToMat3(image.qvec)), forward);
+      const orient = panoramaOrient(model, image, forward);
       const geometry = cube
         ? panoramaCube(image, radius, orient)
         : panoramaSphere(image, radius, panoramaMirror, orient);
@@ -1496,6 +1512,7 @@ export function createColmapLayer({
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
       model.lastForward = forward;
+      model.lastViewer = viewer;
       const pose = [...viewer, ...forward];
       const tolerance = 1e-6 * Math.max(getSceneRadius?.() ?? 1, 1e-6);
       const moved = !model.lastPose || pose.some((v, k) => Math.abs(v - model.lastPose[k]) > tolerance);
