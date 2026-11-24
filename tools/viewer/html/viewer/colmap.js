@@ -764,30 +764,10 @@ export function equirectToCubeAtlas(rgba, width, height, faceSize = PANORAMA_CUB
   return { data: atlas, width: atlasWidth, height: faceSize * 2 };
 }
 
-// Quaternion [w,x,y,z] de la rotation la plus courte qui amène la direction `from` sur `to`.
-export function cubeFacingQvec(from, to) {
-  const f = normalize3(from);
-  const t = normalize3(to);
-  const dot = Math.min(1, Math.max(-1, f[0] * t[0] + f[1] * t[1] + f[2] * t[2]));
-  const axis = [f[1] * t[2] - f[2] * t[1], f[2] * t[0] - f[0] * t[2], f[0] * t[1] - f[1] * t[0]];
-  const s = Math.hypot(...axis);
-  if (s < 1e-9) {
-    if (dot > 0) return [1, 0, 0, 0];
-    // Direction opposée : demi-tour autour d'un axe perpendiculaire à `from`.
-    const ref = Math.abs(f[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
-    const p = [f[1] * ref[2] - f[2] * ref[1], f[2] * ref[0] - f[0] * ref[2], f[0] * ref[1] - f[1] * ref[0]];
-    const n = Math.hypot(...p);
-    return [0, p[0] / n, p[1] / n, p[2] / n];
-  }
-  const half = Math.atan2(s, dot) / 2;
-  const k = Math.sin(half) / s;
-  return [Math.cos(half), axis[0] * k, axis[1] * k, axis[2] * k];
-}
-
-// Six quads (un par face) du cube centré sur la caméra, UV dans l'atlas.
-// Positions relatives au centre de la caméra : l'entité du cube y est placée et tournée (voir placeSlotEntity).
+// Six quads (un par face) posés sur les faces du cube centré sur la caméra, UV dans l'atlas.
 function panoramaCube(image, radius) {
   const rwc = transpose3(qvecToMat3(image.qvec));
+  const center = getCameraCenter(image);
   const positions = [];
   const uvs = [];
   const indices = [];
@@ -808,7 +788,7 @@ function panoramaCube(image, radius) {
       const local = [0, 1, 2].map((k) => (face.center[k] + a * face.right[k] + b * face.down[k]) * radius);
       applyPanoramaYawFix(local);
       const world = mulMat3Vec3(rwc, local);
-      positions.push(world[0], world[1], world[2]);
+      positions.push(world[0] + center[0], world[1] + center[1], world[2] + center[2]);
       uvs.push(u, v);
     }
     const base = index * 4;
@@ -1183,8 +1163,9 @@ export function createColmapLayer({
     const axis = camera && isPanorama(camera) ? [0, 0, -1] : [0, 0, 1];
     const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(rwc, axis))), cameraWorld));
     const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
-    // Léger recul derrière le centre de la caméra pour comparer l'image et le rendu 3D.
-    const back = radius * 0.02;
+    // Panoramas (sphère ou cube) centrés sur la caméra : l'observateur est au centre, sans recul ni parallaxe.
+    // Pinhole : léger recul derrière la caméra pour comparer l'image avec le rendu 3D.
+    const back = camera && isPanorama(camera) ? 0 : radius * 0.02;
     const targetDistance = radius * 0.2;
     return {
       position: cameraWorld.map((value, axis) => value - forward[axis] * back),
@@ -1391,38 +1372,6 @@ export function createColmapLayer({
     refreshEnlarged(model);
   }
 
-  // Cube 360° affiché : il se tourne pour présenter son image à l'observateur lorsqu'il est à l'extérieur.
-  // À l'intérieur (ou à l'arrivée d'« Aller à la vue »), il garde l'orientation de la pose COLMAP.
-  function cubeQvec(image, viewer, radius) {
-    const center = getCameraCenter(image);
-    const toViewer = sub3(viewer, center);
-    if (Math.hypot(...toViewer) <= radius) return [1, 0, 0, 0];
-    const rwc = transpose3(qvecToMat3(image.qvec));
-    return cubeFacingQvec(mulMat3Vec3(rwc, [0, 0, -1]), toViewer);
-  }
-
-  // Place l'entité d'un slot affiché : cube au centre de la caméra et tourné, autres formes en repère du modèle.
-  function placeSlotEntity(model, slot, viewer, radius) {
-    const image = model.colmapImages[slot.shown];
-    const camera = model.cameras.get(image.cameraId);
-    const cube = !!camera && isPanorama(camera) && panoramaMode === "cube";
-    const c = cube ? getCameraCenter(image) : [0, 0, 0];
-    const q = cube ? cubeQvec(image, viewer, radius) : [1, 0, 0, 0];
-    slot.entity.setLocalPosition(c[0], c[1], c[2]);
-    slot.entity.setLocalRotation(q[1], q[2], q[3], q[0]);
-    slot.cubeQvec = cube ? q : null;
-  }
-
-  // Test de clic sur un panorama : cube affiché (tourné) ou boîte alignée (marqueur, sphère).
-  function panoramaHit(model, index, radius, o, d) {
-    const image = model.colmapImages[index];
-    const slot = model.slots.find((s) => s.shown === index && s.cubeQvec);
-    if (!slot) return rayBoxHit(getCameraCenter(image), radius, o, d);
-    const inv = transpose3(qvecToMat3(slot.cubeQvec));
-    const c = getCameraCenter(image);
-    return rayBoxHit([0, 0, 0], radius, mulMat3Vec3(inv, sub3(o, c)), mulMat3Vec3(inv, d));
-  }
-
   function assignSlots(model, selected) {
     model.slots.forEach((slot, i) => {
       const index = selected[i];
@@ -1465,10 +1414,6 @@ export function createColmapLayer({
       const viewer = flip ? [p[0], -p[1], -p[2]] : [p[0], p[1], p[2]];
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
-      const cubeRadius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
-      for (const slot of model.slots) {
-        if (slot.shown !== null) placeSlotEntity(model, slot, viewer, cubeRadius);
-      }
       const isPano = (index) => {
         const camera = model.cameras.get(model.colmapImages[index].cameraId);
         return !!camera && isPanorama(camera);
@@ -2003,7 +1948,7 @@ export function createColmapLayer({
           const image = model.colmapImages[current];
           const camera = model.cameras.get(image.cameraId);
           const onImage = camera && (isPanorama(camera)
-            ? panoramaHit(model, current, model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR, o, d)
+            ? rayBoxHit(getCameraCenter(image), model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR, o, d)
             : rayHitsFarFace(image, camera, depth, o, d));
           if (onImage) {
             model.overrideIndex = null;
@@ -2019,9 +1964,8 @@ export function createColmapLayer({
           const camera = model.cameras.get(image.cameraId);
           if (!camera) return;
           const hit = isPanorama(camera)
-            ? panoramaHit(
-                model,
-                i,
+            ? rayBoxHit(
+                getCameraCenter(image),
                 model.slots.some((slot) => slot.shown === i)
                   ? model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR
                   : model.depth * PANORAMA_MARKER_FACTOR,
