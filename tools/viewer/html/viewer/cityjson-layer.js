@@ -118,6 +118,15 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
     return nearGrids.get(key);
   }
 
+  // À appeler quand un splat est ajouté, retiré ou retourné : les grilles en plan dépendent de leur position.
+  function refreshNearSplats() {
+    nearGrids.clear();
+    if (!hideNearSplats) return;
+    for (const layer of layers.values()) {
+      for (const child of layer.children) render(child);
+    }
+  }
+
   function render(child) {
     destroyRender(child);
     const view = frameFor(child.source, getGeoref?.() ?? null, adoptFrame);
@@ -287,6 +296,7 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
           for (const part of child.parts) part.root.setLocalEulerAngles(flip ? 180 : 0, 0, 0);
         }
       }
+      refreshNearSplats();
     },
 
     // `percent` : 100 = opaque, 0 = invisible. `kind` : "roof" ou "facade".
@@ -303,11 +313,10 @@ export function createCityJsonLayer({ app, setStatus, getFlipUp, getGeoref, getS
 
     setFacadeNearSplats(enabled) {
       hideNearSplats = enabled;
-      nearGrids.clear();
-      for (const layer of layers.values()) {
-        for (const child of layer.children) render(child);
-      }
+      refreshNearSplats();
     },
+
+    refreshNearSplats,
 
     dispose() {
       if (disposed) return;

@@ -501,6 +501,7 @@ async function removeSplatLayer(layer) {
   layer.unregister?.();
   layer.entity.destroy();
   layer.importer.dispose();
+  cityLayer?.refreshNearSplats();
 
   if (!splatLayers.length) {
     releaseScene();
@@ -596,6 +597,20 @@ function keepPivotOnCenter(previousCenter, previousTarget) {
   target.add(delta);
   camera.position.add(delta);
   syncCamera();
+}
+
+// Centres d'un splat dans le repère de la vue (même transformation que son entité).
+function worldSplatCenters(layer) {
+  const m = layer.entity.getWorldTransform().data;
+  const src = layer.centers;
+  const out = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i += 3) {
+    const x = src[i], y = src[i + 1], z = src[i + 2];
+    out[i] = m[0] * x + m[4] * y + m[8] * z + m[12];
+    out[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+    out[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+  }
+  return out;
 }
 
 function gatherSplatCoordinates(layers, keep = null) {
@@ -749,6 +764,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
       onRemove: () => removeSplatLayer(newLayer),
     });
     splatLayers.push(newLayer);
+    cityLayer?.refreshNearSplats();
     splatEntity ??= entity;
     centers = new Float32Array(splatLayers.reduce(
       (total, layer) => total + layer.centers.length, 0
@@ -1973,7 +1989,7 @@ async function initialize() {
         app,
         setStatus,
         getFlipUp: () => $("flipUp").checked,
-        getSplatCenters: () => splatLayers.map((layer) => layer.centers),
+        getSplatCenters: () => splatLayers.map(worldSplatCenters),
         getGeoref: () => sceneTools?.getGeoref() ?? null,
         adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
