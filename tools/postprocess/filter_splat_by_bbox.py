@@ -22,7 +22,7 @@ from scipy.spatial.transform import Rotation
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from tools.libs.python.splat_metadata import load_gauge_reference  # noqa: E402
+from tools.libs.python.splat_metadata import build_metadata, load_gauge_reference  # noqa: E402
 from tools.postprocess.filter_splats import SPLAT_DTYPE, write_records  # noqa: E402
 
 
@@ -43,24 +43,25 @@ def parse_bbox(text):
 
 
 def load_georef(path, epsg_override):
-    """Retourne le repère de référence : type, origine géographique et SCR projeté."""
+    """Retourne (stats, repère, EPSG) : stats est le contenu du metadata.json, ou le repère seul."""
     path = Path(path)
     if not path.is_file():
         raise ValueError(f"Géoréférencement introuvable : {path.name}")
     if path.suffix.lower() == ".json":
-        data = json.loads(path.read_text(encoding="utf-8"))
-        ref = data.get("output_reference", data if "type" in data else None)
+        stats = json.loads(path.read_text(encoding="utf-8"))
+        ref = stats.get("output_reference")
         if not isinstance(ref, dict):
             raise ValueError(f"{path.name} : bloc output_reference absent")
     else:
         ref = load_gauge_reference(path, epsg_override or 2154)
+        stats = {"output_reference": ref}
     projected = ref.get("origin_projected") or {}
     epsg = epsg_override or projected.get("epsg")
     if not epsg:
         raise ValueError(f"{path.name} : EPSG du SCR projeté absent (utiliser --epsg)")
     if ref.get("type") not in ("local_ENU", "projected"):
         raise ValueError(f"{path.name} : type de référence non géré : {ref.get('type')}")
-    return ref, int(epsg)
+    return stats, ref, int(epsg)
 
 
 def enu_to_projected_function(ref, epsg):
@@ -184,8 +185,11 @@ def filter_file(args):
 
     box = parse_bbox(args.bbox) if args.bbox else None
     z_range = (args.zmin, args.zmax) if (args.zmin is not None or args.zmax is not None) else None
-    ref, epsg = load_georef(args.georef.resolve(), args.epsg)
+    stats, ref, epsg = load_georef(args.georef.resolve(), args.epsg)
     to_projected = enu_to_projected_function(ref, epsg)
+    metadata_path = output.with_name(f"{output.stem}.metadata.json")
+    if metadata_path.exists() and not args.overwrite:
+        raise ValueError(f"Sortie existante : {metadata_path.name} (utiliser --overwrite)")
 
     data = read_gaussians(source, args.format)
     count = len(data)
@@ -200,11 +204,18 @@ def filter_file(args):
     else:
         write_ply(output, data, keep)
 
-    return dict(
+    report = dict(
         input=str(source), output=str(output), format=args.format, epsg=epsg,
         georef_type=ref["type"], bbox=box, zmin=args.zmin, zmax=args.zmax,
         sigma=args.sigma, total=count, kept=int(keep.sum()), removed=int(count - keep.sum()),
     )
+    metadata = build_metadata(output, "filter_splat_by_bbox", stats)
+    metadata["filter"] = {key: report[key] for key in (
+        "bbox", "zmin", "zmax", "sigma", "total", "kept", "removed")}
+    metadata["filter"]["source"] = source.name
+    metadata_path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    report["metadata"] = str(metadata_path)
+    return report
 
 
 def main():

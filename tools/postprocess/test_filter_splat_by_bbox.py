@@ -104,6 +104,19 @@ class FilterSplatByBboxTest(unittest.TestCase):
         self.assertEqual(len(kept), 1)
         self.assertAlmostEqual(float(kept["x"][0]), 0.0)
 
+    def test_writes_metadata_json_with_output_reference(self):
+        x0, y0 = ORIGIN_XY
+        bbox = f"{x0 - 2},{y0 - 2},{x0 + 2},{y0 + 2}"
+        self.run_splat([([0.0, 0.0, 0.0], [0.01] * 3), ([0.0, 0.0, 10.0], [0.01] * 3)],
+                      bbox=bbox, zmax=ORIGIN[2] + 5)
+        metadata = json.loads((self.dir / "out.metadata.json").read_text(encoding="utf-8"))
+        self.assertEqual(metadata["output_reference"], REFERENCE)
+        self.assertEqual(metadata["splat"], "out.splat")
+        self.assertEqual(metadata["crs"], "EPSG:2154")
+        self.assertEqual(metadata["filter"]["kept"], 1)
+        self.assertEqual(metadata["filter"]["removed"], 1)
+        self.assertEqual(metadata["filter"]["source"], "in.splat")
+
     def test_requires_bbox_or_z_range(self):
         with self.assertRaisesRegex(ValueError, "--bbox, --zmin ou --zmax"):
             self.run_splat([([0.0, 0.0, 0.0], [0.01] * 3)])

@@ -22,6 +22,8 @@ python "$GIT_ROOT/tools/postprocess/filter_splat_by_bbox.py" --input "$DATA_ROOT
 `--georef` accepte un `metadata.json` ou un `gauge.txt` (EPSG via `--epsg`, 2154 par défaut).
 `--bbox` et `--zmin`/`--zmax` sont optionnels séparément, mais au moins un est requis.
 Un splat est retiré si son support (`--sigma`, 3 par défaut) dépasse la boîte ou les z.
+Le script écrit aussi `scene_bbox.metadata.json` à côté de la sortie : même `output_reference`
+que l'entrée, plus un bloc `filter` (paramètres et compteurs).
 
 ## Exporter un splat filtré avec les points COLMAP
 
