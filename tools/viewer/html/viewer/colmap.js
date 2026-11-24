@@ -794,15 +794,19 @@ function mulMat3(a, b) {
 }
 
 // Cube : rotation mondiale qui place l'axe de l'image (-z) sur l'axe principal de la vue (`forward`).
-// Le cube pivote autour de cet axe : la verticale reste celle de la caméra COLMAP (horizon conservé).
-export function alignCubeToView(rwc, forward) {
+// Le cube pivote autour de cet axe ; sa verticale est `up` (axe monde fixe) projeté sur le plan
+// perpendiculaire au regard. Ainsi, seule la direction de vue change l'image.
+export function alignCubeToView(forward, up = [0, 1, 0]) {
   const len = Math.hypot(...forward);
   const f = forward.map((c) => c / len);
-  const down0 = mulMat3Vec3(rwc, [0, 1, 0]);
-  const proj = down0[0] * f[0] + down0[1] * f[1] + down0[2] * f[2];
-  const d0 = [0, 1, 2].map((k) => down0[k] - proj * f[k]);
+  const project = (v) => {
+    const proj = v[0] * f[0] + v[1] * f[1] + v[2] * f[2];
+    return [0, 1, 2].map((k) => v[k] - proj * f[k]);
+  };
+  let d0 = project(up);
+  // Regard parallèle à la verticale : repli sur l'axe Z monde.
+  if (Math.hypot(...d0) < 1e-9) d0 = project([0, 0, 1]);
   const dl = Math.hypot(...d0);
-  if (dl < 1e-9) return rwc;
   const d = d0.map((c) => c / dl);
   const b = f.map((c) => -c);
   // Repère droit : x = y × z, avec y = d et z = -f.
@@ -1487,10 +1491,10 @@ export function createColmapLayer({
     rebuildFrustums(model, new Set());
   }
 
-  // Cube et sphère : pivotent autour de l'axe principal de la vue (regard de l'observateur).
+  // Cube et sphère : pivotent autour de l'axe principal de la vue (regard de l'observateur),
+  // avec une verticale monde fixe (indépendante de la rotation de la caméra).
   function panoramaOrient(model, image, forward) {
-    const rwc = transpose3(qvecToMat3(image.qvec));
-    return forward ? alignCubeToView(rwc, forward) : null;
+    return forward ? alignCubeToView(forward, model.lastUp) : null;
   }
 
   // Appelée à chaque frame : sélectionne les caméras dont le cadre atteint IMAGE_MIN_SCREEN_PX.
@@ -1570,6 +1574,8 @@ export function createColmapLayer({
       const look = getViewerDirection?.() ?? [0, 0, -1];
       const forward = flip ? [look[0], -look[1], -look[2]] : look;
       model.lastForward = forward;
+      // Verticale monde (écran) exprimée dans le repère des données, inversée comme le regard si flipUp.
+      model.lastUp = flip ? [0, -1, 0] : [0, 1, 0];
       const pose = [...viewer, ...forward];
       const tolerance = 1e-6 * Math.max(getSceneRadius?.() ?? 1, 1e-6);
       const moved = !model.lastPose || pose.some((v, k) => Math.abs(v - model.lastPose[k]) > tolerance);

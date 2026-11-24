@@ -47,7 +47,7 @@ test("a click ray picks the single pinhole frustum it crosses, and the far face 
 test("sphere panoramas keep their radius around the camera centre when oriented like the cube", () => {
   const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
   const forward = [0.3, -0.5, -0.8];
-  const orient = alignCubeToView([1, 0, 0, 0, 1, 0, 0, 0, 1], forward);
+  const orient = alignCubeToView(forward);
   const { positions, uvs } = panoramaSphere(image, 2, false, orient);
   const center = [0, 0, 0];
   for (let k = 0; k < positions.length; k += 3) {
@@ -58,25 +58,31 @@ test("sphere panoramas keep their radius around the camera centre when oriented 
 });
 
 test("cube panoramas pivot around the view axis with the image centre on it", () => {
-  const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
   const det = (m) => m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
   const forward = [0.3, -0.5, -0.8];
-  const m = alignCubeToView(rwc, forward);
+  const m = alignCubeToView(forward);
   const n = Math.hypot(...forward);
   // Image centre (-z) sur le regard.
   assert.ok([-m[2], -m[5], -m[8]].every((v, k) => Math.abs(v - forward[k] / n) < 1e-9));
   assert.ok(Math.abs(det(m) - 1) < 1e-9);
-  // Verticale du cube : projection de la verticale caméra sur le plan perpendiculaire au regard.
+  // Verticale du cube : projection de la verticale monde sur le plan perpendiculaire au regard.
   const down = [m[1], m[4], m[7]];
-  const camDown = [rwc[1], rwc[4], rwc[7]];
-  const along = camDown.reduce((acc, c, k) => acc + c * forward[k] / n, 0);
-  const expected = camDown.map((c, k) => c - along * forward[k] / n);
+  const along = forward[1] / n;
+  const expected = [0 - along * forward[0] / n, 1 - along * forward[1] / n, 0 - along * forward[2] / n];
   const el = Math.hypot(...expected);
   assert.ok(down.every((v, k) => Math.abs(v - expected[k] / el) < 1e-9));
   // Continuité : un petit changement de regard ne fait pas tourner le cube brutalement.
-  const near = alignCubeToView(rwc, [0.31, -0.5, -0.8]);
+  const near = alignCubeToView([0.31, -0.5, -0.8]);
   assert.ok(Math.max(...m.map((v, k) => Math.abs(v - near[k]))) < 0.05);
 });
+
+test("cube orientation stays orthonormal when the view axis is parallel to the world vertical", () => {
+  const m = alignCubeToView([0, -1, 0]);
+  const dot = (i, j) => m[i] * m[j] + m[i + 3] * m[j + 3] + m[i + 6] * m[j + 6];
+  assert.ok(Math.abs(dot(0, 0) - 1) < 1e-9 && Math.abs(dot(1, 1) - 1) < 1e-9 && Math.abs(dot(2, 2) - 1) < 1e-9);
+  assert.ok(Math.abs(dot(0, 1)) < 1e-9 && Math.abs(dot(1, 2)) < 1e-9 && Math.abs(dot(0, 2)) < 1e-9);
+});
+
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {
   const previousDocument = globalThis.document;
