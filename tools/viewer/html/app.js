@@ -15,7 +15,7 @@ import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
 import { splatPlacement } from "./viewer/splat-alignment.js";
-import { createColmapLayer } from "./viewer/colmap.js";
+import { createColmapLayer, makePointMesh } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
 import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
@@ -80,6 +80,7 @@ const target = new THREE.Vector3();
 let app = null;
 let cameraEntity = null;
 let splatEntity = null;
+let splatPointsMode = false;
 let picker = null;
 let layerManager = null;
 let centers = null;
@@ -486,7 +487,44 @@ function requestGifCapture() {
   }
 }
 
+// Couleur de base d'un splat : SH degré 0 (f_dc) convertie en RGB, comme le rendu gsplat.
+const SH_C0 = 0.28209479177387814;
+
+function splatColors(gsplatData) {
+  const dc = [0, 1, 2].map((c) => gsplatData?.getProp?.(`f_dc_${c}`));
+  if (dc.some((values) => !values)) return null;
+  const count = dc[0].length;
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    for (let c = 0; c < 3; c++) {
+      colors[i * 3 + c] = Math.min(1, Math.max(0, 0.5 + SH_C0 * dc[c][i]));
+    }
+  }
+  return colors;
+}
+
+// Affiche les centres des splats en points (comme le LiDAR) à la place du rendu gsplat.
+function applySplatRenderMode(layer) {
+  if (splatPointsMode && !layer.pointsEntity) {
+    layer.pointsResource = makePointMesh(app, layer.centers, layer.colors ?? new Float32Array(0), 2);
+    layer.pointsEntity = new pc.Entity(`Splat points · ${layer.name}`);
+    layer.pointsEntity.addComponent("render", {
+      type: "asset",
+      meshInstances: [layer.pointsResource.meshInstance],
+    });
+    layer.entity.addChild(layer.pointsEntity);
+  }
+  if (layer.entity.gsplat) layer.entity.gsplat.enabled = !splatPointsMode;
+  if (layer.pointsEntity) layer.pointsEntity.enabled = splatPointsMode;
+}
+
+function setSplatPointsMode(on) {
+  splatPointsMode = on;
+  for (const layer of splatLayers) applySplatRenderMode(layer);
+}
+
 function applySplatPlacement(layer) {
+
   const { position, quaternion } = splatPlacement(layer.alignment ?? null, $("flipUp").checked);
   layer.entity.setLocalPosition(...position);
   layer.entity.setLocalRotation(...quaternion);
@@ -501,6 +539,8 @@ async function removeSplatLayer(layer) {
   if (index < 0) return;
   splatLayers.splice(index, 1);
   layer.unregister?.();
+  layer.pointsResource?.material?.destroy?.();
+  layer.pointsResource?.mesh?.destroy?.();
   layer.entity.destroy();
   layer.importer.dispose();
   cityLayer?.refreshNearSplats();
@@ -757,8 +797,10 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
     app.root.addChild(entity);
     newLayer = {
       name, count, centers: layerCenters, entity, importer: sceneImporter,
+      colors: splatColors(resource.gsplatData),
     };
     applySplatPlacement(newLayer);
+    applySplatRenderMode(newLayer);
     newLayer.unregister = layerManager?.add({
       id: `splat-${nextSplatLayerId++}`,
       name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
@@ -1776,6 +1818,7 @@ async function initialize() {
   $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
   applyOverlayOcclusion();
   $("splatOcclusion").addEventListener("change", applyOverlayOcclusion);
+  $("splatPoints").addEventListener("change", () => setSplatPointsMode($("splatPoints").checked));
   $("colmapOcclusion").addEventListener("change", applyOverlayOcclusion);
   $("facadeNearSplats").addEventListener("change", () => cityLayer?.setFacadeNearSplats($("facadeNearSplats").checked));
     layerManager = createLayerManager($("layerList"));
