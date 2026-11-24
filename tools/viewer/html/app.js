@@ -60,6 +60,8 @@ const colmapBox = new THREE.Box3();
 const lidarBox = new THREE.Box3();
 const wireBox = new THREE.Box3();
 const hasFreeData = () => !colmapBox.isEmpty() || !lidarBox.isEmpty() || !wireBox.isEmpty();
+// Toute couche enregistrée (GPX compris) doit survivre à la pose d'un splat.
+const hasAnyLayer = () => hasFreeData() || (layerManager?.size ?? 0) > 0;
 const sceneCenter = new THREE.Vector3();
 
 const principalAxes = {
@@ -867,7 +869,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
         });
         sceneReady = true;
         if (collisionIsEnabled()) await prepareCollision();
-      } else if (hasFreeData()) {
+      } else if (hasAnyLayer()) {
         sceneImporter.dispose();
       } else {
         sceneImporter.dispose();
@@ -958,7 +960,7 @@ async function hasOutputReference(file) {
 }
 
 async function appendScene(source, name) {
-  if (!sceneReady && !hasFreeData()) {
+  if (!sceneReady && !hasAnyLayer()) {
     await resetAndLoad(source, name);
     return splatLayers.at(-1);
   }
