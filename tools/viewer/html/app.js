@@ -1535,7 +1535,7 @@ function installUI() {
 
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
-  $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
+  $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value) / 2));
   for (const kind of ["roof", "facade"]) {
     $(`city${kind === "roof" ? "Roof" : "Facade"}Opacity`).addEventListener("input", (event) => {
       cityLayer?.setOpacity(kind, Number(event.target.value));
@@ -1945,7 +1945,7 @@ async function initialize() {
         },
       });
       gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
-      gpkgLayer.setPointSize(Number($("colmapPointSize").value));
+      gpkgLayer.setPointSize(Number($("colmapPointSize").value) / 2);
 
       cityLayer = createCityJsonLayer({
         app,
