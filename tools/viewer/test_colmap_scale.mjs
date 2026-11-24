@@ -25,10 +25,34 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, cubeFacingQvec } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
+
+test("a cube turned to face the viewer rotates its front normal onto the view direction", () => {
+  const rotate = ([w, x, y, z], v) => {
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const u = [x, y, z];
+    const uv = cross(u, v);
+    const uuv = cross(u, uv);
+    return v.map((c, k) => c + 2 * w * uv[k] + 2 * uuv[k]);
+  };
+  const cases = [
+    [[0, 0, -1], [1, 0, 0]],
+    [[0, 0, -1], [0, 0, 1]],
+    [[0, 1, 0], [0.3, 0.2, -0.9]],
+  ];
+  for (const [from, to] of cases) {
+    const q = cubeFacingQvec(from, to);
+    const hypot = Math.hypot(...q);
+    assert.ok(Math.abs(hypot - 1) < 1e-9);
+    const got = rotate(q, from);
+    const norm = Math.hypot(...to);
+    got.forEach((c, k) => assert.ok(Math.abs(c - to[k] / norm) < 1e-9, `${got} vs ${to}`));
+  }
+  assert.deepEqual(cubeFacingQvec([0, 0, 1], [0, 0, 5]), [1, 0, 0, 0]);
+});
 
 test("a click ray picks the single pinhole frustum it crosses, and the far face resets it", () => {
   const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
