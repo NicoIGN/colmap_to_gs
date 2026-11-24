@@ -936,6 +936,8 @@ export function createColmapLayer({
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
   let panoramaMirror = panoramaMirrorInput?.checked ?? true;
+  const goToPositionSelect = document.getElementById("colmapGoToPosition");
+  let goToBehind = (goToPositionSelect?.value ?? "behind") === "behind";
   const frustumSizeInput = document.getElementById("colmapFrustumSize");
   const imageTransparencyInput = document.getElementById("colmapImageTransparency");
   let frustumFactor = Number(frustumSizeInput?.value ?? 100) / 100;
@@ -1062,6 +1064,10 @@ export function createColmapLayer({
       model.slots?.forEach(resetSlot);
       rebuildFrustums(model, new Set());
     }
+  }
+
+  function setGoToBehind(behind) {
+    goToBehind = behind;
   }
 
   function setPanoramaMirror(on) {
@@ -1210,9 +1216,9 @@ export function createColmapLayer({
     const pointing = shown?.orient ?? rwc;
     const forward = normalize3(sub3(toWorldArray(model, point(mulMat3Vec3(pointing, axis))), cameraWorld));
     const radius = Math.max(getSceneRadius?.() ?? 1, 1e-6);
-    // Panoramas (sphère ou cube) centrés sur la caméra : l'observateur est au centre, sans recul ni parallaxe.
-    // Pinhole : léger recul derrière la caméra pour comparer l'image avec le rendu 3D.
-    const back = camera && isPanorama(camera) ? 0 : radius * 0.02;
+    // « Juste derrière » : léger recul derrière la caméra pour comparer l'image avec le rendu 3D.
+    // « Pile » : observateur exactement au centre de la caméra.
+    const back = goToBehind ? radius * 0.02 : 0;
     const targetDistance = radius * 0.2;
     return {
       position: cameraWorld.map((value, axis) => value - forward[axis] * back),
@@ -1974,6 +1980,12 @@ export function createColmapLayer({
 
   refreshUI();
   refreshInfo();
+
+  if (goToPositionSelect) {
+    const onChange = () => setGoToBehind(goToPositionSelect.value === "behind");
+    goToPositionSelect.addEventListener("change", onChange);
+    removers.push(() => goToPositionSelect.removeEventListener("change", onChange));
+  }
 
   if (panoramaModeSelect) {
     const onChange = () => setPanoramaMode(panoramaModeSelect.value);
