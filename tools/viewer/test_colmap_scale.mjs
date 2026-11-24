@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, snapOrientation } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -42,6 +42,19 @@ test("a click ray picks the single pinhole frustum it crosses, and the far face 
   assert.equal(rayFrustumEntry(image, camera, depth, [0, 0, -5], [0, 0, -1]), null);
   assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0, 1]), true);
   assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0.8, 1]), false);
+});
+
+test("panoramas snap to the 90° orientation whose image axis is closest to the view", () => {
+  const identity = [1, 0, 0, 0, 1, 0, 0, 0, 1];
+  // Regard déjà aligné sur l'axe COLMAP : orientation inchangée.
+  assert.deepEqual(snapOrientation(identity, [0, 0, -1]), identity);
+  // Regard proche de +x : l'axe de l'image (-z) doit pointer vers +x après réorientation.
+  const m = snapOrientation(identity, [0.9, 0.2, -0.1]);
+  const dir = [m[2] * -1, m[5] * -1, m[8] * -1];
+  assert.deepEqual(dir.map((v) => Math.round(v) + 0), [1, 0, 0]);
+  // Toujours une rotation orthonormale de déterminant +1.
+  const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+  assert.ok(Math.abs(det - 1) < 1e-9);
 });
 
 test("COLMAP loading, flipping and removal notify the navigation bounds", async () => {
