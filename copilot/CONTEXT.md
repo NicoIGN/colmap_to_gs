@@ -3,12 +3,7 @@
 ## Message à copier pour une nouvelle session
 
 ```text
-Nous travaillons sur NicoIGN/colmap_to_gs, un projet qui transforme des photos, vidéos ou images Panoramax en scènes 3D Gaussian Splatting : 
-préparation des données, reconstruction COLMAP, entraînement et export. Connecte-toi au dépôt sur la branche review_copilot et lis d'abord copilot/CONTEXT.md 
-Cette note contient les conventions, les points d'entrée et les pièges à connaître. 
-Utilise GIT_ROOT pour les chemins du projet sans chemins absolus dans les réponses. 
-Consulte examples/ pour les commandes et scripts/helper.sh pour les paramètres.
-Avant tout test, active le venv ~/.venvs/colmap_to_gs (voir copilot/CONTEXT.md, « Dépendances Python ») : sans lui, les tests échouent sur numpy/pyproj, ce n'est pas une régression.
+Nous travaillons sur NicoIGN/colmap_to_gs (photos, vidéos ou Panoramax → scènes 3D Gaussian Splatting). Branche review_copilot. Lis d'abord copilot/CONTEXT.md. Utilise GIT_ROOT pour les chemins, sans chemin absolu. Commandes : examples/ ; paramètres : scripts/helper.sh. Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans lui, les échecs numpy/pyproj ne sont pas une régression.
 ```
 
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
@@ -50,6 +45,7 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
+- Prérequis : `georef.js` importe `proj4` sans `package.json`. Installer `proj4` hors dépôt (`npm i --prefix /tmp/proj4mod proj4`), puis lier `tools/viewer/node_modules` vers `/tmp/proj4mod/node_modules` et supprimer le lien après les tests.
 - Syntaxe seule : `node --check html/viewer/colmap.js`.
 - Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/sfm/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
 - Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
