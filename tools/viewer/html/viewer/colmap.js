@@ -650,8 +650,11 @@ export function rayBoxHit(center, r, origin, dir) {
 
 // Ajoute au tableau `out` les segments (paires de sommets) d'un cube filaire ou d'une sphère
 // symbolisée par ses parallèles et méridiens, centrés sur `center`.
-function appendPanoramaMarker(out, center, radius, cube) {
-  const point = (x, y, z) => [center[0] + x * radius, center[1] + y * radius, center[2] + z * radius];
+function appendPanoramaMarker(out, center, radius, cube, rot = null) {
+  const point = (x, y, z) => {
+    const v = rot ? mulMat3Vec3(rot, [x, y, z]) : [x, y, z];
+    return [center[0] + v[0] * radius, center[1] + v[1] * radius, center[2] + v[2] * radius];
+  };
   const segment = (a, b) => out.push(...point(...a), ...point(...b));
   if (cube) {
     const corners = [];
@@ -1110,6 +1113,7 @@ export function createColmapLayer({
     destroyMeshEntity(model.cameraCentersEntity, model.cameraCentersResource);
     destroyMeshEntity(model.frustumsEntity, model.frustumsResource);
     destroyMeshEntity(null, model.markersResource);
+    destroyMeshEntity(model.cubeFrameEntity, model.cubeFrameResource);
     if (model.rootEntity.parent) model.rootEntity.parent.removeChild(model.rootEntity);
     model.rootEntity.destroy();
   }
@@ -1174,6 +1178,7 @@ export function createColmapLayer({
     model.frustumsResource = group.resource;
     model.markersResource = group.markersResource;
     model.frustumsShown = frustums.shown;
+    updateEnlargedCubeFrames(model, model.lastForward);
   }
 
   function ensureSlots(model) {
@@ -1512,6 +1517,45 @@ export function createColmapLayer({
       slot.mesh.update(pc.PRIMITIVE_TRIANGLES, true);
       slot.orient = orient;
     }
+    if (cube) updateEnlargedCubeFrames(model, forward);
+  }
+
+  // Wireframes des cubes agrandis, orientés comme le cube affiché (même rotation que panoramaOrient).
+  function updateEnlargedCubeFrames(model, forward) {
+    destroyMeshEntity(model.cubeFrameEntity, model.cubeFrameResource);
+    model.cubeFrameEntity = null;
+    model.cubeFrameResource = null;
+    if (panoramaMode !== "cube") return;
+    const radius = model.depth * IMAGE_FRUSTUM_SCALE * PANORAMA_SIZE_FACTOR;
+    const segments = [];
+    for (const i of model.enlarged ?? []) {
+      const image = model.colmapImages[i];
+      const camera = image && model.cameras.get(image.cameraId);
+      if (!camera || !isPanorama(camera)) continue;
+      const rot = panoramaOrient(model, image, forward, true);
+      appendPanoramaMarker(segments, getCameraCenter(image), radius, true, rot);
+    }
+    if (!segments.length) return;
+    const count = segments.length / 3;
+    const rgba = new Float32Array(count * 4);
+    for (let k = 0; k < count; k++) rgba.set([1, 0, 0, 1], k * 4);
+    const resource = makeColmapMesh(
+      app,
+      new Float32Array(segments),
+      rgba,
+      pc.PRIMITIVE_LINES,
+      makeColmapMaterial(app, { onTop: true })
+    );
+    const entity = new pc.Entity("COLMAP enlarged cube panoramas");
+    entity.addComponent("render", {
+      type: "asset",
+      meshInstances: [resource.meshInstance],
+      layers: [getOverlayLayer(app).id],
+    });
+    entity.enabled = model.frustumsEntity ? model.frustumsEntity.enabled : true;
+    model.rootEntity.addChild(entity);
+    model.cubeFrameEntity = entity;
+    model.cubeFrameResource = resource;
   }
 
   function frame() {
@@ -1764,9 +1808,11 @@ export function createColmapLayer({
       if (!camera) continue;
 
       if (isPanorama(camera)) {
+        shown++;
+        // Cube agrandi : tracé à part, orienté comme le cube affiché (voir updateEnlargedCubeFrames).
+        if (cube && enlarged.has(i)) continue;
         const radius = depthOf(i) * (enlarged.has(i) ? PANORAMA_SIZE_FACTOR : PANORAMA_MARKER_FACTOR);
         appendPanoramaMarker(markers, getCameraCenter(image), radius, cube);
-        shown++;
         continue;
       }
 
