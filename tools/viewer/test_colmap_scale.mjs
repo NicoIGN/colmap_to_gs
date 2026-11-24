@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, snapOrientation, alignCubeToView } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, alignCubeToView, panoramaSphere } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -44,17 +44,17 @@ test("a click ray picks the single pinhole frustum it crosses, and the far face 
   assert.equal(rayHitsFarFace(image, camera, depth, [0, 0, 0], [0, 0.8, 1]), false);
 });
 
-test("panoramas snap to the 90° orientation whose image axis is closest to the view", () => {
-  const identity = [1, 0, 0, 0, 1, 0, 0, 0, 1];
-  // Regard déjà aligné sur l'axe COLMAP : orientation inchangée.
-  assert.deepEqual(snapOrientation(identity, [0, 0, -1]), identity);
-  // Regard proche de +x : l'axe de l'image (-z) doit pointer vers +x après réorientation.
-  const m = snapOrientation(identity, [0.9, 0.2, -0.1]);
-  const dir = [m[2] * -1, m[5] * -1, m[8] * -1];
-  assert.deepEqual(dir.map((v) => Math.round(v) + 0), [1, 0, 0]);
-  // Toujours une rotation orthonormale de déterminant +1.
-  const det = m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
-  assert.ok(Math.abs(det - 1) < 1e-9);
+test("sphere panoramas keep their radius around the camera centre when oriented like the cube", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const forward = [0.3, -0.5, -0.8];
+  const orient = alignCubeToView([1, 0, 0, 0, 1, 0, 0, 0, 1], forward);
+  const { positions, uvs } = panoramaSphere(image, 2, false, orient);
+  const center = [0, 0, 0];
+  for (let k = 0; k < positions.length; k += 3) {
+    const d = Math.hypot(positions[k] - center[0], positions[k + 1] - center[1], positions[k + 2] - center[2]);
+    assert.ok(Math.abs(d - 2) < 1e-5);
+  }
+  assert.ok([...uvs].every((v) => v >= -1e-6 && v <= 1 + 1e-6));
 });
 
 test("cube panoramas pivot around the view axis with the image centre on it", () => {
