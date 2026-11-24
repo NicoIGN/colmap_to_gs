@@ -584,33 +584,20 @@ function frustumCorners(image, camera, near) {
   });
 }
 
-// Plans de la pyramide d'un frustum (corners[0] = centre caméra, corners[1..4] = plan lointain) :
-// un point est dedans si n·p + w ≥ 0 pour les 6 plans (4 côtés, plan lointain, plan près du centre).
+// Tranche entre le centre caméra (corners[0]) et le plan support de l'image (corners[1..4]) :
+// deux plans, un point est dedans si n·p + w ≥ 0 pour les deux (sans limite latérale).
 export function frustumClipPlanes(corners) {
   const apex = corners[0];
   const far = corners.slice(1);
-  const inside = [0, 1, 2].map((k) => corners.reduce((sum, p) => sum + p[k], 0) / corners.length);
-  const planeFrom = (a, b, c) => {
-    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
-    const len = Math.hypot(...n) || 1;
-    n = n.map((x) => x / len);
-    let w = -(n[0] * a[0] + n[1] * a[1] + n[2] * a[2]);
-    if (n[0] * inside[0] + n[1] * inside[1] + n[2] * inside[2] + w < 0) {
-      n = n.map((x) => -x);
-      w = -w;
-    }
-    return [n[0], n[1], n[2], w];
-  };
-  const planes = [planeFrom(far[0], far[1], far[2])];
-  for (let i = 0; i < 4; i++) planes.push(planeFrom(apex, far[i], far[(i + 1) % 4]));
-  const farCenter = [0, 1, 2].map((k) => far.reduce((sum, p) => sum + p[k], 0) / 4);
+  const farCenter = [0, 1, 2].map((k) => far.reduce((sum, p) => sum + p[k], 0) / far.length);
   const axis = [0, 1, 2].map((k) => farCenter[k] - apex[k]);
   const axisLen = Math.hypot(...axis) || 1;
   const n = axis.map((x) => x / axisLen);
-  planes.push([n[0], n[1], n[2], -(n[0] * apex[0] + n[1] * apex[1] + n[2] * apex[2])]);
-  return planes.flat();
+  const dotN = (p) => n[0] * p[0] + n[1] * p[1] + n[2] * p[2];
+  return [
+    n[0], n[1], n[2], -dotN(apex),
+    -n[0], -n[1], -n[2], dotN(farCenter),
+  ];
 }
 
 const SPLAT_CLIP_HOOK = "gsplatModifyVS";
@@ -619,22 +606,19 @@ const fmtClip = (x) => Number(x).toPrecision(9);
 // Code des hooks gsplat : les splats situés dans une des pyramides affichées sont réduits à zéro.
 // Les plans sont figés dans le code du hook, donc chaque changement passe par un nouveau chunk.
 function splatClipChunk(planes, language) {
-  const count = planes.length / 24;
+  const count = planes.length / 8;
   const values = planes.map(fmtClip);
   if (language === "glsl") {
     const items = [];
     for (let i = 0; i < values.length; i += 4) items.push(`vec4(${values.slice(i, i + 4).join(", ")})`);
-    return `const int CLIP_PYRAMIDS = ${count};
+    return `const int CLIP_SLABS = ${count};
 const vec4 CLIP_PLANES[${items.length}] = vec4[${items.length}](${items.join(", ")});
 void modifySplatCenter(inout vec3 center) {}
 void modifySplatRotationScale(vec3 originalCenter, vec3 modifiedCenter, inout vec4 rotation, inout vec3 scale) {
-  for (int p = 0; p < CLIP_PYRAMIDS; p++) {
-    bool inside = true;
-    for (int i = 0; i < 6; i++) {
-      vec4 pl = CLIP_PLANES[p * 6 + i];
-      if (dot(pl.xyz, modifiedCenter) + pl.w < 0.0) { inside = false; break; }
-    }
-    if (inside) { scale = vec3(0.0); return; }
+  for (int s = 0; s < CLIP_SLABS; s++) {
+    vec4 a = CLIP_PLANES[s * 2];
+    vec4 b = CLIP_PLANES[s * 2 + 1];
+    if (dot(a.xyz, modifiedCenter) + a.w >= 0.0 && dot(b.xyz, modifiedCenter) + b.w >= 0.0) { scale = vec3(0.0); return; }
   }
 }
 void modifySplatColor(vec3 center, inout vec4 color) {}
@@ -642,17 +626,14 @@ void modifySplatColor(vec3 center, inout vec4 color) {}
   }
   const items = [];
   for (let i = 0; i < values.length; i += 4) items.push(`vec4f(${values.slice(i, i + 4).join(", ")})`);
-  return `const CLIP_PYRAMIDS: i32 = ${count};
+  return `const CLIP_SLABS: i32 = ${count};
 const CLIP_PLANES = array<vec4f, ${items.length}>(${items.join(", ")});
 fn modifySplatCenter(center: ptr<function, vec3f>) {}
 fn modifySplatRotationScale(originalCenter: vec3f, modifiedCenter: vec3f, rotation: ptr<function, vec4f>, scale: ptr<function, vec3f>) {
-  for (var p = 0; p < CLIP_PYRAMIDS; p++) {
-    var inside = true;
-    for (var i = 0; i < 6; i++) {
-      let pl = CLIP_PLANES[p * 6 + i];
-      if (dot(pl.xyz, modifiedCenter) + pl.w < 0.0) { inside = false; break; }
-    }
-    if (inside) { *scale = vec3f(0.0); return; }
+  for (var s = 0; s < CLIP_SLABS; s++) {
+    let a = CLIP_PLANES[s * 2];
+    let b = CLIP_PLANES[s * 2 + 1];
+    if (dot(a.xyz, modifiedCenter) + a.w >= 0.0 && dot(b.xyz, modifiedCenter) + b.w >= 0.0) { *scale = vec3f(0.0); return; }
   }
 }
 fn modifySplatColor(center: vec3f, color: ptr<function, vec4f>) {}
