@@ -1469,6 +1469,9 @@ export function createColmapLayer({
       slot.material.cull = pc.CULLFACE_NONE;
     }
     slot.material.emissiveMap = texture;
+    // Image de frustum : quad plan sans auto-recouvrement, il passe au-dessus des splats.
+    // Les panoramas gardent le test de profondeur (sphère/cube : leurs faces se recouvrent).
+    slot.material.depthTest = !isPanorama(camera);
     applySlotOpacity(slot.material);
 
     const meshInstance = new pc.MeshInstance(mesh, slot.material);
