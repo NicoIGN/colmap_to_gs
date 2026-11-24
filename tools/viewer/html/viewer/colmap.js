@@ -36,6 +36,7 @@ const PANORAMA_MARKER_FACTOR = 0.5;
 const PANORAMA_RINGS = 48;
 const PANORAMA_CUBE_FACE = 512;
 const PANORAMA_CUBE_SOURCE_WIDTH = 2048;
+const CUBE_GRID = 32;
 
 // Faces d'un cube dans le repère caméra : centre, axe droit et axe bas de chaque face à 90°.
 const CUBE_FACES = [
@@ -830,34 +831,61 @@ export function alignCubeToView(rwc, forward) {
   return [r[0], d[0], b[0], r[1], d[1], b[1], r[2], d[2], b[2]];
 }
 
+// Coordonnées UV de l'atlas (cf. equirectToCubeAtlas) pour une direction q dans le repère caméra COLMAP.
+function cubeAtlasUv(q) {
+  let best = 0;
+  let bestDot = -Infinity;
+  CUBE_FACES.forEach((face, index) => {
+    const d = q[0] * face.center[0] + q[1] * face.center[1] + q[2] * face.center[2];
+    if (d > bestDot) {
+      bestDot = d;
+      best = index;
+    }
+  });
+  const face = CUBE_FACES[best];
+  const dot = (v) => (q[0] * v[0] + q[1] * v[1] + q[2] * v[2]) / bestDot;
+  const a = dot(face.right);
+  const b = dot(face.down);
+  return [((best % 3) + (a + 1) / 2) / 3, (Math.floor(best / 3) + (b + 1) / 2) / 2];
+}
+
+// Cube maillé (CUBE_GRID × CUBE_GRID par face). Chaque sommet reçoit l'UV de la direction de la
+// panorama vue à cet endroit du cube après rotation : la texture suit donc la rotation du cube.
 function panoramaCube(image, radius, orient = null) {
-  const rwc = orient ?? transpose3(qvecToMat3(image.qvec));
+  const rwc = transpose3(qvecToMat3(image.qvec));
+  const rotation = orient ?? rwc;
+  // Passage du repère du cube tourné vers le repère caméra COLMAP d'origine.
+  const toSource = mulMat3(transpose3(rwc), rotation);
   const center = getCameraCenter(image);
+  const n = CUBE_GRID;
   const positions = [];
   const uvs = [];
   const indices = [];
-  CUBE_FACES.forEach((face, index) => {
-    const col = index % 3;
-    const row = Math.floor(index / 3);
-    const u0 = col / 3;
-    const u1 = (col + 1) / 3;
-    const v0 = row / 2;
-    const v1 = (row + 1) / 2;
-    const corners = [
-      [-1, -1, u0, v0],
-      [1, -1, u1, v0],
-      [1, 1, u1, v1],
-      [-1, 1, u0, v1],
-    ];
-    for (const [a, b, u, v] of corners) {
-      const local = [0, 1, 2].map((k) => (face.center[k] + a * face.right[k] + b * face.down[k]) * radius);
-      applyPanoramaYawFix(local);
-      const world = mulMat3Vec3(rwc, local);
-      positions.push(world[0] + center[0], world[1] + center[1], world[2] + center[2]);
-      uvs.push(u, v);
+  CUBE_FACES.forEach((face) => {
+    const base = positions.length / 3;
+    for (let j = 0; j <= n; j++) {
+      const b = -1 + (2 * j) / n;
+      for (let i = 0; i <= n; i++) {
+        const a = -1 + (2 * i) / n;
+        const local = [0, 1, 2].map((k) => face.center[k] + a * face.right[k] + b * face.down[k]);
+        applyPanoramaYawFix(local);
+        const world = mulMat3Vec3(rotation, local);
+        positions.push(world[0] * radius + center[0], world[1] * radius + center[1], world[2] * radius + center[2]);
+        // Direction de la panorama affichée à cet endroit : rwc·fix(q) = world.
+        const q = mulMat3Vec3(toSource, local);
+        applyPanoramaYawFix(q);
+        uvs.push(...cubeAtlasUv(q));
+      }
     }
-    const base = index * 4;
-    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const v00 = base + j * (n + 1) + i;
+        const v10 = v00 + 1;
+        const v01 = v00 + (n + 1);
+        const v11 = v01 + 1;
+        indices.push(v00, v10, v11, v00, v11, v01);
+      }
+    }
   });
   return {
     positions: new Float32Array(positions),
@@ -955,7 +983,7 @@ export function createColmapLayer({
   const panoramaModeSelect = document.getElementById("colmapPanoramaMode");
   const panoramaMirrorInput = document.getElementById("colmapPanoramaMirror");
   let panoramaMode = panoramaModeSelect?.value ?? "cube";
-  let panoramaMirror = panoramaMirrorInput?.checked ?? true;
+  let panoramaMirror = panoramaMirrorInput?.checked ?? false;
   const goToPositionSelect = document.getElementById("colmapGoToPosition");
   let goToBehind = (goToPositionSelect?.value ?? "behind") === "behind";
   const frustumSizeInput = document.getElementById("colmapFrustumSize");
@@ -1514,6 +1542,7 @@ export function createColmapLayer({
         ? panoramaCube(image, radius, orient)
         : panoramaSphere(image, radius, panoramaMirror, orient);
       slot.mesh.setPositions(geometry.positions);
+      slot.mesh.setUvs(0, geometry.uvs);
       slot.mesh.update(pc.PRIMITIVE_TRIANGLES, true);
       slot.orient = orient;
     }
