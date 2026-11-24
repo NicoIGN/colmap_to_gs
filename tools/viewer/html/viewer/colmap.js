@@ -1971,7 +1971,7 @@ export function createColmapLayer({
                 o,
                 d
               )
-            : rayFrustumEntry(image, camera, depth, o, d) !== null;
+            : rayFrustumEntry(image, camera, model.depth * (model.enlarged?.has(i) ? IMAGE_FRUSTUM_SCALE : 1), o, d) !== null;
           if (!hit) return;
           if (!findImageFile(imageIndex, image.name)) withoutImage++;
           else hits.push(i);
