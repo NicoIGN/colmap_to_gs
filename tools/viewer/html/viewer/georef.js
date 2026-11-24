@@ -172,10 +172,9 @@ export function parseGeoref(json) {
 
   let origin;
   let originGeographic = null;
-  let geographicToWorld;
-  let worldToGeographic;
-  let projectedToWorld;
-  let worldToProjected;
+  // Passage d’un point de la couche (repère local, origine propre) vers le SCR et le géographique.
+  let localToGeographic;
+  let localToProjected;
 
   if (type === "local_ENU") {
     if (
@@ -248,33 +247,7 @@ export function parseGeoref(json) {
       "Origine ECEF"
     );
 
-    geographicToWorld = (lat, lon, h) => {
-      const point = geographicCoordinates(lat, lon, h);
-
-      const ecef = finiteTriple(
-        proj4(
-          GEOGRAPHIC,
-          ECEF,
-          [point.lon, point.lat, point.h]
-        ),
-        "Conversion WGS84 vers ECEF"
-      );
-
-      const delta = ecef.map(
-        (value, index) => value - originEcef[index]
-      );
-
-      const enu = rotation.map(
-        (row) =>
-          row[0] * delta[0] +
-          row[1] * delta[1] +
-          row[2] * delta[2]
-      );
-
-      return coordinates(enu[0], enu[1], enu[2]);
-    };
-
-    worldToGeographic = (x, y, h) => {
+    localToGeographic = (x, y, h) => {
       const point = coordinates(x, y, h);
       const enu = [point.x, point.y, point.h];
 
@@ -295,24 +268,10 @@ export function parseGeoref(json) {
       return geographicCoordinates(lat, lon, height);
     };
 
-    projectedToWorld = (x, y, h) => {
-      const point = projectedToGeographic(x, y, h);
+    localToProjected = (x, y, h) => {
+      const point = localToGeographic(x, y, h);
 
-      return geographicToWorld(
-        point.lat,
-        point.lon,
-        point.h
-      );
-    };
-
-    worldToProjected = (x, y, h) => {
-      const point = worldToGeographic(x, y, h);
-
-      return geographicToProjected(
-        point.lat,
-        point.lon,
-        point.h
-      );
+      return geographicToProjected(point.lat, point.lon, point.h);
     };
   } else {
     // Compatibilité avec les scènes projetées simplement recentrées.
@@ -332,17 +291,7 @@ export function parseGeoref(json) {
       )
     );
 
-    projectedToWorld = (x, y, h) => {
-      const point = coordinates(x, y, h);
-
-      return coordinates(
-        point.x - origin.x,
-        point.y - origin.y,
-        point.h - origin.h
-      );
-    };
-
-    worldToProjected = (x, y, h) => {
+    localToProjected = (x, y, h) => {
       const point = coordinates(x, y, h);
 
       return coordinates(
@@ -352,18 +301,46 @@ export function parseGeoref(json) {
       );
     };
 
-    geographicToWorld = (lat, lon, h) => {
-      const point = geographicToProjected(lat, lon, h);
-
-      return projectedToWorld(point.x, point.y, point.h);
-    };
-
-    worldToGeographic = (x, y, h) => {
-      const point = worldToProjected(x, y, h);
+    localToGeographic = (x, y, h) => {
+      const point = localToProjected(x, y, h);
 
       return projectedToGeographic(point.x, point.y, point.h);
     };
   }
+
+  // Repère de la vue : origine projetée commune, axes de la grille du SCR (E, N, hauteur).
+  // Toute couche (splat, LiDAR, vecteurs) y est ramenée par sa projection.
+  const projectedToWorld = (x, y, h) => {
+    const point = coordinates(x, y, h);
+
+    return coordinates(
+      point.x - origin.x,
+      point.y - origin.y,
+      point.h - origin.h
+    );
+  };
+
+  const worldToProjected = (x, y, h) => {
+    const point = coordinates(x, y, h);
+
+    return coordinates(
+      point.x + origin.x,
+      point.y + origin.y,
+      point.h + origin.h
+    );
+  };
+
+  const geographicToWorld = (lat, lon, h) => {
+    const point = geographicToProjected(lat, lon, h);
+
+    return projectedToWorld(point.x, point.y, point.h);
+  };
+
+  const worldToGeographic = (x, y, h) => {
+    const point = worldToProjected(x, y, h);
+
+    return projectedToGeographic(point.x, point.y, point.h);
+  };
 
   return {
     type,
@@ -375,6 +352,9 @@ export function parseGeoref(json) {
     geographicToProjected,
     projectedToGeographic,
 
+    localToProjected,
+    localToGeographic,
+
     geographicToWorld,
     worldToGeographic,
 
@@ -385,6 +365,48 @@ export function parseGeoref(json) {
     requiresVisualValidation:
       json.requires_visual_validation === true,
   };
+}
+
+/**
+ * Repère propre d’une couche projetée (LiDAR, vecteurs) : son origine est `origin` [x, y, h]
+ * dans le SCR `epsg`, et ses coordonnées locales sont relatives à cette origine.
+ */
+export function createProjectedFrame(epsg, origin) {
+  return parseGeoref({
+    output_reference: {
+      type: "projected",
+      units: "m",
+      epsg,
+      origin_projected: { x: origin[0], y: origin[1], h: origin[2] },
+    },
+  });
+}
+
+/**
+ * Pose d’une couche dans le repère de la vue : p_vue = linear · p_local + origin.
+ * Le passage se fait par coordonnées géographiques : il reste exact quand les SCR diffèrent.
+ * `linear` est exact à la convergence des méridiens près (axes E, N, U du repère local).
+ */
+export function layerPlacement(view, layer) {
+  const toView = (x, y, h) => {
+    const geo = layer.localToGeographic(x, y, h);
+
+    return view.geographicToWorld(geo.lat, geo.lon, geo.h);
+  };
+
+  const origin = toView(0, 0, 0);
+  const linear = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+
+  for (let axis = 0; axis < 3; axis++) {
+    const probe = [0, 0, 0];
+    probe[axis] = 1;
+    const moved = toView(...probe);
+    const delta = [moved.x - origin.x, moved.y - origin.y, moved.h - origin.h];
+
+    for (let row = 0; row < 3; row++) linear[row][axis] = delta[row];
+  }
+
+  return { origin: [origin.x, origin.y, origin.h], linear };
 }
 
 export async function readGeorefFile(file) {

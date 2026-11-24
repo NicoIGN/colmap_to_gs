@@ -3,10 +3,10 @@
 // RFC 7946 : sans membre "crs", les coordonnées sont en WGS84.
 const DEFAULT_EPSG = 4326;
 
-// Code EPSG du membre "crs" (ex. "urn:ogc:def:crs:EPSG::2154" ou "EPSG:2154").
+// Code EPSG du membre "crs" : "urn:ogc:def:crs:EPSG::2154", "EPSG:2154" ou "https://www.opengis.net/def/crs/EPSG/0/2154".
 function epsgOf(geojson) {
   const name = geojson.crs?.properties?.name ?? "";
-  const match = /EPSG:{1,2}(\d+)$/i.exec(name);
+  const match = /EPSG(?::{1,2}|\/\d+\/)(\d+)\s*$/i.exec(name);
   return match ? Number(match[1]) : DEFAULT_EPSG;
 }
 

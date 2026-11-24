@@ -1,7 +1,7 @@
 import * as pc from "playcanvas";
 import { colmapBounds, makePointMesh, setMeshHighlight } from "./colmap.js";
 import { classColor, decodePointRecord, parseLasHeader } from "./las-header.js";
-import { parseGeoref } from "./georef.js";
+import { createProjectedFrame, layerPlacement } from "./georef.js";
 
 export const LAZ_PERF_URL = "https://cdn.jsdelivr.net/npm/laz-perf@0.0.7/lib/web/laz-perf.js";
 export const MAX_DISPLAY_POINTS = 2_000_000;
@@ -177,67 +177,29 @@ function buildSource(name, header, decoded) {
   };
 }
 
-// Pivot partagé par les couches sans géoréférencement de scène (LiDAR, vecteurs) : construit
-// depuis le centre de la première couche, il garde toutes les couches dans le même repère.
-const scenePivot = { georef: null, owners: new Set() };
-
-function pivotGeoref(source) {
-  const [x, y, h] = source.centre;
-  return parseGeoref({
-    output_reference: {
-      type: "projected",
-      units: "m",
-      epsg: source.epsg,
-      origin_projected: { x, y, h },
-    },
-  });
-}
-
-export function resolvePivot(source, georef) {
+// Repère de la vue : la première donnée géographique le fixe. Sans géoréférencement de scène,
+// une couche projetée (LiDAR, vecteurs) adopte son propre repère, origine = centre du nuage.
+export function frameFor(source, georef, adoptFrame) {
   if (georef) return georef;
-  if (!scenePivot.georef && source.epsg) scenePivot.georef = pivotGeoref(source);
-  return scenePivot.georef;
+  if (!source.epsg) return null;
+
+  return adoptFrame?.(createProjectedFrame(source.epsg, source.centre)) ?? null;
 }
 
-export function retainPivot(owner) {
-  scenePivot.owners.add(owner);
-}
-
-export function releasePivot(owner) {
-  scenePivot.owners.delete(owner);
-  if (!scenePivot.owners.size) scenePivot.georef = null;
-}
-
-// Transformation affine LAZ (CRS projeté) → repère monde de la scène.
-export function placementFor(source, georef) {
-  if (!georef) {
+// Pose du nuage dans le repère de la vue : origine propre (centre) + rotation/translation.
+export function placementFor(source, view) {
+  if (!view) {
     return { mode: "local", note: "Aucun géoréférencement : nuage centré à l’origine." };
   }
   if (!source.epsg) {
     return { mode: "local", note: "CRS absent du LAZ : nuage centré à l’origine." };
   }
-  if (georef.epsg !== source.epsg) {
-    return {
-      mode: "local",
-      note: `CRS du LAZ (EPSG:${source.epsg}) ≠ scène (EPSG:${georef.epsg}) : nuage centré à l’origine.`,
-    };
-  }
 
-  const [cx, cy, cz] = source.centre;
-  const origin = georef.projectedToWorld(cx, cy, cz);
-  // linear[ligne monde][axe projeté], par différences finies de 1 m.
-  const linear = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  for (let axis = 0; axis < 3; axis++) {
-    const d = [0, 0, 0];
-    d[axis] = 1;
-    const w = georef.projectedToWorld(cx + d[0], cy + d[1], cz + d[2]);
-    const delta = [w.x - origin.x, w.y - origin.y, w.h - origin.h];
-    for (let row = 0; row < 3; row++) linear[row][axis] = delta[row];
-  }
+  const { origin, linear } = layerPlacement(view, createProjectedFrame(source.epsg, source.centre));
   return {
     mode: "georef",
     note: `Géoréférencé (EPSG:${source.epsg}).`,
-    origin: [origin.x, origin.y, origin.h],
+    origin,
     linear,
   };
 }
@@ -260,7 +222,7 @@ export function worldPositions(source, placement) {
   return out;
 }
 
-export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registerGroup, onBoundsChanged }) {
+export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, adoptFrame, registerGroup, onBoundsChanged }) {
   let disposed = false;
   let nextId = 1;
   const layers = new Map();
@@ -281,11 +243,12 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     layer.root = null;
   }
 
-  function render(layer, georef) {
+  function render(layer) {
+    // Le repère peut être adopté ici (premier géoréférencement) : il est résolu avant de dessiner.
+    const view = frameFor(layer.source, getGeoref?.() ?? null, adoptFrame);
     destroyRender(layer);
-    const pivot = resolvePivot(layer.source, georef);
-    layer.pivot = pivot;
-    const placement = placementFor(layer.source, pivot);
+    layer.frame = view;
+    const placement = placementFor(layer.source, view);
     layer.placement = placement;
     const positions = worldPositions(layer.source, placement);
     layer.bounds = colmapBounds([positions], false);
@@ -310,11 +273,11 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
 
   function refreshPlacement() {
     if (disposed) return;
-    const georef = getGeoref?.() ?? null;
+    const view = getGeoref?.() ?? null;
     let changed = false;
     for (const layer of layers.values()) {
-      if (layer.pivot === resolvePivot(layer.source, georef)) continue;
-      render(layer, georef);
+      if (layer.frame === view) continue;
+      render(layer);
       changed = true;
     }
     if (changed) emitBounds(false);
@@ -351,14 +314,12 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
       root: null,
       resource: null,
       placement: null,
-      pivot: null,
+      frame: null,
       unregister: null,
     };
     layers.set(id, layer);
-    retainPivot(id);
 
-    const georef = getGeoref?.() ?? null;
-    const placement = render(layer, georef);
+    const placement = render(layer);
 
     layer.unregister = registerGroup?.({
       id,
@@ -379,7 +340,6 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
         layer.unregister?.();
         destroyRender(layer);
         layers.delete(id);
-        releasePivot(id);
         emitBounds(false);
       },
     }) ?? null;
@@ -397,7 +357,6 @@ export function createLidarLayer({ app, setStatus, getFlipUp, getGeoref, registe
     for (const layer of layers.values()) {
       layer.unregister?.();
       destroyRender(layer);
-      releasePivot(layer.id);
     }
     layers.clear();
     emitBounds(false);

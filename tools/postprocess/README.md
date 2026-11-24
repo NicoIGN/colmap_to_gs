@@ -21,6 +21,7 @@ python3 tools/postprocess/export_ply.py --help
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
 | `export_ply_legacy.py` | Exporteur alternatif : filtre par BBOX et seuil global de taille |
 | `filter_splats.py` | Diagnostic/nettoyage contextuel d'un `.splat`, sans seuil de distance absolu |
+| `filter_splat_by_bbox.py` | Retire les splats (`.splat` ou `.ply`) dont le support sort d'une boîte projetée `--bbox xmin,ymin,xmax,ymax` et/ou de `--zmin`/`--zmax` ; géoréférencement par `--georef` (`metadata.json` ou `gauge.txt`) ; écrit `<sortie>.metadata.json` |
 | `merge_splats.py` | Fusion de résultats déjà alignés par sélection dans les voxels |
 | `colmap_to_gpkg.py` | Export de données COLMAP en GeoPackage (GDAL requis) |
 

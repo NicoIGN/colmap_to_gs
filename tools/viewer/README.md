@@ -73,10 +73,16 @@ de masquer ou d'afficher leurs éléments, et de naviguer dans la scène.
   scène déjà ouverte. Le bouton d'ouverture remplace la scène. Déposés avec
   `<nom>.metadata.json` (ou `<nom>.georef.json`), ils sont géoréférencés comme le
   fichier de référence le décrit ; un fichier de métadonnées sans `output_reference` est ignoré.
+  Le repère de la vue est fixé par la première donnée géographique importée (splat, gauge, LiDAR,
+  CityJSON ou GeoJSON). Il est en grille projetée (EPSG du repère, axes Est/Nord, hauteur ellipsoïdale).
+  Chaque couche garde sa propre origine ; sa pose dans la vue est calculée par coordonnées géographiques,
+  donc deux couches de même position se superposent quel que soit l'ordre d'import. Un splat dont le repère
+  diffère est recalé sur la vue (translation de son origine, rotation = convergence des méridiens). Un
+  autre géoréférencement JSON ou gauge.txt déposé seul est alors ignoré : recharge la scène pour changer de repère.
 - Un nuage LiDAR `.laz` ou `.las` ajouté par glisser-déposer apparaît comme une
-  couche dans la liste des couches. Il est placé via le géoréférencement JSON
-  s'il a le même CRS (EPSG) ; sinon il est centré à l'origine et un message le
-  signale. Le nuage est sous-échantillonné à 2 millions de points au maximum,
+  couche dans la liste des couches. Son origine est le centre du nuage ; s'il est
+  le premier géoréférencement, il fixe le repère de la vue, sinon il est recalé sur celle-ci. Sans CRS (EPSG)
+  dans le fichier, il est centré à l'origine et un message le signale. Le nuage est sous-échantillonné à 2 millions de points au maximum,
   coloré par RVB si présent, sinon par classe ASPRS. Décodage via laz-perf
   (chargé depuis jsdelivr) ; limite : 1 Gio.
 - Un GeoJSON `.geojson` déposé seul est lu comme un GeoPackage (filaire, une

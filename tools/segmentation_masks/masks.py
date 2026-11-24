@@ -135,6 +135,11 @@ def validate_masks(images, output, *, allow_missing=False):
     )
     if not sources:
         raise ValueError(f"Aucune image sélectionnée : {images}")
+    if not output.is_dir():
+        raise ValueError(
+            f"Dossier de masques introuvable : {output}. "
+            "Vérifier SFM_MASKS_DIR / TRAIN_MASKS_DIR dans la config (ou SFM_MASKS / TRAIN_MASKS = off)."
+        )
     missing = []
     progress(0, len(sources), None, "Vérification des masques")
     for index, source in enumerate(sources, 1):
@@ -144,7 +149,10 @@ def validate_masks(images, output, *, allow_missing=False):
             if allow_missing:
                 missing.append(mask_path)
                 continue
-            raise MissingMaskError(f"Masque attendu absent : {mask_path}")
+            raise MissingMaskError(
+                f"Masque attendu absent : {mask_path} (image {source.relative_to(images).as_posix()} "
+                f"non couverte par {output})"
+            )
         with Image.open(source) as image, Image.open(mask_path) as mask:
             mask.load()
             if mask.format != "PNG" or mask.mode != "L" or mask.size != image.size:

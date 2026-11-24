@@ -13,6 +13,18 @@ Le mode diagnostic conserve les gaussiennes et produit un rapport ainsi qu'un
 fichier de candidats rejetables. Les examiner avant d'utiliser `--mode apply` :
 un filtre peut aussi supprimer des éléments réels. L'entrée n'est pas écrasée.
 
+## Retirer les splats hors d'une boîte projetée
+
+```bash
+python "$GIT_ROOT/tools/postprocess/filter_splat_by_bbox.py" --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/scene_bbox.splat" --format splat --georef "$DATA_ROOT/scene.metadata.json" --bbox "655150,6861000,656000,6861400" --zmin 30 --zmax 80 --overwrite
+```
+
+`--georef` accepte un `metadata.json` ou un `gauge.txt` (EPSG via `--epsg`, 2154 par défaut).
+`--bbox` et `--zmin`/`--zmax` sont optionnels séparément, mais au moins un est requis.
+Un splat est retiré si son support (`--sigma`, 3 par défaut) dépasse la boîte ou les z.
+Le script écrit aussi `scene_bbox.metadata.json` à côté de la sortie : même `output_reference`
+que l'entrée, plus un bloc `filter` (paramètres et compteurs).
+
 ## Exporter un splat filtré avec les points COLMAP
 
 Export d'un checkpoint (`export_ply.py`, appelé par `run_spirula_block.sh`) avec filtrage :

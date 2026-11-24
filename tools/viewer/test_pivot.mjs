@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { findPivotAtPixel } from "./html/viewer/pivot.js";
+import { findPivotAtPixel, findVertexAtPixel } from "./html/viewer/pivot.js";
 
 const IDENTITY = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const CAMERA = { matrix: IDENTITY, fov: 90, horizontalFov: false };
@@ -54,4 +54,22 @@ test("les points derrière la caméra sont ignorés", () => {
     camera: CAMERA, px: 400, py: 300, ...SIZE,
   });
   assert.equal(pivot, null);
+});
+
+test("mesure : le sommet le plus proche du clic est retenu avec son label", () => {
+  
+  const hit = findVertexAtPixel({
+    sources: [
+      { label: "LiDAR", positions: new Float32Array([0, 0, -10, 3, 0, -10]), matrix: IDENTITY },
+      { label: "Vecteurs", positions: new Float32Array([0.5, 0, -10]), matrix: IDENTITY },
+    ],
+    camera: CAMERA, px: 400, py: 300, ...SIZE,
+  });
+  assert.equal(hit.label, "LiDAR");
+  near(hit.point, [0, 0, -10]);
+  const none = findVertexAtPixel({
+    sources: [{ label: "LiDAR", positions: new Float32Array([3, 0, -10]), matrix: IDENTITY }],
+    camera: CAMERA, px: 400, py: 300, ...SIZE,
+  });
+  assert.equal(none, null);
 });

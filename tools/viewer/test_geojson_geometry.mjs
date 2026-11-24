@@ -31,6 +31,16 @@ test("le membre crs fixe le code EPSG", () => {
   assert.equal(layer.polylines.length, 2);
 });
 
+test("le membre crs en URL OGC (roofer) fixe le code EPSG", () => {
+  const text = JSON.stringify({
+    type: "FeatureCollection",
+    crs: { type: "name", properties: { name: "https://www.opengis.net/def/crs/EPSG/0/2154" } },
+    features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [655060.6, 6861458.8, 84.4] } }],
+  });
+  const [layer] = readGeojsonLayers(text, "buildings.geojson");
+  assert.equal(layer.epsg, 2154);
+});
+
 test("un JSON invalide lève une erreur", () => {
   assert.throws(() => readGeojsonLayers("{not json", "x.geojson"));
 });

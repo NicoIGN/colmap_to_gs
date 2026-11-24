@@ -14,13 +14,14 @@ import { createGifRecorder } from "./viewer/gif.js";
 import { createNavigationSystem } from "./viewer/navigation.js";
 import { createMeasurementSystem } from "./viewer/measurement.js";
 import { createSceneTools } from "./viewer/scene-tools.js";
-import { createColmapLayer } from "./viewer/colmap.js";
+import { splatPlacement } from "./viewer/splat-alignment.js";
+import { createColmapLayer, makePointMesh } from "./viewer/colmap.js";
 import { collectDroppedFiles, hasColmapModel } from "./viewer/drop-files.js";
 import { isImageFileName } from "./viewer/colmap-images.js";
 import { createLayerManager } from "./viewer/layers.js";
 import { createGpsLayer } from "./viewer/gps-layer.js";
 import { createLidarLayer } from "./viewer/lidar-layer.js";
-import { findPivotAtPixel } from "./viewer/pivot.js";
+import { findPivotAtPixel, findVertexAtPixel } from "./viewer/pivot.js";
 import { setOverlayOcclusion } from "./viewer/overlay-depth.js";
 import { createGpkgLayer, DEFAULT_WIRE_COLOR } from "./viewer/gpkg-layer.js";
 import { createCityJsonLayer } from "./viewer/cityjson-layer.js";
@@ -59,6 +60,8 @@ const colmapBox = new THREE.Box3();
 const lidarBox = new THREE.Box3();
 const wireBox = new THREE.Box3();
 const hasFreeData = () => !colmapBox.isEmpty() || !lidarBox.isEmpty() || !wireBox.isEmpty();
+// Toute couche enregistrée (GPX compris) doit survivre à la pose d'un splat.
+const hasAnyLayer = () => hasFreeData() || (layerManager?.size ?? 0) > 0;
 const sceneCenter = new THREE.Vector3();
 
 const principalAxes = {
@@ -77,6 +80,7 @@ const target = new THREE.Vector3();
 let app = null;
 let cameraEntity = null;
 let splatEntity = null;
+let splatPointsMode = false;
 let picker = null;
 let layerManager = null;
 let centers = null;
@@ -483,10 +487,51 @@ function requestGifCapture() {
   }
 }
 
-function applyUpFlip() {
-  for (const layer of splatLayers) {
-    layer.entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
+// Couleur de base d'un splat : SH degré 0 (f_dc) convertie en RGB, comme le rendu gsplat.
+const SH_C0 = 0.28209479177387814;
+
+function splatColors(gsplatData) {
+  const dc = [0, 1, 2].map((c) => gsplatData?.getProp?.(`f_dc_${c}`));
+  if (dc.some((values) => !values)) return null;
+  const count = dc[0].length;
+  const colors = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    for (let c = 0; c < 3; c++) {
+      colors[i * 3 + c] = Math.min(1, Math.max(0, 0.5 + SH_C0 * dc[c][i]));
+    }
   }
+  return colors;
+}
+
+// Affiche les centres des splats en points (comme le LiDAR) à la place du rendu gsplat.
+function applySplatRenderMode(layer) {
+  if (splatPointsMode && !layer.pointsEntity) {
+    layer.pointsResource = makePointMesh(app, layer.centers, layer.colors ?? new Float32Array(0), 2);
+    layer.pointsEntity = new pc.Entity(`Splat points · ${layer.name}`);
+    layer.pointsEntity.addComponent("render", {
+      type: "asset",
+      meshInstances: [layer.pointsResource.meshInstance],
+    });
+    layer.entity.addChild(layer.pointsEntity);
+  }
+  if (layer.entity.gsplat) layer.entity.gsplat.enabled = !splatPointsMode;
+  if (layer.pointsEntity) layer.pointsEntity.enabled = splatPointsMode;
+}
+
+function setSplatPointsMode(on) {
+  splatPointsMode = on;
+  for (const layer of splatLayers) applySplatRenderMode(layer);
+}
+
+function applySplatPlacement(layer) {
+
+  const { position, quaternion } = splatPlacement(layer.alignment ?? null, $("flipUp").checked);
+  layer.entity.setLocalPosition(...position);
+  layer.entity.setLocalRotation(...quaternion);
+}
+
+function applyUpFlip() {
+  for (const layer of splatLayers) applySplatPlacement(layer);
 }
 
 async function removeSplatLayer(layer) {
@@ -494,8 +539,11 @@ async function removeSplatLayer(layer) {
   if (index < 0) return;
   splatLayers.splice(index, 1);
   layer.unregister?.();
+  layer.pointsResource?.material?.destroy?.();
+  layer.pointsResource?.mesh?.destroy?.();
   layer.entity.destroy();
   layer.importer.dispose();
+  cityLayer?.refreshNearSplats();
 
   if (!splatLayers.length) {
     releaseScene();
@@ -591,6 +639,20 @@ function keepPivotOnCenter(previousCenter, previousTarget) {
   target.add(delta);
   camera.position.add(delta);
   syncCamera();
+}
+
+// Centres d'un splat dans le repère de la vue (même transformation que son entité).
+function worldSplatCenters(layer) {
+  const m = layer.entity.getWorldTransform().data;
+  const src = layer.centers;
+  const out = new Float32Array(src.length);
+  for (let i = 0; i < src.length; i += 3) {
+    const x = src[i], y = src[i + 1], z = src[i + 2];
+    out[i] = m[0] * x + m[4] * y + m[8] * z + m[12];
+    out[i + 1] = m[1] * x + m[5] * y + m[9] * z + m[13];
+    out[i + 2] = m[2] * x + m[6] * y + m[10] * z + m[14];
+  }
+  return out;
 }
 
 function gatherSplatCoordinates(layers, keep = null) {
@@ -733,10 +795,12 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
     const entity = new pc.Entity(name);
     entity.addComponent("gsplat", { asset, unified: true });
     app.root.addChild(entity);
-    entity.setLocalEulerAngles($("flipUp").checked ? 180 : 0, 0, 0);
     newLayer = {
       name, count, centers: layerCenters, entity, importer: sceneImporter,
+      colors: splatColors(resource.gsplatData),
     };
+    applySplatPlacement(newLayer);
+    applySplatRenderMode(newLayer);
     newLayer.unregister = layerManager?.add({
       id: `splat-${nextSplatLayerId++}`,
       name: `${name} (${count.toLocaleString("fr-FR")} splats)`,
@@ -744,6 +808,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
       onRemove: () => removeSplatLayer(newLayer),
     });
     splatLayers.push(newLayer);
+    cityLayer?.refreshNearSplats();
     splatEntity ??= entity;
     centers = new Float32Array(splatLayers.reduce(
       (total, layer) => total + layer.centers.length, 0
@@ -846,7 +911,7 @@ async function loadSceneInternal(source, name, { append = false } = {}) {
         });
         sceneReady = true;
         if (collisionIsEnabled()) await prepareCollision();
-      } else if (hasFreeData()) {
+      } else if (hasAnyLayer()) {
         sceneImporter.dispose();
       } else {
         sceneImporter.dispose();
@@ -937,11 +1002,22 @@ async function hasOutputReference(file) {
 }
 
 async function appendScene(source, name) {
-  if (!sceneReady && !hasFreeData()) {
+  if (!sceneReady && !hasAnyLayer()) {
     await resetAndLoad(source, name);
-    return;
+    return splatLayers.at(-1);
   }
   await loadSceneInternal(source, name, { append: true });
+  return splatLayers.at(-1);
+}
+
+// Une donnée géoréférencée ne peut pas se poser dans une vue sans repère : le splat déjà
+// posé (sans métadonnées) resterait à l’identité, donc décalé.
+function assertGeoreferencedAllowed() {
+  if (!sceneTools?.getGeoref?.() && splatLayers.length) {
+    throw new Error(
+      "La vue n’est pas géoréférencée : ajoute d’abord le splat avec ses métadonnées, ou recharge la scène."
+    );
+  }
 }
 
 async function handleDroppedFiles(fileList, items) {
@@ -963,6 +1039,7 @@ async function handleDroppedFiles(fileList, items) {
       const sidecar = files.find((f) => f.name.toLowerCase() === sidecarName) ?? null;
       if (files.length === (sidecar ? 2 : 1)) {
         if (!lidarLayer) throw new Error("L’importeur LiDAR n’est pas initialisé.");
+        assertGeoreferencedAllowed();
         await lidarLayer.loadFile(lidarFile, sidecar);
         return;
       }
@@ -971,6 +1048,7 @@ async function handleDroppedFiles(fileList, items) {
     const gpkgFile = files.find((f) => /\.(gpkg|geojson)$/i.test(f.name));
     if (gpkgFile && files.length === 1) {
       if (!gpkgLayer) throw new Error("L’importeur de données filaires n’est pas initialisé.");
+      assertGeoreferencedAllowed();
       await gpkgLayer.loadFile(gpkgFile);
       return;
     }
@@ -980,12 +1058,13 @@ async function handleDroppedFiles(fileList, items) {
       const base = sceneFile.name.replace(/\.[^.]+$/, "").toLowerCase();
       const georefFile = files.find((f) => f !== sceneFile && isGeorefSidecarName(f.name, base));
       if (georefFile) {
-        // Le splat s'ajoute à la vue courante : son propre géoréférencement prend le relais.
-        await appendScene(sceneFile, sceneFile.name);
-        if (/\.txt$/i.test(georefFile.name)) {
-          await sceneTools.importGaugeFile(georefFile);
-        } else if (!/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile))) {
-          await sceneTools.importFile(georefFile);
+        // Le splat s'ajoute à la vue courante ; son géoréférencement le recale sur le repère commun.
+        const layer = await appendScene(sceneFile, sceneFile.name);
+        const hasReference = !/\.metadata\.json$/i.test(georefFile.name) || (await hasOutputReference(georefFile));
+        if (hasReference) {
+          if (!layer) throw new Error("Le splat n’a pas été chargé : réessaie.");
+          layer.alignment = await sceneTools.attachSplatReference(georefFile);
+          applySplatPlacement(layer);
         }
         return;
       }
@@ -1021,6 +1100,7 @@ async function handleDroppedFiles(fileList, items) {
       const text = await file.text();
       if (isCityJsonText(text)) {
         if (!cityLayer) throw new Error("L’importeur CityJSON n’est pas initialisé.");
+        assertGeoreferencedAllowed();
         await cityLayer.loadText(text, file.name);
         return;
       }
@@ -1429,6 +1509,13 @@ function goToImageView() {
   // L'axe vertical reste celui de l'application (axe principal courant).
   const axis = getPrincipalAxis();
   applyCameraString([...pose.position, ...pose.target, axis.x, axis.y, axis.z].join(","));
+  // Même champ de vue que l'image : le rendu 3D se superpose à l'image affichée.
+  if (pose.horizontalFov) {
+    const aspect = canvas.clientWidth / canvas.clientHeight;
+    const halfH = (pose.horizontalFov * Math.PI) / 360;
+    camera.fov = (2 * Math.atan(Math.tan(halfH) / aspect) * 180) / Math.PI;
+    cameraEntity.camera.fov = camera.fov;
+  }
   rememberCamera();
   requestGifCapture();
   setStatus("Caméra placée sur la vue de l’image COLMAP.", "success");
@@ -1535,7 +1622,7 @@ function installUI() {
 
   $("backgroundColor").addEventListener("input", applyBackgroundColor);
   $("wireColor").addEventListener("input", (event) => gpkgLayer?.setColor(event.target.value));
-  $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value)));
+  $("colmapPointSize").addEventListener("input", (event) => gpkgLayer?.setPointSize(Number(event.target.value) / 2));
   for (const kind of ["roof", "facade"]) {
     $(`city${kind === "roof" ? "Roof" : "Facade"}Opacity`).addEventListener("input", (event) => {
       cityLayer?.setOpacity(kind, Number(event.target.value));
@@ -1731,6 +1818,7 @@ async function initialize() {
   $("splatOcclusion").addEventListener("change", applySplatDepthWrite);
   applyOverlayOcclusion();
   $("splatOcclusion").addEventListener("change", applyOverlayOcclusion);
+  $("splatPoints").addEventListener("change", () => setSplatPointsMode($("splatPoints").checked));
   $("colmapOcclusion").addEventListener("change", applyOverlayOcclusion);
   $("facadeNearSplats").addEventListener("change", () => cityLayer?.setFacadeNearSplats($("facadeNearSplats").checked));
     layerManager = createLayerManager($("layerList"));
@@ -1847,6 +1935,21 @@ async function initialize() {
       container,
       camera,
       getCenters: () => centers,
+      getVertexAt: (clientX, clientY) => {
+        const rect = canvas.getBoundingClientRect();
+        return findVertexAtPixel({
+          sources: collectPivotSources(),
+          camera: {
+            matrix: cameraEntity.getWorldTransform().data,
+            fov: cameraEntity.camera.fov,
+            horizontalFov: cameraEntity.camera.horizontalFov,
+          },
+          px: clientX - rect.left,
+          py: clientY - rect.top,
+          width: rect.width,
+          height: rect.height,
+        });
+      },
 
       getAbsoluteCoordinates: (point) =>
         sceneTools.getAbsoluteCoordinates(point),
@@ -1914,6 +2017,7 @@ async function initialize() {
         setStatus,
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => applyFreeBounds(lidarBox, bounds, frame),
       });
@@ -1923,6 +2027,7 @@ async function initialize() {
         setStatus,
         getFlipUp: () => $("flipUp").checked,
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
           const framed = frame && !hasFreeData() && !splatLayers.length;
@@ -1930,14 +2035,15 @@ async function initialize() {
         },
       });
       gpkgLayer.setColor($("wireColor").value || DEFAULT_WIRE_COLOR);
-      gpkgLayer.setPointSize(Number($("colmapPointSize").value));
+      gpkgLayer.setPointSize(Number($("colmapPointSize").value) / 2);
 
       cityLayer = createCityJsonLayer({
         app,
         setStatus,
         getFlipUp: () => $("flipUp").checked,
-        getSplatCenters: () => splatLayers.map((layer) => layer.centers),
+        getSplatCenters: () => splatLayers.map(worldSplatCenters),
         getGeoref: () => sceneTools?.getGeoref() ?? null,
+        adoptFrame: (frame) => sceneTools?.adoptFrame(frame) ?? null,
         registerGroup: (group) => layerManager.addGroup(group),
         onBoundsChanged: (bounds, frame) => {
           const framed = frame && !hasFreeData() && !splatLayers.length;

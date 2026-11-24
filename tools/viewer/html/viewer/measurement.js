@@ -5,6 +5,7 @@ export function createMeasurementSystem({
   container,
   camera,
   getCenters,
+  getVertexAt = () => null,
   getModelMatrix,
   getSceneRadius,
   getPrincipalAxis,
@@ -540,23 +541,25 @@ export function createMeasurementSystem({
     if (!active) return;
 
     const centers = getCenters();
-    if (!centers?.length) return;
 
     try {
       const matrix = getModelMatrix();
-      const seed = findSeed(
-        event.clientX,
-        event.clientY,
-        centers,
-        matrix
-      );
+      const seed = centers?.length
+        ? findSeed(event.clientX, event.clientY, centers, matrix)
+        : null;
 
-      if (!seed) {
-        setStatus("Mesure : aucun point trouvé sous le clic.");
-        return;
+      let barycenter;
+      if (seed) {
+        barycenter = findBarycenter(seed, centers, matrix);
+      } else {
+        const vertex = getVertexAt?.(event.clientX, event.clientY);
+        if (!vertex) {
+          setStatus("Mesure : aucun point trouvé sous le clic.");
+          return;
+        }
+        barycenter = new THREE.Vector3(...vertex.point);
+        setStatus(`Mesure : accroché au sommet ${vertex.label}.`);
       }
-
-      const barycenter = findBarycenter(seed, centers, matrix);
 
       if (!start) {
         start = barycenter;

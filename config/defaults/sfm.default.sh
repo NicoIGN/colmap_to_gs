@@ -15,7 +15,7 @@ HLOC_MATCHER="superpoint+lightglue"
 # retrieval : paires des N voisins les plus proches (HLOC_RETRIEVAL) ; exhaustive : toutes les paires (coûteux).
 HLOC_PAIRS="retrieval"
 HLOC_RETRIEVAL="netvlad"    # descripteur global pour retrieval : netvlad | openibl | cosplace
-HLOC_NUM_NEIGHBORS=20       # entier > 0, paires par image en mode retrieval
+HLOC_NUM_NEIGHBORS=10       # entier > 0, paires par image en mode retrieval
 # Modèle HLOC (majuscules) : OPENCV, SIMPLE_RADIAL, PINHOLE ou EQUIRECTANGULAR.
 # EQUIRECTANGULAR projette les panoramas 2:1 en six vues pinhole de 110 degrés.
 HLOC_CAMERA_MODEL="OPENCV"

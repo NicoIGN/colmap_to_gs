@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { readGaugeFile, readGeorefFile } from "./georef.js";
+import { createProjectedFrame, readGaugeFile, readGeorefFile } from "./georef.js";
+import { frameAlignment } from "./splat-alignment.js";
 
 /**
  * Géoréférencement, GPX et encart d’informations.
@@ -787,8 +788,17 @@ export function createSceneTools({
       return true;
     }
 
+  // La vue se règle sur la grille du SCR (E, N selon l’EPSG). Une référence ENU locale
+  // (axes tangents, décalés de la convergence des méridiens) est donc ramenée à son origine projetée.
+  function viewFrameOf(reference) {
+    if (reference.type === "projected") return reference;
+    const { x, y, h } = reference.origin;
+    return createProjectedFrame(reference.epsg, [x, y, h]);
+  }
+
   function applyGeoref(reference) {
-    georef = reference;
+    georef = viewFrameOf(reference);
+    if (reference.originGeographic) georef.originGeographic = reference.originGeographic;
     resetTrack();
     updateGeorefInfo();
     clearNavigation();
@@ -796,11 +806,31 @@ export function createSceneTools({
     refreshAppUI();
   }
 
+  // Le repère commun est fixé par la première donnée géographique importée.
+  function warnFrameFixed() {
+    setStatus(
+      `Repère commun déjà fixé (EPSG:${georef.epsg}) : ` +
+      "recharge la scène pour en changer.",
+      "warning"
+    );
+  }
+
+  // Une couche projetée (LiDAR, vecteurs) adopte son repère si la vue n'en a pas encore.
+  function adoptFrame(frame) {
+    if (!georef) applyGeoref(frame);
+    return georef;
+  }
+
   // Le JSON de géoréférencement ne dépend pas d'une scène splat : il s'applique aussi seul.
   async function importGeorefFile(file) {
     setStatus(`Lecture de ${file.name}…`);
     const reference = await readGeorefFile(file);
     if (disposed) return;
+
+    if (georef) {
+      warnFrameFixed();
+      return;
+    }
 
     applyGeoref(reference);
     setStatus(
@@ -813,8 +843,39 @@ export function createSceneTools({
     const reference = await readGaugeFile(file);
     if (disposed) return null;
 
+    if (georef) {
+      warnFrameFixed();
+      return georef;
+    }
+
     applyGeoref(reference);
     return reference;
+  }
+
+  /**
+   * Lit le géoréférencement d’un splat. Sans repère commun, cette référence le fixe
+   * (pose identité) ; sinon le splat est recalé sur le repère existant.
+   * Retourne la pose à appliquer au splat, ou null pour l’identité.
+   */
+  async function attachSplatReference(file) {
+    setStatus(`Lecture de ${file.name}…`);
+    const reference = /\.txt$/i.test(file.name)
+      ? await readGaugeFile(file)
+      : await readGeorefFile(file);
+    if (disposed) return null;
+
+    const isFirst = !georef;
+    if (isFirst) applyGeoref(reference);
+
+    const alignment = frameAlignment(georef, reference);
+    const shift = Math.hypot(...alignment.translation);
+    setStatus(
+      isFirst
+        ? `Repère commun fixé — EPSG:${reference.epsg} (première donnée géographique).`
+        : `${file.name} recalé sur le repère commun (décalage ${shift.toFixed(1)} m).`,
+      "success"
+    );
+    return alignment;
   }
 
   async function importFile(file) {
@@ -1138,8 +1199,10 @@ export function createSceneTools({
         getAbsoluteCoordinates,
         importFile,
         importGaugeFile,
-        refreshUI,
+        attachSplatReference,
+        adoptFrame,
         rebuildTrack,
+        refreshUI,
         frame,
         reset,
         moveAlongTrackFromWorldDelta,
