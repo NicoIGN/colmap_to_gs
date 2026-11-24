@@ -3,7 +3,10 @@
 ## Message à copier pour une nouvelle session
 
 ```text
-Nous travaillons sur NicoIGN/colmap_to_gs (photos, vidéos ou Panoramax → scènes 3D Gaussian Splatting). Branche review_copilot. Lis d'abord copilot/CONTEXT.md. Utilise GIT_ROOT pour les chemins, sans chemin absolu. Commandes : examples/ ; paramètres : scripts/helper.sh. Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans lui, les échecs numpy/pyproj ne sont pas une régression.
+Nous travaillons sur NicoIGN/colmap_to_gs (photos, vidéos ou Panoramax → scènes 3D Gaussian Splatting). Branche review_copilot. 
+Lis d'abord copilot/CONTEXT.md. Utilise GIT_ROOT pour les chemins, sans chemin absolu. 
+Commandes : examples/ ; paramètres : scripts/helper.sh. 
+Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans lui, les échecs numpy/pyproj ne sont pas une régression.
 ```
 
 À lire en premier au démarrage d'une session. Mettre à jour après chaque changement notable.
