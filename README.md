@@ -113,9 +113,7 @@ Le viewer s'ouvre dans le navigateur, avec un fichier de scène en argument :
 python3 tools/viewer/server.py /chemin/vers/scene.splat
 ```
 
-Sans argument, l'interface permet d'importer une scène. Il affiche aussi des données
-externes alignées sur le splat (LiDAR, CityJSON, GeoJSON, GeoPackage, COLMAP).
-Détails dans la [documentation du viewer](tools/viewer/README.md).
+L'interface permet d'importer une scène 3DGS et d'y ajouter des données externes alignées sur le splat (LiDAR, CityJSON, GeoJSON, GeoPackage, COLMAP). Détails dans la [documentation du viewer](tools/viewer/README.md).
 
 ### Convertir et visualiser un splat en 3D Tiles
 
