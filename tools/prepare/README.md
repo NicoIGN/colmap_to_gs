@@ -9,7 +9,7 @@ Outils de préparation d’images et d’extraction de frames (vidéo, image inf
 Exemple d’invocation :
 
 ```bash
-python3 tools/prepare/extract_frames_from_video.py --help
+python3 tools/prepare/prepare_video_frames.py --help
 ```
 
 ## 2. Entrées et sorties
@@ -17,12 +17,11 @@ python3 tools/prepare/extract_frames_from_video.py --help
 - Exécuter les scripts depuis la racine du dépôt :
 
 ```bash
-python3 tools/prepare/extract_frames_from_video.py --help
+python3 tools/prepare/prepare_video_frames.py --help
 ```
 
 | Outil | Fonction |
 |---|---|
-| `extract_frames_from_video.py` | Extraction d'images depuis une vidéo (cadence fixe, GPX optionnel) |
 | `prepare_video_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
 | `prepare_image_info.py` | Inspection d'une image et de ses informations GPS |
 
