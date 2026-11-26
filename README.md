@@ -49,11 +49,11 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 Trois étapes :
 
-1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`.
+1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`. Ensuite, activez-le avec `conda activate gsplat`.
 
-2. **Spirula Studio** : à compiler avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), pour les masques natifs.
+2. **Spirula Studio** : compilez-le avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), qui applique les bonnes options et télécharge le modèle SAM3 utilisé pour les masques.
 
-3. **COLMAP et HLOC** : si le SfM utilise HLOC, l'installer avec `bash install/colmap/install-hloc.sh`. Ne pas le poser à la main avec pip : il peut remplacer numpy et torch. Voir le [README SfM](tools/sfm/README.md).
+3. **COLMAP et HLOC** : si le SfM utilise HLOC, installez-le avec `bash install/colmap/install-hloc.sh`. Voir le [README SfM](tools/sfm/README.md).
 
 ## 3. Pipelines principaux
 
