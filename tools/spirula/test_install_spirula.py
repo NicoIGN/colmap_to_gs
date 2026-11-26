@@ -86,20 +86,21 @@ class InstallTest(unittest.TestCase):
         self.git("add", "change.txt", cwd=self.origin)
         self.git("commit", "-qm", "change", cwd=self.origin)
 
-    def test_default_always_rebuilds(self):
+    def test_default_skips_when_executable_exists(self):
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.builds(), 1)
         result = self.run_installer()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.builds(), 2)
+        self.assertIn("Rien à faire", result.stdout)
+        self.assertEqual(self.builds(), 1)
 
-    def test_update_skips_build_when_repo_unchanged(self):
+    def test_update_recompiles_even_when_repo_unchanged(self):
         self.assertEqual(self.run_installer().returncode, 0)
         result = self.run_installer("--update")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("compilation ignorée", result.stdout)
-        self.assertEqual(self.builds(), 1)
+        self.assertIn("Recompilation avec conservation des artefacts", result.stdout)
+        self.assertEqual(self.builds(), 2)
 
     def test_update_rebuilds_on_change_and_keeps_artifacts(self):
         self.assertEqual(self.run_installer().returncode, 0)
@@ -108,7 +109,8 @@ class InstallTest(unittest.TestCase):
         self.commit_upstream()
         result = self.run_installer("--update")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("Dépôt modifié", result.stdout)
+        self.assertIn("Fast-forward", result.stdout)
+        self.assertIn("Recompilation avec conservation des artefacts", result.stdout)
         self.assertEqual(self.builds(), 2)
         self.assertEqual(marker.read_text(), "artifact")
 

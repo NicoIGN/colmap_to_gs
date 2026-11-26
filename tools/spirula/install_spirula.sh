@@ -447,10 +447,11 @@ if [[ -d "${REPO_DIR}/.git" ]]; then
 
     log "Mise à jour du dépôt Spirula"
 
-    # Sauvegarde des modifications locales avant la mise à jour
-    if [[ -n "$(git -C "${REPO_DIR}" status --porcelain)" ]]; then
+    # Sauvegarde des modifications locales avant la mise à jour.
+    # Le répertoire de compilation est exclu : ses artefacts doivent survivre à --update.
+    if [[ -n "$(git -C "${REPO_DIR}" status --porcelain -- . ":(exclude)${BUILD_DIR}")" ]]; then
         log "Modifications locales détectées : mise en stash"
-        git -C "${REPO_DIR}" stash push -u -m "avant mise à jour Spirula ${TIMESTAMP}"
+        git -C "${REPO_DIR}" stash push -u -m "avant mise à jour Spirula ${TIMESTAMP}" -- . ":(exclude)${BUILD_DIR}"
     else
         log "Branche propre : aucun stash nécessaire"
     fi
