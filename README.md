@@ -118,8 +118,8 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 
 ### Documentation des outils
 
-- [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
-- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
+#### Cœur de la chaîne
+
 - [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
@@ -130,9 +130,14 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 - [Export, filtrage et fusion](tools/export/README.md).
 - [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
-- [Données vectorielles](tools/vector/README.md).
 - [Visualisation](tools/viewer/README.md).
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+
+#### Outils autour
+
+- [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
+- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
+- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
 
 ### Tests
 
