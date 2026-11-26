@@ -30,10 +30,10 @@ Pilotes        run_standard_images.sh                                │
 SfM            sfm_run.sh ◀─────────────────────────────────────────┘
                │
                ▼
-Backend        backends/$COLMAP_METHOD.sh
+Backend        backends/$COLMAP_METHOD.sh   (spirula, colmap, nerfstudio, hloc, orientations)
                │
-               ▼
-               spirula.sh → sfm_spirula.sh
+               ▼ si COLMAP_METHOD=spirula
+               backends/spirula.sh → spirula/sfm_spirula.sh
                │
                ▼
 Découpage      colmap_split_blocks.py
