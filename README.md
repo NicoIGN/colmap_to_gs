@@ -102,11 +102,7 @@ et [les exemples de configuration](scripts/README.md).
 
 ### Formats d'export
 
-- **`.splat`** : scène nettoyée, recalée dans le repère monde (`tools/export/export_ply.py`).
-- **`.ply`** : nuage de gaussiennes nettoyé (`tools/export/clean_ply.sh`).
-- **3D Tiles** : tileset géoréférencé pour une visualisation géographique (voir ci-dessous).
-- **GeoPackage** : données COLMAP vectorisées (`tools/export/colmap_to_gpkg.py`).
-
+Les formats `.splat` et `.ply` sont gérés, et un export en 3D Tiles est proposé.
 Les outils et leurs options sont listés dans le [README des exports](tools/export/README.md).
 
 ### Viewer web
