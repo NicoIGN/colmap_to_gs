@@ -10,11 +10,11 @@ bash tools/sfm/run_standard_images.sh /chemin/config.sh
 ```
 
 **Organisation.** Tout le code SfM est regroupé ici, avec une interface commune
-(`run_standard_images.sh` puis `sfm_reconstruct.sh`, qui appelle `backends/$COLMAP_METHOD.sh`) :
+(`run_standard_images.sh` puis `sfm_run.sh`, qui appelle `backends/$COLMAP_METHOD.sh`) :
 
 | Emplacement | Contenu |
 |---|---|
-| `run_standard_images.sh`, `sfm_reconstruct.sh`, `param.default.sh` | Entrée commune, dispatch par méthode, défauts |
+| `run_standard_images.sh`, `sfm_run.sh`, `param.default.sh` | Entrée commune, cœur SfM (reprise, split, vérification), défauts |
 | `backends/` | Un script par méthode : `spirula.sh`, `colmap.sh`, `nerfstudio.sh`, `hloc.sh`, `orientations.sh` |
 | `prepare_panoramax.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
 | `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |

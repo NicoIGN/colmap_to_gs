@@ -127,10 +127,16 @@ class ProjectionTest(unittest.TestCase):
                        HLOC_FEATURES="sift", HLOC_MATCHER="NN-mutual",
                        HLOC_PAIRS="exhaustive", HLOC_RETRIEVAL="netvlad",
                        HLOC_NUM_NEIGHBORS="20", SFM_EQUIRECTANGULAR_VIEW_SIZE="8")
-            script = Path(__file__).resolve().parents[1] / "sfm/sfm_reconstruct.sh"
+            script = Path(__file__).resolve().parents[1] / "sfm/sfm_run.sh"
+            sfm, images = root / "sfm", root / "images"
+            (sfm / "sparse/0").mkdir(parents=True)
+            images.mkdir()
+            for name in ("cameras", "images", "points3D"):
+                (sfm / "sparse/0" / f"{name}.bin").write_bytes(b"x")
             for model in ("EQUIRECTANGULAR", "OPENCV"):
                 with self.subTest(model=model):
-                    result = subprocess.run(["bash", str(script)],
+                    result = subprocess.run(["bash", str(script), "--sfm-dir", str(sfm),
+                                             "--images-dir", str(images), "--force"],
                                             env=dict(env, HLOC_CAMERA_MODEL=model),
                                             capture_output=True, text=True)
                     self.assertEqual(result.returncode, 0, result.stderr)

@@ -27,10 +27,7 @@ Préparation    prepare_video_frames.py    prepare_images.py          download.p
                ▼                                                     run_panoramax.sh
 Pilotes        run_standard_images.sh                                │
                │                                                     │
-SfM            sfm_core.sh ◀─────────────────────────────────────────┘
-               │
-               ▼
-Reconstruction sfm_reconstruct.sh
+SfM            sfm_run.sh ◀─────────────────────────────────────────┘
                │
                ▼
 Backend        backends/$COLMAP_METHOD.sh

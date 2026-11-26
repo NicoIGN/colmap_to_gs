@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Cœur SfM partagé par run_standard_images.sh (images, vidéo) et run_panoramax.sh.
-# Les différences de source sont passées par l'environnement (voir sfm_reconstruct.sh).
-# Usage : sfm_core.sh --sfm-dir DIR --images-dir DIR [--force]
+# Gère la reprise, la reconstruction via tools/sfm/backends/$COLMAP_METHOD.sh, le split par caméra
+# et la vérification des .bin. Les différences de source passent par l'environnement.
+# Usage : sfm_run.sh --sfm-dir DIR --images-dir DIR [--force]
 #   --force : relance toujours la reconstruction (sinon, un sparse complet est réutilisé).
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -13,7 +14,7 @@ while (($#)); do
     --sfm-dir) sfm="$2"; shift 2 ;;
     --images-dir) images="$2"; shift 2 ;;
     --force) force=true; shift ;;
-    *) echo "Usage : sfm_core.sh --sfm-dir DIR --images-dir DIR [--force]" >&2; exit 2 ;;
+    *) echo "Usage : sfm_run.sh --sfm-dir DIR --images-dir DIR [--force]" >&2; exit 2 ;;
   esac
 done
 [[ -n "$sfm" && -n "$images" ]] || { echo "--sfm-dir et --images-dir sont obligatoires." >&2; exit 2; }
@@ -27,6 +28,11 @@ SFM_MASKS="${SFM_MASKS:-off}"
 sparse="$sfm/sparse/0"
 camera_split="$repo_root/tools/sfm/spirula/camera_split.py"
 
+case "$COLMAP_METHOD" in
+  spirula|colmap|nerfstudio|hloc|orientations) ;;
+  *) die "COLMAP_METHOD inconnu : $COLMAP_METHOD" ;;
+esac
+
 sparse_ready() {
   if [[ "$PIPELINE_RESUME" == true ]]; then
     local status=0
@@ -38,10 +44,17 @@ sparse_ready() {
   fi
 }
 
+# Arguments : images, dossier SfM, dossier de masques, mode caméra.
+run_backend() {
+  local mask_dir=""
+  [[ "$SFM_MASKS" != on ]] || mask_dir="$3"
+  SFM_BACKEND_IMAGES="$1" SFM_BACKEND_DIR="$2" SFM_BACKEND_CAMERA_MODE="$4" \
+    SFM_BACKEND_MASK_DIR="$mask_dir" bash "$repo_root/tools/sfm/backends/$COLMAP_METHOD.sh"
+}
+
 reconstruct() {
   echo "[étape $(date '+%H:%M:%S')] reconstruction COLMAP ($COLMAP_METHOD)"
-  SFM_RECONSTRUCT_IMAGES="$images" SFM_RECONSTRUCT_DIR="$sfm" \
-    bash "$repo_root/tools/sfm/sfm_reconstruct.sh"
+  run_backend "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
   if [[ "$PIPELINE_RESUME" == true ]]; then
     "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
   fi
@@ -76,11 +89,8 @@ if [[ "$COLMAP_METHOD" == spirula && "$SFM_CAMERA_SPLIT" == true ]]; then
   fi
   if ((split_status == 0)); then
     echo "[étape $(date '+%H:%M:%S')] SfM avec une caméra par modèle initial"
-    SFM_RECONSTRUCT_IMAGES="$OUTPUT_DIR/sfm_cameras/images" \
-      SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
-      SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
-      SFM_RECONSTRUCT_CAMERA_MODE=folder \
-      bash "$repo_root/tools/sfm/sfm_reconstruct.sh"
+    run_backend "$OUTPUT_DIR/sfm_cameras/images" "$OUTPUT_DIR/sfm_cameras/sfm" \
+      "$OUTPUT_DIR/sfm_cameras/masks" folder
     "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
     "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
   elif ((split_status != 3)); then

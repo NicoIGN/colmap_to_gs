@@ -71,6 +71,7 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 - Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
 
 ## Pièges généraux
+- Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
 - `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
 - `colmap_split_blocks.py` ignore ou refuse les points sans track.
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.

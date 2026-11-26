@@ -459,7 +459,7 @@ prepare_blocks() {
         export HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}"
         export HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"
         export HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}"
-        bash "$repo_root/tools/sfm/sfm_core.sh" --sfm-dir "$SFM_DIR/hloc" --images-dir "$IMAGES_DIR" --force
+        bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$SFM_DIR/hloc" --images-dir "$IMAGES_DIR" --force
       )
     fi
     "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
@@ -490,7 +490,7 @@ prepare_blocks() {
       export SFM_MAX_ERROR SFM_MIN_INLIERS SFM_MIN_TRI_ANGLE SFM_SP_BA_LOSS SFM_SP_BA_LOSS_PARAM
       export SFM_SP_PAIR_MAX_DISTANCE SFM_SP_PREFILTER_NEIGHBORS
       [[ "$SFM_MASKS" != on ]] || export SFM_SP_REUSE_FEATURES=redo
-      bash "$repo_root/tools/sfm/sfm_core.sh" --sfm-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --force
+      bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --force
     )
   fi
 

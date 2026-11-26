@@ -55,7 +55,7 @@ prepare() {
     "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py"
     [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
-  bash "$repo_root/tools/sfm/sfm_core.sh" --sfm-dir "$sfm" --images-dir "$selected"
+  bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$sfm" --images-dir "$selected"
   if [[ "$COLMAP_USE_MVS" == true ]]; then
     begin_stage "densification MVS"
     if [[ ! -s "$sfm/mvs/sparse/0/points3D.bin" ]]; then
