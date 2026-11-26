@@ -17,16 +17,27 @@ case "$COLMAP_METHOD" in
   spirula)
     prepare_args=(--no-prepare)
     [[ "${SFM_PREPARE_IMAGES:-false}" != true ]] || prepare_args=(--prepare)
+    [[ "${SFM_SP_PRESET:-}" != panoramax ]] || prepare_args=(--prepare)
     exposure_args=()
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       exposure_args=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
     metric_gps=none
+    # Sans inputs.json (Panoramax), Spirula choisit le mode GPS lui-même.
+    [[ -f "$OUTPUT_DIR/inputs.json" ]] || metric_gps=auto
     sensor_args=(--no-sensor-pairs)
+    if [[ "$metric_gps" == auto ]]; then sensor_args=(); fi
+    camera_model_args=()
+    [[ -z "$SFM_CAMERA_MODEL" ]] || camera_model_args=(--camera-model "$SFM_CAMERA_MODEL")
+    pair_args=()
+    if [[ -n "${SFM_SP_PAIR_MAX_DISTANCE:-}" ]]; then
+      pair_args=(--max-distance "$SFM_SP_PAIR_MAX_DISTANCE"
+        --metadata-dir "${SFM_SP_METADATA_DIR:?SFM_SP_METADATA_DIR requis avec SFM_SP_PAIR_MAX_DISTANCE}")
+    fi
     positions_args=()
     if [[ -n "$SFM_SP_METRIC_POSITIONS" ]]; then
       positions_args=(--metric-positions "$SFM_SP_METRIC_POSITIONS")
       echo "[COLMAP] Spirula, positions métriques : $SFM_SP_METRIC_POSITIONS (GPS EXIF ignoré)."
-    elif [[ -z "$GEOREF_GPX_FILE" ]]; then
+    elif [[ -z "$GEOREF_GPX_FILE" && -f "$OUTPUT_DIR/inputs.json" ]]; then
       metric_gps="$("$PYTHON_BIN" -c \
         'import json,sys; print(json.load(open(sys.argv[1]))["gps_exif"]["metric_gps"])' \
         "$OUTPUT_DIR/inputs.json")"
@@ -49,9 +60,9 @@ case "$COLMAP_METHOD" in
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
       --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
-      --camera-mode "$camera_mode" --camera-model "$SFM_CAMERA_MODEL" \
+      --camera-mode "$camera_mode" ${camera_model_args[@]+"${camera_model_args[@]}"} \
       --metric-gps "$metric_gps" ${sensor_args[@]+"${sensor_args[@]}"} \
-      ${positions_args[@]+"${positions_args[@]}"} \
+      ${positions_args[@]+"${positions_args[@]}"} ${pair_args[@]+"${pair_args[@]}"} \
       --threads "$NUM_CPUS" ${mask_args[@]+"${mask_args[@]}"} \
       ${exposure_args[@]+"${exposure_args[@]}"}
     ;;
