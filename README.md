@@ -115,28 +115,6 @@ python3 tools/viewer/server.py /chemin/vers/scene.splat
 
 L'interface permet d'importer une scène 3DGS et d'y ajouter des données externes alignées sur le splat (LiDAR, CityJSON, GeoJSON, GeoPackage, COLMAP). Détails dans la [documentation du viewer](tools/viewer/README.md).
 
-### Convertir et visualiser un splat en 3D Tiles
-
-Le fichier `.splat` géoréférencé (repère ENU) se convertit en tileset 3D Tiles,
-puis s'ouvre dans le viewer HTML avec fond OpenStreetMap. Prérequis, une fois :
-
-```bash
-npm install --global 3dgs-ply-3dtiles-converter
-```
-
-```bash
-# Conversion (--georef-summary est facultatif)
-python3 tools/export/export_3dtiles.py \
-  --input /chemin/vers/scene.splat \
-  --output-dir /chemin/vers/scene_tiles \
-  --no-open-inspector
-
-# Visualisation
-bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
-```
-
-Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/export/export_3dtiles.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
-
 
 ### Documentation des outils
 
