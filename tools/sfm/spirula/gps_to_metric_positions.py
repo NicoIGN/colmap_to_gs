@@ -16,6 +16,8 @@ import re
 import sys
 from pathlib import Path
 
+from tqdm import tqdm
+
 WGS84_A = 6378137.0
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 IMAGE_ID_RE = re.compile(r"_(\d+)\.(?:jpe?g|png)$", re.IGNORECASE)
@@ -77,14 +79,14 @@ def convert(events_path: Path, pos_path: Path, images: list[str]) -> list[str]:
     rows = read_pos(pos_path)
     origin = (rows[0][1], rows[0][2], rows[0][3])
     lines = []
-    for name in images:
+    for name in tqdm(images, desc="Positions", unit="img", file=sys.stderr):
         try:
             index = image_id(name)
             if index not in events:
                 raise ValueError(f"index {index} absent de {events_path}")
             lat, lon, height = interpolate(rows, events[index])
         except ValueError as error:
-            print(f"Avertissement : image ignorée ({name}) : {error}", file=sys.stderr)
+            tqdm.write(f"Avertissement : image ignorée ({name}) : {error}", file=sys.stderr)
             continue
         x, y, z = to_enu(lat, lon, height, origin)
         lines.append(f"{Path(name).name} {x:.4f} {y:.4f} {z:.4f}")
