@@ -88,28 +88,17 @@ bash scripts/images_to_3dgs.sh /chemin/config_image.sh
 bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
-**Soumission à un cluster Slurm** — utiliser les lanceurs `launch_*` ci-dessous
-depuis le nœud de connexion. Ils lisent les ressources `SLURM_*` de la
-configuration et appellent eux-mêmes `sbatch` : les calculs s'exécutent sur les
-nœuds alloués, avec un GPU par bloc actif et au plus
-`NUM_GPUS` blocs simultanés. Les lanceurs se démarrent avec
-`bash`, pas avec `sbatch` ; c'est le choix du script `launch_*` qui déclenche
-la soumission Slurm.
+**Sur un cluster Slurm**, lancer les scripts `launch_*` depuis le nœud de connexion
+(avec `bash`, pas `sbatch`) : ils soumettent eux-mêmes les calculs. Voir le
+[guide Bash / Slurm](doc/lancement_bash_slurm.md).
 
 ```bash
-# Images locales → 3DGS
 bash scripts/launch_images_to_3dgs.sh /chemin/config_image.sh
-
-# Panoramax → 3DGS
 bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
-Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md) et les
-[exemples de configuration complète](scripts/README.md) pour les paramètres
-commentés de chaque pipeline.
-
-Les installations, données attendues, paramètres et sorties sont décrits dans
-le README du pipeline choisi.
+Paramètres, données attendues et sorties : voir le README du pipeline choisi,
+et [les exemples de configuration](scripts/README.md).
 
 ### Convertir et visualiser un splat en 3D Tiles
 
