@@ -78,12 +78,19 @@ def convert(events_path: Path, pos_path: Path, images: list[str]) -> list[str]:
     origin = (rows[0][1], rows[0][2], rows[0][3])
     lines = []
     for name in images:
-        index = image_id(name)
-        if index not in events:
-            raise ValueError(f"Index {index} absent de {events_path} (image {name})")
-        lat, lon, height = interpolate(rows, events[index])
+        try:
+            index = image_id(name)
+            if index not in events:
+                raise ValueError(f"index {index} absent de {events_path}")
+            lat, lon, height = interpolate(rows, events[index])
+        except ValueError as error:
+            print(f"Avertissement : image ignorée ({name}) : {error}", file=sys.stderr)
+            continue
         x, y, z = to_enu(lat, lon, height, origin)
         lines.append(f"{Path(name).name} {x:.4f} {y:.4f} {z:.4f}")
+    if not lines:
+        raise ValueError("Aucune image n'a de position")
+    print(f"{len(lines)}/{len(images)} images écrites", file=sys.stderr)
     return lines
 
 
