@@ -7,6 +7,7 @@ set -uo pipefail
 tests_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd "$tests_dir/.." && pwd)"
 python_bin="${PYTHON_BIN:-python3}"
+export PYTHONPATH="$repo_root${PYTHONPATH:+:$PYTHONPATH}"
 phase=""
 
 while [[ $# -gt 0 ]]; do

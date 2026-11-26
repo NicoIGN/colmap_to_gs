@@ -35,6 +35,7 @@ conda activate colmap_to_gs_copilot
 ```
 
 Il ne contient pas `fiona` (requis par `tools/georef/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
+Il ne contient pas `pyogrio` (requis par `tools/vector/requirements.txt` et `tests/vector/test_fetch_vector.py`) : `pip install pyogrio` si ce test est lancé.
 
 Paquets utilisés par les tests et le pipeline :
 - Tests images/Spirula : `pillow numpy opencv-python-headless tqdm scipy plyfile`

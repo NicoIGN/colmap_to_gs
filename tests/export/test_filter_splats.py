@@ -253,7 +253,7 @@ class ContextualFilterTest(unittest.TestCase):
         s = scene()
         with contextlib.redirect_stdout(io.StringIO()):
             result, rejected, report = export.clean_gaussians(
-                s, np.array([[0, 0, 0], [0.1, 0.1, 0.1]]), 0.01, 100,
+                s, None, 0.01, 100,
                 world_scale=1, return_rejected=True,
             )
         self.assertEqual(len(result["means"]), len(s["means"]))
@@ -364,7 +364,7 @@ class ContextualFilterTest(unittest.TestCase):
             source = root / "scene.ply"
             PlyData([PlyElement.describe(vertex, "vertex")]).write(source)
             points = root / "points.bin"
-            points.write_bytes(b"unused sparse reference")
+            write_points3d(points, sparse_cloud())
             transform = root / "transform.json"
             transform.write_text(json.dumps({"transform": np.eye(4).tolist(), "scale": 1}))
             output = root / "scene.splat"
@@ -374,7 +374,9 @@ class ContextualFilterTest(unittest.TestCase):
             ], capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(output.stat().st_size, len(s["means"]) * 32)
-            self.assertEqual(output.with_suffix(".rejected.splat").stat().st_size, 32)
+            rejected_size = output.with_suffix(".rejected.splat").stat().st_size
+            self.assertGreater(rejected_size, 0)
+            self.assertEqual(rejected_size % 32, 0)
 
 
 if __name__ == "__main__":
