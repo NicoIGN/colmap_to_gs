@@ -22,13 +22,18 @@ case "$COLMAP_METHOD" in
       exposure_args=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
     metric_gps=none
     sensor_args=(--no-sensor-pairs)
-    if [[ -z "$GEOREF_GPX_FILE" ]]; then
+    positions_args=()
+    if [[ -n "$SFM_SP_METRIC_POSITIONS" ]]; then
+      positions_args=(--metric-positions "$SFM_SP_METRIC_POSITIONS")
+      echo "[COLMAP] Spirula, positions métriques : $SFM_SP_METRIC_POSITIONS (GPS EXIF ignoré)."
+    elif [[ -z "$GEOREF_GPX_FILE" ]]; then
       metric_gps="$("$PYTHON_BIN" -c \
         'import json,sys; print(json.load(open(sys.argv[1]))["gps_exif"]["metric_gps"])' \
         "$OUTPUT_DIR/inputs.json")"
       [[ "$metric_gps" == none ]] || sensor_args=(--sensor-pairs --sensor-pair-radius 30)
     fi
-    echo "[COLMAP] Spirula, GPS EXIF=$metric_gps ; GPX configuré=${GEOREF_GPX_FILE:-non}."
+    [[ -n "$SFM_SP_METRIC_POSITIONS" ]] ||
+      echo "[COLMAP] Spirula, GPS EXIF=$metric_gps ; GPX configuré=${GEOREF_GPX_FILE:-non}."
     reuse_matches=redo
     [[ "${PIPELINE_RESUME:-false}" != true ]] || reuse_matches=auto
     sequence_args=(--data-type individual --sequence=)
@@ -46,6 +51,7 @@ case "$COLMAP_METHOD" in
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
       --camera-mode "$camera_mode" --camera-model "$SFM_CAMERA_MODEL" \
       --metric-gps "$metric_gps" ${sensor_args[@]+"${sensor_args[@]}"} \
+      ${positions_args[@]+"${positions_args[@]}"} \
       --threads "$NUM_CPUS" ${mask_args[@]+"${mask_args[@]}"} \
       ${exposure_args[@]+"${exposure_args[@]}"}
     ;;

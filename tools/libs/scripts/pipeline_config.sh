@@ -101,6 +101,13 @@ validate_spirula_photometric_config() {
   fi
   [[ -z "$value" || "$sfm_backend" == spirula ]] ||
     config_error "SFM_SP_IMAGE_EXPOSURE est propre au SfM Spirula."
+
+  value="${SFM_SP_METRIC_POSITIONS:-}"
+  if [[ -n "$value" ]]; then
+    [[ "$sfm_backend" == spirula ]] ||
+      config_error "SFM_SP_METRIC_POSITIONS est propre au SfM Spirula."
+    [[ -f "$value" ]] || config_error "SFM_SP_METRIC_POSITIONS introuvable : $value"
+  fi
 }
 
 reject_legacy_config() {

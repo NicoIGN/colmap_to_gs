@@ -68,6 +68,9 @@ SFM_SP_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cau
 # Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entraînement.
 # Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
 SFM_SP_IMAGE_EXPOSURE=""
+# Spirula uniquement : fichier texte « image X Y Z » (mètres, repère métrique), une ligne par image.
+# Remplace le GPS EXIF ; incompatible avec le filtrage GPS des paires. Vide = désactivé.
+SFM_SP_METRIC_POSITIONS=""
 # Nouveau OUTPUT_DIR nécessaire pour recalculer avec d'autres seuils.
 # folder : intrinsèques partagés par sous-dossier ; single : une caméra ;
 # image : intrinsèques indépendants par image.

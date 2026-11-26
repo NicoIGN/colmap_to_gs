@@ -60,6 +60,7 @@ SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
 NUM_CPUS="${NUM_CPUS:-2}"
 export NUM_CPUS
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
+SFM_SP_METRIC_POSITIONS="${SFM_SP_METRIC_POSITIONS:-}"
 SFM_CAMERA_MODEL_EXPLICIT="${SFM_CAMERA_MODEL:+true}"
 SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-}"
 init_sfm_geometry_config
@@ -128,6 +129,7 @@ Variables:
   SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
   NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 2)
   SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
+  SFM_SP_METRIC_POSITIONS   Spirula metric positions file (image X Y Z, metres; empty: EXIF GPS)
   SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
   SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
   SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (6)
@@ -157,6 +159,7 @@ Variables:
 Existing SfM and a complete matching block split are reused. Incomplete or
 mismatched split folders are never deleted automatically.
 SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
+SFM_SP_METRIC_POSITIONS (image X Y Z per line) replaces EXIF GPS; cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
 EOF
 }
 
@@ -196,6 +199,12 @@ validate_sfm_geometry_config
 validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" "$COLMAP_METHOD"
 if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
   die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
+fi
+if [[ -n "$SFM_SP_METRIC_POSITIONS" ]]; then
+  [[ -f "$SFM_SP_METRIC_POSITIONS" ]] ||
+    die "SFM_SP_METRIC_POSITIONS introuvable : $SFM_SP_METRIC_POSITIONS"
+  [[ -z "$SFM_SP_PAIR_MAX_DISTANCE" ]] ||
+    die "SFM_SP_METRIC_POSITIONS n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
 fi
 ((config_errors == 0)) || exit 1
 
@@ -488,6 +497,8 @@ prepare_blocks() {
     sfm_args+=("${camera_args[@]}")
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
+    [[ -z "$SFM_SP_METRIC_POSITIONS" ]] ||
+      sfm_args+=(--metric-positions "$SFM_SP_METRIC_POSITIONS")
     sfm_args+=(--threads "$NUM_CPUS")
     if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
       sfm_args+=(--max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --metadata-dir "$DIR/metadata")

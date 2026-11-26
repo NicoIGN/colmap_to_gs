@@ -27,7 +27,7 @@ option_names=(
   prefilter-neighbors
   max-error min-inliers min-tri-angle ba-loss ba-loss-param
   camera-mode camera-model focal
-  metric-gps sensor-pair-radius
+  metric-gps sensor-pair-radius metric-positions
   masks feature-masks image-exposure
   reuse-features reuse-matches
   threads device
@@ -104,6 +104,8 @@ Caméras :
                              Repère ENU en mètres à partir du GPS EXIF
   --sensor-pairs             Apparie aussi les images proches selon le GPS
   --sensor-pair-radius X     Rayon GPS en mètres ; omission = Spirula (20)
+  --metric-positions FILE    Positions métriques par image (image X Y Z) ; remplace
+                             le GPS EXIF et désactive --metric-gps et --sensor-pairs
 
 Masques et exposition :
   --masks DIR                Masques d'extraction
@@ -390,6 +392,15 @@ show_gps_command() {
   printf ' %q' "$@"
   printf '\n'
 }
+
+metric_positions="$(gps_option metric-positions)"
+if [[ -n "$metric_positions" ]]; then
+  [[ -f "$metric_positions" ]] || die "Fichier de positions introuvable : $metric_positions"
+  [[ -z "$(gps_option max-distance)" ]] ||
+    die "--metric-positions et --max-distance sont incompatibles."
+  set_option metric-gps none
+  sensor_pairs=false
+fi
 
 max_distance="$(gps_option max-distance)"
 if [[ -n "$max_distance" ]]; then
