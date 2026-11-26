@@ -61,7 +61,15 @@ Le projet propose 3 pipelines complets : à partir d'une vidéo, d'un dossier d'
 
 > **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours, le moteur d'entraînement et le pipeline adaptés à votre point de départ.
 
-Paramètres, données attendues et sorties : voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet), le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
+Exemples de lancement :
+
+```bash
+bash scripts/images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/videos_to_3dgs.sh /chemin/config_video.sh
+bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
+```
+
+Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depuis le nœud de connexion. Voir le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
 
 ### Viewer web
 
