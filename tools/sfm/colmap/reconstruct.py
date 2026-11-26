@@ -19,9 +19,10 @@ def run(command):
 
 def reconstruct():
     env = os.environ
-    output = Path(env["OUTPUT_DIR"])
-    sfm = output / "sfm"
-    images = output / "images"
+    sfm = Path(env["SFM_BACKEND_DIR"])
+    images = Path(env["SFM_BACKEND_IMAGES"])
+    mode = env["SFM_BACKEND_CAMERA_MODE"]
+    mask_dir = env["SFM_BACKEND_MASK_DIR"]
     if sfm.exists() and any(sfm.iterdir()):
         raise ValueError(
             "Sortie COLMAP partielle : sauvegarder/déplacer sfm avant de relancer. "
@@ -50,7 +51,6 @@ def reconstruct():
         binary = env["SFM_COLMAP_BIN"]
         database = sfm / "database.db"
         gpu = "1" if env["SFM_COLMAP_USE_GPU"] == "true" else "0"
-        mode = env["SFM_CAMERA_MODE"]
         camera_flags = {
             "single": ["--ImageReader.single_camera", "1"],
             "folder": ["--ImageReader.single_camera_per_folder", "1"],
@@ -64,8 +64,8 @@ def reconstruct():
             "--SiftExtraction.max_num_features", env["SFM_ALIKED_MAX_FEATURES"],
             "--SiftExtraction.num_threads", env["NUM_CPUS"], *camera_flags,
         ]
-        if env["SFM_MASKS"] == "on":
-            command += ["--ImageReader.mask_path", output / "feature_masks"]
+        if mask_dir:
+            command += ["--ImageReader.mask_path", mask_dir]
         run(command)
         if env["SFM_COLMAP_MATCHING"] == "vocab_tree":
             raise ValueError("Le matching vocab_tree exige un vocabulaire ; utiliser exhaustive ou sequential.")

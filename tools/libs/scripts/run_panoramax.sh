@@ -454,7 +454,7 @@ prepare_blocks() {
       # Vues pinhole issues de l'équirectangulaire : le backend hloc lit ces paramètres de l'environnement.
       (
         export COLMAP_METHOD=hloc HLOC_CAMERA_MODEL=PINHOLE PYTHON_BIN OUTPUT_DIR SFM_MASKS
-        export SFM_CAMERA_MODE=single SFM_RECONSTRUCT_CAMERA_MODE=single
+        export SFM_CAMERA_MODE=single HLOC_WORK_DIR="$SFM_DIR/hloc/work"
         export SFM_PERSPECTIVE_VIEW_SIZE="$SFM_EQUIRECTANGULAR_VIEW_SIZE"
         export HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}"
         export HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"

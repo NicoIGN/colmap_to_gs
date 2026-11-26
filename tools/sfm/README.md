@@ -42,7 +42,7 @@ Le découpage équirectangulaire des images 360 (utilisé par HLOC) reste dans
 - `hloc` : SfM complet via [Hierarchical-Localization](https://github.com/cvg/Hierarchical-Localization)
   (`hloc_reconstruct.py`, extraction, appariement, triangulation pycolmap). Réglages
   `HLOC_*` : `HLOC_FEATURES`, `HLOC_MATCHER`, `HLOC_PAIRS` (retrieval ou exhaustive),
-  `HLOC_CAMERA_MODEL`. Si `SFM_MASKS=on`, les points tombant sur un masque SAM
+  `HLOC_CAMERA_MODEL`. `HLOC_WORK_DIR` fixe le workspace (cache features) ; par défaut `SFM/hloc`. Si `SFM_MASKS=on`, les points tombant sur un masque SAM
   (0 = masqué) sont retirés avant l'appariement. Le modèle `equirectangular` n'est pas
   supporté. `SFM_CAMERA_SPLIT=false` est requis. HLOC est installé par `conda_env.yml`.
 

@@ -13,7 +13,7 @@ fi
 projection_args=()
 [[ -z "$view_size" ]] || projection_args=(--perspective-view-size "$view_size")
 "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/hloc_reconstruct.py" \
-  --images "$SFM_BACKEND_IMAGES" --output "$SFM_BACKEND_DIR/sparse/0" --work "$SFM_BACKEND_DIR/hloc" \
+  --images "$SFM_BACKEND_IMAGES" --output "$SFM_BACKEND_DIR/sparse/0" --work "${HLOC_WORK_DIR:-$SFM_BACKEND_DIR/hloc}" \
   --features "$HLOC_FEATURES" --matcher "$HLOC_MATCHER" --pairs "$HLOC_PAIRS" \
   --retrieval "$HLOC_RETRIEVAL" --num-neighbors "$HLOC_NUM_NEIGHBORS" \
   --camera-model "$HLOC_CAMERA_MODEL" --camera-mode "$SFM_BACKEND_CAMERA_MODE" \

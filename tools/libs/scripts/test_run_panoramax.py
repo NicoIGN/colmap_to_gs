@@ -92,6 +92,10 @@ class BlockPipelineTest(unittest.TestCase):
                        SFM_MASKS="off", TRAIN_MASKS="off")
             result = execute("--prepare-only")
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            hloc_calls = [json.loads(line) for line in log.read_text().splitlines()
+                          if json.loads(line)[0] == "hloc"]
+            self.assertEqual(hloc_calls[0][hloc_calls[0].index("--work") + 1],
+                             str(data / "sfm/hloc/work"))
             stats = json.loads((data / "sfm/sparse/0/georef_stats.json").read_text())
             self.assertEqual(stats["mode"], "horizontal")
             commands = [json.loads(line) for line in log.read_text().splitlines()]

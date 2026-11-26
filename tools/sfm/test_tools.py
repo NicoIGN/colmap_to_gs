@@ -148,20 +148,24 @@ class ConversionTest(unittest.TestCase):
                 sparse = Path(command[command.index("--output_path") + 1])
                 shutil.copytree(self.sparse, sparse / "2")
 
+        masks = self.root / "native-masks"
         env = {
-            "OUTPUT_DIR": str(self.root / "native"), "COLMAP_METHOD": "colmap",
+            "SFM_BACKEND_DIR": str(self.root / "native/sfm"), "SFM_BACKEND_IMAGES": str(self.images),
+            "SFM_BACKEND_MASK_DIR": str(masks), "SFM_BACKEND_CAMERA_MODE": "folder",
+            "COLMAP_METHOD": "colmap",
             "SFM_COLMAP_BIN": "colmap", "SFM_COLMAP_USE_GPU": "false",
-            "SFM_COLMAP_MATCHING": "exhaustive", "SFM_CAMERA_MODE": "folder",
+            "SFM_COLMAP_MATCHING": "exhaustive",
             "SFM_CAMERA_MODEL": "opencv", "SFM_MAX_IMAGE_SIZE": "2048",
             "SFM_ALIKED_MAX_FEATURES": "4096", "NUM_CPUS": "4",
-            "SFM_MASKS": "on", "SFM_MAX_ERROR": "2", "SFM_MIN_INLIERS": "30",
+            "SFM_MAX_ERROR": "2", "SFM_MIN_INLIERS": "30",
             "SFM_MIN_TRI_ANGLE": "3",
         }
         with patch.dict(os.environ, env), patch.object(reconstruct, "run", fake_run):
             reconstruct.reconstruct()
-        self.assertIn("--ImageReader.mask_path", calls[0])
+        self.assertEqual(calls[0][calls[0].index("--ImageReader.mask_path") + 1], str(masks))
+        self.assertEqual(calls[0][calls[0].index("--image_path") + 1], str(self.images))
         self.assertEqual(calls[0][calls[0].index("--SiftExtraction.use_gpu") + 1], "0")
-        self.assertTrue((Path(env["OUTPUT_DIR"]) / "sfm/sparse/0/points3D.bin").is_file())
+        self.assertTrue((Path(env["SFM_BACKEND_DIR"]) / "sparse/0/points3D.bin").is_file())
 
     def test_ns_process_data_preserves_names_and_checks_cuda(self):
         import reconstruct
@@ -174,18 +178,19 @@ class ConversionTest(unittest.TestCase):
             shutil.copytree(self.sparse, output / "colmap/sparse/0")
 
         env = {
-            "OUTPUT_DIR": str(self.root / "ns"), "COLMAP_METHOD": "nerfstudio",
+            "SFM_BACKEND_DIR": str(self.root / "ns/sfm"), "SFM_BACKEND_IMAGES": str(self.images),
+            "SFM_BACKEND_CAMERA_MODE": "folder", "SFM_BACKEND_MASK_DIR": "",
+            "COLMAP_METHOD": "nerfstudio",
             "SFM_COLMAP_MATCHING": "exhaustive", "SFM_COLMAP_BIN": "colmap",
             "SFM_NS_PROCESS_DATA_BIN": "ns-process-data", "SFM_CAMERA_MODEL": "opencv",
         }
-        Path(env["OUTPUT_DIR"]).mkdir()
-        (Path(env["OUTPUT_DIR"]) / "images").symlink_to(self.images, target_is_directory=True)
         with patch.dict(os.environ, env), patch.object(reconstruct, "run", fake_run), \
                 patch("nerfstudio_runtime.check_runtime") as check:
             reconstruct.reconstruct()
         check.assert_called_once()
         self.assertIn("--skip-image-processing", calls[0])
-        self.assertTrue((Path(env["OUTPUT_DIR"]) / "sfm/sparse/0/images.bin").is_file())
+        self.assertEqual(calls[0][calls[0].index("--data") + 1], str(self.images))
+        self.assertTrue((Path(env["SFM_BACKEND_DIR"]) / "sparse/0/images.bin").is_file())
 
     def test_nerfstudio_worker_exports_world_frame_and_refuses_changed_signature(self):
         import train_block_nerfstudio

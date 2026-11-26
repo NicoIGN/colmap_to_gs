@@ -39,7 +39,6 @@ begin_stage() {
 }
 sfm="$OUTPUT_DIR/sfm"
 selected="$OUTPUT_DIR/images"
-sfm_masks="$OUTPUT_DIR/feature_masks"
 train_masks="$OUTPUT_DIR/train_masks"
 blocks="$OUTPUT_DIR/blocks"
 sparse="$sfm/sparse/0"
@@ -49,11 +48,9 @@ prepare() {
   begin_stage "sélection des images"
   "$PYTHON_BIN" "$script_dir/prepare_images.py"
   rm -f -- "$OUTPUT_DIR/.prepare_done"
-  feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     begin_stage "masques SfM / entraînement"
     "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py"
-    [[ "$SFM_MASKS" != on ]] || feature_args=(--feature-masks "$sfm_masks")
   fi
   bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$sfm" --images-dir "$selected"
   if [[ "$COLMAP_USE_MVS" == true ]]; then
