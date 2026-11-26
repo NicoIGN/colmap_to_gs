@@ -149,7 +149,7 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 
 ### Exemples
 
-- [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
+- [Exemples de commandes par usage](examples/README.md)
 
 ### Tests
 
@@ -159,4 +159,4 @@ Les tests Python sont dans `tests/`, en miroir de `tools/`. Depuis la racine du 
 PYTHON_BIN=python tests/run_all.sh --phase export
 ```
 
-Le détail des commandes et des prérequis est dans le [README des tests](tests/README.md).
+Détails dans le [README des tests](tests/README.md).
