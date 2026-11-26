@@ -57,21 +57,11 @@ Trois étapes :
 
 ## 3. Pipelines principaux
 
+Le projet propose 3 pipelines complets : à partir d'une vidéo, d'un dossier d'images ou d'un flux Panoramax, ils calculent un modèle 3D Gaussian Splatting. Des informations de positionnement des images permettent de le géoréférencer. Chaque pipeline existe en version exécutable sur la machine courante et en version lançable sur un serveur Slurm. Le résultat est un fichier `.splat` accompagné d'un fichier JSON de métadonnées.
+
 > **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours, le moteur d'entraînement et le pipeline adaptés à votre point de départ.
 
-### Pipelines complets
-
-Les pipelines images, vidéo et Panoramax existent en deux versions :
-
-- sur la machine courante : `scripts/<pipeline>.sh` ;
-- sur un serveur Slurm : `scripts/launch_<pipeline>.sh`, à lancer avec `bash` depuis le nœud de connexion.
-
 Paramètres, données attendues et sorties : voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet), le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
-
-### Formats d'export
-
-Les formats `.splat` et `.ply` sont gérés, et un export en 3D Tiles est proposé.
-Les outils et leurs options sont listés dans le [README des exports](tools/export/README.md).
 
 ### Viewer web
 
