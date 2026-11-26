@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Cœur SfM partagé par run_standard_images.sh (images, vidéo) et run_panoramax.sh.
-# Gère la reprise, la reconstruction via tools/sfm/backends/$COLMAP_METHOD.sh, le split par caméra
-# et la vérification des .bin. Les différences de source passent par l'environnement.
+# Gère la reprise et la vérification des sorties. Chaque méthode est un backend
+# tools/sfm/backends/$COLMAP_METHOD.sh appelé selon trois étapes (SFM_BACKEND_STEP) :
+#   recover     réparation d'une interruption précédente (sans objet pour la plupart)
+#   reconstruct calcul du SfM
+#   refine      étape après vérification (ex. séparation par caméra)
+# Les différences de source passent par l'environnement.
 # Usage : sfm_run.sh --sfm-dir DIR --images-dir DIR [--force]
 #   --force : relance toujours la reconstruction (sinon, un sparse complet est réutilisé).
 set -Eeuo pipefail
@@ -23,10 +27,10 @@ die() { echo "[ERREUR] $*" >&2; exit 1; }
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
 PIPELINE_RESUME="${PIPELINE_RESUME:-false}"
-SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
+export SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
+export SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
 SFM_MASKS="${SFM_MASKS:-off}"
 sparse="$sfm/sparse/0"
-camera_split="$repo_root/tools/sfm/spirula/camera_split.py"
 
 case "$COLMAP_METHOD" in
   spirula|colmap|nerfstudio|hloc|orientations) ;;
@@ -44,25 +48,21 @@ sparse_ready() {
   fi
 }
 
-# Arguments : images, dossier SfM, dossier de masques, mode caméra.
-run_backend() {
+# Arguments : étape, images, dossier SfM, dossier de masques, mode caméra.
+run_step() {
   local mask_dir=""
-  [[ "$SFM_MASKS" != on ]] || mask_dir="$3"
-  SFM_BACKEND_IMAGES="$1" SFM_BACKEND_DIR="$2" SFM_BACKEND_CAMERA_MODE="$4" \
-    SFM_BACKEND_MASK_DIR="$mask_dir" bash "$repo_root/tools/sfm/backends/$COLMAP_METHOD.sh"
+  [[ "$SFM_MASKS" != on ]] || mask_dir="$4"
+  SFM_BACKEND_STEP="$1" SFM_BACKEND_IMAGES="$2" SFM_BACKEND_DIR="$3" \
+    SFM_BACKEND_CAMERA_MODE="$5" SFM_BACKEND_MASK_DIR="$mask_dir" \
+    bash "$repo_root/tools/sfm/backends/$COLMAP_METHOD.sh"
 }
 
 reconstruct() {
   echo "[étape $(date '+%H:%M:%S')] reconstruction COLMAP ($COLMAP_METHOD)"
-  run_backend "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
-  if [[ "$PIPELINE_RESUME" == true ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
-  fi
+  run_step reconstruct "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
 }
 
-if [[ "$COLMAP_METHOD" == spirula ]]; then
-  "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"
-fi
+run_step recover "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
 if [[ "$force" == true ]]; then
   reconstruct
 elif ! sparse_ready; then
@@ -78,25 +78,5 @@ fi
 for name in cameras images points3D; do
   [[ -s "$sparse/$name.bin" ]] || die "SfM incomplet : $name.bin"
 done
-
-if [[ "$COLMAP_METHOD" == spirula && "$SFM_CAMERA_SPLIT" == true ]]; then
-  split_args=(--output "$OUTPUT_DIR" --min-images "$SFM_CAMERA_SPLIT_MIN_IMAGES")
-  split_status=0
-  if [[ "$SFM_MASKS" == on ]]; then
-    "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" --masks "$OUTPUT_DIR/feature_masks" || split_status=$?
-  else
-    "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" || split_status=$?
-  fi
-  if ((split_status == 0)); then
-    echo "[étape $(date '+%H:%M:%S')] SfM avec une caméra par modèle initial"
-    run_backend "$OUTPUT_DIR/sfm_cameras/images" "$OUTPUT_DIR/sfm_cameras/sfm" \
-      "$OUTPUT_DIR/sfm_cameras/masks" folder
-    "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
-    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
-  elif ((split_status != 3)); then
-    die "Séparation des caméras impossible."
-  fi
-fi
-if [[ "$COLMAP_METHOD" != spirula ]]; then
-  "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
-fi
+run_step refine "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
+"$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"

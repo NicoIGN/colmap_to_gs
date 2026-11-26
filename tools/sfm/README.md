@@ -15,7 +15,7 @@ bash tools/sfm/run_standard_images.sh /chemin/config.sh
 | Emplacement | Contenu |
 |---|---|
 | `run_standard_images.sh`, `sfm_run.sh`, `param.default.sh` | Entrée commune, cœur SfM (reprise, split, vérification), défauts |
-| `backends/` | Un script par méthode : `spirula.sh`, `colmap.sh`, `nerfstudio.sh`, `hloc.sh`, `orientations.sh` |
+| `backends/` | Un script par méthode : `spirula.sh`, `colmap.sh`, `nerfstudio.sh`, `hloc.sh`, `orientations.sh`. Étapes via `SFM_BACKEND_STEP` : `recover`, `reconstruct`, `refine` (les méthodes sans objet sortent à `recover`/`refine`) |
 | `prepare_panoramax.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
 | `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |
 | `spirula/` | Scripts qui appellent Spirula (`sfm_spirula.sh`, `camera_split.py`, `spirula_progress.py`) |

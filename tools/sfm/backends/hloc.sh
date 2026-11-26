@@ -2,6 +2,8 @@
 # Backend HLOC : extraction, appariement et triangulation pycolmap (COLMAP_METHOD=hloc).
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Étapes recover et refine : sans objet pour cette méthode.
+[[ "${SFM_BACKEND_STEP:-reconstruct}" == reconstruct ]] || exit 0
 mask_args=()
 [[ -z "$SFM_BACKEND_MASK_DIR" ]] || mask_args=(--feature-masks "$SFM_BACKEND_MASK_DIR")
 view_size="${SFM_PERSPECTIVE_VIEW_SIZE:-}"

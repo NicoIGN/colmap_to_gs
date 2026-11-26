@@ -13,6 +13,24 @@ SCRIPT = Path(__file__).with_name("run_panoramax.sh").resolve()
 REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 
+def write_valid_sparse(folder):
+    """Écrit un petit modèle COLMAP valide (lu par resume.py après reconstruction)."""
+    import numpy as np
+    import pycolmap
+    model = pycolmap.Reconstruction()
+    model.add_camera_with_trivial_rig(pycolmap.Camera(
+        model="PINHOLE", width=16, height=16, params=[8, 8, 8, 8], camera_id=1))
+    model.add_image_with_trivial_frame(
+        pycolmap.Image(name="img.jpg", camera_id=1, image_id=1), pycolmap.Rigid3d())
+    model.images[1].points2D = [pycolmap.Point2D([4., 4.])]
+    track = pycolmap.Track()
+    track.add_element(1, 0)
+    point_id = model.add_point3D(np.array([0., 0., 1.]), track)
+    model.images[1].set_point3D_for_point2D(0, point_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    model.write(folder)
+
+
 class BlockPipelineTest(unittest.TestCase):
     def test_hloc_panorama_prepare_georeferences_before_split_and_checks_reuse(self):
         try:
@@ -201,8 +219,10 @@ class BlockPipelineTest(unittest.TestCase):
             images = data / "images"
             sparse.mkdir(parents=True)
             images.mkdir()
+            template = root / "sparse-template"
+            write_valid_sparse(template)
             for name in ("cameras.bin", "images.bin", "points3D.bin"):
-                (sparse / name).write_bytes(b"colmap")
+                shutil.copyfile(template / name, sparse / name)
             from PIL import Image
             Image.new("RGB", (8, 8)).save(images / "img.jpg")
 
@@ -245,14 +265,14 @@ class BlockPipelineTest(unittest.TestCase):
             spirula = fake_bin / "spirula"
             spirula.write_text(
                 f"#!{sys.executable}\n"
-                "import json, os, sys\n"
+                "import json, os, shutil, sys\n"
                 "args = sys.argv[1:]\n"
                 "with open(os.environ['COMMAND_LOG'], 'a') as f: f.write(json.dumps(['spirula'] + args) + '\\n')\n"
                 "if args[0] == 'sfm':\n"
                 "  status = int(os.environ.get('TEST_SFM_STATUS', '0'))\n"
                 "  if status: sys.exit(status)\n"
                 "  out=args[args.index('--output')+1]; sparse=os.path.join(out,'sparse','0'); os.makedirs(sparse,exist_ok=True)\n"
-                "  for name in ('cameras.bin','images.bin','points3D.bin'): open(os.path.join(sparse,name),'wb').write(b'colmap')\n"
+                "  for name in ('cameras.bin','images.bin','points3D.bin'): shutil.copyfile(os.path.join(os.environ['SPARSE_TEMPLATE'],name),os.path.join(sparse,name))\n"
                 "if args[0] == 'train':\n"
                 "  prefix = args[args.index('--output-dir-prefix') + 1]\n"
                 "  name = args[args.index('--output-dir-name') + 1]\n"
@@ -272,6 +292,7 @@ class BlockPipelineTest(unittest.TestCase):
                 DIR=str(source),
                 OUTPUT_DIR=str(data),
                 SPIRULA_BIN=str(spirula),
+                SPARSE_TEMPLATE=str(template),
                 PYTHON_BIN="python3",
                 PATH=f"{fake_bin}:{os.environ['PATH']}",
                 REAL_PYTHON=REAL_PYTHON,

@@ -1,7 +1,37 @@
 #!/usr/bin/env bash
 # Backend Spirula : appelle tools/sfm/spirula/sfm_spirula.sh avec la config exportée.
+# Étapes : recover (interruption précédente), refine (séparation par caméra), reconstruct (défaut).
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../.." && pwd)"
+camera_split="$repo_root/tools/sfm/spirula/camera_split.py"
+
+refine_camera_split() {
+  [[ "${SFM_CAMERA_SPLIT:-false}" == true ]] || return 0
+  local split_args=(--output "$OUTPUT_DIR" --min-images "$SFM_CAMERA_SPLIT_MIN_IMAGES")
+  local mask_args=() split_status=0
+  [[ -z "${SFM_BACKEND_MASK_DIR:-}" ]] || mask_args=(--masks "$SFM_BACKEND_MASK_DIR")
+  "$PYTHON_BIN" "$camera_split" plan "${split_args[@]}" ${mask_args[@]+"${mask_args[@]}"} ||
+    split_status=$?
+  if ((split_status == 0)); then
+    echo "[étape $(date '+%H:%M:%S')] SfM avec une caméra par modèle initial"
+    local sub_masks=""
+    [[ -z "${SFM_BACKEND_MASK_DIR:-}" ]] || sub_masks="$OUTPUT_DIR/sfm_cameras/masks"
+    SFM_BACKEND_STEP=reconstruct SFM_BACKEND_IMAGES="$OUTPUT_DIR/sfm_cameras/images" \
+      SFM_BACKEND_DIR="$OUTPUT_DIR/sfm_cameras/sfm" SFM_BACKEND_MASK_DIR="$sub_masks" \
+      SFM_BACKEND_CAMERA_MODE=folder bash "${BASH_SOURCE[0]}"
+    "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
+  elif ((split_status != 3)); then
+    die "Séparation des caméras impossible."
+  fi
+}
+die() { echo "[ERREUR] $*" >&2; exit 1; }
+
+case "${SFM_BACKEND_STEP:-reconstruct}" in
+  recover) "$PYTHON_BIN" "$camera_split" recover --output "$OUTPUT_DIR"; exit 0 ;;
+  refine) refine_camera_split; exit 0 ;;
+  reconstruct) ;;
+  *) echo "Étape inconnue : $SFM_BACKEND_STEP" >&2; exit 2 ;;
+esac
 prepare_args=(--no-prepare)
 [[ "${SFM_PREPARE_IMAGES:-false}" != true ]] || prepare_args=(--prepare)
 [[ "${SFM_SP_PRESET:-}" != panoramax ]] || prepare_args=()
