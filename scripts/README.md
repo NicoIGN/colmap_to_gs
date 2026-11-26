@@ -25,7 +25,7 @@ Préparation    prepare_video_frames.py    prepare_images.py          download.p
                │                          │                          │
                ├──────────────────────────┘                          ▼
                ▼                                                     run_panoramax.sh
-Pilotes        sfm_run.sh                                            │
+Pilotes        run_standard_images.sh                                │
                │                                                     │
 SfM            sfm_core.sh ◀─────────────────────────────────────────┘
                │

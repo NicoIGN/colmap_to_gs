@@ -18,7 +18,7 @@ Après avoir préparé un fichier `config-images.sh` avec `SFM_IMAGES_DIR`,
 `OUTPUT_DIR` et la méthode `COLMAP_METHOD` souhaitée :
 
 ```bash
-bash "$GIT_ROOT/tools/sfm/sfm_run.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/tools/sfm/run_standard_images.sh" "$DATA_ROOT/config-images.sh"
 ```
 
 Cette commande prépare le modèle sans entraîner de 3DGS. Pour produire aussi

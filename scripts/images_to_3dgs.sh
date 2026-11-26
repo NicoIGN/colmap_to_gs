@@ -164,7 +164,7 @@ check_filtered_sparse() {
 
 prepare() {
   set_stage "production COLMAP"
-  bash "$repo_root/tools/sfm/sfm_run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  bash "$repo_root/tools/sfm/run_standard_images.sh" "$config" --images "$SFM_IMAGES_DIR"
   set_stage "géoréférencement"
   georef_run "$sfm_model"
   georef_lidar_env

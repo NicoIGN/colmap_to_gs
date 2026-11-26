@@ -125,7 +125,7 @@ class ConversionTest(unittest.TestCase):
             'SPLIT_NUM_BLOCKS=1\nSPIRULA_BIN=true\n'
         )
         for script, args in (
-            (ROOT / "tools/sfm/sfm_run.sh", []),
+            (ROOT / "tools/sfm/run_standard_images.sh", []),
             (ROOT / "scripts/images_to_3dgs.sh", ["--phase", "prepare"]),
         ):
             result = subprocess.run(["bash", str(script), str(config), *args],

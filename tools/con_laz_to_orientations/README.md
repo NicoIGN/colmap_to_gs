@@ -24,7 +24,7 @@ LIDAR_PLY="/chemin/ori/points.ply"
 SFM_MASKS=off
 ```
 
-Puis lancer `bash tools/sfm/sfm_run.sh CONFIG` pour le modèle COLMAP
+Puis lancer `bash tools/sfm/run_standard_images.sh CONFIG` pour le modèle COLMAP
 seul, ou `bash scripts/images_to_3dgs.sh CONFIG` pour le pipeline complet.
 
 ## Entrées

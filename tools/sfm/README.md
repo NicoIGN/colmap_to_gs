@@ -6,15 +6,15 @@
 La configuration est un fichier Bash de confiance :
 
 ```bash
-bash tools/sfm/sfm_run.sh /chemin/config.sh
+bash tools/sfm/run_standard_images.sh /chemin/config.sh
 ```
 
 **Organisation.** Tout le code SfM est regroupé ici, avec une interface commune
-(`sfm_run.sh` puis `sfm_reconstruct.sh`, qui route selon `COLMAP_METHOD`) :
+(`run_standard_images.sh` puis `sfm_reconstruct.sh`, qui route selon `COLMAP_METHOD`) :
 
 | Emplacement | Contenu |
 |---|---|
-| `sfm_run.sh`, `sfm_reconstruct.sh`, `param.default.sh` | Entrée commune, dispatch par méthode, défauts |
+| `run_standard_images.sh`, `sfm_reconstruct.sh`, `param.default.sh` | Entrée commune, dispatch par méthode, défauts |
 | `prepare_panoramax.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
 | `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |
 | `spirula/` | Scripts qui appellent Spirula (`sfm_spirula.sh`, `camera_split.py`, `spirula_progress.py`) |

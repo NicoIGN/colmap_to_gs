@@ -478,7 +478,7 @@ prepare_blocks() {
       printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
       mv -- "$BLOCKS_DIR" "$archive"
     fi
-    # Cœur SfM partagé avec sfm_run.sh ; les différences Panoramax passent par l'environnement.
+    # Cœur SfM partagé avec run_standard_images.sh ; les différences Panoramax passent par l'environnement.
     (
       export SFM_SP_PRESET=panoramax SFM_RECONSTRUCT_SOURCE="$DIR" SFM_SP_IMAGES_DIR="$IMAGES_DIR"
       export SFM_SP_METADATA_DIR="$DIR/metadata" SFM_SP_REUSE_MATCHES=redo

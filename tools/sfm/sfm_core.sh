@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cœur SfM partagé par sfm_run.sh (images, vidéo) et run_panoramax.sh.
+# Cœur SfM partagé par run_standard_images.sh (images, vidéo) et run_panoramax.sh.
 # Les différences de source sont passées par l'environnement (voir sfm_reconstruct.sh).
 # Usage : sfm_core.sh --sfm-dir DIR --images-dir DIR [--force]
 #   --force : relance toujours la reconstruction (sinon, un sparse complet est réutilisé).
