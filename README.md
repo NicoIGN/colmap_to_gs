@@ -47,7 +47,13 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 ## 2. Installation
 
-L'environnement Conda se crée depuis le fichier de sa plateforme dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`), par exemple `conda env create --yes --file environment/macos/conda_env.yml`. Il fournit notamment `pycolmap`. HLOC (et LightGlue) s'installe ensuite avec `bash install/colmap/install-hloc.sh` : ne pas le poser à la main avec pip, il peut remplacer numpy et torch. Voir le [README SfM](tools/sfm/README.md) pour l'usage, et [install/spirula](install/spirula/README.md) pour Spirula.
+Trois étapes :
+
+1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`.
+
+2. **Spirula Studio** : à compiler avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), pour les masques natifs.
+
+3. **COLMAP et HLOC** : si le SfM utilise HLOC, l'installer avec `bash install/colmap/install-hloc.sh`. Ne pas le poser à la main avec pip : il peut remplacer numpy et torch. Voir le [README SfM](tools/sfm/README.md).
 
 ## 3. Pipelines principaux
 
