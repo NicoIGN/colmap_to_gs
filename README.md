@@ -53,56 +53,14 @@ L'environnement Conda se crée depuis le fichier de sa plateforme dans [`environ
 
 > **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours, le moteur d'entraînement et le pipeline adaptés à votre point de départ.
 
-Le projet est organisé en outils indépendants pour la préparation des données COLMAP,
-l'entraînement, l'export et le post-traitement, ainsi qu'en pipelines qui enchaînent ces étapes.
-
 ### Pipelines complets
 
-Les pipelines images, vidéo et Panoramax existent en deux versions : lancement sur la
-machine courante (`scripts/<pipeline>.sh`) ou sur un serveur Slurm
-(`scripts/launch_<pipeline>.sh`). Voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet),
-[le guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les scripts](scripts/README.md).
+Les pipelines images, vidéo et Panoramax existent en deux versions :
 
-### Démarrer
+- sur la machine courante : `scripts/<pipeline>.sh` ;
+- sur un serveur Slurm : `scripts/launch_<pipeline>.sh`, à lancer avec `bash` depuis le nœud de connexion.
 
-Les défauts sont chargés automatiquement depuis `config/defaults/*.default.sh`, puis
-`tools/<pipeline>/config.default.sh`. Un fichier de configuration ne contient que les surcharges :
-
-```bash
-cat > /chemin/config_image.sh <<'EOF'
-#!/usr/bin/env bash
-SFM_IMAGES_DIR="/chemin/images"
-OUTPUT_DIR="/chemin/sortie"
-EOF
-```
-
-Slurm (*Simple Linux Utility for Resource Management*) est un gestionnaire
-de ressources et de tâches de calcul utilisé sur les clusters.
-
-**Exécution directe, sans soumission Slurm** — les calculs tournent sur la
-machine courante et les blocs sont entraînés successivement. Ces commandes
-ne réservent aucune ressource Slurm, même si la configuration contient des
-paramètres `SLURM_*` :
-
-```bash
-# Images locales → 3DGS
-bash scripts/images_to_3dgs.sh /chemin/config_image.sh
-
-# Panoramax → 3DGS
-bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
-```
-
-**Sur un cluster Slurm**, lancer les scripts `launch_*` depuis le nœud de connexion
-(avec `bash`, pas `sbatch`) : ils soumettent eux-mêmes les calculs. Voir le
-[guide Bash / Slurm](doc/lancement_bash_slurm.md).
-
-```bash
-bash scripts/launch_images_to_3dgs.sh /chemin/config_image.sh
-bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
-```
-
-Paramètres, données attendues et sorties : voir le README du pipeline choisi,
-et [les exemples de configuration](scripts/README.md).
+Paramètres, données attendues et sorties : voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet), le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
 
 ### Formats d'export
 
