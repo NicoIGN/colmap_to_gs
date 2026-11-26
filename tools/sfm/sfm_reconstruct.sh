@@ -42,7 +42,7 @@ case "$COLMAP_METHOD" in
     fi
     bash "$repo_root/tools/sfm/spirula/sfm_spirula.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
-      --preset video "${prepare_args[@]}" "${sequence_args[@]}" \
+      --preset "$SFM_SP_PRESET" "${prepare_args[@]}" "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \

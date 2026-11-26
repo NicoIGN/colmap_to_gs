@@ -111,6 +111,7 @@ load_config() {
     SFM_SP_MATCHER="${SFM_SP_MATCHER:-bruteforce}"
     SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
     SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
+    SFM_SP_PRESET="${SFM_SP_PRESET:-video}"
   else
     SFM_SP_FEATURES="${SFM_SP_FEATURES:-}"
     SFM_SP_MATCHER="${SFM_SP_MATCHER:-}"
@@ -285,6 +286,7 @@ load_config() {
     config_choice SFM_SP_MATCHER "$SFM_SP_MATCHER" 'bruteforce|lightglue|loma-b128|loma-b|loma-r|loma-l|loma-g'
     config_choice SFM_SP_PAIRS "$SFM_SP_PAIRS" 'auto|prefilter|exhaustive|sequential'
     config_choice SFM_SP_QUALITY "$SFM_SP_QUALITY" 'low|medium|high|extreme'
+    config_choice SFM_SP_PRESET "$SFM_SP_PRESET" 'video|panoramax'
   fi
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
   config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'true|false'

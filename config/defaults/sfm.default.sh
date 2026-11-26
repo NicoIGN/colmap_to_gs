@@ -63,6 +63,8 @@ SFM_SP_PREFILTER_NEIGHBORS="16"
 # low|medium|high|extreme : préréglage Spirula ; high plafonne les points max à 8192
 # et écrase SFM_ALIKED_MAX_FEATURES. Utiliser extreme pour aller au-delà.
 SFM_SP_QUALITY="high"
+# video|panoramax : préréglage Spirula. panoramax prépare les images équirectangulaires.
+SFM_SP_PRESET="video"
 SFM_SP_BA_LOSS="huber"       # huber|cauchy|trivial
 SFM_SP_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy c
 # Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entraînement.
