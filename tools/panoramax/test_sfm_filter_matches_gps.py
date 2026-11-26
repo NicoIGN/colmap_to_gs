@@ -14,7 +14,7 @@ from pyproj import Geod
 
 
 ROOT = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("filter_matches_gps", ROOT / "filter_matches_gps.py")
+spec = importlib.util.spec_from_file_location("sfm_filter_matches_gps", ROOT / "sfm_filter_matches_gps.py")
 gps = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gps)
 
@@ -112,7 +112,7 @@ class GpsMatchesTest(unittest.TestCase):
             prefix, records, tail = matches_file()
             source.write_bytes(prefix + struct.pack("<I", 1) + records[1] + tail)
             result = subprocess.run(
-                [sys.executable, str(ROOT / "filter_matches_gps.py"), "--input", str(source),
+                [sys.executable, str(ROOT / "sfm_filter_matches_gps.py"), "--input", str(source),
                  "--output", str(target), "--metadata-dir", str(root / "metadata"),
                  "--max-distance", "30"],
                 capture_output=True, text=True, timeout=15,
@@ -138,7 +138,7 @@ class GpsMatchesTest(unittest.TestCase):
             images = dataset / "images"
             images.mkdir(parents=True)
             metadata(dataset / "metadata")
-            # Minimal JPEG sufficient for prepare_sfm's dimension reader.
+            # Minimal JPEG sufficient for prepare_panoramax's dimension reader.
             jpeg = (b"\xff\xd8\xff\xc0" + (11).to_bytes(2, "big") + b"\x08" +
                     (2160).to_bytes(2, "big") + (4096).to_bytes(2, "big") +
                     b"\x01\x01\x11\x00\xff\xd9")

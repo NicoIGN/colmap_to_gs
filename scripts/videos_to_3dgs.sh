@@ -99,7 +99,7 @@ if [[ "$frames_complete" == true && -f "$frames_done" ]] && grep -qxF -- "$frame
 else
   rm -f -- "$frames_done"
   echo "[vidéos] extraction de $num_frames image(s) par vidéo dans $frames_dir"
-  "$python_bin" "$repo_root/tools/preprocess/extract_sharp_frames.py" "${extract_args[@]}"
+  "$python_bin" "$repo_root/tools/preprocess/prepare_video_frames.py" "${extract_args[@]}"
   printf '%s\n' "$frames_key" > "$frames_done"
 fi
 

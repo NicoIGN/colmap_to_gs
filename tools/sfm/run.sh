@@ -58,7 +58,7 @@ sparse_ready() {
 
 prepare() {
   begin_stage "sélection des images"
-  "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
+  "$PYTHON_BIN" "$script_dir/prepare_images.py"
   rm -f -- "$OUTPUT_DIR/.prepare_done"
   feature_args=()
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then

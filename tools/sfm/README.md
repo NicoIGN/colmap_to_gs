@@ -15,7 +15,7 @@ bash tools/sfm/run.sh /chemin/config.sh
 | Emplacement | Contenu |
 |---|---|
 | `run.sh`, `reconstruct.sh`, `param.default.sh` | Entrée commune, dispatch par méthode, défauts |
-| `prepare_sfm.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
+| `prepare_panoramax.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
 | `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |
 | `spirula/` | Scripts qui appellent Spirula (`run_spirula_sfm.sh`, `camera_split.py`, `spirula_progress.py`) |
 | `colmap/` | Outils COLMAP seul, sans Spirula (`reconstruct.py`, `hloc_reconstruct.py`, `mvs_densify.py`, `georef_gps.py`, conversions d'orientations et LAS) |

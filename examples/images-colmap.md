@@ -5,7 +5,7 @@
 ## Extraire des images nettes d'une vidéo
 
 ```bash
-python "$GIT_ROOT/tools/preprocess/extract_sharp_frames.py" \
+python "$GIT_ROOT/tools/preprocess/prepare_video_frames.py" \
   --video "$DATA_ROOT/video.mp4" --out "$DATA_ROOT/frames" --num-frames 200
 ```
 

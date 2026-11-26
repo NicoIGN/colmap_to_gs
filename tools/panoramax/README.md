@@ -506,9 +506,9 @@ Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifi
 que sa sortie. `merge` exige tous les splats et ne relance aucun entraînement.
 Sans argument d'étape, le pipeline local reste séquentiel et complet.
 
-#### Préparation SfM (prepare_sfm.py)
+#### Préparation SfM (prepare_panoramax.py)
 
-Le préréglage lance d'abord `prepare_sfm.py` :
+Le préréglage lance d'abord `prepare_panoramax.py` :
 
 - seules les images de la taille la plus fréquente sont gardées (une bbox
   mélange souvent plusieurs appareils : 360° en 2:1, téléphones...) ; elles
@@ -528,7 +528,7 @@ Le préréglage lance d'abord `prepare_sfm.py` :
 seul :
 
 ```bash
-python3 tools/sfm/prepare_sfm.py --dataset OUTPUT_DIR \
+python3 tools/sfm/prepare_panoramax.py --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm --dry-run
 ```
 

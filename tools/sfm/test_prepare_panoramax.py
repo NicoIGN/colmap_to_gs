@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-spec = importlib.util.spec_from_file_location("panoramax_prepare", Path(__file__).with_name("prepare_sfm.py"))
+spec = importlib.util.spec_from_file_location("panoramax_prepare", Path(__file__).with_name("prepare_panoramax.py"))
 prepare = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(prepare)
 

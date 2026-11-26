@@ -1183,7 +1183,7 @@ if "--wait" in args:
         wrapper = self.bin / "python"
         wrapper.write_text(wrapper.read_text().replace(
             "if name not in known:",
-            '''if name == "extract_sharp_frames.py":
+            '''if name == "prepare_video_frames.py":
     with open(os.environ["TEST_EVENTS"], "a") as log:
         log.write(json.dumps([name, *args[1:]]) + "\\n")
     assert get("--num-frames") == "900"
@@ -1208,17 +1208,17 @@ if name not in known:'''))
         self.assertIn("--job-name=video-frames", jobs[0])
         self.assertIn("--job-name=images-prepare", jobs[1])
         self.assertEqual(jobs[1][-1], str(frames))
-        self.assertEqual(self.commands()[0][0], "extract_sharp_frames.py")
+        self.assertEqual(self.commands()[0][0], "prepare_video_frames.py")
         self.assertEqual((self.output / "scene.splat").read_bytes(), b"merged")
 
     def test_slurm_failed_video_extraction_does_not_launch_images(self):
         launcher, _ = self.configure_video_launcher()
-        self.env["TEST_FAIL_TOOL"] = "extract_sharp_frames.py"
+        self.env["TEST_FAIL_TOOL"] = "prepare_video_frames.py"
         result = subprocess.run(["bash", str(launcher), str(self.config)],
                                 env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len(json.loads(self.jobs.read_text())), 1)
-        self.assertEqual([command[0] for command in self.commands()], ["extract_sharp_frames.py"])
+        self.assertEqual([command[0] for command in self.commands()], ["prepare_video_frames.py"])
 
     def test_slurm_runs_same_config_and_array_then_merges(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))

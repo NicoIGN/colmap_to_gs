@@ -306,7 +306,7 @@ def prepare(check=False):
             target.symlink_to(resolved)
     if project:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
-        from equirectangular_views import prepare as prepare_views
+        from prepare_equirect_views import prepare as prepare_views
         prepare_views(selected_dir, output / "images", output / "projection.json",
                       int(os.environ["SFM_EQUIRECTANGULAR_VIEW_SIZE"]), check=check)
     if not check:

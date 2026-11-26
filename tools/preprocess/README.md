@@ -23,14 +23,14 @@ python3 tools/preprocess/extract_frames_from_video.py --help
 | Outil | Fonction |
 |---|---|
 | `extract_frames_from_video.py` | Extraction d'images depuis une vidéo (cadence fixe, GPX optionnel) |
-| `extract_sharp_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
-| `image_info.py` | Inspection d'une image et de ses informations GPS |
+| `prepare_video_frames.py` | Extraction d'un nombre fixe d'images nettes et réparties sur la durée, depuis une ou plusieurs vidéos (dépendances : `opencv-python-headless`, `numpy`, `tqdm`) |
+| `prepare_image_info.py` | Inspection d'une image et de ses informations GPS |
 
 Les outils COLMAP (`images_to_colmap.py`, `georef_colmap_from_gpx.py`,
 `colmap_split_blocks.py`, `filter_sparse_density.py`, `diagnose_colmap_models.py`)
 ont été déplacés dans [`tools/sfm`](../sfm/README.md).
 
-`extract_sharp_frames.py` retient une frame par tranche temporelle non vide,
+`prepare_video_frames.py` retient une frame par tranche temporelle non vide,
 sans éliminer globalement les séquences floues ou similaires. Le score combine
 la netteté relative à la plus nette de la tranche et la proximité du centre.
 `--sharpness-weight` règle le poids de la netteté entre 0 et 1 (défaut 0,7) ;

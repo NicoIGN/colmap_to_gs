@@ -115,7 +115,7 @@ Masques et exposition :
 Filtrage GPS des paires (remplace sfm auto ; nécessite --prepare) :
   --max-distance M           Rayon strict en mètres ; ne garde que les paires
                              dont les positions GPS sont plus proches.
-                             Étapes : extract, match, filter_matches_gps.py, map.
+                             Étapes : extract, match, sfm_filter_matches_gps.py, map.
   --metadata-dir DIR         Métadonnées Panoramax ; défaut : DATASET/metadata
 
 Reprise et exécution :
@@ -316,7 +316,7 @@ source_dataset="$dataset"
 case "$prepare" in
   1|true|yes|on)
     prepare_cmd=(
-      python3 "$script_dir/../prepare_sfm.py"
+      python3 "$script_dir/../prepare_panoramax.py"
       --dataset "$dataset" --output-dir "$output_dir" --shell
     )
     [[ -z "$keep_size" ]] || prepare_cmd+=(--size "$keep_size")
@@ -497,7 +497,7 @@ PY
   [[ -z "$gps_focal" || "$gps_camera_model" == equirectangular ]] || match_cmd+=(--focal "$gps_focal")
   [[ -z "$gps_threads" ]] || match_cmd+=(--threads "$gps_threads")
   filter_cmd=(
-    "${PYTHON_BIN:-python3}" "$script_dir/../../panoramax/filter_matches_gps.py"
+    "${PYTHON_BIN:-python3}" "$script_dir/../../panoramax/sfm_filter_matches_gps.py"
     --input "$original" --output "$filtered"
     --metadata-dir "$metadata_dir" --max-distance "$max_distance"
   )

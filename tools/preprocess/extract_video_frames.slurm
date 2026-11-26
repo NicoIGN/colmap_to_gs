@@ -11,5 +11,5 @@ fi
 export OMP_NUM_THREADS="${NUM_CPUS:-8}"
 export PYTHONUNBUFFERED=1
 srun --unbuffered --export=ALL "${PYTHON_BIN:-python3}" \
-  "$repo_root/tools/preprocess/extract_sharp_frames.py" \
+  "$repo_root/tools/preprocess/prepare_video_frames.py" \
   --video "$video" --out "$frames" --num-frames "$NUM_FRAMES"

@@ -6,6 +6,48 @@ Les exemples ci-dessous utilisent `GIT_ROOT` et `DATA_ROOT` initialisés comme d
 [l'index](README.md). Choisir le pipeline selon les données d'entrée, puis
 adapter sa configuration et choisir un mode de lancement.
 
+## Flux des pipelines
+
+Les trois entrées (vidéo, image, Panoramax) passent par des scripts de préparation
+spécifiques, puis convergent vers les scripts communs (SfM, entraînement, export).
+
+```text
+Entrée        videos_to_3dgs.sh           images_to_3dgs.sh           panoramax_to_3dgs.sh
+              │                           │                           │
+              ▼                           ▼                           ▼
+Préparation   prepare_video_frames.py ──▶ prepare_images.py           download.py
+                                          │                           │
+                                          │                           ▼
+                                          │                           prepare_panoramax.py
+                                          │                           │
+                                          │                           ▼
+                                          │                           prepare_equirect_views.py
+                                          │                           │
+                                          ▼                           ▼
+SfM                                       run.sh                      run_spirula_blocks.sh
+                                          │                           │
+                                          ▼                           │
+                                          reconstruct.sh              │
+                                          │                           │
+                                          ▼                           │
+                                          run_spirula_sfm.sh ◀────────┘
+                                          │
+                                          ▼
+Découpage                                 colmap_split_blocks.py
+                                          │
+                                          ▼
+Entraînement                              run_3dgs_block.sh
+                                          │
+                                          ▼
+                                          run_spirula_block.sh | nerfstudio_block.py
+                                          │
+                                          ▼
+Géoréférence                              georef_phase.sh
+                                          │
+                                          ▼
+Export                                    pipeline_postprocess.sh
+```
+
 ## Images locales → 3DGS
 
 À partir d'un dossier de photos, ce pipeline sélectionne les images,

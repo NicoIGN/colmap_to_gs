@@ -413,14 +413,14 @@ prepare_blocks() {
   local sfm_args
   local feature_args=()
   local camera_args=()
-  # Sans modèle explicite, le modèle est choisi par la détection 360° de prepare_sfm.py.
+  # Sans modèle explicite, le modèle est choisi par la détection 360° de prepare_panoramax.py.
   [[ "$SFM_CAMERA_MODEL_EXPLICIT" != true ]] || camera_args=(--camera-model "$SFM_CAMERA_MODEL")
   pipeline_report_phase "reconstruction SfM"
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
-    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_sfm.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_panoramax.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
-    "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
+    "$PYTHON_BIN" "$repo_root/tools/preprocess/prepare_equirect_views.py" \
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
   fi
@@ -432,7 +432,7 @@ prepare_blocks() {
   if [[ "$COLMAP_METHOD" != hloc && -z "$(find "$IMAGES_DIR" -type f -print -quit 2>/dev/null)" ]]; then
     # Les masques sont validés contre les images : sélection prête avant la préparation des masques.
     printf '[pipeline] Sélection des images Panoramax vers %s.\n' "$IMAGES_DIR"
-    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_sfm.py" \
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_panoramax.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --shell >/dev/null
   fi
   if [[ "$SFM_MASKS" == on ]]; then
@@ -591,7 +591,7 @@ fi
 
 if [[ "$mode" == block ]]; then
   if [[ "$COLMAP_METHOD" == hloc ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/preprocess/equirectangular_views.py" \
+    "$PYTHON_BIN" "$repo_root/tools/preprocess/prepare_equirect_views.py" \
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
     check_hloc_policy check
