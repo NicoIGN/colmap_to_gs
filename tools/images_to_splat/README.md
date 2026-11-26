@@ -161,8 +161,7 @@ communs (`SFM_MAX_*`, seuils géométriques et threads), puis les options
 `TRAIN_BACKEND=spirula` ; `TRAIN_NS_*` ne s'appliquent qu'à
 `TRAIN_BACKEND=nerfstudio`. `TRAIN_NUM_ITER` et `TRAIN_CLEAN` sont communs.
 Les options SfM `SFM_SP_*` non applicables à la méthode sélectionnée sont
-refusées ; les options d'entraînement `TRAIN_SP_*` n'affectent pas Nerfstudio
-et ne lui sont pas transmises.
+refusées.
 
 ### Masques Nerfstudio
 
@@ -172,11 +171,10 @@ Ils sont générés par
 `TRAIN_MASKS_MODEL` pointant vers le modèle local). Définir explicitement
 `TRAIN_MASKS_MODE=ignore`. Le worker renseigne `mask_path` dans chaque vue
 du `transforms.json` transmis à Nerfstudio.
-Le mode `empty` de Spirula n'est pas transposé. Les paramètres Spirula de cap,
-qualité, croissance, flottants et distractions ne sont pas appliqués à Splatfacto ;
-`TRAIN_NUM_ITER` reste commun. `TRAIN_NS_DOWNSCALE_FACTOR` règle la réduction des images.
-`TRAIN_NS_TRAIN_BIN` et `TRAIN_NS_EXPORT_BIN` choisissent les exécutables de l'environnement
-correspondant à `PYTHON_BIN`. `TRAIN_CLEAN=true` recalcule ce moteur uniquement.
+Le mode `empty` de Spirula n'est pas transposé, et les paramètres Spirula de cap,
+qualité, croissance, flottants et distractions ne s'appliquent pas à Splatfacto.
+`TRAIN_NS_DOWNSCALE_FACTOR`, `TRAIN_NS_TRAIN_BIN` et `TRAIN_NS_EXPORT_BIN`
+(exécutables de l'environnement `PYTHON_BIN`) sont propres à Nerfstudio.
 
 ### Exemple Nerfstudio
 
@@ -331,8 +329,6 @@ les doublons dans leurs zones de recouvrement, sans modifier leurs coordonnées.
 Le recalage utilise une trajectoire GPS fournie au format GPX. Pour l'activer,
 renseigner `GEOREF_GPX_FILE` dans le fichier de configuration :
 
-# Refaire seulement le SfM et le découpage sur Slurm :
-bash scripts/launch_images_to_3dgs.sh /chemin/config.sh --prepare-only --wait
 ```bash
 GEOREF_GPX_FILE="/chemin/absolu/parcours.gpx"
 GEOREF_VIEW_PREFIX="h00_y0"  # vide : sélection automatique du dossier
@@ -386,11 +382,8 @@ de relancer la préparation ; le SfM brut n'a pas à être recalculé.
 Modifier/ajouter/retirer le GPX après préparation exige un **nouvel OUTPUT_DIR** :
 ne pas mélanger des blocs entraînés dans des repères différents.
 
-Sans GPX, le GPS EXIF des images locales peut fournir le repère métrique
-directement pendant le SfM, comme dans le pipeline Panoramax. La détection et
-l'empreinte des coordonnées utilisées sont inscrites dans `inputs.json` ;
-modifier les métadonnées GPS impose donc un nouvel `OUTPUT_DIR`. Un GPX
-renseigné reste prioritaire et désactive entièrement cette voie EXIF.
+Les coordonnées EXIF utilisées sont inscrites dans `inputs.json` ; modifier les
+métadonnées GPS impose donc un nouvel `OUTPUT_DIR`.
 
 ## 4. Fonctionnement interne
 
@@ -451,9 +444,8 @@ nouvel `OUTPUT_DIR`, sans mélanger plusieurs reconstructions.
 Ne pas modifier les images/configurations pendant des jobs actifs.
 Une préparation compatible reprend les masques et réutilise le SfM/découpage.
 Les entraînements terminés sont réutilisés par défaut ; `TRAIN_CLEAN=true`
-recalcule le 3DGS uniquement. Avec `PIPELINE_RESUME=true`, les sorties
-partielles Spirula sont reprises depuis un checkpoint complet si disponible ;
-sinon, les artefacts sont archivés et seul le bloc incomplet redémarre.
+recalcule le 3DGS uniquement. La reprise des blocs partiels est décrite dans
+« Masques terminés, SfM interrompu ».
 L'exemple ne supprime jamais les images source.
 
 ### Masques terminés, SfM interrompu

@@ -565,7 +565,6 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 │   └── estimate_planes.py        # estimation near / far
 ├── scripts
 │   ├── run.sh                     # point d'entrée du pipeline
-│   ├── run_spirula*.sh            # pipelines Spirula
 │   ├── run_panoramax.sh           # découpe SfM et entraînement par blocs
 │   ├── spirula_common.sh          # exécutable Spirula par défaut
 │   ├── train.sh
