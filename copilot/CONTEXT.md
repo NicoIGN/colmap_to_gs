@@ -89,7 +89,7 @@ Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) 
 python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_panoramax.py   # ~4 min, 109 tests
 python -m unittest tools/images_to_splat/test_pipeline.py -k <nom>        # ciblé
 python -m unittest discover -s tools/panoramax -p 'test_*.py'             # panoramax
-python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'    # masques
+python -m unittest discover -s tools/masks -p 'test_*.py'    # masques
 ```
 
 Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.

@@ -14,7 +14,7 @@ Images
   → export par bloc (filtre 3σ, export_ply) → fusion → fichier .splat
 ```
 
-Les [masques](../segmentation_masks/README.md) et le
+Les [masques](../masks/README.md) et le
 [recalage sur une trajectoire GPS](../preprocess/README.md) sont optionnels.
 
 ## 2. Entrées et sorties
@@ -167,7 +167,7 @@ et ne lui sont pas transmises.
 ### Masques Nerfstudio
 
 Ils sont générés par
-[`tools/segmentation_masks`](../segmentation_masks/README.md), avec
+[`tools/masks`](../masks/README.md), avec
 **Mask2Former ou SegFormer** (`TRAIN_MASKS_BACKEND=segmentation` et
 `TRAIN_MASKS_MODEL` pointant vers le modèle local). Définir explicitement
 `TRAIN_MASKS_MODE=ignore`. Le worker renseigne `mask_path` dans chaque vue
@@ -209,7 +209,7 @@ traiter séparément pendant l'entraînement.
 
 - `SFM_MASKS_*` / `TRAIN_MASKS_*` : masques pour l'extraction / l'entraînement ;
   réglages et défauts dans [`config/defaults/masques.default.sh`](../../config/defaults/masques.default.sh). Le fonctionnement des moteurs est décrit
-  dans le [README des masques](../segmentation_masks/README.md).
+  dans le [README des masques](../masks/README.md).
 - `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier optionnel de masques déjà
   calculés ; chaque image doit avoir son PNG monochrome binaire de mêmes
   dimensions. Le pipeline vérifie les fichiers, crée un lien dans le workspace
@@ -398,7 +398,7 @@ Le pipeline **Images locales vers Gaussian Splats** prépare les photos,
 reconstruit la scène et entraîne les blocs. Il partage avec le pipeline
 Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérente :
 
-- `tools/segmentation_masks/masks.py` : interface commune des masques (entrée dossier, SAM via Spirula ou segmenteur) ; les pipelines l'appellent.
+- `tools/masks/masks.py` : interface commune des masques (entrée dossier, SAM via Spirula ou segmenteur) ; les pipelines l'appellent.
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
 - `tools/sfm/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.

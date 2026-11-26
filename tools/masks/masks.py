@@ -6,8 +6,8 @@ Each policy (SFM_MASKS for feature matching, TRAIN_MASKS for training) comes fro
 - spirula: SAM through the native Spirula backend ({PREFIX}_BACKEND=spirula).
 - segmentation: Transformers segmenter ({PREFIX}_BACKEND=segmentation).
 
-Generated masks are produced by generate_masks.py. Policy, resume, signatures, SfM/train sharing
-and validation all live here, so pipelines only call this CLI.
+Generated masks are produced by backends/generate_masks.py. Policy, resume, signatures, SfM/train
+sharing and validation all live here, so pipelines only call this CLI.
 """
 
 import argparse
@@ -20,9 +20,11 @@ import shutil
 import subprocess
 import sys
 
-from generate_masks import progress
+BACKENDS = Path(__file__).resolve().parent / "backends"
+GENERATOR = BACKENDS / "generate_masks.py"
+sys.path.insert(0, str(BACKENDS))
 
-GENERATOR = Path(__file__).resolve().with_name("generate_masks.py")
+from generate_masks import progress  # noqa: E402
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp", ".bmp"}
 
 

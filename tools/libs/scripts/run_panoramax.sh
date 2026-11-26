@@ -143,7 +143,7 @@ Variables:
   TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
   SPIRULA_DEVICE            Vulkan device: auto, index, name or uuid
   MASKS_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
-  TRAIN_MASKS_PYTHON        Python of tools/segmentation_masks/install.sh
+  TRAIN_MASKS_PYTHON        Python of tools/masks/install.sh
   TRAIN_MASKS_MODEL         Local segmentation model directory
   TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
   TRAIN_MASKS_MODE          auto (empty for sky only, else ignore), ignore, empty (défaut)
@@ -311,7 +311,7 @@ if [[ "$TRAIN_MASKS" == on ]]; then
         die "TRAIN_MASKS_SPIRULA_MODEL doit désigner un checkpoint SAM 3 GGML local."
     else
       [[ -n "$TRAIN_MASKS_MODEL" && -d "$TRAIN_MASKS_MODEL" ]] ||
-        die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/segmentation_masks/install.sh)."
+        die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/masks/install.sh)."
     fi
   fi
 fi
@@ -439,7 +439,7 @@ prepare_blocks() {
     else
       rm -f -- "$masks_done"
       printf '[pipeline] Préparation des masques SfM (%s).\n' "$OUTPUT_DIR/feature_masks"
-      "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/masks.py" \
+      "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" \
         ${mask_projection_args[@]+"${mask_projection_args[@]}"}
       touch -- "$masks_done"
     fi
@@ -512,7 +512,7 @@ prepare_blocks() {
     export TRAIN_MASKS TRAIN_MASKS_MODE TRAIN_MASKS_DIR TRAIN_MASKS_BACKEND TRAIN_MASKS_LABELS
     export TRAIN_MASKS_SPIRULA_MODEL TRAIN_MASKS_MODEL TRAIN_MASKS_CONFIDENCE TRAIN_MASKS_DILATE
     export TRAIN_MASKS_MAX_FRACTION TRAIN_MASKS_DEVICE TRAIN_MASKS_PYTHON
-    "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/masks.py" --policy train ||
+    "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" --policy train ||
       die "Préparation des masques d’entraînement échouée."
   fi
 
@@ -583,7 +583,7 @@ if [[ "$mode" == block ]]; then
   if [[ "$SFM_MASKS" == on ]]; then
     mask_projection_args=()
     [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
-    "$PYTHON_BIN" "$repo_root/tools/segmentation_masks/masks.py" --check \
+    "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" --check \
       ${mask_projection_args[@]+"${mask_projection_args[@]}"}
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."

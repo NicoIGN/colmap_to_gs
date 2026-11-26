@@ -25,7 +25,7 @@ TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF=""
 TRAIN_SP_USE_BILATERAL_GRID=""
 TRAIN_SP_BILAGRID_TYPE=""
 
-# Le tool segmentation_masks genere les PNG charges par Nerfstudio.
+# Le tool masks genere les PNG charges par Nerfstudio.
 SFM_MASKS="on"
 TRAIN_MASKS="on"
 TRAIN_MASKS_BACKEND="segmentation"

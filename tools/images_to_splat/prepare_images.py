@@ -13,7 +13,7 @@ import sys
 
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "segmentation_masks"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "masks"))
 from masks import policies
 
 

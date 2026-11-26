@@ -164,7 +164,7 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 - [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
 - [Installation de Spirula](tools/spirula/README.md).
-- [Masques](tools/segmentation_masks/README.md).
+- [Masques](tools/masks/README.md).
 - [Export, filtrage et fusion](tools/postprocess/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).

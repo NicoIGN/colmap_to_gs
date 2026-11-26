@@ -59,7 +59,7 @@ if [[ "$prepare_only" == true ]]; then
 fi
 if [[ "$SFM_MASKS" == on && "$TRAIN_MASKS" == on &&
       -z "$SFM_MASKS_DIR" && -z "$TRAIN_MASKS_DIR" ]]; then
-  policies_equal="$("$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py" --policies-equal)" ||
+  policies_equal="$("$PYTHON_BIN" "$script_dir/../masks/masks.py" --policies-equal)" ||
     die "Impossible de comparer les politiques de masques."
   [[ "$policies_equal" == true || "$policies_equal" == false ]] ||
     die "Résultat invalide de comparaison des politiques de masques."

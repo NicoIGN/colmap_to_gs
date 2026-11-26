@@ -5,7 +5,7 @@
 ## 1. Objectif
 
 Installer Spirula Studio avec le backend Vulkan/SAM 3 utilisé pour générer les
-[masques natifs du pipeline](../segmentation_masks/README.md).
+[masques natifs du pipeline](../masks/README.md).
 
 Exemple d’invocation :
 

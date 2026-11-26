@@ -15,7 +15,7 @@ die() { printf '[ERREUR] Installation masques : %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<'EOF'
-Usage: bash tools/segmentation_masks/install.sh [--install-dir PATH] [--python PATH]
+Usage: bash tools/masks/install.sh [--install-dir PATH] [--python PATH]
                                                 [--model HF_ID] [--mapillary-model HF_ID]
                                                 [--labels LISTE]
 
@@ -83,7 +83,7 @@ assert np.array_equal(torch.from_numpy(a).numpy(), a)' ||
 model_dir="$install_dir/models/${model_id//\//--}"
 mapillary_model_dir="$install_dir/models/${mapillary_model_id//\//--}"
 
-"$runtime" - "$model_id" "$model_dir" "$mapillary_model_id" "$mapillary_model_dir" "$labels" "$script_dir" <<'PY'
+"$runtime" - "$model_id" "$model_dir" "$mapillary_model_id" "$mapillary_model_dir" "$labels" "$script_dir/backends" <<'PY'
 import gc
 import sys
 from pathlib import Path

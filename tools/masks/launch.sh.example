@@ -15,7 +15,7 @@ export TRAIN_MASKS_MAX_FRACTION="0.95"
 export TRAIN_MASKS_DILATE="0"
 
 # Génération des masques
-"$TRAIN_MASKS_PYTHON" "$GIT_ROOT/tools/segmentation_masks/generate_masks.py" \
+"$TRAIN_MASKS_PYTHON" "$GIT_ROOT/tools/masks/backends/generate_masks.py" \
   --backend segmentation \
   --images "$IMAGES_DIR" \
   --output "$MASKS_DIR" \

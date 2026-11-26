@@ -119,7 +119,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Conversion des poses caméra IGNF `.CON` et du LiDAR `.LAZ`** :
   [tools/con_laz_to_orientations](../tools/con_laz_to_orientations/README.md).
 - **Masques de segmentation** :
-  [tools/segmentation_masks](../tools/segmentation_masks/README.md).
+  [tools/masks](../tools/masks/README.md).
 - **Filtrage et fusion des splats** :
   [tools/postprocess](../tools/postprocess/README.md).
 - **Nettoyage multivues du ciel** :

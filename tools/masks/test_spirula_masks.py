@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image
 
 
-SCRIPT = Path(__file__).with_name("generate_masks.py")
+SCRIPT = Path(__file__).resolve().parent / "backends" / "generate_masks.py"
 
 
 class NativeMasksTest(unittest.TestCase):

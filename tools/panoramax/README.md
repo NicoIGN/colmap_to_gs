@@ -115,7 +115,7 @@ Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
 Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
-par le [tool de segmentation](../segmentation_masks/README.md), avec
+par le [tool de segmentation](../masks/README.md), avec
 Mask2Former ou SegFormer : `TRAIN_MASKS_BACKEND=segmentation`, modèle local
 dans `TRAIN_MASKS_MODEL`, `TRAIN_MASKS_LABELS=sky` et
 `TRAIN_MASKS_MODE=ignore`. Les PNG sont référencés dans le dataset Nerfstudio ;
@@ -307,7 +307,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Défaut des labels : seul le ciel (nuages compris) est masqué et appris comme vide.
 - `TRAIN_MASKS_LABELS` : permet d'ajouter d'autres labels (`person`, `car`…).
 - Installation, variables et limites :
-  [tools/segmentation_masks](../segmentation_masks/README.md).
+  [tools/masks](../masks/README.md).
 
 #### Qualité d'entraînement
 

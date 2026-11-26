@@ -50,7 +50,7 @@ prepare() {
   rm -f -- "$OUTPUT_DIR/.prepare_done"
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     begin_stage "masques SfM / entraînement"
-    "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py"
+    "$PYTHON_BIN" "$script_dir/../masks/masks.py"
   fi
   bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$sfm" --images-dir "$selected"
   if [[ "$COLMAP_USE_MVS" == true ]]; then

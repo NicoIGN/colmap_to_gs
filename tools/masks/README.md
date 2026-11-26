@@ -14,12 +14,22 @@ Tous les pipelines préparent les masques via `masks.py`, quelle que soit la sou
 - `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier de masques fourni, copié et validé
   (sans génération) ;
 - `*_BACKEND=spirula` : SAM via Spirula ;
-- `*_BACKEND=segmentation` : segmenteur Transformers (`generate_masks.py`).
+- `*_BACKEND=segmentation` : segmenteur Transformers (`backends/generate_masks.py`).
 
 ```bash
-"$PYTHON_BIN" tools/segmentation_masks/masks.py                  # SfM et entraînement
-"$PYTHON_BIN" tools/segmentation_masks/masks.py --policy train   # une politique seule
-"$PYTHON_BIN" tools/segmentation_masks/masks.py --check          # validation sans génération
+"$PYTHON_BIN" tools/masks/masks.py                  # SfM et entraînement
+"$PYTHON_BIN" tools/masks/masks.py --policy train   # une politique seule
+"$PYTHON_BIN" tools/masks/masks.py --check          # validation sans génération
+```
+
+Structure :
+
+```
+tools/masks/
+├─ masks.py                  interface commune (politiques, signatures, validation)
+├─ install.sh                installation locale des modèles Transformers
+└─ backends/
+   └─ generate_masks.py      génération : backend spirula (SAM) ou segmentation (Transformers)
 ```
 
 Le fichier `masks.json` de chaque dossier signe les réglages et le hash des images :
@@ -28,7 +38,7 @@ des masques dont les images ont changé sont refusés.
 Exemple d’invocation :
 
 ```bash
-"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
+"$TRAIN_MASKS_PYTHON" tools/masks/backends/generate_masks.py \
   --model mapillary --list-labels
 ```
 
@@ -85,7 +95,7 @@ Les logs indiquent, pour chaque image, la proportion de pixels dont la classe ga
 ## 3. Configuration et utilisation
 
 ```bash
-bash tools/segmentation_masks/install.sh \
+bash tools/masks/install.sh \
   --install-dir /chemin/partage/segmentation-masks \
   --python python3
 ```
@@ -212,7 +222,7 @@ Sans argument, le script affiche son aide et quitte. Exemple de commande autonom
 export TRAIN_MASKS_INSTALL_DIR="$HOME/.local/share/colmap-to-gs/segmentation-masks"
 export TRAIN_MASKS_PYTHON="$TRAIN_MASKS_INSTALL_DIR/venv/bin/python"
 
-"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
+"$TRAIN_MASKS_PYTHON" tools/masks/backends/generate_masks.py \
   --backend segmentation \
   --images DATASET/sfm/images \
   --output DATASET/sfm/train_masks \
@@ -236,7 +246,7 @@ Pour Mapillary sur le Mac testé dans ce projet, le traitement CPU a reconnu 4 %
 
 ## 4. Fonctionnement interne
 
-Le script `generate_masks.py` traite les images une par une et produit, pour
+Le script `backends/generate_masks.py` traite les images une par une et produit, pour
 chacune, une carte indiquant les zones à garder ou à masquer.
 
 | Modèle | Données | Intérêt |
@@ -255,7 +265,7 @@ différente pour chaque mot-clé.
 Les noms exacts des labels dépendent du modèle. Consulter le `labels.txt` du modèle ou afficher les classes depuis le script :
 
 ```bash
-"$TRAIN_MASKS_PYTHON" tools/segmentation_masks/generate_masks.py \
+"$TRAIN_MASKS_PYTHON" tools/masks/backends/generate_masks.py \
   --model mapillary --list-labels
 ```
 
@@ -296,7 +306,7 @@ Spirula propose deux interprétations d'un pixel masqué (`--apply-loss-for-mask
 
 
 ```bash
-python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'
+python -m unittest discover -s tools/masks -p 'test_*.py'
 ```
 
 Les tests automatiques n'exigent pas Torch ni Transformers (Pillow et SciPy suffisent). Ils ne remplacent pas une vérification visuelle avec les poids réels et le backend utilisé en production.
