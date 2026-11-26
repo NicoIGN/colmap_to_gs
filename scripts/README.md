@@ -12,43 +12,43 @@ Les trois entrées (vidéo, image, Panoramax) passent par des scripts de prépar
 spécifiques, puis convergent vers les scripts communs (SfM, entraînement, export).
 
 ```text
-Entrée        videos_to_3dgs.sh           images_to_3dgs.sh           panoramax_to_3dgs.sh
-              │                           │                           │
-              ▼                           ▼                           ▼
-Préparation   prepare_video_frames.py ──▶ prepare_images.py           download.py
-                                          │                           │
-                                          │                           ▼
-                                          │                           prepare_panoramax.py
-                                          │                           │
-                                          │                           ▼
-                                          │                           prepare_equirect_views.py
-                                          │                           │
-                                          ▼                           ▼
-SfM                                       sfm_run.sh                  run_panoramax.sh
-                                          │                           │
-                                          ▼                           │
-                                          sfm_core.sh ◀───────────────┘
-                                          │
-                                          ▼
-                                          sfm_reconstruct.sh
-                                          │
-                                          ▼
-                                          sfm_spirula.sh
-                                          │                           │
-                                          ▼                           │
-Découpage                                 colmap_split_blocks.py
-                                          │                           │
-                                          ▼                           │
-Entraînement                              train_block.sh
-                                          │
-                                          ▼
-                                          train_block_spirula.sh | train_block_nerfstudio.py
-                                          │
-                                          ▼
-Géoréférence                              georef.sh
-                                          │
-                                          ▼
-Export                                    export.sh
+Entrées        videos_to_3dgs.sh          images_to_3dgs.sh          panoramax_to_3dgs.sh
+               │                          │                          │
+               ▼                          ▼                          ▼
+Préparation    prepare_video_frames.py    prepare_images.py          download.py
+               │                          │                          │
+               │                          │                          ▼
+               │                          │                          prepare_panoramax.py
+               │                          │                          │
+               │                          │                          ▼
+               │                          │                          prepare_equirect_views.py
+               │                          │                          │
+               ├──────────────────────────┘                          ▼
+               ▼                                                     run_panoramax.sh
+Pilotes        sfm_run.sh                                            │
+               │                                                     │
+SfM            sfm_core.sh ◀─────────────────────────────────────────┘
+               │
+               ▼
+Reconstruction sfm_reconstruct.sh
+               │
+               ▼
+               sfm_spirula.sh
+               │
+               ▼
+Découpage      colmap_split_blocks.py
+               │
+               ▼
+Entraînement   train_block.sh
+               │
+               ▼
+               train_block_spirula.sh | train_block_nerfstudio.py
+               │
+               ▼
+Géoréférence   georef.sh
+               │
+               ▼
+Export         export.sh
 ```
 
 ## Images locales → 3DGS
