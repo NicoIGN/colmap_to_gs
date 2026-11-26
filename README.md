@@ -47,19 +47,14 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 ## 2. Que fait ce projet ?
 
-Ce projet fournit des outils pour préparer des images ou des données COLMAP,
-entraîner des scènes 3DGS avec différents moteurs, puis exporter et traiter
-les résultats. Le [guide utilisateur](doc/guide_utilisateur.md) aide à choisir
-le parcours adapté.
+> **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours adapté à votre point de départ.
 
-Pour un modèle COLMAP, fournir le modèle et les images correspondantes, ou
-produire les données COLMAP depuis des images avec les
-[outil images vers COLMAP](tools/sfm/README.md). L'entraînement peut ensuite
-se faire avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
+Le projet se compose de briques indépendantes : préparation des données COLMAP,
+entraînement, export et post-traitement, chacune avec son propre outil.
 
-```text
-Images → données COLMAP → entraînement → export et post-traitement
-```
+Pour un modèle COLMAP existant, fournir le modèle et les images correspondantes ;
+sinon, produire les données depuis des images avec l'[outil images vers COLMAP](tools/sfm/README.md).
+L'entraînement se fait ensuite avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
 
 Les moteurs d'entraînement proposés sont :
 
