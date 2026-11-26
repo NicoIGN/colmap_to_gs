@@ -19,152 +19,41 @@ spécialisés liés ci-dessous.
 
 ## 2. Choisir un parcours
 
-### 2.1. Produire les données COLMAP
-
-La première étape consiste à reconstruire les caméras et les points 3D depuis
-les images, ou à réutiliser un modèle COLMAP existant avec ses images.
-
-- Images : l'[outil images vers COLMAP](../tools/sfm/README.md)
-  propose `COLMAP_METHOD=spirula|colmap|nerfstudio|orientations`, avec une
-  configuration commune. Les outils de préparation (`../tools/prepare/README.md`)
-  permettent aussi d'extraire des images d'une vidéo.
-- Orientations et LiDAR : convertir les poses caméra vers le JSON explicite documenté
-  et le nuage coloré vers PLY, puis utiliser `COLMAP_METHOD=orientations`.
-  Pour des poses IGNF `.CON` et un `.LAZ`, utiliser
-  [tools/con_laz_to_orientations](../tools/con_laz_to_orientations/README.md).
-- Modèle existant : conserver les images associées, les paramètres des caméras,
-  leurs poses et les points 3D.
-
-### 2.2. Choisir l'entraînement
-
-Une fois les données COLMAP disponibles, choisir le moteur d'entraînement :
-
-- **[Nerfstudio](https://github.com/nerfstudio-project/nerfstudio)** :
-  framework Python de reconstruction et de rendu 3D ; **Splatfacto** est sa
-  méthode Gaussian Splatting utilisée ici. Le projet est développé et maintenu
-  par l'équipe **Nerfstudio**, issue de **Berkeley / KAIR (BAIR)**, et les
-  contributeurs de la communauté.
-- **[Spirula Studio](https://github.com/harry7557558/spirula-studio)** :
-  outil de reconstruction et d'entraînement Gaussian Splatting intégrant le
-  SfM et les masques, avec un backend GPU Vulkan ; maintenu par
-  **harry7557558**, ingénieur indépendant qui le développe seul.
-
-Dans ce dépôt, les points d'entrée correspondants sont :
-
-- **Pipeline commun** : `TRAIN_BACKEND=spirula|nerfstudio` dans la configuration
-  de `scripts/images_to_3dgs.sh` ou `scripts/panoramax_to_3dgs.sh`.
-  Le modèle COLMAP et le découpage restent communs ; chaque moteur dispose
-  de ses sorties d'entraînement. Nerfstudio exige PyTorch et NVIDIA/CUDA,
-  sans repli CPU/Metal. Ses masques sont en mode `ignore`, pas `empty`.
-- **Nerfstudio / Splatfacto** : `tools/libs/scripts/run.sh` prépare les données
-  Nerfstudio, entraîne et exporte en `.ply` (parcours historique) ; voir le
-  [guide Nerfstudio](nerfstudio.md).
-- **Spirula** : installer l'outil suivant son
-  [README](../install/spirula/README.md), puis entraîner depuis le modèle COLMAP
-  et ses images avec `tools/training/backends/train_block_spirula.sh`. Exemple :
-
-```bash
-bash tools/training/backends/train_block_spirula.sh \
-  --sparse-dir /chemin/colmap/sparse/0 \
-  --images-dir /chemin/images \
-  --output-dir /chemin/resultats
-```
-
-Les options de ce lanceur sont accessibles avec `--help` ; l'export `.splat`
-est décrit dans le [README du post-traitement](../tools/export/README.md).
-
 ### 2.3. Utiliser un pipeline complet
 
-Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun a une version directe (machine courante) et une version Slurm (`launch_*`, à lancer avec `bash`, pas `sbatch`, depuis le nœud de connexion) :
+Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun existe en version directe (machine courante) et en version Slurm (`launch_*`, à lancer avec `bash`, pas `sbatch`, depuis le nœud de connexion) :
 
 | Pipeline | Entrée | Direct | Slurm |
 |---|---|---|---|
 | Images locales | dossier de photos | `bash scripts/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --wait` |
-| Vidéo | fichier vidéo (extraction de `NUM_FRAMES` images) | `bash scripts/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
+| Vidéo | fichier vidéo | `bash scripts/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
 | Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --wait` |
+
+Exemple de configuration (images locales), qui ne contient que les surcharges :
+
+```bash
+cat > "$DATA_ROOT/config-images.sh" <<'EOF'
+#!/usr/bin/env bash
+SFM_IMAGES_DIR="/chemin/images"
+OUTPUT_DIR="/chemin/sortie"
+EOF
+```
+
+Lancement standard, sur la machine courante :
+
+```bash
+bash "$GIT_ROOT/scripts/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
+```
+
+Lancement Slurm, depuis le nœud de connexion : soumission puis attente de la fin.
+
+```bash
+bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" "$DATA_ROOT/config-images.sh" --wait
+```
 
 Sortie : un `.splat` et ses métadonnées dans `OUTPUT_DIR`. Les journaux sont dans `OUTPUT_DIR/logs/`.
 
-Sans `--wait`, un retour réussi confirme seulement la soumission. Le détail des modes et des ressources est dans le [guide Bash / Slurm](lancement_bash_slurm.md), et les exemples de configuration sont dans [scripts/README.md](../scripts/README.md).
-
-#### Grandes options : SfM et entraînement
-
-- **SfM** (`COLMAP_METHOD`) : `spirula` (défaut, appariement par `SFM_SP_MATCHER`), `colmap` (extraction et appariement COLMAP, GPU optionnel), `hloc` (SuperPoint et LightGlue, retrieval NetVLAD), `nerfstudio` (`ns-process-data`, NVIDIA/CUDA requis) ou `orientations` (poses JSON fournies, sans SfM).
-- **Entraînement** (`TRAIN_BACKEND`) : `spirula` (défaut, budget de splats réglé par `TRAIN_SP_QUALITY`) ou `nerfstudio` (`ns-train`, NVIDIA/CUDA requis, sans repli CPU).
-- **Blocs** : chaque bloc s'entraîne sur un GPU ; `NUM_GPUS` fixe combien tournent en parallèle.
-
-#### Paramètres utiles par phase
-
-Valeurs par défaut exactes : `bash scripts/helper.sh <PARAMÈTRE>`.
-
-**Commun**
-- `SFM_IMAGES_DIR` : dossier source des photos (`--images` peut le remplacer).
-- `OUTPUT_DIR` : workspace de sortie, distinct et extérieur au dossier d'images. Changer d'images ou de paramètres SfM impose un nouveau workspace.
-- `SPIRULA_BIN` : chemin de l'exécutable Spirula.
-- `NUM_CPUS` : threads du SfM, des masques, de l'entraînement et de la fusion.
-- `NUM_GPUS` : nombre de GPU, un par bloc actif.
-- `TRAIN_BACKEND` : moteur d'entraînement, `spirula` (défaut) ou `nerfstudio`.
-- `PIPELINE_RESUME` : `true` pour reprendre après une interruption, sans supprimer les artefacts.
-
-**Téléchargement (Panoramax)**
-- `PANORAMAX_BBOX` : emprise `xmin,ymin,xmax,ymax` (obligatoire).
-- `PANORAMAX_BBOX_EPSG` : système de coordonnées de l'emprise (`2154` par défaut).
-- `PANORAMAX_PICTURE_TYPE` : `all`, `normal` (photos classiques) ou `360` (équirectangulaires).
-- `PANORAMAX_QUALITY` : `hd`, `sd` ou `thumb`.
-- `PANORAMAX_IMAGE_MAX` : nombre maximal de photos (vide = aucune limite).
-- `PANORAMAX_DATETIME` : filtre de date au format ISO 8601 (vide = toutes dates).
-- `PANORAMAX_FILTERS` : filtre sur les propriétés STAC ou EXIF, syntaxe `CLÉ=V1,V2;CLÉ2=V3`.
-- `PANORAMAX_REPLACE_REQUEST` : `true` archive une requête différente puis retélécharge ; `false` arrête le lancement.
-
-**SfM**
-- `COLMAP_METHOD` : producteur du modèle (`spirula`, `colmap`, `hloc`, `nerfstudio`, `orientations`).
-- `SFM_MAX_IMAGE_SIZE` : résolution maximale des images pour le SfM (`4096` par défaut). La réduire diminue fortement la mémoire GPU.
-- `SFM_ALIKED_MAX_FEATURES` : nombre maximal de points par image (`8192` par défaut).
-- `SFM_SP_QUALITY` : préréglage Spirula, de `low` à `extreme` (`high` par défaut).
-- `SFM_CAMERA_MODE` : partage des intrinsèques, `folder` (défaut), `single` ou `image`.
-- `SFM_CAMERA_MODEL` : force le modèle de caméra (sinon détecté : `equirectangular` pour le 360°, `opencv` sinon).
-- `SFM_CAMERA_SPLIT` : `true` relance le SfM avec une caméra par modèle si Spirula en détecte plusieurs.
-- `SFM_SP_PAIR_MAX_DISTANCE` : distance GPS maximale entre paires d'images, en mètres (vide = désactivé).
-- `SFM_SP_METRIC_POSITIONS` : fichier de positions en mètres, qui remplace les GPS EXIF.
-- `GEOREF_GPX_FILE` : trace GPX pour géoréférencer le modèle (prioritaire sur les GPS EXIF).
-- `GEOREF_EPSG` : EPSG de l'origine projetée dans le rapport (`2154` par défaut).
-
-**Masques**
-- `SFM_MASKS` et `TRAIN_MASKS` : `on` ou `off`, pour le SfM et l'entraînement.
-- `TRAIN_MASKS_BACKEND` : `spirula` ou `segmentation` (modèle local).
-- `TRAIN_MASKS_SPIRULA_MODEL` : chemin du modèle SAM Spirula (`.ggml`).
-- `MASKS_ACCEPT_LICENSE` : `true` seulement après acceptation des conditions SAM 3 de Meta.
-- `TRAIN_MASKS_LABELS` : éléments à masquer, en anglais (`sky` par défaut).
-- `TRAIN_MASKS_MODE` : `empty` (défaut, le ciel est appris comme vide), `ignore` (pixels exclus de la perte) ou `auto`.
-- `TRAIN_MASKS_DIR` : dossier de masques PNG déjà calculés, réutilisé sans modèle ni GPU.
-
-**Découpage**
-- `SPLIT_NUM_BLOCKS` : nombre de blocs (`1` = pas de découpage).
-- `SPLIT_OVERLAP_MAX_FRACTION` : recouvrement maximal entre blocs, entre 0 et 1 (`0.10` par défaut).
-
-**Entraînement**
-- `TRAIN_NUM_ITER` : nombre d'itérations par bloc (`20000` par défaut).
-- `TRAIN_SP_QUALITY` : budget Spirula, de `low` (200 k splats) à `ultra` (10 M). Les budgets explicites priment.
-- `TRAIN_SP_CAP_MAX` : nombre maximal de splats par bloc.
-- `TRAIN_SP_FLOATER_SUPPRESSION` : suppression des flottants, `off`, `mild` ou `strong`.
-- `TRAIN_NS_DOWNSCALE_FACTOR` : facteur de réduction des images (Nerfstudio uniquement, `1` = résolution native).
-- `TRAIN_CLEAN` : `true` recalcule les sorties 3DGS des blocs, sans toucher au SfM (Nerfstudio uniquement).
-
-**Nettoyage**
-- `POSTPROCESS_CLEANER` : `contextual` (filtres géométriques, défaut) ou `cleangs` (nettoyage du ciel par vues multiples, CUDA requis).
-- `POSTPROCESS_FILTER_MODE` : `diagnostic` (exporte les candidats rejetés sans les retirer), `apply` (les retire) ou `off`.
-
-**Export**
-- `MERGE_STRENGTH` : multiplicateur de taille des voxels de fusion (`1.0` par défaut).
-- `EXPORT_SPLAT_NAME` : nom du fichier `.splat` exporté.
-
-**Slurm**
-- `SLURM_PARTITION` : partition du cluster.
-- `SLURM_MEMORY` : mémoire par job (`64G` par défaut).
-- `SLURM_TIME_LIMIT` : limite de temps par job (`48:00:00` par défaut).
-- `SLURM_GPU_TYPE` : type de GPU (vide = `gpu:1`).
-- `SLURM_ACCOUNT` et `SLURM_QOS` : compte et QoS, vides = valeurs par défaut du cluster.
-- `SLURM_ENV_SETUP` : script sourcé sur chaque nœud pour charger l'environnement (modules, conda).
+Sans `--wait`, un retour réussi confirme seulement la soumission. Le détail des modes et des ressources est dans le [guide Bash / Slurm](lancement_bash_slurm.md), et les autres exemples sont dans [scripts/README.md](../scripts/README.md).
 
 ## 3. Préparer les données et lancer un calcul
 
