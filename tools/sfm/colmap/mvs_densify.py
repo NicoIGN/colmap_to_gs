@@ -66,6 +66,7 @@ def main():
     model = args.output / "sparse" / "0"
     if dense.exists():
         shutil.rmtree(dense)
+    dense.mkdir(parents=True)
     run_colmap(args.colmap, "image_undistorter", "--image_path", args.images,
                "--input_path", args.sparse, "--output_path", dense,
                "--output_type", "COLMAP", "--max_image_size", args.max_image_size)
