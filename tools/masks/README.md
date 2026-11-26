@@ -306,7 +306,7 @@ Spirula propose deux interprétations d'un pixel masqué (`--apply-loss-for-mask
 
 
 ```bash
-python -m unittest discover -s tools/masks -p 'test_*.py'
+python -m unittest discover -s tests/masks -p 'test_*.py'
 ```
 
 Les tests automatiques n'exigent pas Torch ni Transformers (Pillow et SciPy suffisent). Ils ne remplacent pas une vérification visuelle avec les poids réels et le backend utilisé en production.

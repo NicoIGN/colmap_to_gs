@@ -85,11 +85,14 @@ python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "import
 
 Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_panoramax.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
 
+Tous les tests sont dans `tests/`, en miroir de `tools/` : `tests/<domaine>/test_X.py` teste `tools/<domaine>/X.py` (voir `tests/README.md`).
+
 ```bash
-python -m unittest tools/libs/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_panoramax.py   # ~4 min, 109 tests
-python -m unittest tools/libs/test_pipeline.py -k <nom>        # ciblé
-python -m unittest discover -s tools/panoramax -p 'test_*.py'             # panoramax
-python -m unittest discover -s tools/masks -p 'test_*.py'    # masques
+PYTHON_BIN=python tests/run_all.sh                 # tout, séquentiel
+PYTHON_BIN=python tests/run_all.sh --phase masks   # une phase (tests/masks)
+python tests/libs/test_pipeline.py -k <nom>        # ciblé
+python -m unittest discover -s tests/panoramax -p 'test_*.py'   # panoramax
+python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 ```
 
 Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.

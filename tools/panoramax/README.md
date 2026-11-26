@@ -535,7 +535,7 @@ python3 tools/sfm/prepare_panoramax.py --dataset OUTPUT_DIR \
 ### Vérification locale
 
 ```bash
-python3 -m unittest discover -s tools/panoramax -p 'test_*.py'
+python3 -m unittest discover -s tests/panoramax -p 'test_*.py'
 ```
 
 Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélection

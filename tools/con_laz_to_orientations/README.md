@@ -78,5 +78,5 @@ Les sorties existantes ne sont pas écrasées.
 ## Tests
 
 ```bash
-python -m unittest discover -s tools/con_laz_to_orientations -p 'test_*.py'
+python -m unittest discover -s tests/con_laz_to_orientations -p 'test_*.py'
 ```

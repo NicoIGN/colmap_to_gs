@@ -178,7 +178,7 @@ réexporter depuis le checkpoint PLY : filtrer un `.splat` existant ne peut pas
 recréer les splats manquants.
 
 ```bash
-python3 -m unittest discover -s tools/export -p 'test_*.py'
+python3 -m unittest discover -s tests/export -p 'test_*.py'
 ```
 
 La conversion `.splat` vers 3D Tiles est documentée dans
