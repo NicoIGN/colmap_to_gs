@@ -9,7 +9,7 @@ import shutil
 import unittest
 
 
-SCRIPT = Path(__file__).with_name("run_spirula_blocks.sh").resolve()
+SCRIPT = Path(__file__).with_name("run_panoramax.sh").resolve()
 REAL_PYTHON = os.environ.get("PYTHON", sys.executable)
 
 

@@ -115,7 +115,7 @@ fi
 export TRAIN_NS_TRAIN_BIN="${TRAIN_NS_TRAIN_BIN:-ns-train}"
 export TRAIN_NS_EXPORT_BIN="${TRAIN_NS_EXPORT_BIN:-ns-export}"
 export TRAIN_NS_DOWNSCALE_FACTOR="${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
-# Child scripts (run_spirula_blocks.sh, masks.py) only see exported variables.
+# Child scripts (run_panoramax.sh, masks.py) only see exported variables.
 export SFM_MASKS_DIR="${SFM_MASKS_DIR:-}" TRAIN_MASKS_DIR="${TRAIN_MASKS_DIR:-}"
 if [[ "$TRAIN_BACKEND" == nerfstudio && ( "$phase" == all || "$phase" == train-block ) ]]; then
   "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
@@ -452,7 +452,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_MASKS_MAX_FRACTION="$TRAIN_MASKS_MAX_FRACTION" \
   TRAIN_MASKS_DEVICE="$TRAIN_MASKS_DEVICE" \
   NUM_CPUS="$NUM_CPUS" \
-  bash "$repo_root/tools/libs/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
+  bash "$repo_root/tools/libs/scripts/run_panoramax.sh" "${phase_args[@]}"
 fi
 if [[ "$phase" == prepare || "$phase" == train-block ]]; then
   printf '[pipeline] Étape %s terminée.\n' "$phase"

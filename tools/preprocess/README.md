@@ -73,7 +73,7 @@ Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
 
 ```bash
 DIR=/chemin/vers/panoramax SPLIT_NUM_BLOCKS=4 \
-  bash /chemin/vers/colmap_to_gs/tools/libs/scripts/run_spirula_blocks.sh
+  bash /chemin/vers/colmap_to_gs/tools/libs/scripts/run_panoramax.sh
 ```
 
 - **SfM :** réutilise `DIR/sfm` s'il est complet et si les seuils géométriques

@@ -94,7 +94,7 @@ block_index=""
 usage() {
   cat <<'EOF'
 Usage:
-  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=1] bash run_spirula_blocks.sh [options]
+  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=1] bash run_panoramax.sh [options]
 
 Options:
   --prepare-only            Run/reuse SfM and partition, without training

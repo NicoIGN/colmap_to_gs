@@ -206,7 +206,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
         block_defaults = {}
         for name, default in re.findall(
                 r'^\s*([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
-                (ROOT.parents[1] / "tools/libs/scripts" / "run_spirula_blocks.sh").read_text(),
+                (ROOT.parents[1] / "tools/libs/scripts" / "run_panoramax.sh").read_text(),
                 re.MULTILINE):
             block_defaults.setdefault(name, default)
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):

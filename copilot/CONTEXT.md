@@ -43,7 +43,7 @@ Paquets utilisés par les tests et le pipeline :
 
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_panoramax.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Viewer (`tools/viewer`)
@@ -82,10 +82,10 @@ Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier
 python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
 ```
 
-Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_spirula_blocks.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
+Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_panoramax.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
 
 ```bash
-python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_spirula_blocks.py   # ~4 min, 109 tests
+python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_panoramax.py   # ~4 min, 109 tests
 python -m unittest tools/images_to_splat/test_pipeline.py -k <nom>        # ciblé
 python -m unittest discover -s tools/panoramax -p 'test_*.py'             # panoramax
 python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'    # masques

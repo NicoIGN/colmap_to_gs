@@ -148,7 +148,7 @@ python3 tools/postprocess/filter_splats.py \
   moyenne à ses 8 voisins > F × médiane de la scène). Via `train_block_spirula.sh` :
   `--shape-max-aspect-ratio` / `--shape-isolation-factor`, ou
   `POSTPROCESS_SHAPE_MAX_ASPECT_RATIO` / `POSTPROCESS_SHAPE_ISOLATION_FACTOR`.
-  Sans effet si le mode d'export est `off`. Le pipeline blocs Spirula (`run_spirula_blocks.sh`)
+  Sans effet si le mode d'export est `off`. Le pipeline blocs Spirula (`run_panoramax.sh`)
   transmet `POSTPROCESS_FILTER_MODE` (défaut `off`) et ces deux variables à chaque bloc.
 - Arguments `--points`, `--dist`, `--radius-factor`, `--outlier-percent`
   et `--max-points` : acceptés mais sans effet sur les splats retenus ;
