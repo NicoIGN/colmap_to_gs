@@ -73,13 +73,13 @@ Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depu
 
 ### Viewer web
 
-Le viewer s'ouvre dans le navigateur :
+Le viewer web s'ouvre dans le navigateur en lançant la commande:
 
 ```bash
 python3 tools/viewer/server.py
 ```
 
-Depuis l'interface web, on importe une scène 3DGS, puis on ajoute des données externes alignées sur le splat : LiDAR, CityJSON, GeoJSON, GeoPackage et COLMAP. Détails dans la [documentation du viewer](tools/viewer/README.md).
+Depuis l'interface web, on importe une scène 3DGS, à laquelle on peut ajouter des données externes alignées sur le splat : LiDAR, CityJSON, GeoJSON, GeoPackage, modèle SfM COLMAP. Détails dans la [documentation du viewer](tools/viewer/README.md).
 
 
 ## 4. Liste des outils
@@ -88,8 +88,6 @@ Depuis l'interface web, on importe une scène 3DGS, puis on ajoute des données 
 
 - [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
-- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
-- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
 
 ### Reconstruction
 
@@ -100,7 +98,6 @@ Depuis l'interface web, on importe une scène 3DGS, puis on ajoute des données 
 ### Entraînement
 
 - [Entraînement](tools/training/README.md).
-- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
 
 ### Export et visualisation
 
@@ -108,6 +105,12 @@ Depuis l'interface web, on importe une scène 3DGS, puis on ajoute des données 
 - [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
 - [Visualisation](tools/viewer/README.md).
+
+### Utilitaires
+- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
+- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
+- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+
 
 ## 5. Exemples
 
