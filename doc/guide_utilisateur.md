@@ -57,29 +57,85 @@ Sans `--wait`, un retour réussi confirme seulement la soumission. Le détail de
 
 ## 3. Préparer les données et lancer un calcul
 
-Le principe commun est de fournir des images et un modèle COLMAP cohérent :
-les caméras, images enregistrées et points 3D doivent décrire la même scène.
-Selon le parcours choisi, le dépôt peut préparer ce modèle ou réutiliser un
-dataset déjà constitué.
+Le choix du moteur d'entraînement (`TRAIN_BACKEND`) se fait dans la configuration
+du pipeline. **Spirula** (défaut) intègre le SfM et les masques, pilote un budget
+de splats (`TRAIN_SP_QUALITY`) et produit un `.splat`. **Nerfstudio** (Splatfacto)
+exige PyTorch et NVIDIA/CUDA, sans repli CPU/Metal, utilise des masques en mode
+`ignore` et exporte en `.ply`. Le modèle COLMAP et le découpage restent communs
+aux deux moteurs.
 
-Pour le pipeline Nerfstudio / Splatfacto, le point d'entrée est
-`tools/libs/scripts/run.sh`. Exemple :
+#### Paramètres utiles par phase
 
-```bash
-./tools/libs/scripts/run.sh \
-  --dataset-dir /chemin/absolu/vers/mon_dataset \
-  --output-dir /chemin/absolu/vers/mes_resultats \
-  --gsplat-profile balanced \
-  --name ma_scene
-```
+Valeurs par défaut exactes : `bash scripts/helper.sh <PARAMÈTRE>`.
 
-Cette commande illustre le lancement ; les options, valeurs possibles,
-prérequis et étapes exécutées sont décrits dans le
-[guide Nerfstudio](nerfstudio.md#3-configuration-et-utilisation).
+**Commun**
+- `SFM_IMAGES_DIR` : dossier source des photos (`--images` peut le remplacer).
+- `OUTPUT_DIR` : workspace de sortie, distinct et extérieur au dossier d'images. Changer d'images ou de paramètres SfM impose un nouveau workspace.
+- `SPIRULA_BIN` : chemin de l'exécutable Spirula.
+- `NUM_CPUS` : threads du SfM, des masques, de l'entraînement et de la fusion.
+- `NUM_GPUS` : nombre de GPU, un par bloc actif.
+- `TRAIN_BACKEND` : moteur d'entraînement, `spirula` (défaut) ou `nerfstudio`.
+- `PIPELINE_RESUME` : `true` pour reprendre après une interruption, sans supprimer les artefacts.
 
-Pour les autres parcours, utiliser les commandes et fichiers de configuration
-de leur README : le pipeline images locales et le pipeline Panoramax ont des
-étapes et sorties propres.
+**Téléchargement (Panoramax)**
+- `PANORAMAX_BBOX` : emprise `xmin,ymin,xmax,ymax` (obligatoire).
+- `PANORAMAX_BBOX_EPSG` : système de coordonnées de l'emprise (`2154` par défaut).
+- `PANORAMAX_PICTURE_TYPE` : `all`, `normal` (photos classiques) ou `360` (équirectangulaires).
+- `PANORAMAX_QUALITY` : `hd`, `sd` ou `thumb`.
+- `PANORAMAX_IMAGE_MAX` : nombre maximal de photos (vide = aucune limite).
+- `PANORAMAX_DATETIME` : filtre de date au format ISO 8601 (vide = toutes dates).
+- `PANORAMAX_FILTERS` : filtre sur les propriétés STAC ou EXIF, syntaxe `CLÉ=V1,V2;CLÉ2=V3`.
+- `PANORAMAX_REPLACE_REQUEST` : `true` archive une requête différente puis retélécharge ; `false` arrête le lancement.
+
+**SfM**
+- `COLMAP_METHOD` : producteur du modèle (`spirula`, `colmap`, `hloc`, `nerfstudio`, `orientations`).
+- `SFM_MAX_IMAGE_SIZE` : résolution maximale des images pour le SfM (`4096` par défaut). La réduire diminue fortement la mémoire GPU.
+- `SFM_ALIKED_MAX_FEATURES` : nombre maximal de points par image (`8192` par défaut).
+- `SFM_SP_QUALITY` : préréglage Spirula, de `low` à `extreme` (`high` par défaut).
+- `SFM_CAMERA_MODE` : partage des intrinsèques, `folder` (défaut), `single` ou `image`.
+- `SFM_CAMERA_MODEL` : force le modèle de caméra (sinon détecté : `equirectangular` pour le 360°, `opencv` sinon).
+- `SFM_CAMERA_SPLIT` : `true` relance le SfM avec une caméra par modèle si Spirula en détecte plusieurs.
+- `SFM_SP_PAIR_MAX_DISTANCE` : distance GPS maximale entre paires d'images, en mètres (vide = désactivé).
+- `SFM_SP_METRIC_POSITIONS` : fichier de positions en mètres, qui remplace les GPS EXIF.
+- `GEOREF_GPX_FILE` : trace GPX pour géoréférencer le modèle (prioritaire sur les GPS EXIF).
+- `GEOREF_EPSG` : EPSG de l'origine projetée dans le rapport (`2154` par défaut).
+
+**Masques**
+- `SFM_MASKS` et `TRAIN_MASKS` : `on` ou `off`, pour le SfM et l'entraînement.
+- `TRAIN_MASKS_BACKEND` : `spirula` ou `segmentation` (modèle local).
+- `TRAIN_MASKS_SPIRULA_MODEL` : chemin du modèle SAM Spirula (`.ggml`).
+- `MASKS_ACCEPT_LICENSE` : `true` seulement après acceptation des conditions SAM 3 de Meta.
+- `TRAIN_MASKS_LABELS` : éléments à masquer, en anglais (`sky` par défaut).
+- `TRAIN_MASKS_MODE` : `empty` (défaut, le ciel est appris comme vide), `ignore` (pixels exclus de la perte) ou `auto`.
+- `TRAIN_MASKS_DIR` : dossier de masques PNG déjà calculés, réutilisé sans modèle ni GPU.
+
+**Découpage**
+- `SPLIT_NUM_BLOCKS` : nombre de blocs (`1` = pas de découpage).
+- `SPLIT_OVERLAP_MAX_FRACTION` : recouvrement maximal entre blocs, entre 0 et 1 (`0.10` par défaut).
+
+**Entraînement**
+- `TRAIN_NUM_ITER` : nombre d'itérations par bloc (`20000` par défaut).
+- `TRAIN_SP_QUALITY` : budget Spirula, de `low` (200 k splats) à `ultra` (10 M). Les budgets explicites priment.
+- `TRAIN_SP_CAP_MAX` : nombre maximal de splats par bloc.
+- `TRAIN_SP_FLOATER_SUPPRESSION` : suppression des flottants, `off`, `mild` ou `strong`.
+- `TRAIN_NS_DOWNSCALE_FACTOR` : facteur de réduction des images (Nerfstudio uniquement, `1` = résolution native).
+- `TRAIN_CLEAN` : `true` recalcule les sorties 3DGS des blocs, sans toucher au SfM (Nerfstudio uniquement).
+
+**Nettoyage**
+- `POSTPROCESS_CLEANER` : `contextual` (filtres géométriques, défaut) ou `cleangs` (nettoyage du ciel par vues multiples, CUDA requis).
+- `POSTPROCESS_FILTER_MODE` : `diagnostic` (exporte les candidats rejetés sans les retirer), `apply` (les retire) ou `off`.
+
+**Export**
+- `MERGE_STRENGTH` : multiplicateur de taille des voxels de fusion (`1.0` par défaut).
+- `EXPORT_SPLAT_NAME` : nom du fichier `.splat` exporté.
+
+**Slurm**
+- `SLURM_PARTITION` : partition du cluster.
+- `SLURM_MEMORY` : mémoire par job (`64G` par défaut).
+- `SLURM_TIME_LIMIT` : limite de temps par job (`48:00:00` par défaut).
+- `SLURM_GPU_TYPE` : type de GPU (vide = `gpu:1`).
+- `SLURM_ACCOUNT` et `SLURM_QOS` : compte et QoS, vides = valeurs par défaut du cluster.
+- `SLURM_ENV_SETUP` : script sourcé sur chaque nœud pour charger l'environnement (modules, conda).
 
 ## 4. Consulter les guides des outils
 
