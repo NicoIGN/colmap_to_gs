@@ -33,10 +33,10 @@ SfM                                       sfm_run.sh                  run_spirul
                                           sfm_spirula.sh ◀────────────┘
                                           │
                                           ▼
-Découpage                                 colmap_split_blocks.py
+Découpage                                 colmap_split_blocks.py ◀── run_spirula_blocks.sh
                                           │
                                           ▼
-Entraînement                              train_block.sh
+Entraînement                              train_block.sh ◀── run_spirula_blocks.sh
                                           │
                                           ▼
                                           train_block_spirula.sh | train_block_nerfstudio.py
