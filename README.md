@@ -73,13 +73,13 @@ Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depu
 
 ### Viewer web
 
-Le viewer s'ouvre dans le navigateur, avec un fichier de scène en argument :
+Le viewer s'ouvre dans le navigateur :
 
 ```bash
-python3 tools/viewer/server.py /chemin/vers/scene.splat
+python3 tools/viewer/server.py
 ```
 
-L'interface permet d'importer une scène 3DGS et d'y ajouter des données externes alignées sur le splat (LiDAR, CityJSON, GeoJSON, GeoPackage, COLMAP). Détails dans la [documentation du viewer](tools/viewer/README.md).
+Depuis l'interface web, on importe une scène 3DGS, puis on ajoute des données externes alignées sur le splat : LiDAR, CityJSON, GeoJSON, GeoPackage et COLMAP. Détails dans la [documentation du viewer](tools/viewer/README.md).
 
 
 ## 4. Liste des outils
