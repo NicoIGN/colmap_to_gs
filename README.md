@@ -147,7 +147,7 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
 - [Visualisation](tools/viewer/README.md).
 
-#### Exemples
+### Exemples
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
 
