@@ -11,11 +11,11 @@ spécialisés liés ci-dessous.
 
 ## 1. Installation
 
-1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`. Ensuite, activez-le avec `conda activate gsplat`.
+1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](../environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`. Ensuite, activez-le avec `conda activate gsplat`.
 
-2. **Spirula Studio** : compilez-le avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), qui applique les bonnes options et télécharge le modèle SAM3 utilisé pour les masques.
+2. **Spirula Studio** : compilez-le avec [`install/spirula/install_spirula.sh`](../install/spirula/README.md), qui applique les bonnes options et télécharge le modèle SAM3 utilisé pour les masques.
 
-3. **COLMAP et HLOC** : HLOC améliore la mise en correspondance des images pour la reconstruction 3D. Si vous utilisez cette option, installez-le avec `bash install/colmap/install-hloc.sh`. Voir [HLOC sur GitHub](https://github.com/cvg/Hierarchical-Localization) et le [README SfM](tools/sfm/README.md).
+3. **COLMAP et HLOC** : HLOC améliore la mise en correspondance des images pour la reconstruction 3D. Si vous utilisez cette option, installez-le avec `bash install/colmap/install-hloc.sh`. Voir [HLOC sur GitHub](https://github.com/cvg/Hierarchical-Localization) et le [README SfM](../tools/sfm/README.md).
 
 ## 2. Choisir un parcours
 
