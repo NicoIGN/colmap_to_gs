@@ -59,6 +59,10 @@ machine courante (`scripts/<pipeline>.sh`) ou sur un serveur Slurm
 (`scripts/launch_<pipeline>.sh`). Voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet),
 [le guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les scripts](scripts/README.md).
 
+### Installation
+
+L'environnement Conda se crée depuis le fichier de sa plateforme dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`), par exemple `conda env create --yes --file environment/macos/conda_env.yml`. Il fournit notamment `pycolmap`. HLOC (et LightGlue) s'installe ensuite avec `bash install/colmap/install-hloc.sh` : ne pas le poser à la main avec pip, il peut remplacer numpy et torch. Voir le [README SfM](tools/sfm/README.md) pour l'usage, et [install/spirula](install/spirula/README.md) pour Spirula.
+
 ### Démarrer
 
 Les défauts sont chargés automatiquement depuis `config/defaults/*.default.sh`, puis
@@ -118,26 +122,34 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 
 ### Documentation des outils
 
-#### Cœur de la chaîne
+#### Acquisition et préparation
 
 - [Préparation des images et modèles COLMAP](tools/prepare/README.md).
-- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
+- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
+- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
+
+#### Reconstruction
+
+- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
 - [Masques](tools/masks/README.md).
-- [Installation de Spirula](install/spirula/README.md).
+
+#### Entraînement
+
 - [Entraînement](tools/training/README.md).
+- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+
+#### Export et visualisation
+
 - [Export, filtrage et fusion](tools/export/README.md).
 - [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
 - [Visualisation](tools/viewer/README.md).
-- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
 
-#### Outils autour
+#### Exemples
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
-- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
-- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
 
 ### Tests
 
