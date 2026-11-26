@@ -33,7 +33,10 @@ SfM            sfm_core.sh ◀────────────────�
 Reconstruction sfm_reconstruct.sh
                │
                ▼
-               sfm_spirula.sh
+Backend        backends/$COLMAP_METHOD.sh
+               │
+               ▼
+               spirula.sh → sfm_spirula.sh
                │
                ▼
 Découpage      colmap_split_blocks.py
