@@ -27,25 +27,30 @@ Préparation    prepare_video_frames.py    prepare_images.py          download.p
                ▼                                                     run_panoramax.sh
 Pilotes        run_standard_images.sh                                │
                │                                                     │
-SfM            sfm_run.sh ◀─────────────────────────────────────────┘
-               │  lance le backend choisi par COLMAP_METHOD
+               ├─────────────────────────────────────────────────────┘
                ▼
-Backend        backends/$COLMAP_METHOD.sh
+              =========================================================
+               │                                                     
+               ▼                
+SfM            sfm_run.sh 
+               │  lance le backend choisi par COLMAP_METHOD
                │
-               ├─ spirula.sh      → spirula/sfm_spirula.sh
-               ├─ colmap.sh       → colmap/reconstruct.py
-               ├─ nerfstudio.sh   → colmap/reconstruct.py (nerfstudio)
-               ├─ hloc.sh         → colmap/hloc_reconstruct.py
-               └─ orientations.sh → colmap/orientations_to_colmap.py (importe des orientations existantes)
+               │  backends/$COLMAP_METHOD.sh
+               │    │
+               │    ├─ spirula.sh      → spirula/sfm_spirula.sh
+               │    ├─ colmap.sh       → colmap/reconstruct.py
+               │    ├─ nerfstudio.sh   → colmap/reconstruct.py (nerfstudio)
+               │    ├─ hloc.sh         → colmap/hloc_reconstruct.py
+               │    └─ orientations.sh → colmap/orientations_to_colmap.py (importe des orientations existantes)
                │
                ▼
 Découpage      colmap_split_blocks.py
                │
                ▼
 Entraînement   train_block.sh   (dispatch selon TRAIN_BACKEND, dans training/)
-               │
-               ├─ spirula    → training/backends/train_block_spirula.sh
-               └─ nerfstudio → training/backends/train_block_nerfstudio.py
+               │    │
+               │    ├─ spirula    → training/backends/train_block_spirula.sh
+               │    └─ nerfstudio → training/backends/train_block_nerfstudio.py
                │
                ▼
 Géoréférence   georef.sh
