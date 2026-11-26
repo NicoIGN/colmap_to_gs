@@ -87,7 +87,7 @@ class RealGpxGeoreferenceTest(unittest.TestCase):
             np.testing.assert_allclose(result_point, expected_point, atol=1e-8)
             # The sidecar is directly consumable by the existing 3D Tiles reader.
             converter_spec = importlib.util.spec_from_file_location(
-                "splat_convert", SOURCE.parent / "splat_to_3dtiles/convert.py")
+                "splat_convert", SOURCE.parent / "export/export_3dtiles.py")
             converter = importlib.util.module_from_spec(converter_spec)
             converter_spec.loader.exec_module(converter)
             reference = converter.read_georeference(root / "scene.georef.json")

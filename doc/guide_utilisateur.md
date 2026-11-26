@@ -129,7 +129,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Visualisation locale** :
   [tools/viewer](../tools/viewer/README.md).
 - **Conversion d'un SPLAT géoréférencé en 3D Tiles** :
-  [tools/splat_to_3dtiles](../tools/splat_to_3dtiles/README.md).
+  [tools/export/export_3dtiles.md](../tools/export/export_3dtiles.md).
 
 Ces documents détaillent les paramètres, dépendances, fichiers produits,
 commandes de validation et particularités de chaque outil.

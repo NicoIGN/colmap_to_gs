@@ -369,7 +369,7 @@ explicitement cette solution sans refaire le SfM ; les avertissements restent
 affichés. **Tout recalage demande une validation visuelle**, même sans alerte.
 
 Le résultat final est accompagné de `<nom-du-splat>.georef.json`, compatible
-avec `tools/splat_to_3dtiles/convert.py --georef-summary`, sans appliquer une
+avec `tools/export/export_3dtiles.py --georef-summary`, sans appliquer une
 seconde transformation aux coordonnées. Un `.splat` seul n'embarque pas de CRS :
 conserver le fichier de référence avec lui.
 

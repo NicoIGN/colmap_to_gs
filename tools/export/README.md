@@ -181,5 +181,5 @@ recréer les splats manquants.
 python3 -m unittest discover -s tools/export -p 'test_*.py'
 ```
 
-La conversion `.splat` vers 3D Tiles conserve son dossier autonome
-[`../splat_to_3dtiles/`](../splat_to_3dtiles/README.md).
+La conversion `.splat` vers 3D Tiles est documentée dans
+[`export_3dtiles.md`](export_3dtiles.md).

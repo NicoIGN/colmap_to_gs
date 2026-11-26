@@ -54,7 +54,7 @@ Options : `tileset` (requis), `--port PORT` (défaut `8000`, valeurs de `0` à
 le fond est sans relief. Les contenus référencés par le tileset doivent être
 dans son dossier ou ses sous-dossiers.
 
-Le pipeline de conversion reste dans [`../splat_to_3dtiles/`](../splat_to_3dtiles/README.md).
+Le pipeline de conversion reste dans [`../export/export_3dtiles.md`](../export/export_3dtiles.md).
 
 ## 4. Fonctionnement interne
 

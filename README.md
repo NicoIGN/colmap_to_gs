@@ -146,7 +146,7 @@ npm install --global 3dgs-ply-3dtiles-converter
 
 ```bash
 # Conversion (--georef-summary est facultatif)
-python3 tools/splat_to_3dtiles/convert.py \
+python3 tools/export/export_3dtiles.py \
   --input /chemin/vers/scene.splat \
   --output-dir /chemin/vers/scene_tiles \
   --no-open-inspector
@@ -155,7 +155,7 @@ python3 tools/splat_to_3dtiles/convert.py \
 bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
 ```
 
-Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/splat_to_3dtiles/README.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
+Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/export/export_3dtiles.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
 
 ### Documentation des outils
 
@@ -170,4 +170,4 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
 - [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
 - [Visualisation](tools/viewer/README.md).
-- [Conversion en 3D Tiles](tools/splat_to_3dtiles/README.md).
+- [Conversion en 3D Tiles](tools/export/export_3dtiles.md).

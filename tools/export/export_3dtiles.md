@@ -9,7 +9,7 @@ Convertir un `.splat` local géoréférencé en tileset 3D Tiles 1.1 contenant d
 Exemple d’invocation :
 
 ```bash
-python3 tools/splat_to_3dtiles/convert.py \
+python3 tools/export/export_3dtiles.py \
   --input /chemin/vers/scene.splat \
   --georef-summary /chemin/vers/georef_summary.json \
   --output-dir /chemin/vers/scene_tiles \
@@ -38,7 +38,7 @@ npm install --global 3dgs-ply-3dtiles-converter
 
 Le premier lancement du convertisseur peut ouvrir son inspecteur ; la commande ci-dessous le désactive pour un traitement batch.
 
-Options de `convert.py` :
+Options de `export_3dtiles.py` :
 
 - `--georef-summary PATH` : `georef_summary.json` de `georef_colmap_from_gpx.py`. Facultatif : sans lui, le convertisseur cherche `georef/georef_summary.json`, puis `georef_summary.json` dans le dossier du `.splat`.
 - `--model NAME` : modèle du résumé géographique ; facultatif avec un seul modèle, requis s'il y en a plusieurs.
@@ -51,7 +51,7 @@ Options de `convert.py` :
 
 
 ```bash
-python3 tools/splat_to_3dtiles/convert.py \
+python3 tools/export/export_3dtiles.py \
   --input /chemin/vers/scene.splat \
   --georef-summary /chemin/vers/georef_summary.json \
   --output-dir /chemin/vers/scene_tiles \
@@ -61,7 +61,7 @@ python3 tools/splat_to_3dtiles/convert.py \
 Pour un résumé contenant plusieurs modèles :
 
 ```bash
-python3 tools/splat_to_3dtiles/convert.py \
+python3 tools/export/export_3dtiles.py \
   --input /chemin/vers/scene.splat \
   --georef-summary /chemin/vers/georef_summary.json \
   --model "." \
@@ -73,7 +73,7 @@ Le résultat est `scene_tiles/tileset.json` et les contenus référencés sous `
 
 ## 4. Fonctionnement interne
 
-Le convertisseur `tools/splat_to_3dtiles/convert.py` prépare le `.splat` dans
+Le convertisseur `tools/export/export_3dtiles.py` prépare le `.splat` dans
 un format que le convertisseur 3D Tiles peut lire. Celui-ci découpe ensuite
 la scène en tuiles de plusieurs niveaux de détail pour qu'elle puisse être
 affichée progressivement dans un visualiseur.

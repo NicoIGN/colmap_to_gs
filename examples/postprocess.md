@@ -48,7 +48,7 @@ Le chemin du checkpoint est le dernier `chkpt_step-*.ply` de `chkpt/`.
 ## Convertir un splat en 3D Tiles
 
 ```bash
-python "$GIT_ROOT/tools/splat_to_3dtiles/convert.py" \
+python "$GIT_ROOT/tools/export/export_3dtiles.py" \
   --input "$DATA_ROOT/scene.splat" --georef-summary "$DATA_ROOT/georef_summary.json" \
   --output-dir "$DATA_ROOT/scene_tiles" --no-open-inspector
 ```
@@ -57,4 +57,4 @@ Le splat doit être en ENU local et le résumé de géoréférencement doit prov
 du même traitement. Adapter les entrées et choisir un dossier de sortie qui
 n'existe pas. Node.js et le convertisseur externe sont nécessaires ; pour
 leurs prérequis et la visualisation, consulter la
-[documentation 3D Tiles](../tools/splat_to_3dtiles/README.md).
+[documentation 3D Tiles](../tools/export/export_3dtiles.md).
