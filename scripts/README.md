@@ -1,9 +1,9 @@
 # Pipelines principaux
 
-[Retour aux exemples](README.md) · [Guide Bash / Slurm](../doc/lancement_bash_slurm.md)
+[Retour aux exemples](../examples/README.md) · [Guide Bash / Slurm](../doc/lancement_bash_slurm.md)
 
 Les exemples ci-dessous utilisent `GIT_ROOT` et `DATA_ROOT` initialisés comme dans
-[l'index](README.md). Choisir le pipeline selon les données d'entrée, puis
+[l'index](../examples/README.md). Choisir le pipeline selon les données d'entrée, puis
 adapter sa configuration et choisir un mode de lancement.
 
 ## Flux des pipelines
@@ -24,19 +24,19 @@ Préparation   prepare_video_frames.py ──▶ prepare_images.py           dow
                                           │                           prepare_equirect_views.py
                                           │                           │
                                           ▼                           ▼
-SfM                                       sfm_run.sh                  run_spirula_blocks.sh
+SfM                                       sfm_run.sh                  run_panoramax.sh
                                           │                           │
                                           ▼                           │
                                           sfm_reconstruct.sh          │
                                           │                           │
                                           ▼                           │
-                                          sfm_spirula.sh ◀────────────┘
-                                          │
-                                          ▼
-Découpage                                 colmap_split_blocks.py ◀── run_spirula_blocks.sh
-                                          │
-                                          ▼
-Entraînement                              train_block.sh ◀── run_spirula_blocks.sh
+                                          sfm_spirula.sh ◀────────────┤
+                                          │                           │
+                                          ▼                           │
+Découpage                                 colmap_split_blocks.py ◀────┤
+                                          │                           │
+                                          ▼                           │
+Entraînement                              train_block.sh ◀────────────┘
                                           │
                                           ▼
                                           train_block_spirula.sh | train_block_nerfstudio.py

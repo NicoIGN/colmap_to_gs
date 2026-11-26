@@ -86,7 +86,7 @@ Après avoir préparé un fichier `config-panoramax.sh` contenant au minimum
 bash "$GIT_ROOT/scripts/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 ```
 
-Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](pipelines.md).
+Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](../scripts/README.md).
 
 Pour filtrer les photos du pipeline complet, utiliser `PANORAMAX_FILTERS` :
 `;` sépare les propriétés (ET), `,` sépare les valeurs d'une propriété (OU), la

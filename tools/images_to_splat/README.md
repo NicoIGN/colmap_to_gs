@@ -68,7 +68,7 @@ sont décrits dans le [guide de lancement Bash / Slurm](../../doc/lancement_bash
 
 La configuration, les commandes et les options (`VIDEO`, `NUM_FRAMES`,
 `--wait`, `--prepare-only`) sont décrites dans
-[l'exemple vidéo](../../examples/pipelines.md#vidéo--images--3dgs) et le
+[l'exemple vidéo](../../scripts/README.md#vidéo--images--3dgs) et le
 [guide Bash / Slurm](../../doc/lancement_bash_slurm.md).
 
 `scripts/launch_videos_to_3dgs.sh` effectue deux étapes : extraction CPU des

@@ -129,7 +129,7 @@ bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
 Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md) et les
-[exemples de configuration complète](examples/pipelines.md) pour les paramètres
+[exemples de configuration complète](scripts/README.md) pour les paramètres
 commentés de chaque pipeline.
 
 Les installations, données attendues, paramètres et sorties sont décrits dans

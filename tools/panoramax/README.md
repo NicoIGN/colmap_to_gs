@@ -249,7 +249,7 @@ acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 Un exemple de configuration minimale et complète, avec la commande de lancement,
-est dans [l'exemple Panoramax](../../examples/pipelines.md#panoramax--3dgs).
+est dans [l'exemple Panoramax](../../scripts/README.md#panoramax--3dgs).
 
 - Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
   avant toute soumission.
