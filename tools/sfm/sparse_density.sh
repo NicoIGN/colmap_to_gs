@@ -1,4 +1,4 @@
-# Filtre de densité du sparse, partagé par tools/sfm/run.sh et Panoramax.
+# Filtre de densité du sparse, partagé par tools/sfm/sfm_run.sh et Panoramax.
 # Requiert repo_root, PYTHON_BIN, NUM_CPUS, SFM_DENSITY_* et die.
 #
 # Usage : sparse_density_stage INPUT_DIR OUTPUT_DIR GUARD_DIR...

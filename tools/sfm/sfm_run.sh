@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
-usage() { echo "Usage : bash tools/sfm/run.sh CONFIG [--images DIR]"; }
+usage() { echo "Usage : bash tools/sfm/sfm_run.sh CONFIG [--images DIR]"; }
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
@@ -79,7 +79,7 @@ prepare() {
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0" --archive-sparse
     fi
     begin_stage "reconstruction COLMAP ($COLMAP_METHOD)"
-    bash "$repo_root/tools/sfm/reconstruct.sh"
+    bash "$repo_root/tools/sfm/sfm_reconstruct.sh"
     if [[ "$PIPELINE_RESUME" == true ]]; then
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     fi
@@ -101,7 +101,7 @@ prepare() {
         SFM_RECONSTRUCT_DIR="$OUTPUT_DIR/sfm_cameras/sfm" \
         SFM_RECONSTRUCT_MASKS="$OUTPUT_DIR/sfm_cameras/masks" \
         SFM_RECONSTRUCT_CAMERA_MODE=folder \
-        bash "$repo_root/tools/sfm/reconstruct.sh"
+        bash "$repo_root/tools/sfm/sfm_reconstruct.sh"
       "$PYTHON_BIN" "$camera_split" finish "${split_args[@]}"
       "$PYTHON_BIN" "$script_dir/resume.py" "$sfm/sparse/0"
     elif ((split_status != 3)); then

@@ -52,7 +52,7 @@ fi
 usage() {
   cat <<'EOF'
 Usage:
-  bash run_spirula_block.sh --sparse-dir <dir> --images-dir <dir> --output-dir <dir> [options]
+  bash train_block_spirula.sh --sparse-dir <dir> --images-dir <dir> --output-dir <dir> [options]
 
 Important:
   - La visionneuse est désactivée.

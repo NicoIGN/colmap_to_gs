@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Caller supplies repo_root, PYTHON_BIN and OUTPUT_DIR, and sources georef_phase.sh and pipeline_lidar.sh.
+# Caller supplies repo_root, PYTHON_BIN and OUTPUT_DIR, and sources georef.sh and pipeline_lidar.sh.
 # Coordinate-frame selection stays upstream.
 
 # Tail commun : référence géographique puis nettoyage LiDAR du splat final.

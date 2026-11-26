@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/panoramax"
-source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
 
 usage() {
@@ -91,7 +91,7 @@ export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-source "$repo_root/tools/libs/scripts/georef_phase.sh"
+source "$repo_root/tools/libs/scripts/georef.sh"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 export LIDAR_WORKSPACE="$OUTPUT_DIR"

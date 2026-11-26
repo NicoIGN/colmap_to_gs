@@ -44,7 +44,7 @@ bash tools/postprocess/clean_ply.sh --help
 - Pour modifier la fusion, la relancer sans réentraîner les blocs.
 
 - `tools/libs/scripts/run.sh` : appelle les lanceurs Nerfstudio.
-- `tools/libs/scripts/run_spirula_block.sh` : utilise `export_ply.py` par défaut ;
+- `tools/libs/scripts/train_block_spirula.sh` : utilise `export_ply.py` par défaut ;
   surcharge possible avec `--export-script` / `EXPORT_SCRIPT`.
 
 ## 4. Fonctionnement interne
@@ -145,7 +145,7 @@ python3 tools/postprocess/filter_splats.py \
 - Filtre de forme/isolement (aiguilles flottantes) : `--max-aspect-ratio R` et
   `--isolation-factor F` (à fournir ensemble, désactivé par défaut). Un splat est
   rejeté s'il est plus allongé que R (rapport max/min des axes) ET isolé (distance
-  moyenne à ses 8 voisins > F × médiane de la scène). Via `run_spirula_block.sh` :
+  moyenne à ses 8 voisins > F × médiane de la scène). Via `train_block_spirula.sh` :
   `--shape-max-aspect-ratio` / `--shape-isolation-factor`, ou
   `POSTPROCESS_SHAPE_MAX_ASPECT_RATIO` / `POSTPROCESS_SHAPE_ISOLATION_FACTOR`.
   Sans effet si le mode d'export est `off`. Le pipeline blocs Spirula (`run_spirula_blocks.sh`)
@@ -163,7 +163,7 @@ Pour le réutiliser explicitement :
 
 ```bash
 EXPORT_SCRIPT="$PWD/tools/postprocess/export_ply_legacy.py" \
-  bash tools/libs/scripts/run_spirula_block.sh --sparse-dir ... --images-dir ... --output-dir ...
+  bash tools/libs/scripts/train_block_spirula.sh --sparse-dir ... --images-dir ... --output-dir ...
 ```
 
 Cet exporteur accepte `MAX_WORLD_SCALE` via le lanceur. Cette surcharge peut
@@ -171,7 +171,7 @@ retirer de grands splats de route : elle ne convient pas pour évaluer le filtre
 contextuel sur des blocs.
 
 Pour réexporter un entraînement existant, relancer la même commande
-`run_spirula_block.sh` **sans `--clean`** : le checkpoint final est réutilisé,
+`train_block_spirula.sh` **sans `--clean`** : le checkpoint final est réutilisé,
 sans nouvel entraînement, et le `.splat` est remplacé.
 Pour récupérer les splats supprimés par un export précédent, il faut
 réexporter depuis le checkpoint PLY : filtrer un `.splat` existant ne peut pas

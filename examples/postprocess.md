@@ -27,7 +27,7 @@ que l'entrée, plus un bloc `filter` (paramètres et compteurs).
 
 ## Exporter un splat filtré avec les points COLMAP
 
-Export d'un checkpoint (`export_ply.py`, appelé par `run_spirula_block.sh`) avec filtrage :
+Export d'un checkpoint (`export_ply.py`, appelé par `train_block_spirula.sh`) avec filtrage :
 
 ```bash
 python "$GIT_ROOT/tools/postprocess/export_ply.py" \

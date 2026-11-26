@@ -7,7 +7,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).with_name("run_spirula_sfm.sh")
+SCRIPT = Path(__file__).with_name("sfm_spirula.sh")
 
 
 class SfmRecoveryTest(unittest.TestCase):

@@ -189,7 +189,7 @@ Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
   Spirula. Le dernier filtre les paires par distance GPS.
 - Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
   `match` et `map` concernées.
-- `tools/sfm/spirula/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
+- `tools/sfm/spirula/sfm_spirula.sh` : wrapper direct ; options CLI équivalentes
   `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
   `--ba-loss-param`.
 - Vérifier la disponibilité de ces options dans la version installée de
@@ -218,7 +218,7 @@ altitude, cap). Spirula s'en sert directement pour placer le modèle dans un
 repère local est-nord-haut en mètres, sans recalage GPX a posteriori :
 
 ```bash
-bash tools/sfm/spirula/run_spirula_sfm.sh \
+bash tools/sfm/spirula/sfm_spirula.sh \
   --spirula-bin /chemin/vers/spirula \
   --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm \

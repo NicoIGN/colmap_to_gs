@@ -402,7 +402,7 @@ Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérent
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
 - `tools/sfm/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.
-- `tools/libs/scripts/pipeline_postprocess.sh` : fusionne les splats exportés par bloc.
+- `tools/libs/scripts/export.sh` : fusionne les splats exportés par bloc.
 - `tools/libs/scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
 - `tools/libs/scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
   et entraîner les blocs.

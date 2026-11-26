@@ -24,28 +24,28 @@ Préparation   prepare_video_frames.py ──▶ prepare_images.py           dow
                                           │                           prepare_equirect_views.py
                                           │                           │
                                           ▼                           ▼
-SfM                                       run.sh                      run_spirula_blocks.sh
+SfM                                       sfm_run.sh                  run_spirula_blocks.sh
                                           │                           │
                                           ▼                           │
-                                          reconstruct.sh              │
+                                          sfm_reconstruct.sh          │
                                           │                           │
                                           ▼                           │
-                                          run_spirula_sfm.sh ◀────────┘
+                                          sfm_spirula.sh ◀────────────┘
                                           │
                                           ▼
 Découpage                                 colmap_split_blocks.py
                                           │
                                           ▼
-Entraînement                              run_3dgs_block.sh
+Entraînement                              train_block.sh
                                           │
                                           ▼
-                                          run_spirula_block.sh | nerfstudio_block.py
+                                          train_block_spirula.sh | train_block_nerfstudio.py
                                           │
                                           ▼
-Géoréférence                              georef_phase.sh
+Géoréférence                              georef.sh
                                           │
                                           ▼
-Export                                    pipeline_postprocess.sh
+Export                                    export.sh
 ```
 
 ## Images locales → 3DGS

@@ -40,7 +40,7 @@ case "$COLMAP_METHOD" in
     if [[ "$SFM_SP_PAIRS" == sequential ]]; then
       sequence_args=(--data-type video --sequence .)
     fi
-    bash "$repo_root/tools/sfm/spirula/run_spirula_sfm.sh" \
+    bash "$repo_root/tools/sfm/spirula/sfm_spirula.sh" \
       --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
       --preset video "${prepare_args[@]}" "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \

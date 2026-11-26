@@ -364,7 +364,7 @@ class BlockPipelineTest(unittest.TestCase):
                 env["TRAIN_SP_GROWTH_FACTOR"] = ""
                 env.update(settings)
                 result = subprocess.run(
-                    ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                    ["bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                      "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                      "--output-dir", str(root / "worker"), *args],
                     env=env, capture_output=True, text=True, timeout=30)
@@ -391,7 +391,7 @@ class BlockPipelineTest(unittest.TestCase):
                 root, data, sparse, env, log, execute = self.fixture(temporary)
                 env.pop("TRAIN_SP_GROWTH_FACTOR")
                 result = subprocess.run(
-                    ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                    ["bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                      "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                      "--output-dir", str(root / "unused"), *args],
                     env=env, capture_output=True, text=True, timeout=10)
@@ -424,7 +424,7 @@ class BlockPipelineTest(unittest.TestCase):
             env.update(TRAIN_SP_GROWTH_FACTOR="", LC_NUMERIC="C",
                        TRAIN_SP_REFINE_STOP_ITER="12000", TRAIN_SP_REFINE_STOP_NUM_ITER="3000")
             result = subprocess.run(
-                ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                ["bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "worker"), "--num-iterations", "15000"],
                 env=env,
@@ -682,7 +682,7 @@ class BlockPipelineTest(unittest.TestCase):
                        TRAIN_SP_BILAGRID_TYPE="ppisp")
             output = root / "output"
             command = [
-                "bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                "bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                 "--spirula-bin", str(spirula), "--python-bin", str(python),
                 "--sparse-dir", str(sparse), "--images-dir", str(images),
                 "--output-dir", str(output), "--num-iterations", "3",
@@ -727,7 +727,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_QUALITY", result.stderr)
             result = subprocess.run(
-                ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                ["bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "unused"), "--quality", "invalid"],
                 env=env, capture_output=True, text=True, timeout=10)
@@ -763,7 +763,7 @@ class BlockPipelineTest(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
             result = subprocess.run(
-                ["bash", str(SCRIPT.with_name("run_spirula_block.sh")),
+                ["bash", str(SCRIPT.with_name("train_block_spirula.sh")),
                  "--sparse-dir", str(sparse), "--images-dir", str(data / "images"),
                  "--output-dir", str(root / "unused"),
                  "--distraction-robustness", "invalid"],
@@ -775,7 +775,7 @@ class BlockPipelineTest(unittest.TestCase):
 
 class SingleBlockMergeTest(unittest.TestCase):
     def test_single_splat_is_copied_and_converted_formats_still_use_merge(self):
-        helper = SCRIPT.with_name("pipeline_postprocess.sh")
+        helper = SCRIPT.with_name("export.sh")
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "block.splat"

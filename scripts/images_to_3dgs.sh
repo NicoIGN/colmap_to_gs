@@ -2,9 +2,9 @@
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
-source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/libs/scripts/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
-source "$repo_root/tools/libs/scripts/georef_phase.sh"
+source "$repo_root/tools/libs/scripts/georef.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
@@ -164,7 +164,7 @@ check_filtered_sparse() {
 
 prepare() {
   set_stage "production COLMAP"
-  bash "$repo_root/tools/sfm/run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  bash "$repo_root/tools/sfm/sfm_run.sh" "$config" --images "$SFM_IMAGES_DIR"
   set_stage "géoréférencement"
   georef_run "$sfm_model"
   georef_lidar_env
@@ -247,7 +247,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
-    bash "$repo_root/tools/libs/scripts/run_3dgs_block.sh" "${args[@]}"
+    bash "$repo_root/tools/libs/scripts/train_block.sh" "${args[@]}"
   done
 fi
 [[ "$phase" != train-block ]] || exit 0

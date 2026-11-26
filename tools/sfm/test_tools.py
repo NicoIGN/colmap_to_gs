@@ -22,7 +22,7 @@ from orientations_to_colmap import convert
 from transforms_to_orientations import convert as convert_transforms
 from las_to_ply import convert as convert_las
 from nerfstudio_runtime import check_runtime
-from nerfstudio_block import prepare_dataset, main as block_main
+from train_block_nerfstudio import prepare_dataset, main as block_main
 from colmap_split_blocks import read_images_binary, read_points3d_binary
 
 
@@ -125,7 +125,7 @@ class ConversionTest(unittest.TestCase):
             'SPLIT_NUM_BLOCKS=1\nSPIRULA_BIN=true\n'
         )
         for script, args in (
-            (ROOT / "tools/sfm/run.sh", []),
+            (ROOT / "tools/sfm/sfm_run.sh", []),
             (ROOT / "scripts/images_to_3dgs.sh", ["--phase", "prepare"]),
         ):
             result = subprocess.run(["bash", str(script), str(config), *args],
@@ -188,7 +188,7 @@ class ConversionTest(unittest.TestCase):
         self.assertTrue((Path(env["OUTPUT_DIR"]) / "sfm/sparse/0/images.bin").is_file())
 
     def test_nerfstudio_worker_exports_world_frame_and_refuses_changed_signature(self):
-        import nerfstudio_block
+        import train_block_nerfstudio
         calls = []
 
         def fake_run(command):
@@ -217,8 +217,8 @@ class ConversionTest(unittest.TestCase):
 
         args = ["worker", "--sparse-dir", str(self.sparse), "--images-dir", str(self.images),
                 "--output-dir", str(self.root / "trained"), "--name", "test.splat"]
-        with patch.object(nerfstudio_block, "check_runtime"), \
-                patch.object(nerfstudio_block, "run", fake_run), patch.object(sys, "argv", args):
+        with patch.object(train_block_nerfstudio, "check_runtime"), \
+                patch.object(train_block_nerfstudio, "run", fake_run), patch.object(sys, "argv", args):
             block_main()
             raw = self.root / "trained/splats/test.splat"
             xyz = np.frombuffer(raw.read_bytes()[:12], dtype="<f4")

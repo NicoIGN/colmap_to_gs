@@ -40,7 +40,7 @@ option_values=()
 usage() {
   cat <<'EOF'
 Usage :
-  bash run_spirula_sfm.sh --dataset PATH --output-dir PATH [options]
+  bash sfm_spirula.sh --dataset PATH --output-dir PATH [options]
 
 Entrées :
   --spirula-bin PATH         Exécutable Spirula ; défaut : spirula du PATH,

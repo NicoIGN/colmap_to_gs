@@ -510,7 +510,7 @@ prepare_blocks() {
       printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
       mv -- "$BLOCKS_DIR" "$archive"
     fi
-    bash "$repo_root/tools/sfm/spirula/run_spirula_sfm.sh" "${sfm_args[@]}"
+    bash "$repo_root/tools/sfm/spirula/sfm_spirula.sh" "${sfm_args[@]}"
   fi
 
   for file in cameras.bin images.bin points3D.bin; do
@@ -668,7 +668,7 @@ for ((index = first_index; index < last_index; index++)); do
   fi
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
   [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
-  bash "$script_dir/run_3dgs_block.sh" "${block_args[@]}"
+  bash "$script_dir/train_block.sh" "${block_args[@]}"
 done
 
 printf '\n[pipeline] Terminé. Modèles par bloc : %s/block_*/splats/*.splat\n' "$GS_ROOT"
