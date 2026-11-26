@@ -67,7 +67,7 @@ est décrit dans le [README du post-traitement](../tools/export/README.md).
 
 ### 2.3. Utiliser un pipeline complet
 
-Deux pipelines dans `scripts/` enchaînent la production des données COLMAP,
+Trois pipelines dans `scripts/` enchaînent la production des données COLMAP,
 l'entraînement et l'export. Spirula reste le moteur par défaut ; Nerfstudio
 peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
 

@@ -54,17 +54,8 @@ l'entraînement, l'export et le post-traitement, ainsi qu'en pipelines qui encha
 
 ### Pipelines complets
 
-Trois pipelines dans `scripts/` enchaînent les étapes jusqu'à l'export d'un splat
-(`TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto) :
-
-- **Images** : `images_to_3dgs.sh`, [pipeline images vers splat](tools/libs/README.md).
-- **Vidéo** : `videos_to_3dgs.sh`, extraction d'images puis même chaîne.
-- **Panoramax** : `panoramax_to_3dgs.sh`, [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
-
-La préparation COLMAP possède son propre outil et sa configuration :
-Spirula, COLMAP direct, `ns-process-data` ou conversion de poses caméra et LiDAR.
-Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
-échoue explicitement s'ils sont absents.
+Les pipelines images, vidéo et Panoramax, avec le choix du moteur d'entraînement,
+sont décrits dans le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet).
 
 ### Démarrer
 
