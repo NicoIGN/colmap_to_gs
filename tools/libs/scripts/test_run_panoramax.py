@@ -47,6 +47,13 @@ class BlockPipelineTest(unittest.TestCase):
                 image = pycolmap.Image(name=f"front/{name}.jpg", camera_id=1, image_id=index + 1)
                 model.add_image_with_trivial_frame(
                     image, pycolmap.Rigid3d(rotation, -rotation.matrix() @ centers[index]))
+                model.images[index + 1].points2D = [pycolmap.Point2D([4., 4.])]
+            track = pycolmap.Track()
+            for image_id in range(1, len(coordinates) + 1):
+                track.add_element(image_id, 0)
+            point_id = model.add_point3D(np.array([0., 0., 1.]), track)
+            for image_id in range(1, len(coordinates) + 1):
+                model.images[image_id].set_point3D_for_point2D(0, point_id)
             raw = root / "raw-model"
             raw.mkdir()
             model.write(raw)

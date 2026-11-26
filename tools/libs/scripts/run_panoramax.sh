@@ -410,7 +410,6 @@ PY
 
 prepare_blocks() {
   local block_count block_id block_sparse file index
-  local feature_args=()
   pipeline_report_phase "reconstruction SfM"
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
@@ -444,7 +443,6 @@ prepare_blocks() {
         ${mask_projection_args[@]+"${mask_projection_args[@]}"}
       touch -- "$masks_done"
     fi
-    feature_args=(--feature-masks "$OUTPUT_DIR/feature_masks")
   elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
     die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
   fi
@@ -453,13 +451,16 @@ prepare_blocks() {
     check_hloc_policy prepare
     if [[ ! -s "$hloc_raw/cameras.bin" || ! -s "$hloc_raw/images.bin" || ! -s "$hloc_raw/points3D.bin" ]]; then
       [[ ! -d "$SFM_DIR/hloc" ]] || die "SfM HLOC partiel : déplacer le workspace avant de recommencer."
-      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/hloc_reconstruct.py" \
-        --images "$IMAGES_DIR" --output "$hloc_raw" --work "$SFM_DIR/hloc/work" \
-        --features "${HLOC_FEATURES:-superpoint_max}" --matcher "${HLOC_MATCHER:-superpoint+lightglue}" \
-        --pairs "${HLOC_PAIRS:-retrieval}" --retrieval "${HLOC_RETRIEVAL:-netvlad}" \
-        --num-neighbors "${HLOC_NUM_NEIGHBORS:-20}" --camera-model PINHOLE --camera-mode single \
-        --perspective-view-size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" \
-        ${feature_args[@]+"${feature_args[@]}"}
+      # Vues pinhole issues de l'équirectangulaire : le backend hloc lit ces paramètres de l'environnement.
+      (
+        export COLMAP_METHOD=hloc HLOC_CAMERA_MODEL=PINHOLE PYTHON_BIN OUTPUT_DIR SFM_MASKS
+        export SFM_CAMERA_MODE=single SFM_RECONSTRUCT_CAMERA_MODE=single
+        export SFM_PERSPECTIVE_VIEW_SIZE="$SFM_EQUIRECTANGULAR_VIEW_SIZE"
+        export HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}"
+        export HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"
+        export HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}"
+        bash "$repo_root/tools/sfm/sfm_core.sh" --sfm-dir "$SFM_DIR/hloc" --images-dir "$IMAGES_DIR" --force
+      )
     fi
     "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
