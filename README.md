@@ -100,6 +100,27 @@ bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 Paramètres, données attendues et sorties : voir le README du pipeline choisi,
 et [les exemples de configuration](scripts/README.md).
 
+### Formats d'export
+
+- **`.splat`** : scène nettoyée, recalée dans le repère monde (`tools/export/export_ply.py`).
+- **`.ply`** : nuage de gaussiennes nettoyé (`tools/export/clean_ply.sh`).
+- **3D Tiles** : tileset géoréférencé pour une visualisation géographique (voir ci-dessous).
+- **GeoPackage** : données COLMAP vectorisées (`tools/export/colmap_to_gpkg.py`).
+
+Les outils et leurs options sont listés dans le [README des exports](tools/export/README.md).
+
+### Viewer web
+
+Le viewer s'ouvre dans le navigateur, avec un fichier de scène en argument :
+
+```bash
+python3 tools/viewer/server.py /chemin/vers/scene.splat
+```
+
+Sans argument, l'interface permet d'importer une scène. Il affiche aussi des données
+externes alignées sur le splat (LiDAR, CityJSON, GeoJSON, GeoPackage, COLMAP).
+Détails dans la [documentation du viewer](tools/viewer/README.md).
+
 ### Convertir et visualiser un splat en 3D Tiles
 
 Le fichier `.splat` géoréférencé (repère ENU) se convertit en tileset 3D Tiles,
@@ -121,6 +142,7 @@ bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
 ```
 
 Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/export/export_3dtiles.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
+
 
 ### Documentation des outils
 
