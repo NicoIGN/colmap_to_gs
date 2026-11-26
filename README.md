@@ -119,14 +119,27 @@ L'interface permet d'importer une scène 3DGS et d'y ajouter des données extern
 ### Documentation des outils
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
+- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
 - [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
-- [Installation de Spirula](install/spirula/README.md).
-- [Masques](tools/masks/README.md).
-- [Export, filtrage et fusion](tools/export/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
-- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+- [Masques](tools/masks/README.md).
+- [Installation de Spirula](install/spirula/README.md).
+- [Entraînement](tools/training/README.md).
+- [Export, filtrage et fusion](tools/export/README.md).
 - [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
-- [Visualisation](tools/viewer/README.md).
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
+- [Données vectorielles](tools/vector/README.md).
+- [Visualisation](tools/viewer/README.md).
+- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+
+### Tests
+
+Les tests Python sont dans `tests/`, en miroir de `tools/`. Depuis la racine du dépôt, venv activé :
+
+```bash
+PYTHON_BIN=python tests/run_all.sh --phase export
+```
+
+Le détail des commandes et des prérequis est dans le [README des tests](tests/README.md).
