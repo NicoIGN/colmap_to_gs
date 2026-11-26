@@ -410,11 +410,7 @@ PY
 
 prepare_blocks() {
   local block_count block_id block_sparse file index
-  local sfm_args
   local feature_args=()
-  local camera_args=()
-  # Sans modèle explicite, le modèle est choisi par la détection 360° de prepare_panoramax.py.
-  [[ "$SFM_CAMERA_MODEL_EXPLICIT" != true ]] || camera_args=(--camera-model "$SFM_CAMERA_MODEL")
   pipeline_report_phase "reconstruction SfM"
   if [[ "$COLMAP_METHOD" == hloc ]]; then
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
@@ -476,41 +472,25 @@ prepare_blocks() {
     printf '[pipeline] SfM existant : %s (ignoré).\n' "$RAW_SPARSE_DIR"
   else
     printf '[pipeline] Lancement du SfM.\n'
-    sfm_args=(
-      --spirula-bin "$SPIRULA_BIN"
-      --dataset "$DIR"
-      --output-dir "$SFM_DIR"
-      --images-dir "$IMAGES_DIR"
-      --preset panoramax
-      --pairs "$SFM_SP_PAIRS"
-      --prefilter-neighbors "$SFM_SP_PREFILTER_NEIGHBORS"
-      --quality "$SFM_SP_QUALITY"
-      --max-image-size "$SFM_MAX_IMAGE_SIZE"
-      --aliked-max-features "$SFM_ALIKED_MAX_FEATURES"
-      --features "$SFM_SP_FEATURES"
-      --matcher "$SFM_SP_MATCHER"
-      --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS"
-      --min-tri-angle "$SFM_MIN_TRI_ANGLE"
-      --ba-loss "$SFM_SP_BA_LOSS" --ba-loss-param "$SFM_SP_BA_LOSS_PARAM"
-      --reuse-matches redo
-    )
-    sfm_args+=("${camera_args[@]}")
-    [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
-      sfm_args+=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
-    [[ -z "$SFM_SP_METRIC_POSITIONS" ]] ||
-      sfm_args+=(--metric-positions "$SFM_SP_METRIC_POSITIONS")
-    sfm_args+=(--threads "$NUM_CPUS")
-    if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
-      sfm_args+=(--max-distance "$SFM_SP_PAIR_MAX_DISTANCE" --metadata-dir "$DIR/metadata")
-    fi
-    [[ "$SFM_MASKS" != on ]] || sfm_args+=("${feature_args[@]}" --reuse-features redo)
     # Les blocs dérivent du SfM : un nouveau SfM ne doit pas réutiliser un découpage ancien.
     if [[ -e "$BLOCKS_DIR" ]]; then
       archive="$OUTPUT_DIR/blocks.replaced-$(date +%Y%m%d-%H%M%S)"
       printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
       mv -- "$BLOCKS_DIR" "$archive"
     fi
-    bash "$repo_root/tools/sfm/spirula/sfm_spirula.sh" "${sfm_args[@]}"
+    # Cœur SfM partagé avec sfm_run.sh ; les différences Panoramax passent par l'environnement.
+    (
+      export SFM_SP_PRESET=panoramax SFM_RECONSTRUCT_SOURCE="$DIR" SFM_SP_IMAGES_DIR="$IMAGES_DIR"
+      export SFM_SP_METADATA_DIR="$DIR/metadata" SFM_SP_REUSE_MATCHES=redo
+      export SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}" GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
+      export OUTPUT_DIR COLMAP_METHOD SFM_MASKS NUM_CPUS PYTHON_BIN SPIRULA_BIN
+      export SFM_CAMERA_MODEL SFM_SP_IMAGE_EXPOSURE SFM_SP_METRIC_POSITIONS SFM_SP_PAIRS
+      export SFM_SP_QUALITY SFM_SP_FEATURES SFM_SP_MATCHER SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES
+      export SFM_MAX_ERROR SFM_MIN_INLIERS SFM_MIN_TRI_ANGLE SFM_SP_BA_LOSS SFM_SP_BA_LOSS_PARAM
+      export SFM_SP_PAIR_MAX_DISTANCE SFM_SP_PREFILTER_NEIGHBORS
+      [[ "$SFM_MASKS" != on ]] || export SFM_SP_REUSE_FEATURES=redo
+      bash "$repo_root/tools/sfm/sfm_core.sh" --sfm-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --force
+    )
   fi
 
   for file in cameras.bin images.bin points3D.bin; do

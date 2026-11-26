@@ -17,7 +17,7 @@ case "$COLMAP_METHOD" in
   spirula)
     prepare_args=(--no-prepare)
     [[ "${SFM_PREPARE_IMAGES:-false}" != true ]] || prepare_args=(--prepare)
-    [[ "${SFM_SP_PRESET:-}" != panoramax ]] || prepare_args=(--prepare)
+    [[ "${SFM_SP_PRESET:-}" != panoramax ]] || prepare_args=()
     exposure_args=()
     [[ -z "$SFM_SP_IMAGE_EXPOSURE" ]] ||
       exposure_args=(--image-exposure "$SFM_SP_IMAGE_EXPOSURE")
@@ -47,19 +47,28 @@ case "$COLMAP_METHOD" in
       echo "[COLMAP] Spirula, GPS EXIF=$metric_gps ; GPX configuré=${GEOREF_GPX_FILE:-non}."
     reuse_matches=redo
     [[ "${PIPELINE_RESUME:-false}" != true ]] || reuse_matches=auto
+    reuse_matches="${SFM_SP_REUSE_MATCHES:-$reuse_matches}"
+    reuse_features_args=()
+    [[ -z "${SFM_SP_REUSE_FEATURES:-}" ]] || reuse_features_args=(--reuse-features "$SFM_SP_REUSE_FEATURES")
+    source_dir="${SFM_RECONSTRUCT_SOURCE:-$selected}"
+    images_dir_args=()
+    [[ -z "${SFM_SP_IMAGES_DIR:-}" ]] || images_dir_args=(--images-dir "$SFM_SP_IMAGES_DIR")
     sequence_args=(--data-type individual --sequence=)
     if [[ "$SFM_SP_PAIRS" == sequential ]]; then
       sequence_args=(--data-type video --sequence .)
     fi
     bash "$repo_root/tools/sfm/spirula/sfm_spirula.sh" \
-      --spirula-bin "$SPIRULA_BIN" --dataset "$selected" --output-dir "$sfm" \
-      --preset "$SFM_SP_PRESET" "${prepare_args[@]}" "${sequence_args[@]}" \
+      --spirula-bin "$SPIRULA_BIN" --dataset "$source_dir" --output-dir "$sfm" \
+      ${images_dir_args[@]+"${images_dir_args[@]}"} \
+      --preset "$SFM_SP_PRESET" ${prepare_args[@]+"${prepare_args[@]}"} "${sequence_args[@]}" \
       --pairs "$SFM_SP_PAIRS" --quality "$SFM_SP_QUALITY" \
       --features "$SFM_SP_FEATURES" --matcher "$SFM_SP_MATCHER" \
       --max-image-size "$SFM_MAX_IMAGE_SIZE" --aliked-max-features "$SFM_ALIKED_MAX_FEATURES" \
+      --prefilter-neighbors "${SFM_SP_PREFILTER_NEIGHBORS:-16}" \
       --max-error "$SFM_MAX_ERROR" --min-inliers "$SFM_MIN_INLIERS" \
       --min-tri-angle "$SFM_MIN_TRI_ANGLE" --ba-loss "$SFM_SP_BA_LOSS" \
       --ba-loss-param "$SFM_SP_BA_LOSS_PARAM" --reuse-matches "$reuse_matches" \
+      ${reuse_features_args[@]+"${reuse_features_args[@]}"} \
       --camera-mode "$camera_mode" ${camera_model_args[@]+"${camera_model_args[@]}"} \
       --metric-gps "$metric_gps" ${sensor_args[@]+"${sensor_args[@]}"} \
       ${positions_args[@]+"${positions_args[@]}"} ${pair_args[@]+"${pair_args[@]}"} \

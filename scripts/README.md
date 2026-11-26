@@ -27,16 +27,19 @@ Préparation   prepare_video_frames.py ──▶ prepare_images.py           dow
 SfM                                       sfm_run.sh                  run_panoramax.sh
                                           │                           │
                                           ▼                           │
-                                          sfm_reconstruct.sh          │
+                                          sfm_core.sh ◀───────────────┘
+                                          │
+                                          ▼
+                                          sfm_reconstruct.sh
+                                          │
+                                          ▼
+                                          sfm_spirula.sh
                                           │                           │
                                           ▼                           │
-                                          sfm_spirula.sh ◀────────────┤
+Découpage                                 colmap_split_blocks.py
                                           │                           │
                                           ▼                           │
-Découpage                                 colmap_split_blocks.py ◀────┤
-                                          │                           │
-                                          ▼                           │
-Entraînement                              train_block.sh ◀────────────┘
+Entraînement                              train_block.sh
                                           │
                                           ▼
                                           train_block_spirula.sh | train_block_nerfstudio.py
