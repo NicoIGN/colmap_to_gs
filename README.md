@@ -1,10 +1,14 @@
 # COLMAP to Gaussian Splats
 
-Produire des scènes 3D Gaussian Splatting à partir d'images ou d'un modèle COLMAP,
-puis les exporter, les traiter et les visualiser.
+Ce projet regroupe les outils nécessaires pour produire des scènes 3D en *Gaussian Splatting* (3DGS) à partir de vidéos, de photographies ou de flux d'images issus des services [Panoramax](https://panoramax.fr). Il couvre quatre grandes étapes :
+
+- **La photogrammétrie (SfM)** : reconstruction des caméras et du nuage de points 3D avec HLOC, COLMAP ou Spirula.
+- **L'entraînement 3DGS** : génération et optimisation des gaussiennes avec Nerfstudio (Splatfacto) ou Spirula.
+- **L'export et le géoréférencement** : production de fichiers `.splat`, `.ply` ou 3D Tiles, avec possibilité de géoréférencer les scènes à partir des coordonnées GPS des images (EXIF), d'une trajectoire GPS au format GPX ou de fichiers externes de positions.
+- **La visualisation 3D** : un viewer web affiche les splats alignés avec des données externes : nuages LiDAR, bâtiments CityJSON (roofer), couches GeoJSON ou GeoPackage, et données COLMAP.
 
 ```text
-Images → reconstruction des caméras et points 3D → entraînement → export → visualisation
+Images → reconstruction des caméras et points 3D → entraînement 3DGS → export → visualisation
 ```
 
 ## 1. Qu’est-ce que le 3DGS ?
