@@ -54,12 +54,12 @@ l'entraînement, l'export et le post-traitement, ainsi qu'en pipelines qui encha
 
 ### Pipelines complets
 
-Deux pipelines dans `scripts/` enchaînent les étapes depuis les images jusqu'à
-l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
+Trois pipelines dans `scripts/` enchaînent les étapes jusqu'à l'export d'un splat
+(`TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto) :
 
-- **Bbox + flux Panoramax → splat** :
-  [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
-- **Images locales → splat** : [pipeline images vers splat](tools/libs/README.md).
+- **Images** : `images_to_3dgs.sh`, [pipeline images vers splat](tools/libs/README.md).
+- **Vidéo** : `videos_to_3dgs.sh`, extraction d'images puis même chaîne.
+- **Panoramax** : `panoramax_to_3dgs.sh`, [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
 
 La préparation COLMAP possède son propre outil et sa configuration :
 Spirula, COLMAP direct, `ns-process-data` ou conversion de poses caméra et LiDAR.
