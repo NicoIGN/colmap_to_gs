@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -7,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pyogrio
 from shapely.geometry import LineString, Polygon
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools" / "vector"))
 import fetch_vector as fv
 
 
