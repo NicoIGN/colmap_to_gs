@@ -155,7 +155,9 @@ recouvrement, utilisées pour le SfM et l'entraînement choisi par
 les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
 d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
 `bash $GIT_ROOT/install/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
-pyproj et pycolmap sont requis dans `PYTHON_BIN`.
+pyproj et pycolmap sont requis dans `PYTHON_BIN`. Remplacer l'ancien
+`SFM_EQUIRECTANGULAR_VIEWS=true` par `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les
+workspaces compatibles restent réutilisables.
 
 Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
 Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
@@ -351,6 +353,12 @@ Voir [la description et les limites du filtre](../export/README.md).
 - Des labels identiques avec des seuils différents ne doivent pas partager les
   mêmes PNG.
 - `TRAIN_MASKS=off` : permet aussi de masquer uniquement le SfM.
+- `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier optionnel de masques déjà
+  calculés ; chaque image doit avoir son PNG monochrome binaire de mêmes
+  dimensions. Le pipeline vérifie les fichiers, crée un lien dans le workspace
+  et ne charge pas de modèle ni ne relance la segmentation. Ne pas modifier ces
+  dossiers pendant le calcul : la signature contrôle taille, date et SHA256 de
+  chaque masque. En cas de divergence, le diagnostic indique l'image et le champ modifié.
 
 - Signature : la politique SfM est enregistrée dans `sfm_mask_policy.json`.
   Un SfM ou des caractéristiques déjà présents sans signature compatible sont
@@ -368,6 +376,8 @@ Voir [la description et les limites du filtre](../export/README.md).
 - Les blocs déjà entraînés ne sont pas recalculés ; utiliser
   `TRAIN_CLEAN=true`.
 
+
+#### Budgets d'entraînement
 
 - Spirula (MCMC) augmente le nombre de splats jusqu'à `cap_max` ; atteindre le
   plafond est donc attendu.
