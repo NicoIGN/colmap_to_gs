@@ -9,7 +9,7 @@ check_gpu=false
 die() { printf '[ERREUR] Installation Clean-GS : %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-Usage: bash tools/clean_gs/install.sh [--install-dir PATH] [--python PATH] [--check-gpu]
+Usage: bash tools/export/clean_gs/install.sh [--install-dir PATH] [--python PATH] [--check-gpu]
 
 Prépare un environnement isolé, Clean-GS et le modèle local SegFormer.
 Nécessite Linux, Python 3.11/3.12, git, accès réseau et espace disque.

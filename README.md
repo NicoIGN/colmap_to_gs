@@ -168,6 +168,6 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 - [Export, filtrage et fusion](tools/export/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
-- [Nettoyage multivues du ciel](tools/clean_gs/README.md).
+- [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
 - [Visualisation](tools/viewer/README.md).
 - [Conversion en 3D Tiles](tools/splat_to_3dtiles/README.md).

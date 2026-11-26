@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from tools.clean_gs.clean_sky import rejection_mask
+from tools.export.clean_gs.clean_sky import rejection_mask
 
 
 class VoteTest(unittest.TestCase):

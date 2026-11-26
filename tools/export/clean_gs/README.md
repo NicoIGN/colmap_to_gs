@@ -1,6 +1,6 @@
 # Nettoyage multivues du ciel inspiré de Clean-GS
 
-[Retour à la documentation générale](../../doc/guide_utilisateur.md)
+[Retour à la documentation générale](../../../doc/guide_utilisateur.md)
 
 ## 1. Objectif
 
@@ -9,7 +9,7 @@ Filtrer les splats projetés dans le ciel à partir des masques générés pour 
 Exemple d’invocation :
 
 ```bash
-python tools/clean_gs/clean_sky.py \
+python tools/export/clean_gs/clean_sky.py \
   --input /chemin/scene.unfiltered.splat \
   --output /chemin/scene.cleangs.splat \
   --scene /chemin/sfm \
@@ -21,7 +21,7 @@ Le mode `diagnostic` est utilisé par défaut. Examiner les masques et les rejet
 ## 2. Entrées et sorties
 
 ```bash
-python tools/clean_gs/clean_sky.py \
+python tools/export/clean_gs/clean_sky.py \
   --input /chemin/scene.unfiltered.splat \
   --output /chemin/scene.cleangs.splat \
   --scene /chemin/sfm-12000 \
@@ -52,7 +52,7 @@ Clean-GS `78a39e941c14df5857903b1112040d117f230ac4` avec son verrou de dépendan
 PyTorch CUDA 12.8, transformers, pyproj et le modèle SegFormer local :
 
 ```bash
-bash "$GIT_ROOT/tools/clean_gs/install.sh" \
+bash "$GIT_ROOT/tools/export/clean_gs/install.sh" \
   --install-dir /shared/home/NBellaiche/envs/cleangs \
   --python python3
 ```
@@ -77,7 +77,7 @@ puis vérifier la compilation effective et un petit rendu :
 
 ```bash
 /shared/home/NBellaiche/envs/cleangs/source/.venv/bin/python \
-  "$GIT_ROOT/tools/clean_gs/check_runtime.py"
+  "$GIT_ROOT/tools/export/clean_gs/check_runtime.py"
 ```
 
 L'option `--check-gpu` fait cette vérification à la fin de l'installation si
@@ -88,7 +88,7 @@ Les images ne sont jamais envoyées à un service ; seule l'installation
 télécharge les poids, l'inférence les charge ensuite sans accès réseau.
 
 
-Variables à ajouter dans la [configuration Panoramax](../panoramax/README.md) :
+Variables à ajouter dans la [configuration Panoramax](../../panoramax/README.md) :
 
 
 L'installateur affiche les chemins exacts à reporter dans `config.sh` :

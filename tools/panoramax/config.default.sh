@@ -97,7 +97,7 @@ POSTPROCESS_FILTER_SIZE_FACTOR="10"
 
 # --- Propre à Panoramax : nettoyage cleangs (ignoré si POSTPROCESS_CLEANER=contextual) ---
 # Défaut : "" (repli PYTHON_BIN). Commande/chemin du Python du venv Clean-GS,
-# affiché par bash tools/clean_gs/install.sh.
+# affiché par bash tools/export/clean_gs/install.sh.
 CLEANGS_PYTHON=""
 # Défaut : "". Dossier local du modèle de segmentation obligatoire si
 # POSTPROCESS_CLEANER=cleangs ; affiché par l'installateur Clean-GS.

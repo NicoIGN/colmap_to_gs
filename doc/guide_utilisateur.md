@@ -123,7 +123,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Filtrage et fusion des splats** :
   [tools/export](../tools/export/README.md).
 - **Nettoyage multivues du ciel** :
-  [tools/clean_gs](../tools/clean_gs/README.md).
+  [tools/export/clean_gs](../tools/export/clean_gs/README.md).
 - **Installation de Spirula** :
   [install/spirula](../install/spirula/README.md).
 - **Visualisation locale** :

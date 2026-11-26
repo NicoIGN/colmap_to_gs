@@ -232,7 +232,7 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Configuration du pipeline complet
 
-- Variante : le [nettoyage expérimental Clean-GS](../clean_gs/README.md) peut remplacer le filtre
+- Variante : le [nettoyage expérimental Clean-GS](../export/clean_gs/README.md) peut remplacer le filtre
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
@@ -293,8 +293,8 @@ Voir [la description et les limites du filtre](../export/README.md).
   `apply` les retire.
 - Slurm avec Clean-GS : la fusion demande alors un GPU NVIDIA.
 - Installation, dépendances et précautions :
-  [tools/clean_gs](../clean_gs/README.md).
-- Installation complète : `bash tools/clean_gs/install.sh
+  [tools/export/clean_gs](../export/clean_gs/README.md).
+- Installation complète : `bash tools/export/clean_gs/install.sh
   --install-dir /chemin/partage/cleangs --python python3` ; le script affiche
   `CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
 
@@ -566,7 +566,7 @@ peut recaler la reconstruction sur une trajectoire GPS au format GPX.
 ### Mode Clean-GS adapté
 
 Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel.
-Voir [tools/clean_gs](../clean_gs/README.md).
+Voir [tools/export/clean_gs](../export/clean_gs/README.md).
 
 
 

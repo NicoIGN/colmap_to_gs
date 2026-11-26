@@ -10,7 +10,7 @@ import tempfile
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 from tools.export.filter_splats import SPLAT_DTYPE, write_records
 
