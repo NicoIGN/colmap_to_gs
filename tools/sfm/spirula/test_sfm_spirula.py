@@ -90,5 +90,40 @@ class SfmRecoveryTest(unittest.TestCase):
                 self.assertNotIn("--focal", result.stdout)
 
 
+class MetricPositionsFormatTest(unittest.TestCase):
+    """Sortie de gps_to_metric_positions.py : `image X Y Z` par ligne, 4 champs, noms uniques."""
+
+    def test_converter_output_matches_spirula_metric_positions_format(self):
+        converter = Path(__file__).with_name("gps_to_metric_positions.py")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            images = root / "panoramas"
+            images.mkdir()
+            for index in (29020, 29021):
+                (images / f"stream_00001-000000_01819_00{index}.jpg").touch()
+            (root / "events.txt").write_text("29020 290762.3325332\n29021 290762.6658735\n")
+            (root / "traj.pos").write_text(
+                "290762.3325 48.880204272 2.351204386 54.294 0 0 0 0 0 0 0 0 0\n"
+                "290762.6659 48.880204265 2.351204295 54.294 0 0 0 0 0 0 0 0 0\n"
+                "290762.9992 48.880204268 2.351204239 54.294 0 0 0 0 0 0 0 0 0\n"
+            )
+            output = root / "SFM_SP_METRIC_POSITIONS.txt"
+            result = subprocess.run(
+                [sys.executable, str(converter), "--events", str(root / "events.txt"),
+                 "--pos", str(root / "traj.pos"), "--images-dir", str(images),
+                 "--output", str(output)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = [line.split() for line in output.read_text().splitlines()]
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(len({row[0] for row in rows}), len(rows))
+            for row in rows:
+                self.assertEqual(len(row), 4, row)
+                self.assertTrue(row[0].endswith(".jpg"))
+                for value in row[1:]:
+                    float(value)
+
+
 if __name__ == "__main__":
     unittest.main()

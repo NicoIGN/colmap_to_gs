@@ -65,6 +65,17 @@ Les coordonnées EXIF ne sont utilisées automatiquement que par Spirula ;
 un GPX configuré est toujours prioritaire. Les autres méthodes ne prétendent
 pas fournir un résultat géoréférencé à partir des EXIF.
 
+**Positions métriques Spirula (`SFM_SP_METRIC_POSITIONS`).** Fichier texte remplaçant
+le GPS EXIF pour fixer l'échelle et le repère du SfM Spirula. Une ligne par image :
+`nom_image X Y Z`, avec X, Y, Z en mètres (4 champs exactement). Le nom doit correspondre
+à celui du modèle SfM : nom de fichier, avec ou sans extension, relatif au dossier
+d'images. Les lignes vides et le texte après `#` sont ignorés. Un nom ne peut pas
+apparaître deux fois. Les images absentes du fichier restent sans position ;
+l'option est incompatible avec `SFM_SP_PAIR_MAX_DISTANCE`. Pour le produire depuis un
+GPS externe (événements et `.pos`), voir `spirula/gps_to_metric_positions.py`, qui
+écrit ce format et peut filtrer par bbox (`--bbox`, `--crs`, `--links-dir`).
+Le test `MetricPositionsFormatTest` de `spirula/test_sfm_spirula.py` contrôle ce format.
+
 **Réutilisation.** `inputs.json` protège les images, la méthode et les données
 d'orientation/LiDAR. Une méthode différente exige un nouveau workspace.
 Le pipeline `scripts/images_to_3dgs.sh` appelle ce même outil avant de découper
