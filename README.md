@@ -71,7 +71,7 @@ bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 
 Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depuis le nœud de connexion. Voir le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
 
-### Viewer web
+## 4. Viewer web
 
 Le viewer web s'ouvre dans le navigateur en lançant la commande:
 
@@ -82,7 +82,7 @@ python3 tools/viewer/server.py
 Depuis l'interface web, on importe une scène 3DGS, à laquelle on peut ajouter des données externes alignées sur le splat : LiDAR, CityJSON, GeoJSON, GeoPackage, modèle SfM COLMAP. Détails dans la [documentation du viewer](tools/viewer/README.md).
 
 
-## 4. Liste des outils
+## 5. Liste des outils
 
 ### Acquisition et préparation
 
@@ -112,11 +112,11 @@ Depuis l'interface web, on importe une scène 3DGS, à laquelle on peut ajouter 
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
 
 
-## 5. Exemples
+## 6. Exemples
 
 - [Exemples de commandes par usage](examples/README.md)
 
-## 6. Tests
+## 7. Tests
 
 Les tests Python sont dans `tests/`, en miroir de `tools/`. Depuis la racine du dépôt, venv activé :
 
