@@ -47,26 +47,10 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 ## 2. Que fait ce projet ?
 
-> **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours adapté à votre point de départ.
+> **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours, le moteur d'entraînement et le pipeline adaptés à votre point de départ.
 
-Le projet se compose de briques indépendantes : préparation des données COLMAP,
-entraînement, export et post-traitement, chacune avec son propre outil.
-
-Pour un modèle COLMAP existant, fournir le modèle et les images correspondantes ;
-sinon, produire les données depuis des images avec l'[outil images vers COLMAP](tools/sfm/README.md).
-L'entraînement se fait ensuite avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
-
-Les moteurs d'entraînement proposés sont :
-
-- **[Nerfstudio](https://github.com/nerfstudio-project/nerfstudio)** : framework
-  Python de reconstruction et de rendu 3D, dont **Splatfacto** est la méthode
-  Gaussian Splatting utilisée ici. Développé et maintenu par l'équipe
-  **Nerfstudio**, issue de **Berkeley / KAIR (BAIR)**, et les contributeurs
-  de la communauté.
-- **[Spirula Studio](https://github.com/harry7557558/spirula-studio)** : outil
-  de reconstruction et d'entraînement Gaussian Splatting intégrant notamment
-  le SfM et les masques, avec un backend GPU Vulkan. Projet maintenu par
-  **harry7557558**, ingénieur indépendant qui le développe seul.
+Le projet est organisé en outils indépendants pour la préparation des données COLMAP,
+l'entraînement, l'export et le post-traitement, ainsi qu'en pipelines qui enchaînent ces étapes.
 
 ### Pipelines complets
 
