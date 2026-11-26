@@ -5,6 +5,11 @@ Les images sont associées à leur index (`stream_..._<ID>.jpg` → `<ID>`), pui
 à un timestamp lu dans le fichier d'événements. La position est interpolée
 linéairement dans le fichier `.pos` (temps, lat, lon, hauteur) et convertie
 en repère ENU local (mètres) autour de l'origine choisie.
+
+Les positions du `.pos` sont en coordonnées géographiques WGS84 (lat, lon).
+Option `--bbox` : ne garde que les images dont la position, projetée dans
+`--crs`, est dans l'emprise `xmin,ymin,xmax,ymax`. Option `--links-dir` : crée
+des liens symboliques vers les images retenues.
 """
 
 from __future__ import annotations
@@ -16,6 +21,7 @@ import re
 import sys
 from pathlib import Path
 
+from pyproj import Transformer
 from tqdm import tqdm
 
 WGS84_A = 6378137.0
@@ -74,11 +80,29 @@ def to_enu(lat: float, lon: float, height: float, origin: tuple[float, float, fl
     return east, north, height - h0
 
 
-def convert(events_path: Path, pos_path: Path, images: list[str]) -> list[str]:
+def parse_bbox(value: str) -> tuple[float, float, float, float]:
+    try:
+        xmin, ymin, xmax, ymax = (float(v) for v in value.split(","))
+    except ValueError:
+        raise argparse.ArgumentTypeError("format attendu : xmin,ymin,xmax,ymax") from None
+    if xmin >= xmax or ymin >= ymax:
+        raise argparse.ArgumentTypeError("xmin < xmax et ymin < ymax sont requis")
+    return xmin, ymin, xmax, ymax
+
+
+def convert(
+    events_path: Path,
+    pos_path: Path,
+    images: list[str],
+    bbox: tuple[float, float, float, float] | None = None,
+    crs: str = "EPSG:2154",
+) -> tuple[list[str], list[str]]:
+    """Retourne les lignes `image X Y Z` et les noms d'images retenus."""
     events = read_events(events_path)
     rows = read_pos(pos_path)
     origin = (rows[0][1], rows[0][2], rows[0][3])
-    lines = []
+    to_crs = Transformer.from_crs("EPSG:4326", crs, always_xy=True) if bbox else None
+    lines, kept = [], []
     for name in tqdm(images, desc="Positions", unit="img", file=sys.stderr):
         try:
             index = image_id(name)
@@ -88,12 +112,18 @@ def convert(events_path: Path, pos_path: Path, images: list[str]) -> list[str]:
         except ValueError as error:
             tqdm.write(f"Avertissement : image ignorée ({name}) : {error}", file=sys.stderr)
             continue
+        if to_crs:
+            east_crs, north_crs = to_crs.transform(lon, lat)
+            xmin, ymin, xmax, ymax = bbox
+            if not (xmin <= east_crs <= xmax and ymin <= north_crs <= ymax):
+                continue
         x, y, z = to_enu(lat, lon, height, origin)
         lines.append(f"{Path(name).name} {x:.4f} {y:.4f} {z:.4f}")
+        kept.append(name)
     if not lines:
-        raise ValueError("Aucune image n'a de position")
-    print(f"{len(lines)}/{len(images)} images écrites", file=sys.stderr)
-    return lines
+        raise ValueError("Aucune image n'a de position (ou aucune dans la bbox)")
+    print(f"{len(lines)}/{len(images)} images retenues", file=sys.stderr)
+    return lines, kept
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -102,7 +132,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pos", required=True, type=Path, help="Fichier .pos (temps lat lon hauteur ...)")
     parser.add_argument("--images-dir", required=True, type=Path, help="Dossier contenant les images")
     parser.add_argument("--output", required=True, type=Path, help="Fichier de sortie")
+    parser.add_argument("--bbox", type=parse_bbox, help="Emprise xmin,ymin,xmax,ymax dans --crs")
+    parser.add_argument("--crs", default="EPSG:2154", help="CRS de --bbox (défaut : Lambert-93)")
+    parser.add_argument("--links-dir", type=Path, help="Dossier de liens symboliques vers les images retenues")
     args = parser.parse_args(argv)
+    if args.bbox and not args.links_dir:
+        parser.error("--links-dir est obligatoire avec --bbox")
     if not args.images_dir.is_dir():
         print(f"Erreur : dossier introuvable : {args.images_dir}", file=sys.stderr)
         return 1
@@ -111,11 +146,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Erreur : aucune image dans {args.images_dir}", file=sys.stderr)
         return 1
     try:
-        lines = convert(args.events, args.pos, names)
+        lines, kept = convert(args.events, args.pos, names, args.bbox, args.crs)
     except (OSError, ValueError) as error:
         print(f"Erreur : {error}", file=sys.stderr)
         return 1
+    args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("\n".join(lines) + "\n")
+    if args.links_dir:
+        args.links_dir.mkdir(parents=True, exist_ok=True)
+        source_dir = args.images_dir.resolve()
+        for name in kept:
+            link = args.links_dir / name
+            if link.is_symlink() or link.exists():
+                link.unlink()
+            link.symlink_to(source_dir / name)
+        print(f"{len(kept)} liens créés dans {args.links_dir}", file=sys.stderr)
     return 0
 
 
