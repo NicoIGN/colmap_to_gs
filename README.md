@@ -54,8 +54,10 @@ l'entraînement, l'export et le post-traitement, ainsi qu'en pipelines qui encha
 
 ### Pipelines complets
 
-Les pipelines images, vidéo et Panoramax, avec le choix du moteur d'entraînement,
-sont décrits dans le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet).
+Les pipelines images, vidéo et Panoramax existent en deux versions : lancement sur la
+machine courante (`scripts/<pipeline>.sh`) ou sur un serveur Slurm
+(`scripts/launch_<pipeline>.sh`). Voir le [guide utilisateur](doc/guide_utilisateur.md#23-utiliser-un-pipeline-complet),
+[le guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les scripts](scripts/README.md).
 
 ### Démarrer
 
