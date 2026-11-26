@@ -1,4 +1,4 @@
-# Télécharger des photos Panoramax par bbox
+# Pipeline Panoramax : photos par bbox vers Gaussian Splats
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
