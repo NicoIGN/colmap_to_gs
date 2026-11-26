@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 WGS84_A = 6378137.0
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 IMAGE_ID_RE = re.compile(r"_(\d+)\.(?:jpe?g|png)$", re.IGNORECASE)
 
 
@@ -90,11 +91,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--events", required=True, type=Path, help="Fichier d'événements (index timestamp)")
     parser.add_argument("--pos", required=True, type=Path, help="Fichier .pos (temps lat lon hauteur ...)")
-    parser.add_argument("--images", required=True, nargs="+", help="Noms des images")
+    parser.add_argument("--images-dir", required=True, type=Path, help="Dossier contenant les images")
     parser.add_argument("--output", required=True, type=Path, help="Fichier de sortie")
     args = parser.parse_args(argv)
+    if not args.images_dir.is_dir():
+        print(f"Erreur : dossier introuvable : {args.images_dir}", file=sys.stderr)
+        return 1
+    names = sorted(p.name for p in args.images_dir.iterdir() if p.suffix.lower() in IMAGE_EXTENSIONS)
+    if not names:
+        print(f"Erreur : aucune image dans {args.images_dir}", file=sys.stderr)
+        return 1
     try:
-        lines = convert(args.events, args.pos, args.images)
+        lines = convert(args.events, args.pos, names)
     except (OSError, ValueError) as error:
         print(f"Erreur : {error}", file=sys.stderr)
         return 1
