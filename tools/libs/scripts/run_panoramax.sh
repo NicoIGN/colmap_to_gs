@@ -649,7 +649,7 @@ for ((index = first_index; index < last_index; index++)); do
   fi
   [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
   [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
-  bash "$script_dir/train_block.sh" "${block_args[@]}"
+  bash "$script_dir/../../training/train_block.sh" "${block_args[@]}"
 done
 
 printf '\n[pipeline] Terminé. Modèles par bloc : %s/block_*/splats/*.splat\n' "$GS_ROOT"

@@ -44,7 +44,7 @@ bash tools/postprocess/clean_ply.sh --help
 - Pour modifier la fusion, la relancer sans réentraîner les blocs.
 
 - `tools/libs/scripts/run.sh` : appelle les lanceurs Nerfstudio.
-- `tools/libs/scripts/train_block_spirula.sh` : utilise `export_ply.py` par défaut ;
+- `tools/training/backends/train_block_spirula.sh` : utilise `export_ply.py` par défaut ;
   surcharge possible avec `--export-script` / `EXPORT_SCRIPT`.
 
 ## 4. Fonctionnement interne
@@ -163,7 +163,7 @@ Pour le réutiliser explicitement :
 
 ```bash
 EXPORT_SCRIPT="$PWD/tools/postprocess/export_ply_legacy.py" \
-  bash tools/libs/scripts/train_block_spirula.sh --sparse-dir ... --images-dir ... --output-dir ...
+  bash tools/training/backends/train_block_spirula.sh --sparse-dir ... --images-dir ... --output-dir ...
 ```
 
 Cet exporteur accepte `MAX_WORLD_SCALE` via le lanceur. Cette surcharge peut

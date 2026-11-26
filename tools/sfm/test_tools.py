@@ -18,6 +18,7 @@ sys.path.insert(0, str(SOURCE / "colmap"))
 sys.path.insert(0, str(SOURCE / "spirula"))
 sys.path.insert(0, str(SOURCE))
 sys.path.insert(0, str(ROOT / "tools/libs/python"))
+sys.path.insert(0, str(ROOT / "tools/training/backends"))
 from orientations_to_colmap import convert
 from transforms_to_orientations import convert as convert_transforms
 from las_to_ply import convert as convert_las

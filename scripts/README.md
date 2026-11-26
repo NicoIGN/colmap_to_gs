@@ -42,10 +42,10 @@ Backend        backends/$COLMAP_METHOD.sh
 Découpage      colmap_split_blocks.py
                │
                ▼
-Entraînement   train_block.sh   (dispatch selon TRAIN_BACKEND)
+Entraînement   train_block.sh   (dispatch selon TRAIN_BACKEND, dans training/)
                │
-               ├─ spirula    → train_block_spirula.sh
-               └─ nerfstudio → train_block_nerfstudio.py
+               ├─ spirula    → training/backends/train_block_spirula.sh
+               └─ nerfstudio → training/backends/train_block_nerfstudio.py
                │
                ▼
 Géoréférence   georef.sh

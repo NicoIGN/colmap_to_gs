@@ -247,7 +247,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
-    bash "$repo_root/tools/libs/scripts/train_block.sh" "${args[@]}"
+    bash "$repo_root/tools/training/train_block.sh" "${args[@]}"
   done
 fi
 [[ "$phase" != train-block ]] || exit 0

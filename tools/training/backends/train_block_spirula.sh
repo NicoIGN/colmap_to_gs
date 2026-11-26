@@ -3,8 +3,8 @@ set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=spirula_common.sh
-source "$script_dir/spirula_common.sh"
-source "$script_dir/pipeline_config.sh"
+source "$script_dir/../../libs/scripts/spirula_common.sh"
+source "$script_dir/../../libs/scripts/pipeline_config.sh"
 reject_legacy_config || exit 1
 
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
@@ -52,7 +52,7 @@ fi
 usage() {
   cat <<'EOF'
 Usage:
-  bash train_block_spirula.sh --sparse-dir <dir> --images-dir <dir> --output-dir <dir> [options]
+  bash tools/training/backends/train_block_spirula.sh --sparse-dir <dir> --images-dir <dir> --output-dir <dir> [options]
 
 Important:
   - La visionneuse est désactivée.
@@ -335,7 +335,7 @@ done
 mkdir -p "$output_dir"
 
 lock_dir="$output_dir/.training_lock"
-lock_helper="$script_dir/../python/pipeline_lock.py"
+lock_helper="$script_dir/../../libs/python/pipeline_lock.py"
 "$python_bin" "$lock_helper" "$lock_dir" --pid "$$" --resume "${PIPELINE_RESUME:-false}" --ignore "${REMOVE_LOCKS:-false}" --workspace "${OUTPUT_DIR:-$output_dir}"
 trap '"$python_bin" "$lock_helper" "$lock_dir" --pid "$$" --release' EXIT
 

@@ -13,11 +13,11 @@ import sys
 import numpy as np
 from plyfile import PlyData, PlyElement
 
-from nerfstudio_runtime import check_runtime
-
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "tools/sfm"))
+sys.path.insert(0, str(ROOT / "tools/libs/python"))
 from colmap_split_blocks import read_points3d_binary
+from nerfstudio_runtime import check_runtime
 
 
 def run(command):
@@ -41,7 +41,7 @@ def prepare_dataset(sparse, images, masks, dataset):
         vertex[row] = (*point.xyz, *point.rgb)
     PlyData([PlyElement.describe(vertex, "vertex")]).write(dataset / "sparse_pc.ply")
     run([
-        sys.executable, Path(__file__).with_name("colmap_to_transforms.py"),
+        sys.executable, ROOT / "tools/libs/python/colmap_to_transforms.py",
         "--colmap-model", sparse, "--images-dir", images,
         "--output", dataset / "transforms.json", "--image-prefix", "images",
         "--ply-file-path", "sparse_pc.ply",

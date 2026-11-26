@@ -53,10 +53,10 @@ Dans ce dépôt, les points d'entrée correspondants sont :
   [guide Nerfstudio](nerfstudio.md).
 - **Spirula** : installer l'outil suivant son
   [README](../tools/spirula/README.md), puis entraîner depuis le modèle COLMAP
-  et ses images avec `tools/libs/scripts/train_block_spirula.sh`. Exemple :
+  et ses images avec `tools/training/backends/train_block_spirula.sh`. Exemple :
 
 ```bash
-bash tools/libs/scripts/train_block_spirula.sh \
+bash tools/training/backends/train_block_spirula.sh \
   --sparse-dir /chemin/colmap/sparse/0 \
   --images-dir /chemin/images \
   --output-dir /chemin/resultats
