@@ -28,12 +28,15 @@ Préparation    prepare_video_frames.py    prepare_images.py          download.p
 Pilotes        run_standard_images.sh                                │
                │                                                     │
 SfM            sfm_run.sh ◀─────────────────────────────────────────┘
-               │
+               │  lance le backend choisi par COLMAP_METHOD
                ▼
-Backend        backends/$COLMAP_METHOD.sh   (spirula, colmap, nerfstudio, hloc, orientations)
+Backend        backends/$COLMAP_METHOD.sh
                │
-               ▼ si COLMAP_METHOD=spirula
-               backends/spirula.sh → spirula/sfm_spirula.sh
+               ├─ spirula.sh      → spirula/sfm_spirula.sh
+               ├─ colmap.sh       → colmap/reconstruct.py
+               ├─ nerfstudio.sh   → colmap/reconstruct.py (nerfstudio)
+               ├─ hloc.sh         → colmap/hloc_reconstruct.py
+               └─ orientations.sh → colmap/orientations_to_colmap.py (importe des orientations existantes)
                │
                ▼
 Découpage      colmap_split_blocks.py
