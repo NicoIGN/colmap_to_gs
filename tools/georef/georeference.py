@@ -75,7 +75,7 @@ def main():
                 )
             command = [
                 os.environ["PYTHON_BIN"],
-                str(Path(__file__).parents[1] / "sfm/georef_colmap_from_gpx.py"),
+                str(Path(__file__).resolve().parent / "georef_colmap_from_gpx.py"),
                 "--gpx", os.environ["GEOREF_GPX_FILE"],
                 "--sparse-dir", str(output / "sfm/sparse"),
                 "--output-dir", str(root),

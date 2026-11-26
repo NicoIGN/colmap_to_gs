@@ -41,7 +41,7 @@ merge_pipeline_splats() {
   if [[ $# -eq 1 && "${1##*.}" == "${output##*.}" ]]; then
     cp -f "$1" "$output"
   else
-    "$PYTHON_BIN" "$repo_root/tools/postprocess/merge_splats.py" \
+    "$PYTHON_BIN" "$repo_root/tools/export/merge_splats.py" \
       "$@" --output "$output" --strength "$strength"
   fi
   [[ -s "$output" ]] || {

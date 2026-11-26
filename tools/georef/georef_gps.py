@@ -13,10 +13,10 @@ import pycolmap
 from PIL import Image
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from georef_colmap_from_gpx import (apply_sim, enu_rotation, geodetic_to_ecef,
                                     projection_reference, robust_sim3)
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "images_to_splat"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "prepare"))
 from prepare_images import _gps_coordinate
 
 

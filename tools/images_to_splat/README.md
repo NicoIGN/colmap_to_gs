@@ -15,7 +15,7 @@ Images
 ```
 
 Les [masques](../masks/README.md) et le
-[recalage sur une trajectoire GPS](../preprocess/README.md) sont optionnels.
+[recalage sur une trajectoire GPS](../prepare/README.md) sont optionnels.
 
 ## 2. Entrées et sorties
 
@@ -322,7 +322,7 @@ les doublons dans leurs zones de recouvrement, sans modifier leurs coordonnées.
   fusion ; `EXPORT_SPLAT_NAME` définit le nom du fichier final. Voir
   [`config/defaults/export.default.sh`](../../config/defaults/export.default.sh).
 - Nombre final : peut être inférieur à la somme des budgets des blocs.
-- Détails de l'algorithme : voir le [README du post-traitement](../postprocess/README.md).
+- Détails de l'algorithme : voir le [README du post-traitement](../export/README.md).
 
 ### Recalage sur une trajectoire GPS
 
@@ -340,7 +340,7 @@ Si `GEOREF_GPX_FILE` est absent ou vide, les coordonnées EXIF GPS sont utilisé
 automatiquement lorsqu'au moins deux images en possèdent ; fiona et pyproj ne
 sont alors pas nécessaires.
 
-Le pipeline réutilise `tools/sfm/georef_colmap_from_gpx.py` : il recale
+Le pipeline réutilise `tools/georef/georef_colmap_from_gpx.py` : il recale
 la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,
 timestamps ni offset temporel. Les images doivent porter des indices `_fXXXXX`
 et fournir au moins six frames distinctes dans un dossier exploitable.
@@ -395,7 +395,7 @@ Panoramax plusieurs outils pour effectuer les mêmes étapes de façon cohérent
 - `tools/libs/scripts/pipeline_config.sh` : vérifie que la configuration du calcul est valide.
 - `tools/sfm/sfm_geometry_policy.py` : vérifie qu'une reconstruction existante
   convient aux réglages avant de la réutiliser.
-- `tools/libs/scripts/export.sh` : fusionne les splats exportés par bloc.
+- `tools/export/export.sh` : fusionne les splats exportés par bloc.
 - `tools/libs/scripts/pipeline_slurm.sh` : soumet les étapes au cluster et gère les échecs.
 - `tools/libs/scripts/` contient les scripts qui lancent Spirula pour reconstruire la scène
   et entraîner les blocs.
@@ -554,7 +554,7 @@ est toujours recalculée et un export dont la commande a changé est relancé au
 
 La fusion seule exige tous les blocs terminés. Elle fusionne les splats exportés par bloc
 (`gs/block_NNN/splats/block_NNN.splat`) sans recadrage supplémentaire. Le nettoyage est fait
-à l'export par `tools/postprocess/export_ply.py` : il retire les splats dont le support 3σ
+à l'export par `tools/export/export_ply.py` : il retire les splats dont le support 3σ
 dépasse de la bbox des points 3D COLMAP (`POSTPROCESS_FILTER_MODE`, `apply` ou `diagnostic`).
 Les diagnostics sont conservés à côté du splat par bloc.
 La fusion écrit `OUTPUT_DIR/EXPORT_SPLAT_NAME`, sans réentraîner.

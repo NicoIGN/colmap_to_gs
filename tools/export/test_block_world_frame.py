@@ -8,8 +8,8 @@ import unittest
 import numpy as np
 from scipy.spatial.transform import Rotation
 
-from tools.postprocess import export_ply as export
-from tools.postprocess.merge_splats import SPLAT_DTYPE
+from tools.export import export_ply as export
+from tools.export.merge_splats import SPLAT_DTYPE
 
 
 class BlockWorldFrameTest(unittest.TestCase):

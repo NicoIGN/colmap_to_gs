@@ -11,7 +11,7 @@ from plyfile import PlyData, PlyElement
 from scipy.spatial import cKDTree
 from scipy.spatial.transform import Rotation
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "postprocess"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "export"))
 from merge_splats import Scene
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "libs/python"))
 from pipeline_report import Reporter

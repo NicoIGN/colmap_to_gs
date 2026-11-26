@@ -9,7 +9,7 @@ import numpy as np
 from tools.sfm.colmap.colmap_pseudo_gpx import (
     GPX_NAMESPACE, frame_order, order_centres, path_length, simplify_polyline, two_opt, write_gpx,
 )
-from tools.sfm.georef_colmap_from_gpx import enu_to_wgs84
+from tools.georef.georef_colmap_from_gpx import enu_to_wgs84
 
 
 class PseudoGpxOrderingTest(unittest.TestCase):

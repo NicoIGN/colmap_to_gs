@@ -2,9 +2,9 @@
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/images_to_splat"
-source "$repo_root/tools/libs/scripts/export.sh"
+source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
-source "$repo_root/tools/libs/scripts/georef.sh"
+source "$repo_root/tools/georef/georef.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
@@ -159,7 +159,7 @@ select_sparse
 check_filtered_sparse() {
   [[ -f "$lidar_input/.density_done" && -s "$lidar_input/density_report.json" ]] ||
     die "Filtrage sparse incomplet : relancer --phase prepare."
-  "$PYTHON_BIN" "$script_dir/resume.py" "$lidar_input"
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$lidar_input"
 }
 
 prepare() {
@@ -179,7 +179,7 @@ prepare() {
     set_stage "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
   fi
-  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition prepare
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition prepare
   if [[ ! -s "$blocks/manifest.json" ]]; then
     set_stage "découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/sfm/colmap_split_blocks.py" \
@@ -205,7 +205,7 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare
 elif [[ "$phase" == mask-setup ]]; then
   set_stage "préparation des entrées pour les masques"
-  "$PYTHON_BIN" "$script_dir/prepare_images.py"
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py"
   exit 0
 elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   set_stage "vérification des entrées pour les masques"
@@ -217,8 +217,8 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   exit 0
 else
   set_stage "vérification du workspace"
-  "$PYTHON_BIN" "$script_dir/prepare_images.py" --check
-  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition check
   georef_check "$sfm_model"
   select_sparse
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then

@@ -305,7 +305,7 @@ def prepare(check=False):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(resolved)
     if project:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "preprocess"))
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "prepare"))
         from prepare_equirect_views import prepare as prepare_views
         prepare_views(selected_dir, output / "images", output / "projection.json",
                       int(os.environ["SFM_EQUIRECTANGULAR_VIEW_SIZE"]), check=check)

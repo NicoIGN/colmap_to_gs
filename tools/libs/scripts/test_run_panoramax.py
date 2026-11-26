@@ -38,7 +38,7 @@ class BlockPipelineTest(unittest.TestCase):
             import pycolmap
             import numpy as np
             from PIL import Image
-            from tools.sfm.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
+            from tools.georef.georef_colmap_from_gpx import geodetic_to_ecef, enu_rotation
         except ImportError as exc:
             self.skipTest(f"Dépendance HLOC indisponible : {exc}")
         with tempfile.TemporaryDirectory() as temporary:
@@ -808,7 +808,7 @@ class BlockPipelineTest(unittest.TestCase):
 
 class SingleBlockMergeTest(unittest.TestCase):
     def test_single_splat_is_copied_and_converted_formats_still_use_merge(self):
-        helper = SCRIPT.with_name("export.sh")
+        helper = SCRIPT.parents[2] / "export" / "export.sh"
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "block.splat"

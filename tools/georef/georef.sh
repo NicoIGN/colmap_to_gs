@@ -44,14 +44,14 @@ georef_run() {
     gpx)
       [[ "$COLMAP_USE_MVS" != true ]] ||
         die "COLMAP_USE_MVS=true est incompatible avec GEOREF_GPX_FILE (le recalage lit le sparse, pas le dense)."
-      "$PYTHON_BIN" "$repo_root/tools/images_to_splat/georeference.py" prepare
+      "$PYTHON_BIN" "$repo_root/tools/georef/georeference.py" prepare
       ;;
     exif)
       local args=(--sparse "$input" --output "$output" --epsg "$GEOREF_EPSG"
                   --images "$OUTPUT_DIR/images" --allow-missing)
       [[ ! -f "$OUTPUT_DIR/projection.json" ]] || args+=(--projection "$OUTPUT_DIR/projection.json")
-      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" "${args[@]}"
-      "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$output"
+      "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" "${args[@]}"
+      "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$output"
       ;;
   esac
   printf '%s\n' "$georef_mode" > "$OUTPUT_DIR/.georef_mode"
@@ -62,12 +62,12 @@ georef_check() {
   local input="$1" args
   georef_check_mode
   case "$georef_mode" in
-    gpx) "$PYTHON_BIN" "$repo_root/tools/images_to_splat/georeference.py" check ;;
+    gpx) "$PYTHON_BIN" "$repo_root/tools/georef/georeference.py" check ;;
     exif)
       args=(--sparse "$input" --output "$OUTPUT_DIR/georef/0" --epsg "$GEOREF_EPSG"
             --images "$OUTPUT_DIR/images" --allow-missing --check)
       [[ ! -f "$OUTPUT_DIR/projection.json" ]] || args+=(--projection "$OUTPUT_DIR/projection.json")
-      "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" "${args[@]}"
+      "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" "${args[@]}"
       ;;
   esac
 }
@@ -76,7 +76,7 @@ georef_check() {
 georef_export() {
   local splat="$1"
   case "$(georef_stored_mode)" in
-    gpx) "$PYTHON_BIN" "$repo_root/tools/images_to_splat/georeference.py" export ;;
+    gpx) "$PYTHON_BIN" "$repo_root/tools/georef/georeference.py" export ;;
     exif)
       "$PYTHON_BIN" - "$OUTPUT_DIR/georef/0/georef_stats.json" "$OUTPUT_DIR" "$splat" <<'PY'
 import json, sys

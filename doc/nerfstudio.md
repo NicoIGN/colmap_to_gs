@@ -32,7 +32,7 @@ Exemple :
 
 ## 1. Objectif
 
-Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi [créer un dataset COLMAP à partir d'images](../tools/preprocess/README.md) et lancer un [serveur local de visualisation](../tools/viewer/README.md).
+Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi [créer un dataset COLMAP à partir d'images](../tools/prepare/README.md) et lancer un [serveur local de visualisation](../tools/viewer/README.md).
 
 Flux principal :
 
@@ -403,7 +403,7 @@ Logs SLURM :
 Commande appelée par `run.sh` :
 
 ```bash
-python3 tools/libs/python/colmap_to_transforms.py \
+python3 tools/training/colmap_to_transforms.py \
   --colmap-model <dataset-dir>/colmap/sparse/0 \
   --images-dir   <dataset-dir>/images \
   --output       <dataset-dir>/transforms.json \
@@ -473,20 +473,20 @@ Champs de transformation globale :
 4. Vérifie le GPU, active Conda si demandé et vérifie la version de Python.
 5. Estime `near` / `far` avec `estimate_planes.py`.
 6. Entraîne Splatfacto avec `tools/training/backends/train_scene_nerfstudio.sh`.
-7. Exporte le `.ply` avec `tools/postprocess/backends/export_nerfstudio.sh`.
-8. Nettoie le `.ply` avec `tools/postprocess/clean_ply.sh` et `tools/postprocess/clean_ply.py`.
+7. Exporte le `.ply` avec `tools/export/backends/export_nerfstudio.sh`.
+8. Nettoie le `.ply` avec `tools/export/clean_ply.sh` et `tools/export/clean_ply.py`.
 
 Export :
 
-- `tools/postprocess/backends/export_nerfstudio.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
+- `tools/export/backends/export_nerfstudio.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
 - Il lance `ns-export gaussian-splat --load-config <run>/config.yml`.
 - Il écrit le `.ply` dans `<output-dir>/model3d/`.
 - Le script peut archiver le run en ZIP : `ZIP_RUN=1` par défaut ; `run.sh` désactive cette option avec `ZIP_RUN=0`.
 
-Nettoyage : `tools/postprocess/clean_ply.sh` appelle `tools/postprocess/clean_ply.py` :
+Nettoyage : `tools/export/clean_ply.sh` appelle `tools/export/clean_ply.py` :
 
 ```bash
-tools/postprocess/clean_ply.sh \
+tools/export/clean_ply.sh \
   --transform <run>/dataparser_transforms.json \
   --points <dataset-dir>/colmap/sparse/0/points3D.bin \
   --in-ply <output-dir>/model3d/splat.ply \
@@ -570,8 +570,8 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 │   ├── train.sh
 │   └── torch_stack_check.sh       # validation PyTorch / CUDA
 └── tools
-    ├── preprocess/                # images, vidéo, géoréférencement, blocs COLMAP
-    ├── postprocess/               # nettoyage, export, fusion, GeoPackage
+    ├── prepare/                   # images, vidéo, blocs COLMAP
+    ├── export/                    # nettoyage, export, fusion, GeoPackage
     ├── viewer/
     │   ├── server.py              # visualiseur PLY / SPLAT
     │   ├── html/                  # interface et modules JavaScript

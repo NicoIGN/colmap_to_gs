@@ -415,7 +415,7 @@ prepare_blocks() {
     [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
     "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_panoramax.py" \
       --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
-    "$PYTHON_BIN" "$repo_root/tools/preprocess/prepare_equirect_views.py" \
+    "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_equirect_views.py" \
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
   fi
@@ -462,7 +462,7 @@ prepare_blocks() {
         bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$SFM_DIR/hloc" --images-dir "$IMAGES_DIR" --force
       )
     fi
-    "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
+    "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
       --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata"
   elif [[ -f "$SFM_DIR/.gps_filter_done" && -z "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
@@ -572,11 +572,11 @@ fi
 
 if [[ "$mode" == block ]]; then
   if [[ "$COLMAP_METHOD" == hloc ]]; then
-    "$PYTHON_BIN" "$repo_root/tools/preprocess/prepare_equirect_views.py" \
+    "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_equirect_views.py" \
       --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
       --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
     check_hloc_policy check
-    "$PYTHON_BIN" "$repo_root/tools/sfm/colmap/georef_gps.py" \
+    "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" \
       --projection "$SFM_DIR/projection.json" --sparse "$SFM_DIR/hloc/sparse/0" \
       --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata" --check
   fi

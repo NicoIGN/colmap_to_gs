@@ -14,7 +14,7 @@ import warnings
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "postprocess"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "export"))
 from merge_splats import C0, matrix
 
 from common import load_lidar, open_scene, vector, write_report, write_scene

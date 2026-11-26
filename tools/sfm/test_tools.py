@@ -59,7 +59,7 @@ class ConversionTest(unittest.TestCase):
         convert(self.orientations, self.points, self.images, self.sparse)
 
     def test_projected_tracks_are_consistent_and_coordinates_preserved(self):
-        sys.path.insert(0, str(ROOT / "tools/images_to_splat"))
+        sys.path.insert(0, str(ROOT / "tools/sfm"))
         from resume import validate_sparse
         validate_sparse(self.sparse)
         points = read_points3d_binary(self.sparse / "points3D.bin")
@@ -70,7 +70,7 @@ class ConversionTest(unittest.TestCase):
     def test_transforms_round_trip_keeps_world_frame(self):
         transforms = self.root / "transforms.json"
         subprocess.run([
-            sys.executable, str(ROOT / "tools/libs/python/colmap_to_transforms.py"),
+            sys.executable, str(ROOT / "tools/training/colmap_to_transforms.py"),
             "--colmap-model", str(self.sparse), "--images-dir", str(self.images),
             "--output", str(transforms),
         ], check=True, capture_output=True)

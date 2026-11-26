@@ -16,7 +16,7 @@ clean="${TRAIN_CLEAN:-false}"
 export_name="block.splat"
 
 python_bin="${PYTHON_BIN:-python}"
-export_script="${EXPORT_SCRIPT:-$script_dir/../../../tools/postprocess/export_ply.py}"
+export_script="${EXPORT_SCRIPT:-$script_dir/../../export/export_ply.py}"
 export_filter_mode="${POSTPROCESS_FILTER_MODE:-apply}"
 shape_max_aspect_ratio="${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}"
 shape_isolation_factor="${POSTPROCESS_SHAPE_ISOLATION_FACTOR:-}"
@@ -60,7 +60,7 @@ Important:
       {output_dir}/splats/chkpt_step-<N>.ply (splat.ply du dernier step-<N>.ckpt de Spirula, publié dans splats/ en fin d'entraînement)
   - Export post-train:
       conversion du PLY final vers splats/block_000.splat (repère monde)
-      via tools/postprocess/export_ply.py et splats/scene_transform.json
+      via tools/export/export_ply.py et splats/scene_transform.json
   - Marqueurs:
       .train_done = train terminé
       .export_done = export terminé
@@ -302,7 +302,7 @@ command -v "$python_bin" >/dev/null 2>&1 ||
   die "Python introuvable : $python_bin"
 
 [[ -f "$export_script" ]] || die "Script d'export introuvable : $export_script"
-default_export_script="$(canonical_path "$script_dir/../../../tools/postprocess/export_ply.py")"
+default_export_script="$(canonical_path "$script_dir/../../export/export_ply.py")"
 if [[ "$export_script" == "$default_export_script" && -n "${MAX_WORLD_SCALE:-}" ]]; then
   die "MAX_WORLD_SCALE impose une limite absolue : le nouveau filtre ne l'accepte pas. Retirer cette variable ou utiliser export_ply_legacy.py via --export-script."
 fi
@@ -566,7 +566,7 @@ if [[ "$clean" == false ]]; then
       die "Masques modifiés depuis le checkpoint partiel ; reprise refusée."
     [[ ! -f "$photometric_signature_file" || "$(cat "$photometric_signature_file")" == "$photometric_signature" ]] ||
       die "Paramètres photométriques modifiés depuis le checkpoint partiel ; reprise refusée."
-    resume_checkpoint="$("$python_bin" "$script_dir/../../images_to_splat/resume.py" "$chkpt_dir" --training-checkpoint)"
+    resume_checkpoint="$("$python_bin" "$script_dir/../../sfm/resume.py" "$chkpt_dir" --training-checkpoint)"
     if [[ -n "$resume_checkpoint" ]]; then
       log "Reprise du checkpoint : $resume_checkpoint"
     else

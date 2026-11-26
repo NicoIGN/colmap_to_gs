@@ -17,14 +17,15 @@ bash tools/sfm/run_standard_images.sh /chemin/config.sh
 | `run_standard_images.sh`, `sfm_run.sh`, `param.default.sh` | Entrée commune, cœur SfM (reprise, split, vérification), défauts |
 | `backends/` | Un script par méthode : `spirula.sh`, `colmap.sh`, `nerfstudio.sh`, `hloc.sh`, `orientations.sh`. Étapes via `SFM_BACKEND_STEP` : `recover`, `reconstruct`, `refine` (les méthodes sans objet sortent à `recover`/`refine`) |
 | `prepare_panoramax.py`, `sparse_density.sh`, `filter_sparse_density.py`, `sfm_geometry_policy.py` | Étapes partagées (préparation, filtre de densité, politique géométrique) |
-| `colmap_split_blocks.py`, `georef_colmap_from_gpx.py`, `diagnose_colmap_models.py` | Découpage en blocs, recalage GPX, diagnostic |
+| `colmap_split_blocks.py`, `diagnose_colmap_models.py` | Découpage en blocs, diagnostic |
 | `spirula/` | Scripts qui appellent Spirula (`sfm_spirula.sh`, `camera_split.py`, `spirula_progress.py`) |
-| `colmap/` | Outils COLMAP seul, sans Spirula (`reconstruct.py`, `hloc_reconstruct.py`, `mvs_densify.py`, `georef_gps.py`, conversions d'orientations et LAS) |
+| `colmap/` | Outils COLMAP seul, sans Spirula (`reconstruct.py`, `hloc_reconstruct.py`, `mvs_densify.py`, conversions d'orientations et LAS) |
 
 Les scripts d'appel direct à Spirula ne sont appelés que depuis `spirula/` ;
 les outils n'utilisant que COLMAP (dont HLOC) sont dans `colmap/`.
 Le découpage équirectangulaire des images 360 (utilisé par HLOC) reste dans
-[`tools/preprocess`](../preprocess/README.md).
+[`tools/prepare`](../prepare/README.md). Le recalage GPX et GPS est dans
+[`tools/georef`](../georef/).
 
 **Méthodes.** `COLMAP_METHOD` choisit la production des caméras et points :
 

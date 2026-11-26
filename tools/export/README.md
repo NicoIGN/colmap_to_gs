@@ -9,7 +9,7 @@ Outils d’export, de nettoyage, de filtrage contextuel et de fusion des résult
 Exemple d’invocation :
 
 ```bash
-python3 tools/postprocess/export_ply.py --help
+python3 tools/export/export_ply.py --help
 ```
 
 ## 2. Entrées et sorties
@@ -28,8 +28,8 @@ python3 tools/postprocess/export_ply.py --help
 Exemples depuis la racine du dépôt :
 
 ```bash
-python3 tools/postprocess/export_ply.py --help
-bash tools/postprocess/clean_ply.sh --help
+python3 tools/export/export_ply.py --help
+bash tools/export/clean_ply.sh --help
 ```
 
 ## 3. Configuration et utilisation
@@ -49,7 +49,7 @@ bash tools/postprocess/clean_ply.sh --help
 
 ## 4. Fonctionnement interne
 
-Les scripts de `tools/postprocess/` exportent les modèles, fusionnent les blocs
+Les scripts de `tools/export/` exportent les modèles, fusionnent les blocs
 et proposent des filtres pour retirer certains splats indésirables.
 
 - `export_ply.py` prépare l'export `.splat` ; il retire les valeurs invalides et,
@@ -69,7 +69,7 @@ Le mode diagnostic permet d'examiner les candidats avant leur suppression.
 Pour un `.splat` fusionné existant, sans réentraîner :
 
 ```bash
-python3 tools/postprocess/filter_splats.py \
+python3 tools/export/filter_splats.py \
   --input scene.splat --output essai.splat --mode diagnostic
 ```
 
@@ -79,7 +79,7 @@ et `essai.filter.json` contient les compteurs et paramètres. Visualiser ces
 candidats séparément avant d'utiliser `--mode apply` :
 
 ```bash
-python3 tools/postprocess/filter_splats.py \
+python3 tools/export/filter_splats.py \
   --input scene.splat --output essai-nettoye.splat --mode apply
 ```
 
@@ -162,7 +162,7 @@ avec ses garde-fous (avertissement au-delà de 10 %, filtre ignoré au-delà de 
 Pour le réutiliser explicitement :
 
 ```bash
-EXPORT_SCRIPT="$PWD/tools/postprocess/export_ply_legacy.py" \
+EXPORT_SCRIPT="$PWD/tools/export/export_ply_legacy.py" \
   bash tools/training/backends/train_block_spirula.sh --sparse-dir ... --images-dir ... --output-dir ...
 ```
 
@@ -178,7 +178,7 @@ réexporter depuis le checkpoint PLY : filtrer un `.splat` existant ne peut pas
 recréer les splats manquants.
 
 ```bash
-python3 -m unittest discover -s tools/postprocess -p 'test_*.py'
+python3 -m unittest discover -s tools/export -p 'test_*.py'
 ```
 
 La conversion `.splat` vers 3D Tiles conserve son dossier autonome

@@ -8,8 +8,8 @@ import pycolmap
 from PIL import Image
 from scipy.spatial.transform import Rotation
 
-from tools.sfm.colmap.georef_gps import horizontal_fit, apply_sim, run, geodetic_to_ecef, enu_rotation
-from tools.images_to_splat.resume import validate_sparse
+from tools.georef.georef_gps import horizontal_fit, apply_sim, run, geodetic_to_ecef, enu_rotation
+from tools.sfm.resume import validate_sparse
 
 
 class HorizontalGpsTest(unittest.TestCase):

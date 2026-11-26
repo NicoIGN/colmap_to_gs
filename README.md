@@ -160,12 +160,12 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 ### Documentation des outils
 
 - [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
-- [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
+- [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
 - [Installation de Spirula](tools/spirula/README.md).
 - [Masques](tools/masks/README.md).
-- [Export, filtrage et fusion](tools/postprocess/README.md).
+- [Export, filtrage et fusion](tools/export/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
 - [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
 - [Nettoyage multivues du ciel](tools/clean_gs/README.md).

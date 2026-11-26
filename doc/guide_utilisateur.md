@@ -18,7 +18,7 @@ les images, ou à réutiliser un modèle COLMAP existant avec ses images.
 
 - Images : l'[outil images vers COLMAP](../tools/sfm/README.md)
   propose `COLMAP_METHOD=spirula|colmap|nerfstudio|orientations`, avec une
-  configuration commune. Les [outils de préparation](../tools/preprocess/README.md)
+  configuration commune. Les outils de préparation (`../tools/prepare/README.md`)
   permettent aussi d'extraire des images d'une vidéo.
 - Orientations et LiDAR : convertir les poses caméra vers le JSON explicite documenté
   et le nuage coloré vers PLY, puis utiliser `COLMAP_METHOD=orientations`.
@@ -63,7 +63,7 @@ bash tools/training/backends/train_block_spirula.sh \
 ```
 
 Les options de ce lanceur sont accessibles avec `--help` ; l'export `.splat`
-est décrit dans le [README du post-traitement](../tools/postprocess/README.md).
+est décrit dans le [README du post-traitement](../tools/export/README.md).
 
 ### 2.3. Utiliser un pipeline complet
 
@@ -113,7 +113,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Lancement Bash ou Slurm, ressources et suivi des jobs** :
   [guide de lancement](lancement_bash_slurm.md).
 - **Préparation des données et sparse COLMAP** :
-  [tools/preprocess](../tools/preprocess/README.md).
+  [tools/prepare](../tools/prepare/README.md).
 - **Choix du producteur COLMAP et conversion orientations/LiDAR** :
   [tools/sfm](../tools/sfm/README.md).
 - **Conversion des poses caméra IGNF `.CON` et du LiDAR `.LAZ`** :
@@ -121,7 +121,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Masques de segmentation** :
   [tools/masks](../tools/masks/README.md).
 - **Filtrage et fusion des splats** :
-  [tools/postprocess](../tools/postprocess/README.md).
+  [tools/export](../tools/export/README.md).
 - **Nettoyage multivues du ciel** :
   [tools/clean_gs](../tools/clean_gs/README.md).
 - **Installation de Spirula** :

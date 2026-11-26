@@ -284,7 +284,7 @@ retrouver/interpréter ce repère.
   `NOM.filter.json` donne les compteurs.
 - `POSTPROCESS_FILTER_SIZE_FACTOR="10"` : règle le rapport de taille locale ;
   défaut `10`.
-Voir [la description et les limites du filtre](../postprocess/README.md).
+Voir [la description et les limites du filtre](../export/README.md).
 
 - `POSTPROCESS_CLEANER="cleangs"` : remplace le filtre par le
   nettoyage expérimental du ciel multivues.

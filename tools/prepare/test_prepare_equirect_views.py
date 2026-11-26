@@ -9,7 +9,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from tools.preprocess import prepare_equirect_views as views
+from tools.prepare import prepare_equirect_views as views
 
 
 class ProjectionTest(unittest.TestCase):
@@ -63,7 +63,7 @@ class ProjectionTest(unittest.TestCase):
                        COLMAP_METHOD="hloc", SFM_COLMAP_MATCHING="exhaustive", SFM_COLMAP_USE_GPU="false",
                        HLOC_FEATURES="sift", HLOC_MATCHER="NN-mutual", HLOC_PAIRS="exhaustive",
                        HLOC_RETRIEVAL="netvlad", HLOC_NUM_NEIGHBORS="20")
-            script = Path(__file__).resolve().parents[1] / "images_to_splat/prepare_images.py"
+            script = Path(__file__).resolve().parent / "prepare_images.py"
             def execute(*args):
                 return subprocess.run([sys.executable, str(script), *args], env=env,
                                       capture_output=True, text=True)
@@ -108,7 +108,7 @@ class ProjectionTest(unittest.TestCase):
                        SFM_EQUIRECTANGULAR_VIEW_SIZE="8", SFM_MASKS="off", TRAIN_MASKS="off",
                        COLMAP_METHOD="hloc", SFM_COLMAP_MATCHING="exhaustive",
                        SFM_COLMAP_USE_GPU="false")
-            script = Path(__file__).resolve().parents[1] / "images_to_splat/prepare_images.py"
+            script = Path(__file__).resolve().parent / "prepare_images.py"
             result = subprocess.run([sys.executable, str(script)], env=env,
                                     capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)

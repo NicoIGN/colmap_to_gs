@@ -40,7 +40,7 @@ esac
 sparse_ready() {
   if [[ "$PIPELINE_RESUME" == true ]]; then
     local status=0
-    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse" || status=$?
+    "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$sparse" || status=$?
     ((status < 2)) || die "Impossible de valider le sparse ; aucun recalcul lancé."
     return "$status"
   else
@@ -71,7 +71,7 @@ elif ! sparse_ready; then
       [[ ! -e "$OUTPUT_DIR/$downstream" ]] ||
         die "Sparse incomplet mais sorties $downstream déjà présentes : choisir un nouvel OUTPUT_DIR."
     done
-    "$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse" --archive-sparse
+    "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$sparse" --archive-sparse
   fi
   reconstruct
 fi
@@ -79,4 +79,4 @@ for name in cameras images points3D; do
   [[ -s "$sparse/$name.bin" ]] || die "SfM incomplet : $name.bin"
 done
 run_step refine "$images" "$sfm" "$OUTPUT_DIR/feature_masks" "$SFM_CAMERA_MODE"
-"$PYTHON_BIN" "$repo_root/tools/images_to_splat/resume.py" "$sparse"
+"$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$sparse"

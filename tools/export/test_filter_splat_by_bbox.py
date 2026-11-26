@@ -7,8 +7,8 @@ import unittest
 import numpy as np
 from plyfile import PlyData, PlyElement
 
-from tools.postprocess import filter_splat_by_bbox as tool
-from tools.postprocess.filter_splats import SPLAT_DTYPE
+from tools.export import filter_splat_by_bbox as tool
+from tools.export.filter_splats import SPLAT_DTYPE
 
 
 ORIGIN = [48.8753176, 2.3408312, 34.35]

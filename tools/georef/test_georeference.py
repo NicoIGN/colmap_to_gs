@@ -13,7 +13,7 @@ import numpy as np
 
 SOURCE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
-    "gpx_georeference", SOURCE.parent / "sfm/georef_colmap_from_gpx.py")
+    "gpx_georeference", SOURCE / "georef_colmap_from_gpx.py")
 gpx_tool = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gpx_tool)
 

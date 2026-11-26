@@ -46,7 +46,7 @@ sparse="$sfm/sparse/0"
 
 prepare() {
   begin_stage "sélection des images"
-  "$PYTHON_BIN" "$script_dir/prepare_images.py"
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py"
   rm -f -- "$OUTPUT_DIR/.prepare_done"
   if [[ "$SFM_MASKS" == on || "$TRAIN_MASKS" == on ]]; then
     begin_stage "masques SfM / entraînement"

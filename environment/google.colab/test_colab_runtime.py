@@ -378,7 +378,7 @@ class ColabRuntimeTests(unittest.TestCase):
         archive = self.colmap_archive()
         run = self.root / "run"
         validator = [sys.executable, str(Path(__file__).resolve().parents[2]
-                                       / "tools/images_to_splat/resume.py")]
+                                       / "tools/sfm/resume.py")]
         with contextlib.redirect_stdout(io.StringIO()):
             images = restore_colmap(archive, run, validator, self.root)
             model = run / "output/sfm/sparse/0"
@@ -395,7 +395,7 @@ class ColabRuntimeTests(unittest.TestCase):
         project = Path(__file__).resolve().parents[2]
         archive = self.colmap_archive()
         run = self.root / "run"
-        validator = [sys.executable, str(project / "tools/images_to_splat/resume.py")]
+        validator = [sys.executable, str(project / "tools/sfm/resume.py")]
         with contextlib.redirect_stdout(io.StringIO()):
             images = restore_colmap(archive, run, validator, self.root)
         # A native reconstruction would fail, proving that the existing model is used.
@@ -461,7 +461,7 @@ class ColabRuntimeTests(unittest.TestCase):
 
     def test_colmap_restore_rejects_missing_images_unsafe_paths_and_existing_workspace(self):
         validator = [sys.executable, str(Path(__file__).resolve().parents[2]
-                                       / "tools/images_to_splat/resume.py")]
+                                       / "tools/sfm/resume.py")]
         with contextlib.redirect_stdout(io.StringIO()):
             for index, name in enumerate(("missing.jpg", "../../outside.jpg")):
                 archive = self.colmap_archive(f"missing-{index}.zip", name)

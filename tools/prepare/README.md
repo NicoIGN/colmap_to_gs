@@ -9,7 +9,7 @@ Outils de préparation d’images et d’extraction de frames (vidéo, image inf
 Exemple d’invocation :
 
 ```bash
-python3 tools/preprocess/extract_frames_from_video.py --help
+python3 tools/prepare/extract_frames_from_video.py --help
 ```
 
 ## 2. Entrées et sorties
@@ -17,7 +17,7 @@ python3 tools/preprocess/extract_frames_from_video.py --help
 - Exécuter les scripts depuis la racine du dépôt :
 
 ```bash
-python3 tools/preprocess/extract_frames_from_video.py --help
+python3 tools/prepare/extract_frames_from_video.py --help
 ```
 
 | Outil | Fonction |
@@ -46,7 +46,7 @@ existantes ne sont pas recalculées automatiquement.
 - Les dépendances sont celles de l'environnement du projet.
 - Les outils externes requis dépendent de la commande (COLMAP, ffmpeg, exiftool, etc.).
 
-- `tools/libs/python/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
+- `tools/training/colmap_to_transforms.py` : conversion pour [Nerfstudio](../../doc/nerfstudio.md),
   appelée par `tools/libs/scripts/run.sh`.
 - `tools/libs/python/estimate_planes.py` : estimation des plans, appelée par `tools/libs/scripts/run.sh`.
 
@@ -106,7 +106,7 @@ et peut augmenter les effectifs finaux.
 
 ## 4. Fonctionnement interne
 
-Les outils de `tools/preprocess/` préparent les images et les frames. Le SfM
+Les outils de `tools/prepare/` préparent les images et les frames. Le SfM
 (`tools/sfm/`) prépare les reconstructions COLMAP ; en particulier,
 `tools/sfm/filter_sparse_density.py` cherche les points 3D
 manifestement isolés ou incohérents en les comparant à ce qui est observé

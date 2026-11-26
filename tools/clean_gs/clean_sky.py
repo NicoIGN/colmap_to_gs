@@ -12,7 +12,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from tools.postprocess.filter_splats import SPLAT_DTYPE, write_records
+from tools.export.filter_splats import SPLAT_DTYPE, write_records
 
 
 def rejection_mask(sky_votes, foreground_votes, min_views):

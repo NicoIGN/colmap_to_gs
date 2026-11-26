@@ -41,7 +41,7 @@ def prepare_dataset(sparse, images, masks, dataset):
         vertex[row] = (*point.xyz, *point.rgb)
     PlyData([PlyElement.describe(vertex, "vertex")]).write(dataset / "sparse_pc.ply")
     run([
-        sys.executable, ROOT / "tools/libs/python/colmap_to_transforms.py",
+        sys.executable, ROOT / "tools/training/colmap_to_transforms.py",
         "--colmap-model", sparse, "--images-dir", images,
         "--output", dataset / "transforms.json", "--image-prefix", "images",
         "--ply-file-path", "sparse_pc.ply",
@@ -152,7 +152,7 @@ def train(args):
     transform = splats / "scene_transform.json"
     shutil.copy2(config.parent / "dataparser_transforms.json", transform)
     run([
-        sys.executable, ROOT / "tools/postprocess/export_ply.py",
+        sys.executable, ROOT / "tools/export/export_ply.py",
         "--in-ply", source, "--points", sparse / "points3D.bin",
         "--transform", transform, "--out-ply", final, "--format", "splat",
         "--filter-mode", "off", "--overwrite",

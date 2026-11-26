@@ -218,7 +218,7 @@ class SparseDensityTest(unittest.TestCase):
                                 read_image_point_ids(rejected / "images.bin")))
             self.assertEqual((rejected / "cameras.bin").read_bytes(),
                              (source / "cameras.bin").read_bytes())
-            from tools.images_to_splat.resume import validate_sparse
+            from tools.sfm.resume import validate_sparse
             validate_sparse(output)
             validate_sparse(rejected)
             self.assertEqual((output / "rigs.bin").read_bytes(), b"rig metadata")

@@ -12,8 +12,8 @@ import numpy as np
 from plyfile import PlyData, PlyElement
 from scipy.spatial.transform import Rotation
 
-from tools.postprocess import export_ply as export
-from tools.postprocess.filter_splats import (
+from tools.export import export_ply as export
+from tools.export.filter_splats import (
     SPLAT_DTYPE, contextual_mask, load_camera_centres, load_sparse_points,
     planar_sparse_bbox_mask, sparse_bbox_mask, sparse_support_mask,
 )

@@ -11,7 +11,7 @@ sparse_density_stage() {
   shift 2
   clean="${output}_clean"
   local filter="$repo_root/tools/sfm/filter_sparse_density.py"
-  local resume="$repo_root/tools/images_to_splat/resume.py"
+  local resume="$repo_root/tools/sfm/resume.py"
 
   version="$("$PYTHON_BIN" "$filter" --version)"
   [[ "$version" =~ ^[0-9]+$ ]] || die "Version du filtre de densité invalide : $version"

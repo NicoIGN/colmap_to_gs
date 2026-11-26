@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from tools.libs.python.splat_metadata import build_metadata, load_gauge_reference  # noqa: E402
-from tools.postprocess.filter_splats import SPLAT_DTYPE, write_records  # noqa: E402
+from tools.export.filter_splats import SPLAT_DTYPE, write_records  # noqa: E402
 
 
 CORNER_SIGNS = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)], dtype=np.float64)

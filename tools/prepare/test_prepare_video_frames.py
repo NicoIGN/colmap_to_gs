@@ -9,7 +9,7 @@ from unittest.mock import patch
 import cv2
 import numpy as np
 
-from tools.preprocess.prepare_video_frames import scan_video, select_indices
+from tools.prepare.prepare_video_frames import scan_video, select_indices
 
 SCRIPT = Path(__file__).with_name("prepare_video_frames.py")
 
@@ -51,8 +51,8 @@ class SelectIndicesTest(unittest.TestCase):
 
     def test_scan_rejects_truncated_video_decoding(self):
         frame = np.zeros((48, 64, 3), dtype=np.uint8)
-        with patch("tools.preprocess.prepare_video_frames.read_video_info", return_value=(30, 10)), \
-                patch("tools.preprocess.prepare_video_frames.iter_frames", return_value=iter([(0, frame)])):
+        with patch("tools.prepare.prepare_video_frames.read_video_info", return_value=(30, 10)), \
+                patch("tools.prepare.prepare_video_frames.iter_frames", return_value=iter([(0, frame)])):
             with self.assertRaisesRegex(RuntimeError, "Lecture incomplète"):
                 scan_video(Path("test.avi"), 4)
 
