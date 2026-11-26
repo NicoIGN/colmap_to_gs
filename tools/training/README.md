@@ -12,5 +12,8 @@
 | `spirula` | `backends/train_block_spirula.sh` | Entraînement Spirula, export `export_ply.py` |
 | `nerfstudio` | `backends/train_block_nerfstudio.py` | Entraînement Nerfstudio sur le bloc |
 
+Hors dispatch par bloc, `backends/train_scene_nerfstudio.sh` entraîne une scène
+unique avec Splatfacto ; il est appelé par `tools/libs/scripts/run.sh`.
+
 Les utilitaires partagés restent dans `tools/libs/` (`scripts/` pour le shell,
 `python/` pour `pipeline_lock.py`, `nerfstudio_runtime.py`).

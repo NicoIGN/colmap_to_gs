@@ -16,7 +16,7 @@ python3 tools/postprocess/export_ply.py --help
 
 | Outil | Fonction |
 |---|---|
-| `export_splat_to_ply.sh` | Export [Nerfstudio](../../doc/nerfstudio.md) via `ns-export` |
+| `export_nerfstudio.sh` | Export [Nerfstudio](../../doc/nerfstudio.md) via `ns-export` (dans `backends/`) |
 | `clean_ply.sh` et `clean_ply.py` | Nettoyage d'un PLY avec les points COLMAP : distance aux points, et support gaussien (`--support-sigmas` × échelle) hors bbox des points élargie de `--bbox-margin` retiré |
 | `export_ply.py` | Nettoyage, retour au repère monde et export `.splat` |
 | `export_ply_legacy.py` | Exporteur alternatif : filtre par BBOX et seuil global de taille |

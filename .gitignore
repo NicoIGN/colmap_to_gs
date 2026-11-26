@@ -1,5 +1,6 @@
 .DS_Store
 example/output
 __pycache__
+tools/training/backends/.python_patches/
 segmentation-masks/
 venv

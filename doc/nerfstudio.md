@@ -46,7 +46,7 @@ dossier d'images
    ├─► colmap_to_transforms.py ─► transforms.json
    ├─► estimate_planes.py      ─► near / far
    ├─► train.sh (Splatfacto)   ─► model3d/splatfacto/<run>/
-   ├─► export_splat_to_ply.sh  ─► model3d/splat.ply
+   ├─► export_nerfstudio.sh     ─► model3d/splat.ply
    └─► clean_ply.sh / clean_ply.py
            (splat.ply + points3D.bin + dataparser_transforms.json)
                  ▼
@@ -472,13 +472,13 @@ Champs de transformation globale :
 3. Charge `config/config.sh`, puis le profil.
 4. Vérifie le GPU, active Conda si demandé et vérifie la version de Python.
 5. Estime `near` / `far` avec `estimate_planes.py`.
-6. Entraîne Splatfacto avec `tools/libs/scripts/train.sh`.
-7. Exporte le `.ply` avec `tools/postprocess/export_splat_to_ply.sh`.
+6. Entraîne Splatfacto avec `tools/training/backends/train_scene_nerfstudio.sh`.
+7. Exporte le `.ply` avec `tools/postprocess/backends/export_nerfstudio.sh`.
 8. Nettoie le `.ply` avec `tools/postprocess/clean_ply.sh` et `tools/postprocess/clean_ply.py`.
 
 Export :
 
-- `tools/postprocess/export_splat_to_ply.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
+- `tools/postprocess/backends/export_nerfstudio.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
 - Il lance `ns-export gaussian-splat --load-config <run>/config.yml`.
 - Il écrit le `.ply` dans `<output-dir>/model3d/`.
 - Le script peut archiver le run en ZIP : `ZIP_RUN=1` par défaut ; `run.sh` désactive cette option avec `ZIP_RUN=0`.
