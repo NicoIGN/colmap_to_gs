@@ -11,10 +11,9 @@ Ce projet regroupe les outils nécessaires pour produire des scènes 3D en *Gaus
 Images → reconstruction des caméras et points 3D → entraînement 3DGS → export → visualisation
 ```
 
-## 1. Qu’est-ce que le 3DGS ?
+## 1. Qu’est-ce qu'un modèle 3DGS ?
 
-### 1.1. Qu’est-ce qu’un Gaussian Splat ?
-
+### Définition
 Un Gaussian Splat représente une scène 3D par un ensemble de gaussiennes :
 des ellipsoïdes colorés dotés d’une position, d’une taille, d’une orientation
 et d’une opacité. Depuis un point de vue, elles sont projetées sur l’image puis
@@ -45,15 +44,6 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 ![Reconstruction SfM](doc/technopitch/images/sfm.jpg)
 
-## 2. Installation
-
-Trois étapes :
-
-1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`. Ensuite, activez-le avec `conda activate gsplat`.
-
-2. **Spirula Studio** : compilez-le avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), qui applique les bonnes options et télécharge le modèle SAM3 utilisé pour les masques.
-
-3. **COLMAP et HLOC** : si le SfM utilise HLOC, installez-le avec `bash install/colmap/install-hloc.sh`. Voir le [README SfM](tools/sfm/README.md).
 
 ## 3. Pipelines principaux
 

@@ -9,6 +9,15 @@ les Gaussian Splats et le principe général. Les commandes complètes, options,
 paramètres et détails de chaque outil sont documentés dans les README
 spécialisés liés ci-dessous.
 
+## 1. Installation
+
+1. **Environnement Conda** : les librairies nécessaires aux pipelines sont contenues dans l'environnement Conda de votre plateforme, dans [`environment/`](environment/) (`macos`, `ign.slurm`, `google.colab`). Exemple : `conda env create --yes --file environment/macos/conda_env.yml`. Ensuite, activez-le avec `conda activate gsplat`.
+
+2. **Spirula Studio** : compilez-le avec [`install/spirula/install_spirula.sh`](install/spirula/README.md), qui applique les bonnes options et télécharge le modèle SAM3 utilisé pour les masques.
+
+3. **COLMAP et HLOC** : si le SfM utilise HLOC, installez-le avec `bash install/colmap/install-hloc.sh`. Voir le [README SfM](tools/sfm/README.md).
+
+
 ## 2. Choisir un parcours
 
 ### 2.1. Produire les données COLMAP
