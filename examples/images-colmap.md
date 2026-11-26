@@ -1,6 +1,6 @@
 # Images, vidéos et COLMAP
 
-[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/sfm/README.md) · [Images vers 3DGS](../tools/images_to_splat/README.md)
+[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/sfm/README.md) · [Images vers 3DGS](../tools/libs/README.md)
 
 ## Extraire des images nettes d'une vidéo
 
@@ -34,4 +34,4 @@ Pour des images 360 équirectangulaires avec HLOC, définir
 `COLMAP_METHOD=hloc` et `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les vues
 perspectives sont reconstruites en `PINHOLE`. Voir les prérequis et les
 restrictions de ce mode dans la
-[documentation du pipeline images](../tools/images_to_splat/README.md).
+[documentation du pipeline images](../tools/libs/README.md).

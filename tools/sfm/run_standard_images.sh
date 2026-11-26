@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-script_dir="$repo_root/tools/images_to_splat"
+script_dir="$repo_root/tools/libs"
 usage() { echo "Usage : bash tools/sfm/run_standard_images.sh CONFIG [--images DIR]"; }
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then usage; exit 0; fi
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }

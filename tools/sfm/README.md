@@ -49,7 +49,7 @@ Le découpage équirectangulaire des images 360 (utilisé par HLOC) reste dans
 
 **Réglages.** Copier [`param.default.sh`](param.default.sh). Les masques,
 la reprise et le recalage GPX reprennent les réglages du
-[pipeline images](../images_to_splat/README.md). Les options `SFM_SP_FEATURES`,
+[pipeline images](../libs/README.md). Les options `SFM_SP_FEATURES`,
 `SFM_SP_MATCHER`, `SFM_SP_PAIRS` et de bundle adjustment concernent Spirula.
 COLMAP direct applique les seuils d'erreur, d'inliers et d'angle aux étapes
 correspondantes, mais ne transpose pas la politique de perte robuste Spirula.

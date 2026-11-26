@@ -23,7 +23,7 @@ done
 command -v sbatch >/dev/null || { echo "[ERREUR] sbatch introuvable." >&2; exit 1; }
 command -v scancel >/dev/null || { echo "[ERREUR] scancel introuvable." >&2; exit 1; }
 mkdir -p "$SFM_IMAGES_DIR"
-source "$repo_root/tools/images_to_splat/common.sh"
+source "$repo_root/tools/libs/common.sh"
 load_config "$config" "$SFM_IMAGES_DIR"
 mkdir -p "$OUTPUT_DIR/logs"
 source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"

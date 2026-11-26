@@ -2,8 +2,8 @@
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../libs/scripts/spirula_common.sh
-source "$script_dir/../libs/scripts/spirula_common.sh"
+# shellcheck source=../../tools/libs/scripts/spirula_common.sh
+source "$script_dir/../../tools/libs/scripts/spirula_common.sh"
 
 spirula_bin="${SPIRULA_BIN:-$(default_spirula_bin)}"
 dataset="${DATASET:-}"

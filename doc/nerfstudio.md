@@ -2,7 +2,7 @@
 
 [Retour à la documentation générale](guide_utilisateur.md)
 
-Le [pipeline images](../tools/images_to_splat/README.md) et le
+Le [pipeline images](../tools/libs/README.md) et le
 [pipeline Panoramax](../tools/panoramax/README.md) acceptent
 `TRAIN_BACKEND=nerfstudio`, avec export `.splat` dans les coordonnées COLMAP
 et fusion commune. PyTorch et un GPU NVIDIA/CUDA sont obligatoires.
@@ -524,7 +524,7 @@ Tous les scripts peuvent être lancés depuis n'importe quel dossier : les chemi
 
 > ⚠️ Utilise des **chemins absolus** avec `run.sh`. Le script se place dans `tools/libs/scripts/` avant de résoudre les chemins : un chemin relatif est donc interprété depuis `tools/libs/scripts/`. C'est aussi le cas de la valeur par défaut `runs/default`.
 
-L'exécutable [Spirula](../tools/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
+L'exécutable [Spirula](../install/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
 
 ### Visualisation locale
 
@@ -546,7 +546,7 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 
 - [Guide utilisateur](guide_utilisateur.md).
 - Télécharger des images géolocalisées : [extraction Panoramax par bbox](../tools/panoramax/README.md).
-- Images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](../tools/images_to_splat/README.md).
+- Images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](../tools/libs/README.md).
 - Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeline `.splat` vers 3D Tiles](../tools/splat_to_3dtiles/README.md).
 
 ### Organisation du dépôt
@@ -577,7 +577,6 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
     │   ├── html/                  # interface et modules JavaScript
     │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
     ├── panoramax/                 # récupération d'images par bbox et EPSG indiqué
-    ├── images_to_splat/           # images locales → splat, Bash et Slurm
     ├── spirula/                   # installation et compilation de Spirula Studio
     └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
 ```

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exemple de configuration Nerfstudio : les défauts sont chargés automatiquement
-# (config/defaults/*.default.sh puis tools/images_to_splat/config.default.sh) avant ce fichier.
+# (config/defaults/*.default.sh puis tools/libs/config.default.sh) avant ce fichier.
 
 SFM_IMAGES_DIR="/chemin/images"
 OUTPUT_DIR="/chemin/resultats-nerfstudio"

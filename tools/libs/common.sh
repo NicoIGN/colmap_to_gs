@@ -38,7 +38,7 @@ load_config() {
   [[ -f "$config" ]] || die "Configuration introuvable : $config"
   set -a
   source "$repo_root/tools/libs/scripts/pipeline_config.sh"
-  load_pipeline_defaults "$repo_root" images_to_splat
+  load_pipeline_defaults "$repo_root" libs
   source "$config"
   init_sfm_geometry_config "${COLMAP_METHOD:-spirula}"
   for name in INPUT_IMAGES_DIR INPUT_RECURSIVE MASKS_SPIRULA_MODEL MASKS_SPIRULA_DEVICE \

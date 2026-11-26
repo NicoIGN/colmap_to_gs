@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 DEFAULTS_DIR = ROOT / "config" / "defaults"
 PIPELINE_OVERRIDES = {
     "panoramax": ROOT / "tools" / "panoramax" / "config.default.sh",
-    "images_to_splat": ROOT / "tools" / "images_to_splat" / "config.default.sh",
+    "images_orchestrator": ROOT / "tools" / "libs" / "config.default.sh",
 }
 
 PHASES = {
@@ -213,7 +213,7 @@ def list_phases():
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Décrit les paramètres Panoramax et images_to_splat.")
+    parser = argparse.ArgumentParser(description="Décrit les paramètres Panoramax et orchestrator.")
     parser.add_argument("params", nargs="*", help="nom(s) de paramètre, ex. TRAIN_MASKS_MAX_FRACTION")
     parser.add_argument("--phase", help="liste les paramètres applicables à une phase")
     args = parser.parse_args(argv)

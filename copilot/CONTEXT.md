@@ -54,7 +54,7 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
 
 ## macOS : HLOC et OpenMP
-- HLOC s'installe avec `tools/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
+- HLOC s'installe avec `install/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
 - LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
 - macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
 - HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
@@ -86,8 +86,8 @@ python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "import
 Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_panoramax.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
 
 ```bash
-python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_panoramax.py   # ~4 min, 109 tests
-python -m unittest tools/images_to_splat/test_pipeline.py -k <nom>        # ciblé
+python -m unittest tools/libs/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_panoramax.py   # ~4 min, 109 tests
+python -m unittest tools/libs/test_pipeline.py -k <nom>        # ciblé
 python -m unittest discover -s tools/panoramax -p 'test_*.py'             # panoramax
 python -m unittest discover -s tools/masks -p 'test_*.py'    # masques
 ```
@@ -95,7 +95,7 @@ python -m unittest discover -s tools/masks -p 'test_*.py'    # masques
 Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.
 
 ## Validation de configuration
-- `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/images_to_splat/common.sh`).
+- `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/libs/common.sh`).
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 

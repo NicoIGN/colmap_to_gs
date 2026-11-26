@@ -4,7 +4,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(cd -- "$script_dir/../.." && pwd)"
 source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
 usage() {
-  echo "Usage : bash tools/images_to_splat/launch.sh CONFIG [--images DIR] [--prepare-only] [--wait]"
+  echo "Usage : bash tools/libs/launch.sh CONFIG [--images DIR] [--prepare-only] [--wait]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }

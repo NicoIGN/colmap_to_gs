@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-script_dir="$repo_root/tools/images_to_splat"
+script_dir="$repo_root/tools/libs"
 source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
 source "$repo_root/tools/georef/georef.sh"

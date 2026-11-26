@@ -13,14 +13,14 @@ SFM_COLMAP_MATCHING="exhaustive"
 # --- COLMAP_METHOD=nerfstudio uniquement ---
 SFM_NS_PROCESS_DATA_BIN="ns-process-data"
 SFM_CAMERA_MODEL="opencv"
-SFM_CAMERA_MODE="folder" # ns-process-data exige single (validé dans images_to_splat/common.sh)
+SFM_CAMERA_MODE="folder" # ns-process-data exige single (validé dans libs/common.sh)
 SFM_MAX_IMAGE_SIZE="2048"
 SFM_ALIKED_MAX_FEATURES="4096"
 NUM_CPUS="2"
 # Pas d'entrainement ici ; sa preparation peut etre anticipee si souhaite.
 SFM_MASKS="off"
 TRAIN_MASKS="off"
-# Pour activer les masques SfM Spirula/COLMAP direct, voir l'exemple images_to_splat.
+# Pour activer les masques SfM Spirula/COLMAP direct, voir l'exemple orchestrator.
 # Logs Spirula : 1 masque les temps SAM et les messages [pcs], conserve
 # avertissements/erreurs et la progression du pipeline. 0 = silencieux,
 # 2 = informations et temps (defaut Spirula), 3 = detaille.

@@ -52,7 +52,7 @@ Dans ce dépôt, les points d'entrée correspondants sont :
   Nerfstudio, entraîne et exporte en `.ply` (parcours historique) ; voir le
   [guide Nerfstudio](nerfstudio.md).
 - **Spirula** : installer l'outil suivant son
-  [README](../tools/spirula/README.md), puis entraîner depuis le modèle COLMAP
+  [README](../install/spirula/README.md), puis entraîner depuis le modèle COLMAP
   et ses images avec `tools/training/backends/train_block_spirula.sh`. Exemple :
 
 ```bash
@@ -76,11 +76,11 @@ peut être choisi pour l'entraînement avec `TRAIN_BACKEND=nerfstudio` :
   [pipeline Panoramax](../tools/panoramax/README.md).
 - **Images locales → splat** : sélection des images, reconstruction,
   entraînement par blocs et fusion ; voir le
-  [pipeline images locales](../tools/images_to_splat/README.md).
+  [pipeline images locales](../tools/libs/README.md).
 - **Vidéo → splat** : extraction des images d'une vidéo, puis même chaîne que
   le pipeline images (reconstruction, entraînement par blocs et fusion) ; voir
   la section « Vidéo sur Slurm » du
-  [pipeline images locales](../tools/images_to_splat/README.md#vidéo-sur-slurm).
+  [pipeline images locales](../tools/libs/README.md#vidéo-sur-slurm).
 
 ## 3. Préparer les données et lancer un calcul
 
@@ -125,7 +125,7 @@ de leur README : le pipeline images locales et le pipeline Panoramax ont des
 - **Nettoyage multivues du ciel** :
   [tools/clean_gs](../tools/clean_gs/README.md).
 - **Installation de Spirula** :
-  [tools/spirula](../tools/spirula/README.md).
+  [install/spirula](../install/spirula/README.md).
 - **Visualisation locale** :
   [tools/viewer](../tools/viewer/README.md).
 - **Conversion d'un SPLAT géoréférencé en 3D Tiles** :

@@ -5,12 +5,12 @@
 ## 1. Objectif
 
 Installer Spirula Studio avec le backend Vulkan/SAM 3 utilisé pour générer les
-[masques natifs du pipeline](../masks/README.md).
+[masques natifs du pipeline](../../tools/masks/README.md).
 
 Exemple d’invocation :
 
 ```bash
-bash /chemin/vers/colmap_to_gs/tools/spirula/install_spirula.sh
+bash /chemin/vers/colmap_to_gs/install/spirula/install_spirula.sh
 ```
 
 ## 2. Entrées et sorties
@@ -36,7 +36,7 @@ Options de l'installateur :
 Depuis n'importe quel dossier :
 
 ```bash
-bash /chemin/vers/colmap_to_gs/tools/spirula/install_spirula.sh
+bash /chemin/vers/colmap_to_gs/install/spirula/install_spirula.sh
 ```
 
 Si l'exécutable existe déjà, le script le réutilise **sans mettre à jour le
@@ -47,7 +47,7 @@ utiliser `--clean` pour recompiler.
 Pour mettre à jour et recompiler proprement :
 
 ```bash
-bash tools/spirula/install_spirula.sh --clean
+bash install/spirula/install_spirula.sh --clean
 ```
 
 Cette option exécute la cible CMake `clean` du dossier de build existant puis
@@ -58,7 +58,7 @@ modifications locales empêchent toujours la mise à jour.
 Pour choisir un autre emplacement, un fork ou des options CMake :
 
 ```bash
-bash tools/spirula/install_spirula.sh \
+bash install/spirula/install_spirula.sh \
   --repo-dir /chemin/vers/spirula-studio \
   --repo-url https://github.com/harry7557558/spirula-studio.git \
   -- -DSS_BUILD_GUI=OFF

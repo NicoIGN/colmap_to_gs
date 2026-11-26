@@ -154,7 +154,7 @@ recouvrement, utilisées pour le SfM et l'entraînement choisi par
 `TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
 les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
 d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
-`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
+`bash $GIT_ROOT/install/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
 pyproj et pycolmap sont requis dans `PYTHON_BIN`.
 
 Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
@@ -193,7 +193,7 @@ Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
   `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
   `--ba-loss-param`.
 - Vérifier la disponibilité de ces options dans la version installée de
-  [Spirula](../spirula/README.md).
+  [Spirula](../../install/spirula/README.md).
 
 
 

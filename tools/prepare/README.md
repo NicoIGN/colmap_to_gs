@@ -66,7 +66,7 @@ modèles seuls ne prouvent pas pourquoi la fusion a échoué.
 
 ### Découpage et entraînement Spirula par blocs
 
-Pour installer Spirula, consulter [son README](../spirula/README.md).
+Pour installer Spirula, consulter [son README](../../install/spirula/README.md).
 
 Depuis n'importe quel dossier, avec l'environnement Python du projet activé :
 

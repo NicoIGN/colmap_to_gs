@@ -76,7 +76,7 @@ l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
 
 - **Bbox + flux Panoramax → splat** :
   [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
-- **Images locales → splat** : [pipeline images vers splat](tools/images_to_splat/README.md).
+- **Images locales → splat** : [pipeline images vers splat](tools/libs/README.md).
 
 La préparation COLMAP possède son propre outil et sa configuration :
 Spirula, COLMAP direct, `ns-process-data` ou conversion de poses caméra et LiDAR.
@@ -163,7 +163,7 @@ Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.spl
 - [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
-- [Installation de Spirula](tools/spirula/README.md).
+- [Installation de Spirula](install/spirula/README.md).
 - [Masques](tools/masks/README.md).
 - [Export, filtrage et fusion](tools/export/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).

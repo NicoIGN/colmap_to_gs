@@ -5,7 +5,7 @@
 ## 1. Objectif
 
 Générer des masques locaux pour le SfM et l'entraînement 3DGS avec
-[Spirula](../spirula/README.md) ou Nerfstudio. Par défaut, le masque exclut le ciel.
+[Spirula](../../install/spirula/README.md) ou Nerfstudio. Par défaut, le masque exclut le ciel.
 
 ### Interface commune : `masks.py`
 

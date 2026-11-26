@@ -154,7 +154,7 @@ class ProjectionTest(unittest.TestCase):
             config = root / "config.sh"
             repo = Path(__file__).resolve().parents[2]
             command = ["bash", "-c",
-                       'repo_root="$1"; source "$repo_root/tools/images_to_splat/common.sh"; load_config "$2"',
+                       'repo_root="$1"; source "$repo_root/tools/libs/common.sh"; load_config "$2"',
                        "_", str(repo), str(config)]
             base = (f'SFM_IMAGES_DIR="{source}"\nOUTPUT_DIR="{root / "out"}"\n'
                     'COLMAP_METHOD=hloc\nSFM_MASKS=off\nTRAIN_MASKS=off\n')

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installe HLOC (avec LightGlue) et le réseau SuperGlue dans l'environnement Python courant.
-# Usage : bash tools/colmap/install-hloc.sh [--python PATH]
+# Usage : bash install/colmap/install-hloc.sh [--python PATH]
 set -euo pipefail
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ sg_dir_name="SuperGluePretrainedNetwork"
 die() { printf '[ERREUR] Installation HLOC : %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
-Usage: bash tools/colmap/install-hloc.sh [--python PATH]
+Usage: bash install/colmap/install-hloc.sh [--python PATH]
 
 Installe hloc (+ LightGlue) via pip depuis GitHub, clone SuperGluePretrainedNetwork
 dans site-packages (requis par hloc/extractors/superpoint.py), puis vérifie les imports.

@@ -401,7 +401,7 @@ fi
 # ===============================================================
 
 # ===============================================================
-# Correctifs locaux (tools/spirula/patch/*.patch)
+# Correctifs locaux (install/spirula/patch/*.patch)
 # ===============================================================
 
 PATCH_DIR="${SCRIPT_DIR}/patch"
