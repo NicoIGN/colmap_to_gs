@@ -552,6 +552,64 @@ Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélect
 géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
 
 
+### Téléchargement seul : détails
+
+Ces règles s'appliquent à `download.sh` et au téléchargement du pipeline complet.
+
+#### Recherche et comptage
+
+Le script demande les métadonnées à l'API (sans télécharger les images à cette
+étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
+par requête : si une requête en atteint 10 000, la zone est découpée en quatre
+quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
+supprimés par `collection/id`. Le script compte ensuite les photos dont le point
+est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
+`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
+basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
+précise. Chaque page brute est écrite dans `pages/`.
+
+`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
+sans réduire le comptage : par exemple, `--image-max 400` affiche le total
+disponible dans la bbox et en traite au plus 400.
+
+#### Reprise et manifeste
+
+Relancer la même commande reprend les images dont l'URL et la taille correspondent
+aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
+avant remplacement ; les photos en échec sont signalées par un avertissement,
+indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
+avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
+ou une autre erreur fatale entraîne un code de sortie non nul.
+Les réponses API brutes sont conservées.
+Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
+sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
+Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
+restent présents, donc utiliser un dossier distinct pour une autre sélection.
+
+#### Progression
+
+Dans un terminal interactif, une barre de progression affiche les photos
+téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
+trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+
+#### Limites de l'API
+
+Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
+HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
+par une petite zone et respecter les conditions d'utilisation et d'attribution
+des instances et des photos.
+
+#### Périmètre
+
+« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
+visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
+ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
+photos extérieures de séquences qui traversent la zone.
+
+La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
+l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
+inférieure n'est effectué si l'asset demandé manque.
+
 ## 4. Fonctionnement interne
 
 Le pipeline **Panoramax** recherche et télécharge les photos, puis prépare
@@ -600,49 +658,6 @@ de confiance et est sourcé, même en validation seule.
 
 
 
-### Reprise et manifeste
-
-Relancer la même commande reprend les images dont l'URL et la taille correspondent
-aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
-avant remplacement ; les photos en échec sont signalées par un avertissement,
-indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
-avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
-ou une autre erreur fatale entraîne un code de sortie non nul.
-Les réponses API brutes sont conservées.
-Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
-sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
-Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
-restent présents, donc utiliser un dossier distinct pour une autre sélection.
-
-### Limites de l'API
-
-Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
-HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
-par une petite zone et respecter les conditions d'utilisation et d'attribution
-des instances et des photos.
-
-### Progression
-
-Dans un terminal interactif, une barre de progression affiche les photos
-téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
-trouvées, la barre se termine à 100 % du total effectivement sélectionné.
-
-### Recherche et comptage
-
-Le script demande les métadonnées à l'API (sans télécharger les images à cette
-étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
-par requête : si une requête en atteint 10 000, la zone est découpée en quatre
-quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
-supprimés par `collection/id`. Le script compte ensuite les photos dont le point
-est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
-`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
-basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
-précise. Chaque page brute est écrite dans `pages/`.
-
-`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
-sans réduire le comptage : par exemple, `--image-max 400` affiche le total
-disponible dans la bbox et en traite au plus 400.
-
 
 
 ### Robustesse SfM
@@ -662,13 +677,3 @@ Un nouveau calcul via le worker revérifie les matches (`--reuse-matches redo`).
 
 
 
-### Périmètre
-
-« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
-visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
-ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
-photos extérieures de séquences qui traversent la zone.
-
-La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
-l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
-inférieure n'est effectué si l'asset demandé manque.
