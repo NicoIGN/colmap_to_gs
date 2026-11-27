@@ -205,7 +205,7 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare
 elif [[ "$phase" == mask-setup ]]; then
   set_stage "préparation des entrées pour les masques"
-  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py"
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --phase mask-setup
   exit 0
 elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   set_stage "vérification des entrées pour les masques"
@@ -217,7 +217,7 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   exit 0
 else
   set_stage "vérification du workspace"
-  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check --phase train
   "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition check
   georef_check "$sfm_model"
   select_sparse

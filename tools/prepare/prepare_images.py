@@ -140,22 +140,98 @@ def _comparable_setting(key, value):
     return value
 
 
-def compatible_record(previous, current):
-    if any(previous.get(key) != current.get(key)
+# Each rule maps a setting prefix to the stage that consumes it and, when given,
+# to the COLMAP_METHOD values for which it matters. Unmatched settings are SfM.
+SETTING_RULES = (
+    ("SFM_MASKS", "masks_sfm", None),
+    ("TRAIN_MASKS", "masks_train", None),
+    ("SFM_FILTER_", "filter", None),
+    ("SFM_DENSITY_", "filter", None),
+    ("SFM_SP_", "sfm_backend", frozenset({"spirula"})),
+    ("SFM_NS_", "sfm_backend", frozenset({"nerfstudio"})),
+    ("SFM_COLMAP_", "sfm_backend", frozenset({"colmap", "hloc", "orientations", "nerfstudio"})),
+    ("SFM_EQUIRECTANGULAR_", "sfm_backend", frozenset({"hloc"})),
+)
+PHASE_STAGES = {
+    "prepare": None,
+    "mask-setup": frozenset({"masks_sfm", "masks_train"}),
+    "train": frozenset({"masks_train", "masks_sfm", "filter", "sfm"}),
+}
+
+
+def _setting_active(name, method, stages):
+    for prefix, stage, methods in SETTING_RULES:
+        if name.startswith(prefix):
+            break
+    else:
+        stage, methods = "sfm", None
+    return ((methods is None or method in methods)
+            and (stages is None or stage in stages))
+
+
+def _field_active(name, stages):
+    if name == "colmap_policy":
+        return stages is None or "sfm" in stages
+    return True
+
+
+def scoped_record(record, method, stages):
+    """Keep only the signature parts that affect this phase and active backend."""
+    scoped = {key: value for key, value in record.items()
+              if key != "settings" and _field_active(key, stages)}
+    settings = {}
+    for name, value in record.get("settings", {}).items():
+        if name == "mask_policies":
+            settings[name] = {policy: item for policy, item in value.items()
+                              if _setting_active(policy, method, stages)}
+        elif _setting_active(name, method, stages):
+            settings[name] = value
+    scoped["settings"] = settings
+    return scoped
+
+
+def compatible_record(previous, current, method, stages):
+    if not isinstance(previous.get("settings"), dict):
+        return False
+    old = scoped_record(previous, method, stages)
+    new = scoped_record(current, method, stages)
+    if any(old.get(key) != new.get(key)
            for key in ("source", "images", "georeference", "gps_exif", "colmap_policy")):
         return False
-    old_settings = previous.get("settings")
-    if not isinstance(old_settings, dict):
-        return False
     return all(
-        key in current["settings"]
-        and _comparable_setting(key, current["settings"][key]) == _comparable_setting(key, value)
-        for key, value in old_settings.items()
-        if not key.startswith("SPLIT_")
+        name in new["settings"]
+        and _comparable_setting(name, new["settings"][name]) == _comparable_setting(name, value)
+        for name, value in old["settings"].items()
+        if not name.startswith("SPLIT_")
     )
 
 
-def prepare(check=False):
+def merge_out_of_scope(previous, current, method, stages):
+    """Keep recorded values for signature parts this phase does not check."""
+    merged = dict(current)
+    if not _field_active("colmap_policy", stages):
+        if "colmap_policy" in previous:
+            merged["colmap_policy"] = previous["colmap_policy"]
+        else:
+            merged.pop("colmap_policy", None)
+    old_settings = previous.get("settings", {})
+    settings = {name: value for name, value in current["settings"].items()
+                if name != "mask_policies" and _setting_active(name, method, stages)}
+    for name, value in old_settings.items():
+        if name != "mask_policies" and not _setting_active(name, method, stages):
+            settings[name] = value
+    old_policies = old_settings.get("mask_policies", {})
+    policies_now = current["settings"].get("mask_policies", {})
+    merged_policies = {policy: value for policy, value in policies_now.items()
+                       if _setting_active(policy, method, stages)}
+    merged_policies.update({policy: value for policy, value in old_policies.items()
+                            if not _setting_active(policy, method, stages)})
+    settings["mask_policies"] = merged_policies
+    merged["settings"] = settings
+    return merged
+
+
+def prepare(check=False, phase="prepare"):
     source = Path(os.environ["SFM_IMAGES_DIR"]).resolve()
     output = Path(os.environ["OUTPUT_DIR"]).resolve()
     recursive = os.environ["SFM_IMAGES_RECURSIVE"] == "true"
@@ -175,6 +251,7 @@ def prepare(check=False):
                                stat.st_size, file_sha256(path)])
     if not images:
         raise ValueError(f"Aucune image sélectionnée dans {source} (récursif={recursive})")
+    method = os.environ.get("COLMAP_METHOD", "spirula")
     settings = {key: value for key, value in os.environ.items()
                 if key.startswith(("SFM_", "TRAIN_MASKS"))}
     if not project:
@@ -208,7 +285,6 @@ def prepare(check=False):
     record["gps_exif"] = gps_exif_metadata(
         images, bool(os.environ.get("GEOREF_GPX_FILE"))
     )
-    method = os.environ.get("COLMAP_METHOD", "spirula")
     if method != "spirula":
         record["colmap_policy"] = {
             "method": method,
@@ -237,6 +313,7 @@ def prepare(check=False):
         }
     marker = output / "inputs.json"
     resume = os.environ.get("PIPELINE_RESUME") == "true"
+    stages = PHASE_STAGES[phase]
     adopted = False
     rewritten = False
     if marker.is_file():
@@ -246,13 +323,10 @@ def prepare(check=False):
         if project and previous.get("settings", {}).get("SFM_EQUIRECTANGULAR_VIEWS") == "true":
             previous["settings"].pop("SFM_EQUIRECTANGULAR_VIEWS")
         if previous != record:
-            without_partition = dict(previous)
-            without_partition["settings"] = {
-                key: value for key, value in previous.get("settings", {}).items()
-                if not key.startswith("SPLIT_")
-            }
-            if without_partition != record and (not resume or not compatible_record(previous, record)):
-                differences = list(islice(record_differences(previous, record), 13))
+            if not compatible_record(previous, record, method, stages):
+                differences = list(islice(record_differences(
+                    scoped_record(previous, method, stages),
+                    scoped_record(record, method, stages)), 13))
                 details = "\n".join(f"  - {item}" for item in differences[:12])
                 if len(differences) > 12:
                     details += "\n  - Autres différences non affichées."
@@ -262,6 +336,7 @@ def prepare(check=False):
                                  f"\nPIPELINE_RESUME={'true' if resume else 'false'}"
                                  f" ; contrôle seul={'true' if check else 'false'}"
                                  f"\nDifférences enregistrées / actuelles :\n{details}")
+            record = merge_out_of_scope(previous, record, method, stages)
             rewritten = True
     elif check:
         raise ValueError("Préparation absente : lancer --phase prepare.")
@@ -338,8 +413,10 @@ def prepare(check=False):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--phase", choices=tuple(PHASE_STAGES), default="prepare",
+                        help="Limiter les contrôles de signature aux paramètres de cette phase")
     args = parser.parse_args()
     try:
-        prepare(args.check)
+        prepare(args.check, args.phase)
     except (OSError, ValueError) as exc:
         parser.exit(1, f"[ERREUR] Sélection des images : {exc}\n")

@@ -143,6 +143,11 @@ correspondent aux images et aux réglages choisis.
   effacer `inputs.json`.
 - Reprise explicite : permet d'adopter certaines signatures anciennes ; une
   politique connue incompatible reste refusée.
+- Portée par phase : `prepare` contrôle toute la signature ; `mask-setup` et
+  `train-block`/`merge` (`--phase train`) contrôlent les réglages SfM partagés,
+  filtres et masques, mais ignorent les paramètres d'un autre backend
+  (`SFM_SP_*`, `SFM_NS_*`, `SFM_COLMAP_*`, `SFM_EQUIRECTANGULAR_*`). Une
+  différence hors portée est acceptée sans `PIPELINE_RESUME=true`.
 
 Le SfM est **global**. L'ordre est : reconstruction globale, géoréférencement
 éventuel, puis découpage en sous-modèles COLMAP et entraînement par bloc.
