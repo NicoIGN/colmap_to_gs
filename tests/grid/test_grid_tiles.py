@@ -38,6 +38,13 @@ class PlanTilesTest(unittest.TestCase):
         self.assertTrue(-5 < min(lons) < max(lons) < 10)
         self.assertTrue(40 < min(lats) < max(lats) < 60)
 
+    def test_tiles_geojson_can_stay_in_native_crs(self):
+        tiles = plan_tiles((650000, 6860000, 650008, 6860004), tile_size=4, overlap=0, margin=2)
+        ring = tiles_geojson(tiles, 2154, out_epsg=2154)["features"][0]["geometry"]["coordinates"][0]
+        self.assertEqual(ring[0], [650000.0, 6860000.0])
+        xs = [p[0] for p in ring]
+        self.assertEqual((min(xs), max(xs)), (650000.0, 650004.0))
+
     def test_compute_box_is_core_enlarged_by_margin(self):
         first = plan_tiles((0, 0, 10, 4), tile_size=4, overlap=1, margin=2)[0]
         self.assertEqual(first["core"], [0, 0, 4, 4])
