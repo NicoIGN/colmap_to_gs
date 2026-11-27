@@ -586,6 +586,13 @@ if run_relayed "${cmd[@]}"; then
   printf '[SFM] Reconstruction terminée : %s\n' "$output_dir"
 else
   status=$?
+  if [[ "$status" -eq 3 ]] && [[ -s "$output_dir/sparse/0/images.bin" && -s "$output_dir/sparse/0/points3D.bin" ]]; then
+    # Code 3 : au moins un modèle complet est écrit ; le sélecteur décide des blocs.
+    printf '[SFM] Modèle(s) partiel(s) écrit(s) (code 3) : sélection des modèles représentatifs. Workspace : %s\n' \
+      "$output_dir" >&2
+    touch -- "$output_dir/.sfm_done"
+    exit 0
+  fi
   case "$status" in
     1) message="Erreur d'utilisation ou d'exécution" ;;
     2) message="Aucune reconstruction" ;;

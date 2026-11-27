@@ -87,6 +87,12 @@ SFM_CAMERA_MODE="folder"
 SFM_CAMERA_SPLIT="false"
 # Entier > 0 : taille minimale d'un modèle caméra pour déclencher le découpage.
 SFM_CAMERA_SPLIT_MIN_IMAGES=50
+# Modèles Spirula multiples (sparse/N), code 3 accepté si sparse/0 est valide.
+# Un modèle est représentatif s'il a >= SFM_PARTIAL_MIN_IMAGES images ET
+# >= SFM_PARTIAL_MIN_FRACTION du total ; un bloc et un géoréférencement par modèle.
+# Exige un mode de géoréférencement (GPX, positions ou EXIF) ; sinon modèle unique.
+SFM_PARTIAL_MIN_FRACTION=0.05
+SFM_PARTIAL_MIN_IMAGES=30
 # SFM_CAMERA_MODEL non défini : détection automatique (360° -> equirectangular, sinon opencv).
 # Le définir explicitement force le modèle.
 # Filtre expérimental des points isolés/lointains avant découpage (CPU).

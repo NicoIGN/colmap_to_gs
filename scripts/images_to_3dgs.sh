@@ -164,9 +164,40 @@ check_filtered_sparse() {
   "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$lidar_input"
 }
 
+select_models_for_blocks() {
+  rm -f -- "$OUTPUT_DIR/.models_done"
+  [[ -d "$sfm/sparse/1" ]] || return 0
+  set_stage "sélection des modèles SfM"
+  local total georef_available=true largest_only=false selected_models configs_text ws_config
+  total="$(find "$selected" -mindepth 1 -maxdepth 1 \( -type f -o -type l \) | wc -l)"
+  [[ "$(georef_resolved_mode)" != none ]] || { georef_available=false; largest_only=true; }
+  local args=(--sparse-root "$sfm/sparse" --total-images "$total"
+              --min-fraction "$SFM_PARTIAL_MIN_FRACTION" --min-images "$SFM_PARTIAL_MIN_IMAGES"
+              --output "$sfm/representative_models.json")
+  [[ "$largest_only" != true ]] || args+=(--largest-only)
+  selected_models="$("$PYTHON_BIN" "$repo_root/tools/sfm/representative_models.py" "${args[@]}")"
+  [[ -n "$selected_models" ]] ||
+    die "Aucun modèle SfM représentatif (SFM_PARTIAL_MIN_FRACTION=$SFM_PARTIAL_MIN_FRACTION, SFM_PARTIAL_MIN_IMAGES=$SFM_PARTIAL_MIN_IMAGES)."
+  [[ "$selected_models" != 0 ]] || return 0
+  echo "[modèles] Blocs par modèle : $selected_models (géoréférencement : $georef_available)"
+  configs_text="$("$PYTHON_BIN" "$repo_root/tools/sfm/model_workspaces.py" \
+    --parent "$OUTPUT_DIR" --config "$config" --indices "$selected_models")"
+  while IFS= read -r ws_config; do
+    set_stage "pipeline du sous-workspace $(dirname -- "$ws_config")"
+    PIPELINE_MODEL_WORKSPACE=true bash "$repo_root/scripts/images_to_3dgs.sh" "$ws_config" \
+      --images "$SFM_IMAGES_DIR" --phase all
+  done <<< "$configs_text"
+  touch "$OUTPUT_DIR/.models_done"
+  echo "[modèles] Terminé : $OUTPUT_DIR/models/{$selected_models}"
+  exit 0
+}
+
 prepare() {
-  set_stage "production COLMAP"
-  bash "$repo_root/tools/sfm/run_standard_images.sh" "$config" --images "$SFM_IMAGES_DIR"
+  if [[ "${PIPELINE_MODEL_WORKSPACE:-false}" != true ]]; then
+    set_stage "production COLMAP"
+    bash "$repo_root/tools/sfm/run_standard_images.sh" "$config" --images "$SFM_IMAGES_DIR"
+    select_models_for_blocks
+  fi
   set_stage "géoréférencement"
   georef_run "$sfm_model"
   georef_lidar_env
@@ -218,6 +249,8 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   "$PYTHON_BIN" "$script_dir/../masks/masks.py" --policy "$policy"
   exit 0
 else
+  [[ ! -f "$OUTPUT_DIR/.models_done" || "${PIPELINE_MODEL_WORKSPACE:-false}" == true ]] ||
+    die "Blocs par modèle : les phases par bloc s'appliquent aux sous-workspaces models/N (lancer --phase all sur le workspace parent)."
   set_stage "vérification du workspace"
   "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check --phase train
   "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition check

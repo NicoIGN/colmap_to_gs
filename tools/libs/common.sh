@@ -125,6 +125,8 @@ load_config() {
   SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}"
   SFM_CAMERA_SPLIT="${SFM_CAMERA_SPLIT:-false}"
   SFM_CAMERA_SPLIT_MIN_IMAGES="${SFM_CAMERA_SPLIT_MIN_IMAGES:-50}"
+  SFM_PARTIAL_MIN_FRACTION="${SFM_PARTIAL_MIN_FRACTION:-0.05}"
+  SFM_PARTIAL_MIN_IMAGES="${SFM_PARTIAL_MIN_IMAGES:-30}"
   SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
   GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
   GEOREF_FROM_EXIF="${GEOREF_FROM_EXIF:-true}"
@@ -291,6 +293,10 @@ load_config() {
   config_choice SFM_CAMERA_MODE "$SFM_CAMERA_MODE" 'folder|single|image'
   config_choice SFM_CAMERA_SPLIT "$SFM_CAMERA_SPLIT" 'true|false'
   config_positive_integer SFM_CAMERA_SPLIT_MIN_IMAGES "$SFM_CAMERA_SPLIT_MIN_IMAGES"
+  config_positive_integer SFM_PARTIAL_MIN_IMAGES "$SFM_PARTIAL_MIN_IMAGES"
+  [[ "$SFM_PARTIAL_MIN_FRACTION" =~ ^0?\.[0-9]+$|^1(\.0+)?$ ]] &&
+    awk -v v="$SFM_PARTIAL_MIN_FRACTION" 'BEGIN { exit !(v > 0 && v <= 1) }' ||
+    config_error "SFM_PARTIAL_MIN_FRACTION='$SFM_PARTIAL_MIN_FRACTION' doit être dans ]0, 1]."
   if [[ "$SFM_CAMERA_SPLIT" == true && ( "$COLMAP_METHOD" != spirula || "$SFM_CAMERA_MODE" == image ) ]]; then
     config_error "SFM_CAMERA_SPLIT=true exige COLMAP_METHOD=spirula et SFM_CAMERA_MODE folder ou single."
   fi
