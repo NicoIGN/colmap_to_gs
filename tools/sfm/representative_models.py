@@ -6,6 +6,7 @@ MIN_FRACTION du total d'images du jeu. Le résultat est écrit dans un manifeste
 import argparse
 import json
 import struct
+import sys
 from pathlib import Path
 
 
