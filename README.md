@@ -92,7 +92,7 @@ Depuis l'interface web, on importe une scène 3DGS, à laquelle on peut ajouter 
 ### Export et visualisation
 
 - [Export, filtrage et fusion](tools/export/README.md).
-- [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
+- [Nettoyage multivues du ciel](tools/libs/legacy/clean_gs/README.md).
 - [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
 - [Visualisation](tools/viewer/README.md).
 

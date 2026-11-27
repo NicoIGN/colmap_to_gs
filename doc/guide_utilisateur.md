@@ -154,7 +154,7 @@ Valeurs par défaut exactes : `bash scripts/helper.sh <PARAMÈTRE>`.
 - **Filtrage et fusion des splats** :
   [tools/export](../tools/export/README.md).
 - **Nettoyage multivues du ciel** :
-  [tools/export/clean_gs](../tools/export/clean_gs/README.md).
+  [tools/libs/legacy/clean_gs](../tools/libs/legacy/clean_gs/README.md).
 - **Installation de Spirula** :
   [install/spirula](../install/spirula/README.md).
 - **Visualisation locale** :
