@@ -27,6 +27,10 @@ Trois pipelines sont disponibles :
 - Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG`
 - Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG`
 
+Paramètres obligatoires :
+
+Pour un pipeline images, seuls `SFM_IMAGES_DIR` (dossier des photos, chemin absolu) et `OUTPUT_DIR` (dossier de sortie, chemin absolu, distinct du dossier d'images) sont obligatoires. Les autres paramètres ont des valeurs par défaut, lues dans `config/defaults/*.default.sh` (et `tools/libs/config.default.sh` pour le pipeline images) ; la configuration utilisateur ne contient que les surcharges. Selon le cas, il faut aussi définir les chemins propres au site : `SPIRULA_BIN` (binaire Spirula), `TRAIN_MASKS_SPIRULA_MODEL` (masques), `EXPORT_SPLAT_NAME` (export) et `SLURM_PARTITION` (avec `--slurm`).
+
 Options communes à ces pipelines :
 
 - `--slurm` : soumet le calcul à Slurm, depuis le nœud de connexion. Sans `--slurm`, le calcul tourne sur la machine courante.
@@ -40,10 +44,6 @@ Le lanceur, lancé avec `bash` (pas `sbatch`), choisit le mode : sans `--slurm`,
 `--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`.
 
 `--grid` et `--slurm` se combinent : `--grid` choisit le découpage, `--slurm` choisit où le calcul s'exécute.
-
-Paramètres obligatoires pour un pipeline images : `SFM_IMAGES_DIR` (dossier des photos, chemin absolu) et `OUTPUT_DIR` (dossier de sortie, chemin absolu, distinct du dossier d'images). Les autres paramètres ont des valeurs par défaut, lues dans `config/defaults/*.default.sh` (et `tools/libs/config.default.sh` pour le pipeline images). La configuration utilisateur ne contient que les surcharges.
-
-Selon le cas, il faut aussi définir les chemins propres au site : `SPIRULA_BIN` (binaire Spirula), `TRAIN_MASKS_SPIRULA_MODEL` (masques), `EXPORT_SPLAT_NAME` (export) et `SLURM_PARTITION` (avec `--slurm`).
 
 Exemple de configuration (images locales) :
 
