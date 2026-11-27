@@ -852,6 +852,8 @@ if "--wait" in args:
 
     def test_camera_split_on_resume_archives_outputs_of_previous_sfm(self):
         self.env["TEST_CAMERA_SPLIT"] = "1"
+        # The mocked SfM model has 2 images, below the default representative threshold of 30.
+        self.append("SFM_PARTIAL_MIN_IMAGES=1")
         self.assert_ok(self.run_pipeline("--phase", "prepare"))
         self.assertEqual(len(self.sfm_runs()), 1)
         self.append("PIPELINE_RESUME=true\nSFM_CAMERA_SPLIT=true\nSFM_CAMERA_SPLIT_MIN_IMAGES=1")
