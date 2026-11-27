@@ -6,7 +6,7 @@ emprise de calcul `compute` = core élargie de GRID_MARGIN. Le calcul utilise `c
 splat clippé sur `core` est exporté. Les dalles adjacentes se recouvrent de GRID_OVERLAP mètres.
 
 Sous-commandes :
-  plan            manifest.json : dalles, emprises core et compute
+  plan            manifest.json : dalles, emprises core et compute ; tiles.geojson : emprises core en EPSG:4326 (même dossier)
   select-images   liens symboliques des images dont la position (fichier --positions, sinon GPS EXIF) est dans l'emprise compute
 """
 
@@ -83,6 +83,28 @@ def write_manifest(path, bbox, epsg, tile_size, overlap, margin, tiles):
         "tiles": tiles,
     }
     Path(path).write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def tiles_geojson(tiles, epsg, edge_points=11):
+    """FeatureCollection GeoJSON (EPSG:4326) des emprises `core` ; bords densifiés pour suivre la reprojection."""
+    to_wgs84 = Transformer.from_crs(f"EPSG:{epsg}", "EPSG:4326", always_xy=True)
+    features = []
+    for tile in tiles:
+        x0, y0, x1, y1 = tile["core"]
+        corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
+        ring = []
+        for (ax, ay), (bx, by) in zip(corners, corners[1:]):
+            for step in range(edge_points - 1):
+                t = step / (edge_points - 1)
+                ring.append(to_wgs84.transform(ax + (bx - ax) * t, ay + (by - ay) * t))
+        ring.append(ring[0])
+        features.append({
+            "type": "Feature",
+            "properties": {"id": tile["id"], "row": tile["row"], "col": tile["col"],
+                           "epsg_native": epsg, "core_native": tile["core"]},
+            "geometry": {"type": "Polygon", "coordinates": [[list(p) for p in ring]]},
+        })
+    return {"type": "FeatureCollection", "features": features}
 
 
 def inside(point, box):
@@ -267,7 +289,9 @@ def main():
         bbox = parse_bbox(args.bbox)
         tiles = plan_tiles(bbox, args.tile_size, args.overlap, args.margin)
         write_manifest(args.output, bbox, args.epsg, args.tile_size, args.overlap, args.margin, tiles)
-        print(f"[OK] {len(tiles)} dalle(s) : {args.output}")
+        geojson_path = args.output.parent / "tiles.geojson"
+        geojson_path.write_text(json.dumps(tiles_geojson(tiles, args.epsg), ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"[OK] {len(tiles)} dalle(s) : {args.output} ; emprises : {geojson_path}")
     elif args.command == "tiles":
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         for tile in manifest["tiles"]:

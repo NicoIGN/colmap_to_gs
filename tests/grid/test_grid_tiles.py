@@ -11,6 +11,7 @@ from tools.grid.grid_tiles import (
     read_positions,
     select_from_metric,
     select_images,
+    tiles_geojson,
     write_tile_metric,
 )
 
@@ -22,6 +23,20 @@ class PlanTilesTest(unittest.TestCase):
         self.assertEqual(cores_x, [(0, 4), (3, 7), (6, 10)])
         self.assertEqual({(t["core"][1], t["core"][3]) for t in tiles}, {(0, 4)})
         self.assertEqual(len(tiles), 3)
+
+    def test_tiles_geojson_is_wgs84_polygon_per_core_tile(self):
+        tiles = plan_tiles((650000, 6860000, 650008, 6860004), tile_size=4, overlap=0, margin=2)
+        collection = tiles_geojson(tiles, 2154)
+        self.assertEqual(collection["type"], "FeatureCollection")
+        self.assertEqual(len(collection["features"]), len(tiles))
+        feature = collection["features"][0]
+        self.assertEqual(feature["properties"]["id"], "tile_000_000")
+        ring = feature["geometry"]["coordinates"][0]
+        self.assertEqual(ring[0], ring[-1])
+        lons = [p[0] for p in ring]
+        lats = [p[1] for p in ring]
+        self.assertTrue(-5 < min(lons) < max(lons) < 10)
+        self.assertTrue(40 < min(lats) < max(lats) < 60)
 
     def test_compute_box_is_core_enlarged_by_margin(self):
         first = plan_tiles((0, 0, 10, 4), tile_size=4, overlap=1, margin=2)[0]
