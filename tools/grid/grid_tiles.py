@@ -131,7 +131,7 @@ def read_positions(path):
     return positions
 
 
-def select_images(images_dir, epsg, tiles, positions=None, verbose=False):
+def select_images(images_dir, epsg, tiles, positions=None, verbose=False, points=None):
     """Retourne {tile_id: [images]}.
 
     La position vient du fichier externe `positions` (prioritaire, clé = nom de fichier) ou, à défaut,
@@ -153,6 +153,8 @@ def select_images(images_dir, epsg, tiles, positions=None, verbose=False):
         if lat is None or lon is None:
             raise ValueError(f"{path.name} : aucune position (ni GPS EXIF, ni GRID_POSITIONS)")
         point = to_projected.transform(lon, lat)
+        if points is not None:
+            points[path.name] = point
         hits = [tile["id"] for tile in tiles if inside(point, tile["compute"])]
         for tile in tiles:
             if tile["id"] in hits:
@@ -163,7 +165,7 @@ def select_images(images_dir, epsg, tiles, positions=None, verbose=False):
     return selection
 
 
-def select_from_metric(images_dir, epsg, tiles, metric_file, verbose=False):
+def select_from_metric(images_dir, epsg, tiles, metric_file, verbose=False, points=None):
     """Sélection à partir de SFM_SP_METRIC_POSITIONS (ENU en mètres autour de l'origine d'en-tête), sans lire les EXIF.
 
     Les images absentes du fichier métrique sont ignorées et comptées dans le message.
@@ -207,6 +209,8 @@ def select_from_metric(images_dir, epsg, tiles, metric_file, verbose=False):
         dz = cp * north + sp * up
         x, y, _ = to_projected.transform(ox + dx, oy + dy, oz + dz)
         point = (x, y)
+        if points is not None:
+            points[path.name] = point
         hits = [tile["id"] for tile in tiles if inside(point, tile["compute"])]
         for tile in tiles:
             if tile["id"] in hits:
@@ -219,11 +223,29 @@ def select_from_metric(images_dir, epsg, tiles, metric_file, verbose=False):
     return selection
 
 
-def run_selection(images_dir, epsg, tiles, positions=None, global_metric=None, verbose=False):
+def run_selection(images_dir, epsg, tiles, positions=None, global_metric=None, verbose=False, points=None):
     """Sélection par dalle : positions externes, sinon fichier métrique global si fourni, sinon EXIF GPS."""
     if positions is None and global_metric is not None:
-        return select_from_metric(images_dir, epsg, tiles, global_metric, verbose)
-    return select_images(images_dir, epsg, tiles, positions, verbose)
+        return select_from_metric(images_dir, epsg, tiles, global_metric, verbose, points)
+    return select_images(images_dir, epsg, tiles, positions, verbose, points)
+
+
+def positions_geojson(points, tiles, epsg, out_epsg=4326):
+    """FeatureCollection de points {nom: (x, y)} en EPSG:epsg, reprojetés en EPSG:out_epsg, avec les dalles de compute."""
+    to_out = Transformer.from_crs(f"EPSG:{epsg}", f"EPSG:{out_epsg}", always_xy=True)
+    features = []
+    for name, point in sorted(points.items()):
+        x, y = to_out.transform(*point)
+        hits = [tile["id"] for tile in tiles if inside(point, tile["compute"])]
+        features.append({
+            "type": "Feature",
+            "properties": {"name": name, "tiles": hits},
+            "geometry": {"type": "Point", "coordinates": [x, y]},
+        })
+    collection = {"type": "FeatureCollection", "features": features}
+    if out_epsg != 4326:
+        collection["crs"] = {"type": "name", "properties": {"name": f"urn:ogc:def:crs:EPSG::{out_epsg}"}}
+    return collection
 
 
 def write_tile_metric(selection, tiles, epsg, output_dir, positions=None, global_metric=None):
@@ -325,13 +347,19 @@ def main():
             positions = read_positions(positions_file) if positions_file else None
             if args.images is None and positions is not None:
                 raise ValueError("--positions WGS84 nécessite --images (ou passer le fichier SFM_SP_METRIC_POSITIONS)")
+            points = {}
             if args.images is None:
-                selection = select_from_metric(None, args.epsg, tiles, global_metric, args.verbose)
+                selection = select_from_metric(None, args.epsg, tiles, global_metric, args.verbose, points)
             else:
-                selection = run_selection(args.images, args.epsg, tiles, positions, global_metric, args.verbose)
+                selection = run_selection(args.images, args.epsg, tiles, positions, global_metric, args.verbose, points)
             for tile in tiles:
                 tile["image_count"] = len(selection[tile["id"]])
             print("[plan] images par dalle comptées", flush=True)
+            if args.positions is not None or args.global_metric is not None:
+                positions_path = args.output.parent / "positions.geojson"
+                collection = positions_geojson(points, tiles, args.epsg, args.out_crs)
+                positions_path.write_text(json.dumps(collection, ensure_ascii=False) + "\n", encoding="utf-8")
+                print(f"[plan] positions : {positions_path} ({len(points)} point(s), CRS {args.out_crs})", flush=True)
         write_manifest(args.output, bbox, args.epsg, args.tile_size, args.overlap, args.margin, tiles)
         geojson_path = args.output.parent / "tiles.geojson"
         geojson = tiles_geojson(tiles, args.epsg, args.out_crs)

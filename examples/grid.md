@@ -68,6 +68,7 @@ Sorties, dans `GRID_OUTPUT_DIR` (défaut `OUTPUT_DIR/grid`) :
 
 - `manifest.json` : emprises de chaque dalle (`core` exporté, `compute` calculé).
 - `tiles.geojson` : emprises `core` des dalles, dans le CRS `--out-crs` de `grid_tiles.py plan` (défaut EPSG:4326 ; ex. `--out-crs 2154` pour Lambert 93) (propriétés `id`, `row`, `col`, `epsg_native`, `core_native`, et `image_count` si `plan` reçoit `--global-metric` ou `--images`), à charger dans un SIG.
+- `positions.geojson` : (si `plan` reçoit `--positions` ou `--global-metric`) points des images, dans le même `--out-crs` que `tiles.geojson` ; propriétés `name` et `tiles` (ids des dalles de `compute` qui contiennent le point).
 - `splats/<dalle>.splat` : résultat clippé à l'emprise `core`.
 - `logs/<dalle>.log` et `logs/failed.txt` en cas d'échec.
 - `work/<dalle>/` : calcul intermédiaire, avec `tile.conf` et les liens d'images en mode images.

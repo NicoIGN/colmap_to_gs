@@ -8,6 +8,7 @@ from pyproj import Transformer
 from tools.grid.grid_tiles import (
     parse_bbox,
     plan_tiles,
+    positions_geojson,
     read_positions,
     select_from_metric,
     select_images,
@@ -46,6 +47,16 @@ class PlanTilesTest(unittest.TestCase):
         self.assertEqual(ring[0], [650000.0, 6860000.0])
         xs = [p[0] for p in ring]
         self.assertEqual((min(xs), max(xs)), (650000.0, 650004.0))
+
+    def test_positions_geojson_is_in_out_crs_with_tile_membership(self):
+        tiles = plan_tiles((650000, 6860000, 650008, 6860004), tile_size=4, overlap=0, margin=2)
+        points = {"inside.jpg": (650002.0, 6860002.0), "outside.jpg": (650100.0, 6860100.0)}
+        collection = positions_geojson(points, tiles, 2154, out_epsg=2154)
+        self.assertEqual(collection["crs"]["properties"]["name"], "urn:ogc:def:crs:EPSG::2154")
+        by_name = {f["properties"]["name"]: f for f in collection["features"]}
+        self.assertEqual(by_name["inside.jpg"]["geometry"]["coordinates"], [650002.0, 6860002.0])
+        self.assertTrue(by_name["inside.jpg"]["properties"]["tiles"])
+        self.assertEqual(by_name["outside.jpg"]["properties"]["tiles"], [])
 
     def test_image_count_is_exported_to_geojson_properties(self):
         tiles = plan_tiles((650000, 6860000, 650008, 6860004), tile_size=4, overlap=0, margin=2)
