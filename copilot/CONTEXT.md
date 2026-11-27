@@ -43,6 +43,16 @@ Paquets utilisés par les tests et le pipeline :
 - HLOC / COLMAP : `pycolmap>=4.2` (`tools/lidar/requirements-colmap.txt`)
 
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
+
+### pyproj (projections CRS)
+- Rôle : conversions WGS84 ↔ projection (Lambert-93 EPSG:2154 par défaut, ou CRS GRID/Panoramax). Import `from pyproj import Transformer`, parfois `CRS`, `Geod`, `ProjError`.
+- Utilisé par : `tools/georef/georef_gps.py` et `tools/georef/positions_to_geojson.py`, `tools/sfm/spirula/gps_to_metric_positions.py` (ENU), `tools/georef/georef_colmap_from_gpx.py` (import tardif, avec fiona), `tools/grid/grid_tiles.py` (emprises GRID), `tools/export/filter_splat_by_bbox.py` (clip), `tools/panoramax/download.py` et `sfm_filter_matches_gps.py`, `tools/lidar/*`, `tools/vector/fetch_vector.py`, `tools/prepare/prepare_image_info.py`.
+- Installation : `copilot/setup_env.sh` l'installe avec `laspy lazrs fiona`. Version épinglée dans `tools/panoramax/requirements.txt` (`pyproj>=3.4,<4`). Dans les environnements conda, `copilot/conda_env.yml` fixe `pyproj==3.8.0`.
+- Pièges : les modules qui l'importent en tête (ex. `tools/grid/grid_tiles.py`, `tools/sfm/spirula/gps_to_metric_positions.py`) échouent dès l'import si `pyproj` manque, même pour une commande qui n'en a pas besoin à l'exécution. Les imports tardifs (`georef_colmap_from_gpx.py`, `tools/lidar/pipeline_options.py`) ne l'exigent que pour leur option.
+- Ordre des axes : `Transformer.from_crs(..., always_xy=True)` donne (lon, lat) → (x, y). Sans `always_xy`, EPSG:4326 est lu en (lat, lon) et les points tombent au mauvais endroit.
+- Tests qui exigent pyproj : `tests/panoramax/test_download.py`, `tests/panoramax/test_sfm_filter_matches_gps.py`, `tests/lidar/test_colmap_lidar.py`, `tests/grid/test_grid_tiles.py`.
+- Vérification : `python -c "import pyproj; print(pyproj.__version__)"` dans `~/.venvs/colmap_to_gs`.
+
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
 - Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_panoramax.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.

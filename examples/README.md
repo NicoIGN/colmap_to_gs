@@ -16,6 +16,7 @@ Les prérequis complets sont indiqués dans la documentation de chaque outil.
 - [LiDAR : récupérer un `.laz` IGN et le convertir](lidar.md)
 - [Pipelines images, vidéo et Panoramax : exécution directe ou Slurm, helper de paramètres](../scripts/README.md)
 - [Panoramax : télécharger des images par emprise](panoramax.md)
+- [Mode GRID : dalles géoréférencées clippées](grid.md)
 - [Images, vidéos et COLMAP](images-colmap.md)
 - [Post-traitement et visualisation](postprocess.md)
 - [Tester le filtre de densité sparse](sparse-density-filter.md)
