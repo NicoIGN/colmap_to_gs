@@ -51,11 +51,13 @@ bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh"
 Lancer les calculs :
 
 ```bash
-bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --grid
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --grid          # local, bloquant
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --grid --slurm  # job Slurm
 ```
 
-Le lanceur appelle `scripts/grid_to_3dgs.sh CONFIG --source <panoramax|images>`, qui peut aussi
-être lancé directement avec la même option `--source`.
+`--slurm` soumet un job unique (`NUM_GPUS` GPU, `NUM_CPUS x NUM_GPUS` CPU) qui relance le même
+lanceur en local ; il exige `SLURM_PARTITION`, `SLURM_MEMORY` et `SLURM_TIME_LIMIT` renseignés.
+Progression : `GRID_OUTPUT_DIR/logs/grid.log` ; logs par dalle : `GRID_OUTPUT_DIR/work/<dalle>/tile.log`.
 
 Une configuration qui contient des `GRID_*` est refusée par les lanceurs sans `--grid` et par
 les scripts `images_to_3dgs.sh` / `panoramax_to_3dgs.sh`. Le contrôle lit le fichier de
