@@ -21,15 +21,17 @@ spécialisés liés ci-dessous.
 
 ### 2.3. Utiliser un pipeline complet
 
-Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun existe en version directe (machine courante) et en version Slurm (`launch_*`, à lancer avec `bash`, pas `sbatch`, depuis le nœud de connexion) :
+Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun se lance avec `scripts/launch_*_to_3dgs.sh` (à lancer avec `bash`, pas `sbatch`) : sans `--slurm`, le calcul tourne sur la machine courante ; avec `--slurm`, il est soumis à Slurm, depuis le nœud de connexion.
 
-| Pipeline | Entrée | Direct | Slurm |
+| Pipeline | Entrée | Machine courante | Slurm |
 |---|---|---|---|
-| Images locales | dossier de photos | `bash scripts/local/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --wait` |
-| Vidéo | fichier vidéo | `bash scripts/local/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
-| Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/local/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --wait` |
-| GRID Panoramax | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --grid` | non |
-| GRID images | dossier géoréférencé découpé en dalles (`GRID_*`) | `bash scripts/launch_images_to_3dgs.sh CONFIG --grid` | non |
+| Images locales | dossier de photos | `bash scripts/launch_images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` |
+| Vidéo | fichier vidéo | `bash scripts/launch_videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` |
+| Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` |
+| GRID Panoramax | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --grid` | `... --grid --slurm` |
+| GRID images | dossier géoréférencé découpé en dalles (`GRID_*`) | `bash scripts/launch_images_to_3dgs.sh CONFIG --grid` | `... --grid --slurm` |
+
+`--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`. `--grid` et `--slurm` sont indépendants : le premier découpe la zone en dalles, le second choisit où le calcul s'exécute.
 
 Exemple de configuration (images locales), qui ne contient que les surcharges :
 
@@ -44,8 +46,9 @@ EOF
 Lancement standard, sur la machine courante :
 
 ```bash
-bash "$GIT_ROOT/scripts/local/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 ```
+
 
 Lancement Slurm, depuis le nœud de connexion : soumission puis attente de la fin.
 

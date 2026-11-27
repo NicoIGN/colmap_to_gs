@@ -159,7 +159,7 @@ Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_
 **Modèles partiels Spirula (sélection par bloc).** Spirula peut écrire plusieurs modèles
 (`sparse/0`, `sparse/1`, …) et signaler un résultat « partiel » (code 3). Le wrapper
 `spirula/sfm_spirula.sh` accepte alors ce résultat si `sparse/0` contient `images.bin` et
-`points3D.bin` non vides. Ensuite `scripts/local/images_to_3dgs.sh` (`select_models_for_blocks`)
+`points3D.bin` non vides. Ensuite `scripts/launch_images_to_3dgs.sh` (`select_models_for_blocks`)
 retient les modèles éligibles : au moins `SFM_PARTIAL_MIN_IMAGES` images (30 par défaut)
 et une fraction d'au moins `SFM_PARTIAL_MIN_FRACTION` des images sélectionnées (0.05 par défaut,
 dans ]0 ; 1]). Le manifeste est `sfm/representative_models.json`.
@@ -206,7 +206,7 @@ Le découpage équirectangulaire des images 360 (utilisé par HLOC) reste dans
 
 **Réutilisation.** `inputs.json` protège les images, la méthode et les données
 d'orientation/LiDAR. Une méthode différente exige un nouveau workspace.
-Le pipeline `scripts/local/images_to_3dgs.sh` appelle ce même outil avant de découper
+Le pipeline `scripts/launch_images_to_3dgs.sh` appelle ce même outil avant de découper
 et entraîner ; il réutilise donc une préparation compatible déjà effectuée.
 Une sortie COLMAP direct ou Nerfstudio partielle doit être sauvegardée/déplacée ;
 elle n'est pas reprise implicitement.

@@ -19,4 +19,12 @@ if [[ "$grid" == true ]]; then
 fi
 source "$repo_root/tools/libs/scripts/shell_helpers.sh"
 reject_grid_params "${args[0]:-}"
+if [[ "$slurm" != true ]]; then
+  for arg in "${args[@]:1}"; do
+    case "$arg" in
+      --wait|--prepare-only) echo "[ERREUR] $arg s'utilise avec --slurm." >&2; exit 1 ;;
+    esac
+  done
+  exec bash "$repo_root/scripts/local/images_to_3dgs.sh" "${args[@]}"
+fi
 exec bash "$repo_root/tools/libs/launch.sh" "${args[@]}"

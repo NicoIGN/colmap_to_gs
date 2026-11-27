@@ -1198,7 +1198,7 @@ if name not in known:'''))
 
     def test_slurm_video_extracts_before_launching_images(self):
         launcher, frames = self.configure_video_launcher()
-        result = subprocess.run(["bash", str(launcher), str(self.config), "--wait"],
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--slurm", "--wait"],
                                 env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
         self.assert_ok(result)
         jobs = json.loads(self.jobs.read_text())
@@ -1214,11 +1214,19 @@ if name not in known:'''))
     def test_slurm_failed_video_extraction_does_not_launch_images(self):
         launcher, _ = self.configure_video_launcher()
         self.env["TEST_FAIL_TOOL"] = "prepare_video_frames.py"
-        result = subprocess.run(["bash", str(launcher), str(self.config)],
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--slurm"],
                                 env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(len(json.loads(self.jobs.read_text())), 1)
         self.assertEqual([command[0] for command in self.commands()], ["prepare_video_frames.py"])
+
+    def test_video_wait_requires_slurm(self):
+        launcher, _ = self.configure_video_launcher()
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--wait"],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("--slurm", result.stderr)
+        self.assertFalse(self.jobs.exists())
 
     def test_slurm_runs_same_config_and_array_then_merges(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))

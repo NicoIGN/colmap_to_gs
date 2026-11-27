@@ -12,7 +12,7 @@ Les trois entrées (vidéo, image, Panoramax) passent par des scripts de prépar
 spécifiques, puis convergent vers les scripts communs (SfM, entraînement, export).
 
 ```text
-Entrées        local/videos_to_3dgs.sh    local/images_to_3dgs.sh    local/panoramax_to_3dgs.sh
+Entrées        launch_videos_to_3dgs.sh   launch_images_to_3dgs.sh  launch_panoramax_to_3dgs.sh
                │                          │                          │
                ▼                          ▼                          ▼
 Préparation    prepare_video_frames.py    prepare_images.py          download.py
@@ -84,7 +84,7 @@ Deux modes de lancement sont disponibles :
 
 ```bash
 # Directement sur la machine courante.
-bash "$GIT_ROOT/scripts/local/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 
 # Sur un serveur Slurm : soumission et attente de la fin.
 bash "$GIT_ROOT/scripts/launch_images_to_3dgs.sh" "$DATA_ROOT/config-images.sh" --wait
@@ -135,13 +135,11 @@ Deux modes de lancement sont disponibles. Le lanceur Slurm lit `VIDEO`,
 prend la vidéo et le nombre d'images en arguments :
 
 ```bash
-# Direct : extraction puis pipeline sur la machine courante.
-bash "$GIT_ROOT/scripts/local/videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" \
-  --video "$DATA_ROOT/video.mp4" --num-frames 200 \
-  --frames-dir "$DATA_ROOT/results/video-frames"
+# Sans --slurm : extraction puis pipeline sur la machine courante.
+bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh"
 
-# Slurm : extraction sur le cluster, puis soumission du pipeline images.
-bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" --wait
+# Avec --slurm : extraction sur le cluster, puis soumission du pipeline images.
+bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" --slurm --wait
 ```
 
 Configuration avec des paramètres supplémentaires :
@@ -184,7 +182,7 @@ Les outils SfM et d'entraînement restent nécessaires. Deux modes de lancement 
 
 ```bash
 # Direct : téléchargement et calcul sur la machine courante.
-bash "$GIT_ROOT/scripts/local/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 
 # Slurm : téléchargement et calcul sur les nœuds du cluster.
 bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh" --wait

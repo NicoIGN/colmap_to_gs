@@ -20,17 +20,27 @@ Ce guide concerne trois pipelines :
 
 Depuis la racine du dépôt, après adaptation de la configuration :
 
-| Pipeline | Exécution directe | Soumission Slurm |
+| Pipeline | Sans `--slurm` (machine courante) | Avec `--slurm` (Slurm) |
 |---|---|---|
-| Images locales | `bash scripts/local/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG` |
-| Panoramax | `bash scripts/local/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` |
+| Images locales | `bash scripts/launch_images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm` |
+| Panoramax | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm` |
+| Vidéo | `bash scripts/launch_videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm` |
+
+Deux options sont indépendantes et se combinent :
+
+- `--slurm` choisit où le calcul s'exécute. Sans elle, le pipeline tourne sur la
+  machine courante ; avec elle, il est soumis à Slurm.
+- `--grid` découpe la zone en dalles et lance un pipeline par dalle. Sans
+  `--slurm`, les dalles sont traitées sur la machine courante ; avec `--slurm`,
+  elles forment un tableau de jobs Slurm.
 
 **Le lanceur Slurm se lance avec Bash, pas avec `sbatch`** :
 le lanceur soumet lui-même un job de préparation, un tableau de jobs (un par
 bloc) et un job de fusion, liés par dépendances. Les ressources viennent des
 variables `SLURM_*` de la configuration. Ajouter `--wait` pour attendre la fin
 de la fusion et obtenir un échec si elle échoue ; sans cette option, un retour
-réussi confirme seulement la soumission. Chaque bloc actif dispose de son GPU ;
+réussi confirme seulement la soumission. `--wait` et `--prepare-only` ne sont
+acceptés qu'avec `--slurm`. Chaque bloc actif dispose de son GPU ;
 `NUM_GPUS` fixe le nombre maximal de blocs simultanés.
 Aucune partition ni ressource CPU/RAM n'est à répéter dans la commande.
 

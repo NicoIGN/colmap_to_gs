@@ -13,7 +13,7 @@ Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans
 
 ## Projet
 - Pipeline images/vidéos → 3DGS (SfM HLOC / Spirula / COLMAP / Nerfstudio, entraînement Spirula, export `.splat`).
-- Point d'entrée vidéo : `scripts/local/videos_to_3dgs.sh <config.sh> --video <fichier> --num-frames N`.
+- Point d'entrée vidéo : `scripts/launch_videos_to_3dgs.sh <config.sh>` (`VIDEO`, `NUM_FRAMES` dans la configuration).
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
 - Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
@@ -77,7 +77,7 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 ## Densification MVS (`COLMAP_USE_MVS`, défaut `false`)
 - Clés : `COLMAP_USE_MVS`, `MVS_MAX_IMAGE_SIZE` (2000), `MVS_GPU_INDEX` (0) dans `config/defaults/sfm.default.sh`.
 - Script : `tools/sfm/colmap/mvs_densify.py` (image_undistorter, patch_match_stereo, stereo_fusion). Nécessite un COLMAP compilé avec CUDA : à lancer sur Slurm, pas sur Mac.
-- Le sparse dense est `sfm/mvs/sparse/0` ; `run_standard_images.sh` et `scripts/local/images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
+- Le sparse dense est `sfm/mvs/sparse/0` ; `run_standard_images.sh` et `scripts/launch_images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
 - Les points denses reprennent le track du point sparse le plus proche (scipy `cKDTree`), pour que le découpage par tracks fonctionne. Approximatif si `SPLIT_NUM_BLOCKS > 1`.
 - Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
 

@@ -83,7 +83,7 @@ Après avoir préparé un fichier `config-panoramax.sh` contenant au minimum
 `OUTPUT_DIR` et `PANORAMAX_BBOX` :
 
 ```bash
-bash "$GIT_ROOT/scripts/local/panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-panoramax.sh"
 ```
 
 Voir aussi l'[exemple du pipeline Panoramax en direct et sur Slurm](../scripts/README.md).
