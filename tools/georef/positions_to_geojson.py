@@ -34,7 +34,12 @@ from xml.sax.saxutils import escape
 
 from pyproj import CRS, Transformer
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sfm" / "spirula"))
+from gps_to_metric_positions import read_header_origin
+
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
+_TO_ECEF = Transformer.from_crs("EPSG:4326", "EPSG:4978", always_xy=True)
+_FROM_ECEF = Transformer.from_crs("EPSG:4978", "EPSG:4326", always_xy=True)
 
 
 def parse_line(line):
@@ -89,7 +94,7 @@ def write_kml(features, output_path, name, fmt, images_dir=None, url_prefix=None
                        f"lat {props['latitude']:.7f}, lon {props['longitude']:.7f}<br/>"
                        f"alt WGS84 {props['altitude']:.2f} m")
         if images_dir:
-            source = image_index.get(str(props["index"]))
+            source = image_index.get(str(props["index"])) or image_index.get(Path(str(props["index"])).stem)
             if source is None:
                 missing += 1
             else:
@@ -123,6 +128,51 @@ def write_kml(features, output_path, name, fmt, images_dir=None, url_prefix=None
     return 0
 
 
+def enu_to_geodetic(x, y, z, origin):
+    """Inverse de to_enu : ENU autour de l'origine (lat, lon, alt) -> WGS84."""
+    lat0, lon0, h0 = origin
+    ox, oy, oz = _TO_ECEF.transform(lon0, lat0, h0)
+    phi, lam = math.radians(lat0), math.radians(lon0)
+    sp, cp, sl, cl = math.sin(phi), math.cos(phi), math.sin(lam), math.cos(lam)
+    dx = -sl * x - sp * cl * y + cp * cl * z
+    dy = cl * x - sp * sl * y + cp * sl * z
+    dz = cp * y + sp * z
+    lon, lat, alt = _FROM_ECEF.transform(ox + dx, oy + dy, oz + dz)
+    return lat, lon, alt
+
+
+def parse_metric_line(line, origin):
+    """`nom X Y Z` (SFM_SP_METRIC_POSITIONS) -> (index, lat, lon, alt, extra)."""
+    parts = line.split()
+    if len(parts) != 4:
+        raise ValueError("attendu `nom X Y Z`")
+    try:
+        x, y, z = (float(v) for v in parts[1:])
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
+    if not all(math.isfinite(v) for v in (x, y, z)):
+        raise ValueError("valeur non finie")
+    latitude, longitude, altitude = enu_to_geodetic(x, y, z, origin)
+    return parts[0], latitude, longitude, altitude, [x, y, z]
+
+
+def iter_positions(input_file):
+    """Yield (numéro de ligne, ligne, résultat ou ValueError) ; format détecté par l'en-tête d'origine."""
+    origin = read_header_origin(Path(input_file))
+    parse = parse_line if origin is None else (lambda line: parse_metric_line(line, origin))
+    if origin is not None:
+        print(f"[OK] Format SFM_SP_METRIC_POSITIONS (origine {origin[0]:.6f}, {origin[1]:.6f})")
+    with open(input_file, "r", encoding="utf-8") as f:
+        for line_number, raw in enumerate(f, 1):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                yield line_number, line, parse(line)
+            except ValueError as exc:
+                yield line_number, line, exc
+
+
 def convert(input_file, output_file, target_crs="EPSG:2154", fmt="geojson",
             images_dir=None, image_url_prefix=None, image_max_size=800):
     crs = CRS.from_user_input(target_crs)
@@ -130,30 +180,24 @@ def convert(input_file, output_file, target_crs="EPSG:2154", fmt="geojson",
 
     features = []
     skipped = 0
-    with open(input_file, "r", encoding="utf-8") as f:
-        for line_number, raw in enumerate(f, 1):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            try:
-                index, latitude, longitude, altitude, extra = parse_line(line)
-            except ValueError as exc:
-                print(f"[WARNING] Ligne {line_number} ignorée ({exc}) : {line}", file=sys.stderr)
-                skipped += 1
-                continue
-
-            x, y = transformer.transform(longitude, latitude)
-            features.append({
-                "type": "Feature",
-                "geometry": {"type": "Point", "coordinates": [x, y, altitude]},
-                "properties": {
-                    "index": index,
-                    "latitude": latitude,
-                    "longitude": longitude,
-                    "altitude": altitude,
-                    "extra": extra,
-                },
-            })
+    for line_number, line, parsed in iter_positions(input_file):
+        if isinstance(parsed, ValueError):
+            print(f"[WARNING] Ligne {line_number} ignorée ({parsed}) : {line}", file=sys.stderr)
+            skipped += 1
+            continue
+        index, latitude, longitude, altitude, extra = parsed
+        x, y = transformer.transform(longitude, latitude)
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [x, y, altitude]},
+            "properties": {
+                "index": index,
+                "latitude": latitude,
+                "longitude": longitude,
+                "altitude": altitude,
+                "extra": extra,
+            },
+        })
 
     if not features:
         print(f"[ERREUR] Aucune position valide dans {input_file}", file=sys.stderr)
