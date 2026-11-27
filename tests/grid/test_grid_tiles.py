@@ -47,6 +47,13 @@ class PlanTilesTest(unittest.TestCase):
         xs = [p[0] for p in ring]
         self.assertEqual((min(xs), max(xs)), (650000.0, 650004.0))
 
+    def test_image_count_is_exported_to_geojson_properties(self):
+        tiles = plan_tiles((650000, 6860000, 650008, 6860004), tile_size=4, overlap=0, margin=2)
+        tiles[0]["image_count"] = 7
+        collection = tiles_geojson(tiles, 2154, out_epsg=2154)
+        self.assertEqual(collection["features"][0]["properties"]["image_count"], 7)
+        self.assertNotIn("image_count", collection["features"][1]["properties"])
+
     def test_compute_box_is_core_enlarged_by_margin(self):
         first = plan_tiles((0, 0, 10, 4), tile_size=4, overlap=1, margin=2)[0]
         self.assertEqual(first["core"], [0, 0, 4, 4])

@@ -101,7 +101,8 @@ def tiles_geojson(tiles, epsg, out_epsg=4326, edge_points=11):
         features.append({
             "type": "Feature",
             "properties": {"id": tile["id"], "row": tile["row"], "col": tile["col"],
-                           "epsg_native": epsg, "core_native": tile["core"]},
+                           "epsg_native": epsg, "core_native": tile["core"],
+                           **({"image_count": tile["image_count"]} if "image_count" in tile else {})},
             "geometry": {"type": "Polygon", "coordinates": [[list(p) for p in ring]]},
         })
     collection = {"type": "FeatureCollection", "features": features}
@@ -207,6 +208,13 @@ def select_from_metric(images_dir, epsg, tiles, metric_file):
     return selection
 
 
+def run_selection(images_dir, epsg, tiles, positions=None, global_metric=None):
+    """Sélection par dalle : positions externes, sinon fichier métrique global si fourni, sinon EXIF GPS."""
+    if positions is None and global_metric is not None:
+        return select_from_metric(images_dir, epsg, tiles, global_metric)
+    return select_images(images_dir, epsg, tiles, positions)
+
+
 def write_tile_metric(selection, tiles, epsg, output_dir, positions=None, global_metric=None):
     """Écrit work/<dalle>/metric_positions.txt (SFM_SP_METRIC_POSITIONS) pour chaque dalle non vide.
 
@@ -276,6 +284,11 @@ def main():
     plan.add_argument("--margin", type=float, required=True)
     plan.add_argument("--output", required=True, type=Path)
     plan.add_argument("--out-crs", dest="out_crs", type=int, default=4326, help="EPSG de tiles.geojson (défaut 4326)")
+    plan.add_argument("--images", type=Path, default=None,
+                      help="Dossier d'images : ajoute image_count à chaque dalle (manifest et tiles.geojson)")
+    plan.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes pour --images")
+    plan.add_argument("--global-metric", type=Path, default=None,
+                      help="SFM_SP_METRIC_POSITIONS global pour --images, si --positions est absent")
 
     tiles = sub.add_parser("tiles", help="Afficher les dalles (TSV) pour le driver shell")
     tiles.add_argument("--manifest", required=True, type=Path)
@@ -292,6 +305,12 @@ def main():
     if args.command == "plan":
         bbox = parse_bbox(args.bbox)
         tiles = plan_tiles(bbox, args.tile_size, args.overlap, args.margin)
+        if args.images is not None:
+            positions = read_positions(args.positions) if args.positions else None
+            selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric)
+            for tile in tiles:
+                tile["image_count"] = len(selection[tile["id"]])
+            print(f"[plan] images par dalle comptées depuis {args.images}", flush=True)
         write_manifest(args.output, bbox, args.epsg, args.tile_size, args.overlap, args.margin, tiles)
         geojson_path = args.output.parent / "tiles.geojson"
         geojson = tiles_geojson(tiles, args.epsg, args.out_crs)
@@ -306,10 +325,7 @@ def main():
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         print(f"[select-images] {len(manifest['tiles'])} dalle(s), lecture des positions...", flush=True)
         positions = read_positions(args.positions) if args.positions else None
-        if positions is None and args.global_metric is not None:
-            selection = select_from_metric(args.images, manifest["epsg"], manifest["tiles"], args.global_metric)
-        else:
-            selection = select_images(args.images, manifest["epsg"], manifest["tiles"], positions)
+        selection = run_selection(args.images, manifest["epsg"], manifest["tiles"], positions, args.global_metric)
         print("[select-images] sélection faite, écriture des liens et positions...", flush=True)
         counts = link_selection(selection, args.output_dir)
         write_tile_metric(selection, manifest["tiles"], manifest["epsg"], args.output_dir,
