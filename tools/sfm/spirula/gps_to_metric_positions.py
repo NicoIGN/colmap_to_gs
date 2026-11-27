@@ -25,6 +25,7 @@ from pyproj import Transformer
 from tqdm import tqdm
 
 WGS84_A = 6378137.0
+WGS84_E2 = (1.0 / 298.257223563) * (2.0 - 1.0 / 298.257223563)
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 IMAGE_ID_RE = re.compile(r"_(\d+)\.(?:jpe?g|png)$", re.IGNORECASE)
 
@@ -72,12 +73,25 @@ def interpolate(rows, t: float) -> tuple[float, float, float]:
     return tuple(a + w * (b - a) for a, b in zip(p0[:3], p1[:3]))
 
 
+def ecef(lat: float, lon: float, height: float) -> tuple[float, float, float]:
+    phi, lam = math.radians(lat), math.radians(lon)
+    sin_phi = math.sin(phi)
+    n = WGS84_A / math.sqrt(1.0 - WGS84_E2 * sin_phi * sin_phi)
+    return ((n + height) * math.cos(phi) * math.cos(lam),
+            (n + height) * math.cos(phi) * math.sin(lam),
+            (n * (1.0 - WGS84_E2) + height) * sin_phi)
+
+
 def to_enu(lat: float, lon: float, height: float, origin: tuple[float, float, float]) -> tuple[float, float, float]:
+    """Repère est-nord-haut autour de l'origine, identique à enuFromGeodetic de Spirula (ECEF tourné)."""
     lat0, lon0, h0 = origin
-    lat_r0 = math.radians(lat0)
-    east = math.radians(lon - lon0) * WGS84_A * math.cos(lat_r0)
-    north = math.radians(lat - lat0) * WGS84_A
-    return east, north, height - h0
+    ox, oy, oz = ecef(lat0, lon0, h0)
+    dx, dy, dz = (a - b for a, b in zip(ecef(lat, lon, height), (ox, oy, oz)))
+    phi, lam = math.radians(lat0), math.radians(lon0)
+    sp, cp, sl, cl = math.sin(phi), math.cos(phi), math.sin(lam), math.cos(lam)
+    return (-sl * dx + cl * dy,
+            -sp * cl * dx - sp * sl * dy + cp * dz,
+            cp * cl * dx + cp * sl * dy + sp * dz)
 
 
 def parse_bbox(value: str) -> tuple[float, float, float, float]:

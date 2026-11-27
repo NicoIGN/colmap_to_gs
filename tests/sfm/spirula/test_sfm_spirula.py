@@ -154,5 +154,19 @@ class MetricPositionsFormatTest(unittest.TestCase):
             self.assertIn("origine lat/lon", rejected.stderr)
 
 
+    def test_enu_matches_spirula_ecef_frame(self):
+        """Valeurs issues de enuFromGeodetic (Spirula) ; l'ancienne approximation s'écartait de ~1 m."""
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "tools/sfm/spirula"))
+        try:
+            import gps_to_metric_positions as converter_module
+        finally:
+            sys.path.pop(0)
+        origin = (48.880204, 2.351204, 54.3)
+        east, north, up = converter_module.to_enu(48.89204, 2.351204, 54.3, origin)
+        self.assertAlmostEqual(east, 0.0, places=6)
+        self.assertAlmostEqual(north, 1316.2635456, places=3)
+        self.assertAlmostEqual(up, -0.1359550466, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()
