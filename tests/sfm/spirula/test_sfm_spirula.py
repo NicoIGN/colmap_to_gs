@@ -115,7 +115,8 @@ class MetricPositionsFormatTest(unittest.TestCase):
                 capture_output=True, text=True,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            rows = [line.split() for line in output.read_text().splitlines()]
+            rows = [line.split() for line in output.read_text().splitlines()
+                    if line.strip() and not line.lstrip().startswith("#")]
             self.assertEqual(len(rows), 2)
             self.assertEqual(len({row[0] for row in rows}), len(rows))
             for row in rows:
@@ -123,6 +124,10 @@ class MetricPositionsFormatTest(unittest.TestCase):
                 self.assertTrue(row[0].endswith(".jpg"))
                 for value in row[1:]:
                     float(value)
+            origin = {line.split()[1]: float(line.split()[2])
+                      for line in output.read_text().splitlines() if line.startswith("# origin_")}
+            self.assertAlmostEqual(origin["origin_lat"], 48.880204272)
+            self.assertAlmostEqual(origin["origin_lon"], 2.351204386)
 
 
 if __name__ == "__main__":

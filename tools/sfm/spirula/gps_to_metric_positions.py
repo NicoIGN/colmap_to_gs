@@ -151,7 +151,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Erreur : {error}", file=sys.stderr)
         return 1
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("\n".join(lines) + "\n")
+    origin = read_pos(args.pos)[0]
+    header = [f"# origin_lat {origin[1]:.9f}", f"# origin_lon {origin[2]:.9f}",
+              f"# origin_alt {origin[3]:.3f}"]
+    args.output.write_text("\n".join(header + lines) + "\n")
     if args.links_dir:
         args.links_dir.mkdir(parents=True, exist_ok=True)
         source_dir = args.images_dir.resolve()
