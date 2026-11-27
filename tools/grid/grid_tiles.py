@@ -104,7 +104,10 @@ def tiles_geojson(tiles, epsg, out_epsg=4326, edge_points=11):
                            "epsg_native": epsg, "core_native": tile["core"]},
             "geometry": {"type": "Polygon", "coordinates": [[list(p) for p in ring]]},
         })
-    return {"type": "FeatureCollection", "features": features}
+    collection = {"type": "FeatureCollection", "features": features}
+    if out_epsg != 4326:
+        collection["crs"] = {"type": "name", "properties": {"name": f"urn:ogc:def:crs:EPSG::{out_epsg}"}}
+    return collection
 
 
 def inside(point, box):
