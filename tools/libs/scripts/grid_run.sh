@@ -148,6 +148,9 @@ EOF
 
   [[ -n "$tile" ]] || rm -f "$log_dir/failed.txt"
   local pids=() worker index id x0 y0 x1 y1 cx0 cy0 cx1 cy1
+  # Sans contrôle de job, bash ignore SIGINT dans les sous-shells en arrière-plan : chaque worker
+  # reçoit son propre groupe de processus, et le parent le tue sur ^C / TERM.
+  set -m
   for worker in $(seq 0 $((NUM_GPUS - 1))); do
     (
       export CUDA_VISIBLE_DEVICES="$worker"
@@ -167,9 +170,12 @@ EOF
     ) &
     pids+=("$!")
   done
+  set +m
+  trap 'echo "[INTERRUPTION] arrêt des dalles en cours" | tee -a "$log_dir/grid.log" >&2; kill -TERM -- "${pids[@]/#/-}" 2>/dev/null; exit 130' INT TERM
   for pid in "${pids[@]}"; do
     wait "$pid" || true
   done
+  trap - INT TERM
 
   [[ ! -f "$log_dir/failed.txt" ]] || die "Mode GRID : dalles en échec : $(tr '\n' ' ' < "$log_dir/failed.txt") (logs : $log_dir/grid.log et $work_dir/<dalle>/tile.log)."
   echo "[TERMINE] $(ls "$splat_dir" | wc -l) dalle(s) exportée(s) dans $splat_dir"
