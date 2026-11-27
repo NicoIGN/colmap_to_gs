@@ -96,8 +96,8 @@ Valeurs par défaut exactes : `bash scripts/helper.sh <PARAMÈTRE>`.
 - `SFM_CAMERA_MODEL` : force le modèle de caméra (sinon détecté : `equirectangular` pour le 360°, `opencv` sinon).
 - `SFM_CAMERA_SPLIT` : `true` relance le SfM avec une caméra par modèle si Spirula en détecte plusieurs.
 - `SFM_SP_PAIR_MAX_DISTANCE` : distance GPS maximale entre paires d'images, en mètres (vide = désactivé).
-- `SFM_SP_METRIC_POSITIONS` : fichier de positions en mètres, qui remplace les GPS EXIF.
-- `GEOREF_GPX_FILE` : trace GPX pour géoréférencer le modèle (prioritaire sur les GPS EXIF).
+- `SFM_SP_METRIC_POSITIONS` : fichier de positions en mètres, qui remplace les GPS EXIF pour le SfM et sert ensuite de source au géoréférencement (mode `positions`, quel que soit le backend).
+- `GEOREF_GPX_FILE` : trace GPX pour géoréférencer le modèle (prioritaire sur les positions et les GPS EXIF).
 - `GEOREF_EPSG` : EPSG de l'origine projetée dans le rapport (`2154` par défaut).
 
 **Masques**

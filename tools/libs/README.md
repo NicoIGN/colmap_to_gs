@@ -26,6 +26,8 @@ Les [masques](../masks/README.md) et le
 - `SFM_IMAGES_RECURSIVE=true` : parcourt les sous-dossiers ordinaires.
 - `GEOREF_GPX_FILE` : fichier GPX facultatif ; s'il est renseigné, il est
   utilisé à la place du GPS EXIF pour géoréférencer le résultat.
+- `SFM_SP_METRIC_POSITIONS` : fichier de positions métriques ; sans GPX, il sert
+  de source au géoréférencement (mode `positions`, voir `tools/sfm/README.md`).
 - Liens : les liens vers des fichiers sont acceptés, mais pas le parcours des
   dossiers symboliques.
 - Noms relatifs : préservés ; `h00_y0/photo.jpg` et `h01_y45/photo.jpg`
@@ -234,9 +236,10 @@ GEOREF_EPSG="2154"
 GEOREF_ALLOW_UNCERTAIN="false"
 ```
 
-Si `GEOREF_GPX_FILE` est absent ou vide, les coordonnées EXIF GPS sont utilisées
-automatiquement lorsqu'au moins deux images en possèdent ; fiona et pyproj ne
-sont alors pas nécessaires.
+Si `GEOREF_GPX_FILE` est absent ou vide et que `SFM_SP_METRIC_POSITIONS` existe,
+le mode `positions` est utilisé (recalage sur les positions métriques, sans GPX).
+Sinon, les coordonnées EXIF GPS sont utilisées automatiquement lorsqu'au moins deux
+images en possèdent ; fiona et pyproj ne sont alors pas nécessaires.
 
 Le pipeline réutilise `tools/georef/georef_colmap_from_gpx.py` : il recale
 la trajectoire caméra sur un sous-parcours GPX par similitude 3D, sans FPS,

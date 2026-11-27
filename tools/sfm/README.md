@@ -138,6 +138,16 @@ valide un `gauge.txt` existant et vérifie sa cohérence avec l'en-tête du fich
 Le comportement réel de Spirula Studio sur ce `gauge.txt` n'a pas été vérifié ici (binaire absent).
 Les tests `MetricPositionsFormatTest` de `spirula/test_sfm_spirula.py` contrôlent ce format.
 
+**Géoréférencement après SfM (mode `positions`).** Après la production du sparse, quel que
+soit le backend (COLMAP, HLOC, Spirula…), la phase `georef`
+([`tools/georef`](../georef/)) recale le sparse sur ce fichier si `GEOREF_GPX_FILE` est vide
+et que `SFM_SP_METRIC_POSITIONS` existe (`georef_positions.py`). Le recalage est une
+similitude 3D robuste sur les centres caméra (médiane par image), avec erreur maximale
+de 20 m. Sorties : `georef/0` (sparse recalé en ENU local), `gauge.txt` à l'origine de
+l'en-tête, et `georef_stats.json` avec `"status": "georeferenced"`. Les noms d'images
+sont appariés sans extension, puis par nom de fichier. Au moins 3 images doivent correspondre.
+Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_DIR`.
+
 ## 4. Fonctionnement interne
 
 **Organisation.** Tout le code SfM est regroupé ici, avec une interface commune
