@@ -17,7 +17,6 @@ if [[ "$grid" == true ]]; then
   grid_run "$repo_root" panoramax "${args[@]}"
   exit 0
 fi
-[[ "$slurm" != true ]] || { echo "[ERREUR] --slurm s'utilise avec --grid." >&2; exit 1; }
 source "$repo_root/tools/libs/scripts/shell_helpers.sh"
 reject_grid_params "${args[0]:-}"
-exec bash "$repo_root/tools/panoramax/launch.sh" "$@"
+exec bash "$repo_root/tools/panoramax/launch.sh" "${args[@]}"
