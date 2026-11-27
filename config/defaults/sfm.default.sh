@@ -63,11 +63,18 @@ SFM_SP_PREFILTER_NEIGHBORS="16"
 # low|medium|high|extreme : préréglage Spirula ; high plafonne les points max à 8192
 # et écrase SFM_ALIKED_MAX_FEATURES. Utiliser extreme pour aller au-delà.
 SFM_SP_QUALITY="high"
+# video|panoramax : préréglage Spirula. panoramax prépare les images équirectangulaires.
+SFM_SP_PRESET="video"
 SFM_SP_BA_LOSS="huber"       # huber|cauchy|trivial
 SFM_SP_BA_LOSS_PARAM="2"     # ]0,1000], pixels d'extraction : Huber delta / Cauchy c
 # Spirula uniquement : exposition pour l'analyse SfM, pas la correction d'entraînement.
 # Vide = option omise ; sinon auto ou correction en stops (ex. 2 ou -1).
 SFM_SP_IMAGE_EXPOSURE=""
+# Spirula uniquement : fichier texte « nom_image X Y Z » (X, Y, Z en mètres, 4 champs par ligne),
+# une ligne par image. Le nom doit correspondre à celui du modèle SfM (avec ou sans extension).
+# Remplace le GPS EXIF ; incompatible avec SFM_SP_PAIR_MAX_DISTANCE. Vide = désactivé.
+# Format décrit dans tools/sfm/README.md ; produit par tools/sfm/spirula/gps_to_metric_positions.py.
+SFM_SP_METRIC_POSITIONS=""
 # Nouveau OUTPUT_DIR nécessaire pour recalculer avec d'autres seuils.
 # folder : intrinsèques partagés par sous-dossier ; single : une caméra ;
 # image : intrinsèques indépendants par image.

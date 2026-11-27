@@ -6,6 +6,7 @@ reçoit la track de son point épars le plus proche, pour que le découpage et l
 """
 import argparse
 import shutil
+import signal
 import struct
 import subprocess
 from pathlib import Path
@@ -49,7 +50,16 @@ def read_fused_ply(path):
 
 
 def run_colmap(colmap, *args):
-    subprocess.run([colmap, *map(str, args)], check=True)
+    command = [colmap, *map(str, args)]
+    print(f"[MVS] lancement : {args[0]}", flush=True)
+    result = subprocess.run(command)
+    if result.returncode != 0:
+        if result.returncode < 0:
+            cause = f"signal {signal.Signals(-result.returncode).name}"
+        else:
+            cause = f"code {result.returncode}"
+        print(f"[ERREUR] MVS : {args[0]} s'est arrêté avec {cause}.", flush=True)
+        raise SystemExit(f"[ERREUR] MVS : {args[0]} échoué ({cause}).")
 
 
 def main():
@@ -66,6 +76,7 @@ def main():
     model = args.output / "sparse" / "0"
     if dense.exists():
         shutil.rmtree(dense)
+    dense.mkdir(parents=True)
     run_colmap(args.colmap, "image_undistorter", "--image_path", args.images,
                "--input_path", args.sparse, "--output_path", dense,
                "--output_type", "COLMAP", "--max_image_size", args.max_image_size)

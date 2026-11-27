@@ -306,7 +306,7 @@ run_train() {
     TRAIN_NS_MIXED_PRECISION="${TRAIN_NS_MIXED_PRECISION:-}" \
     TRAIN_NS_USE_GRAD_SCALER="${TRAIN_NS_USE_GRAD_SCALER:-}" \
     "$@" \
-    bash "$SCRIPT_DIR/train.sh"
+    bash "$SCRIPT_DIR/../../training/backends/train_scene_nerfstudio.sh"
 }
 
 if [ "$SKIP_TRAINING" = false ]; then
@@ -360,7 +360,7 @@ if [ "$SKIP_EXPORT" = false ]; then
   OUTPUT_DIR="$TRAIN_DIR/$EXPERIMENT_NAME" \
   EXPORT_DIR="$OUTPUT_DIR" \
   ZIP_RUN=0 \
-    bash "$SCRIPT_DIR/../../../tools/postprocess/export_splat_to_ply.sh"
+    bash "$SCRIPT_DIR/../../export/backends/export_nerfstudio.sh"
 
   PLY_FILE=$(find "$OUTPUT_DIR" -type f -name "*.ply" | head -n 1 || true)
 
@@ -381,7 +381,7 @@ CLEANED_PLY=""
 if [ "$SKIP_EXPORT" = false ]; then
   STEP_START=$(date +%s)
 
-  CLEAN_SCRIPT="$SCRIPT_DIR/../../../tools/postprocess/clean_ply.sh"
+  CLEAN_SCRIPT="$SCRIPT_DIR/../../export/clean_ply.sh"
   COLMAP_POINTS="$COLMAP_SPARSE_DIR/points3D.bin"
   CLEANED_PLY="$OUTPUT_DIR/cleaned/${BASENAME}.ply"
   TRANSFORM_SEARCH_DIR="$TRAIN_DIR/$EXPERIMENT_NAME"

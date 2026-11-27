@@ -1,4 +1,4 @@
-# Télécharger des photos Panoramax par bbox
+# Pipeline Panoramax : photos par bbox vers Gaussian Splats
 
 [Retour à la documentation générale](../../doc/guide_utilisateur.md)
 
@@ -115,7 +115,7 @@ Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
 Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
-par le [tool de segmentation](../segmentation_masks/README.md), avec
+par le [tool de segmentation](../masks/README.md), avec
 Mask2Former ou SegFormer : `TRAIN_MASKS_BACKEND=segmentation`, modèle local
 dans `TRAIN_MASKS_MODEL`, `TRAIN_MASKS_LABELS=sky` et
 `TRAIN_MASKS_MODE=ignore`. Les PNG sont référencés dans le dataset Nerfstudio ;
@@ -154,8 +154,10 @@ recouvrement, utilisées pour le SfM et l'entraînement choisi par
 `TRAIN_BACKEND`. `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` décrit les images d'entrée ;
 les vues sont reconstruites en `PINHOLE` avec leur focale fixée. Les vues
 d'un même panorama ne sont pas contraintes en rig. Installer HLOC avec
-`bash $GIT_ROOT/tools/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
-pyproj et pycolmap sont requis dans `PYTHON_BIN`.
+`bash $GIT_ROOT/install/colmap/install-hloc.sh` ; numpy, OpenCV, Pillow, scipy,
+pyproj et pycolmap sont requis dans `PYTHON_BIN`. Remplacer l'ancien
+`SFM_EQUIRECTANGULAR_VIEWS=true` par `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` ; les
+workspaces compatibles restent réutilisables.
 
 Les positions d'origine sont conservées dans `sfm/sparse/0/gps_positions.json`.
 Le modèle est recalé en ENU local métrique, et l'origine est décrite dans le
@@ -189,11 +191,11 @@ Nerfstudio. L'exposition SfM n'est pas disponible avec le filtre
   Spirula. Le dernier filtre les paires par distance GPS.
 - Transmission : au SfM natif et, si le filtre GPS est activé, aux étapes
   `match` et `map` concernées.
-- `tools/sfm/spirula/run_spirula_sfm.sh` : wrapper direct ; options CLI équivalentes
+- `tools/sfm/spirula/sfm_spirula.sh` : wrapper direct ; options CLI équivalentes
   `--max-error`, `--min-inliers`, `--min-tri-angle`, `--ba-loss`,
   `--ba-loss-param`.
 - Vérifier la disponibilité de ces options dans la version installée de
-  [Spirula](../spirula/README.md).
+  [Spirula](../../install/spirula/README.md).
 
 
 
@@ -218,7 +220,7 @@ altitude, cap). Spirula s'en sert directement pour placer le modèle dans un
 repère local est-nord-haut en mètres, sans recalage GPX a posteriori :
 
 ```bash
-bash tools/sfm/spirula/run_spirula_sfm.sh \
+bash tools/sfm/spirula/sfm_spirula.sh \
   --spirula-bin /chemin/vers/spirula \
   --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm \
@@ -232,7 +234,7 @@ modèle a été écrit sans le repère métrique demandé.
 
 ### Configuration du pipeline complet
 
-- Variante : le [nettoyage expérimental Clean-GS](../clean_gs/README.md) peut remplacer le filtre
+- Variante : le [nettoyage expérimental Clean-GS](../export/clean_gs/README.md) peut remplacer le filtre
   contextuel.
 - Configuration : fichier Bash (code de confiance) ; chaque variable, ses
   valeurs possibles et son défaut sont commentés dans
@@ -249,7 +251,7 @@ acceptées avec un avertissement si aucun déplacement de frontière sûr
 n'est possible. Le recouvrement peut ensuite augmenter les effectifs.
 
 Un exemple de configuration minimale et complète, avec la commande de lancement,
-est dans [l'exemple Panoramax](../../examples/pipelines.md#panoramax--3dgs).
+est dans [l'exemple Panoramax](../../scripts/README.md#panoramax--3dgs).
 
 - Validation de configuration : avant téléchargement et, avec le lanceur Slurm,
   avant toute soumission.
@@ -284,7 +286,7 @@ retrouver/interpréter ce repère.
   `NOM.filter.json` donne les compteurs.
 - `POSTPROCESS_FILTER_SIZE_FACTOR="10"` : règle le rapport de taille locale ;
   défaut `10`.
-Voir [la description et les limites du filtre](../postprocess/README.md).
+Voir [la description et les limites du filtre](../export/README.md).
 
 - `POSTPROCESS_CLEANER="cleangs"` : remplace le filtre par le
   nettoyage expérimental du ciel multivues.
@@ -293,8 +295,8 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
   `apply` les retire.
 - Slurm avec Clean-GS : la fusion demande alors un GPU NVIDIA.
 - Installation, dépendances et précautions :
-  [tools/clean_gs](../clean_gs/README.md).
-- Installation complète : `bash tools/clean_gs/install.sh
+  [tools/export/clean_gs](../export/clean_gs/README.md).
+- Installation complète : `bash tools/export/clean_gs/install.sh
   --install-dir /chemin/partage/cleangs --python python3` ; le script affiche
   `CLEANGS_PYTHON` et `CLEANGS_MODEL` à ajouter à la configuration.
 
@@ -307,7 +309,7 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Défaut des labels : seul le ciel (nuages compris) est masqué et appris comme vide.
 - `TRAIN_MASKS_LABELS` : permet d'ajouter d'autres labels (`person`, `car`…).
 - Installation, variables et limites :
-  [tools/segmentation_masks](../segmentation_masks/README.md).
+  [tools/masks](../masks/README.md).
 
 #### Qualité d'entraînement
 
@@ -351,6 +353,12 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Des labels identiques avec des seuils différents ne doivent pas partager les
   mêmes PNG.
 - `TRAIN_MASKS=off` : permet aussi de masquer uniquement le SfM.
+- `SFM_MASKS_DIR` / `TRAIN_MASKS_DIR` : dossier optionnel de masques déjà
+  calculés ; chaque image doit avoir son PNG monochrome binaire de mêmes
+  dimensions. Le pipeline vérifie les fichiers, crée un lien dans le workspace
+  et ne charge pas de modèle ni ne relance la segmentation. Ne pas modifier ces
+  dossiers pendant le calcul : la signature contrôle taille, date et SHA256 de
+  chaque masque. En cas de divergence, le diagnostic indique l'image et le champ modifié.
 
 - Signature : la politique SfM est enregistrée dans `sfm_mask_policy.json`.
   Un SfM ou des caractéristiques déjà présents sans signature compatible sont
@@ -368,6 +376,8 @@ Voir [la description et les limites du filtre](../postprocess/README.md).
 - Les blocs déjà entraînés ne sont pas recalculés ; utiliser
   `TRAIN_CLEAN=true`.
 
+
+#### Budgets d'entraînement
 
 - Spirula (MCMC) augmente le nombre de splats jusqu'à `cap_max` ; atteindre le
   plafond est donc attendu.
@@ -506,9 +516,9 @@ Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifi
 que sa sortie. `merge` exige tous les splats et ne relance aucun entraînement.
 Sans argument d'étape, le pipeline local reste séquentiel et complet.
 
-#### Préparation SfM (prepare_sfm.py)
+#### Préparation SfM (prepare_panoramax.py)
 
-Le préréglage lance d'abord `prepare_sfm.py` :
+Le préréglage lance d'abord `prepare_panoramax.py` :
 
 - seules les images de la taille la plus fréquente sont gardées (une bbox
   mélange souvent plusieurs appareils : 360° en 2:1, téléphones...) ; elles
@@ -528,19 +538,77 @@ Le préréglage lance d'abord `prepare_sfm.py` :
 seul :
 
 ```bash
-python3 tools/sfm/prepare_sfm.py --dataset OUTPUT_DIR \
+python3 tools/sfm/prepare_panoramax.py --dataset OUTPUT_DIR \
   --output-dir OUTPUT_DIR/sfm --dry-run
 ```
 
 ### Vérification locale
 
 ```bash
-python3 -m unittest discover -s tools/panoramax -p 'test_*.py'
+python3 -m unittest discover -s tests/panoramax -p 'test_*.py'
 ```
 
 Les tests utilisent une API HTTP locale pour vérifier la pagination, la sélection
 géographique, la reprise, les erreurs de téléchargement et les nouvelles tentatives.
 
+
+### Téléchargement seul : détails
+
+Ces règles s'appliquent à `download.sh` et au téléchargement du pipeline complet.
+
+#### Recherche et comptage
+
+Le script demande les métadonnées à l'API (sans télécharger les images à cette
+étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
+par requête : si une requête en atteint 10 000, la zone est découpée en quatre
+quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
+supprimés par `collection/id`. Le script compte ensuite les photos dont le point
+est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
+`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
+basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
+précise. Chaque page brute est écrite dans `pages/`.
+
+`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
+sans réduire le comptage : par exemple, `--image-max 400` affiche le total
+disponible dans la bbox et en traite au plus 400.
+
+#### Reprise et manifeste
+
+Relancer la même commande reprend les images dont l'URL et la taille correspondent
+aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
+avant remplacement ; les photos en échec sont signalées par un avertissement,
+indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
+avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
+ou une autre erreur fatale entraîne un code de sortie non nul.
+Les réponses API brutes sont conservées.
+Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
+sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
+Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
+restent présents, donc utiliser un dossier distinct pour une autre sélection.
+
+#### Progression
+
+Dans un terminal interactif, une barre de progression affiche les photos
+téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
+trouvées, la barre se termine à 100 % du total effectivement sélectionné.
+
+#### Limites de l'API
+
+Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
+HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
+par une petite zone et respecter les conditions d'utilisation et d'attribution
+des instances et des photos.
+
+#### Périmètre
+
+« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
+visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
+ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
+photos extérieures de séquences qui traversent la zone.
+
+La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
+l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
+inférieure n'est effectué si l'asset demandé manque.
 
 ## 4. Fonctionnement interne
 
@@ -566,7 +634,7 @@ peut recaler la reconstruction sur une trajectoire GPS au format GPX.
 ### Mode Clean-GS adapté
 
 Ce mode est une adaptation de Clean-GS, pas son algorithme Pareto officiel.
-Voir [tools/clean_gs](../clean_gs/README.md).
+Voir [tools/export/clean_gs](../export/clean_gs/README.md).
 
 
 
@@ -590,49 +658,6 @@ de confiance et est sourcé, même en validation seule.
 
 
 
-### Reprise et manifeste
-
-Relancer la même commande reprend les images dont l'URL et la taille correspondent
-aux métadonnées sauvegardées. Les téléchargements utilisent des fichiers temporaires
-avant remplacement ; les photos en échec sont signalées par un avertissement,
-indiquées dans le manifeste et comptées dans `summary.json`. Le pipeline continue
-avec les photos utilisables. Aucune photo utilisable, une erreur de recherche API
-ou une autre erreur fatale entraîne un code de sortie non nul.
-Les réponses API brutes sont conservées.
-Les types HTTP `image/jpeg`, `application/octet-stream` et `binary/octet-stream`
-sont acceptés ; la signature JPEG et la taille téléchargée restent vérifiées.
-Le manifeste et le résumé décrivent le dernier lancement ; les anciens fichiers
-restent présents, donc utiliser un dossier distinct pour une autre sélection.
-
-### Limites de l'API
-
-Les requêtes sont séquentielles, avec trois tentatives en cas d'erreur réseau,
-HTTP 429 ou 5xx. Une grande bbox peut représenter un volume important ; commencer
-par une petite zone et respecter les conditions d'utilisation et d'attribution
-des instances et des photos.
-
-### Progression
-
-Dans un terminal interactif, une barre de progression affiche les photos
-téléchargées, réutilisées ou en erreur. Si moins que la limite demandée sont
-trouvées, la barre se termine à 100 % du total effectivement sélectionné.
-
-### Recherche et comptage
-
-Le script demande les métadonnées à l'API (sans télécharger les images à cette
-étape) en suivant la pagination. L'API ne renvoie jamais plus de 10 000 résultats
-par requête : si une requête en atteint 10 000, la zone est découpée en quatre
-quadrants, récursivement, jusqu'à `MAX_SPLIT_DEPTH` (8). Les doublons sont
-supprimés par `collection/id`. Le script compte ensuite les photos dont le point
-est dans la bbox exacte Lambert-93, affiche ce total et l'écrit dans
-`summary.json` (`available`, `available_is_exact`). Le total n'est une borne
-basse (`+`) que si la profondeur maximale est atteinte, et un avertissement le
-précise. Chaque page brute est écrite dans `pages/`.
-
-`--image-max` limite ensuite le nombre de photos à télécharger ou réutiliser,
-sans réduire le comptage : par exemple, `--image-max 400` affiche le total
-disponible dans la bbox et en traite au plus 400.
-
 
 
 ### Robustesse SfM
@@ -652,13 +677,3 @@ Un nouveau calcul via le worker revérifie les matches (`--reuse-matches redo`).
 
 
 
-### Périmètre
-
-« Dans la bbox » signifie **position de prise de vue dans la bbox**, pas contenu
-visible dans la photo. Toutes les photos retournées sont candidates, panoramiques
-ou non, sans restriction d'auteur ou de séquence. Le script ne télécharge pas les
-photos extérieures de séquences qui traversent la zone.
-
-La qualité HD est l'asset public `hd` annoncé par l'API ; elle ne garantit pas
-l'accès à l'original brut non flouté. Aucun remplacement silencieux par une qualité
-inférieure n'est effectué si l'asset demandé manque.

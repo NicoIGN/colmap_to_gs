@@ -57,5 +57,5 @@ export MVK_CONFIG_LOG_LEVEL="1"
 
 # macOS : évite l'abandon OMP « libomp.dylib already initialized » quand plusieurs
 # copies de libomp sont chargées (pycolmap pip + torch conda). Contournement
-# non sûr ; à remplacer par une seule libomp si possible (voir tools/colmap/install-hloc.sh).
+# non sûr ; à remplacer par une seule libomp si possible (voir install/colmap/install-hloc.sh).
 export KMP_DUPLICATE_LIB_OK=TRUE

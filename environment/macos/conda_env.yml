@@ -25,7 +25,7 @@ dependencies:
   - llvm-openmp=22.1.7
 
   ########################################
-  # PIP (torch, pycolmap, hloc / SuperGlue : voir tools/colmap/install-hloc.sh)
+  # PIP (torch, pycolmap, hloc / SuperGlue : voir install/colmap/install-hloc.sh)
   # torch/torchvision via PyPI : pytorch 2.3.1 (conda) exige llvm-openmp<16, incompatible avec pycolmap 4.2.1.
   # Paire torch/torchvision appariée, validée avec numpy 1.26.4 (import hloc/lightglue OK).
   ########################################

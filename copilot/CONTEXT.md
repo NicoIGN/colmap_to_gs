@@ -30,11 +30,12 @@ source ~/.venvs/colmap_to_gs/bin/activate
 Environnement de référence de l'agent : `copilot/conda_env_copilot.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
 
 ```bash
-conda env create --yes --file "$GIT_ROOT/copilot/conda_env_copilot.yml"
+conda env create --yes --file "$GIT_ROOT/copilot/conda_env.yml"
 conda activate colmap_to_gs_copilot
 ```
 
-Il ne contient pas `fiona` (requis par `tools/sfm/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
+Il ne contient pas `fiona` (requis par `tools/georef/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
+Il ne contient pas `pyogrio` (requis par `tools/vector/requirements.txt` et `tests/vector/test_fetch_vector.py`) : `pip install pyogrio` si ce test est lancé.
 
 Paquets utilisés par les tests et le pipeline :
 - Tests images/Spirula : `pillow numpy opencv-python-headless tqdm scipy plyfile`
@@ -43,7 +44,7 @@ Paquets utilisés par les tests et le pipeline :
 
 Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et scripts échouent avec `ModuleNotFoundError`, ce ne sont pas des bugs du code. Vérifier d'abord : `python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL"`.
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_spirula_blocks.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
+- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_panoramax.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Viewer (`tools/viewer`)
@@ -54,23 +55,24 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
 
 ## macOS : HLOC et OpenMP
-- HLOC s'installe avec `tools/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
+- HLOC s'installe avec `install/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
 - LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
 - macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
 - HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
 - Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
 
 ## Bash : `set -u` et tableaux vides
-Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/sfm/reconstruct.sh`.
+Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/sfm/backends/*.sh`.
 
 ## Densification MVS (`COLMAP_USE_MVS`, défaut `false`)
 - Clés : `COLMAP_USE_MVS`, `MVS_MAX_IMAGE_SIZE` (2000), `MVS_GPU_INDEX` (0) dans `config/defaults/sfm.default.sh`.
 - Script : `tools/sfm/colmap/mvs_densify.py` (image_undistorter, patch_match_stereo, stereo_fusion). Nécessite un COLMAP compilé avec CUDA : à lancer sur Slurm, pas sur Mac.
-- Le sparse dense est `sfm/mvs/sparse/0` ; `run.sh` et `scripts/images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
+- Le sparse dense est `sfm/mvs/sparse/0` ; `run_standard_images.sh` et `scripts/images_to_3dgs.sh` pointent dessus quand activé. Incompatible avec `GEOREF_GPX_FILE` (refus explicite).
 - Les points denses reprennent le track du point sparse le plus proche (scipy `cKDTree`), pour que le découpage par tracks fonctionne. Approximatif si `SPLIT_NUM_BLOCKS > 1`.
 - Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
 
 ## Pièges généraux
+- Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
 - `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
 - `colmap_split_blocks.py` ignore ou refuse les points sans track.
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
@@ -82,19 +84,22 @@ Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier
 python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
 ```
 
-Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_spirula_blocks.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
+Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_panoramax.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
+
+Tous les tests sont dans `tests/`, en miroir de `tools/` : `tests/<domaine>/test_X.py` teste `tools/<domaine>/X.py` (voir `tests/README.md`).
 
 ```bash
-python -m unittest tools/images_to_splat/test_pipeline.py tools/panoramax/test_validate_config.py tools/libs/scripts/test_run_spirula_blocks.py   # ~4 min, 109 tests
-python -m unittest tools/images_to_splat/test_pipeline.py -k <nom>        # ciblé
-python -m unittest discover -s tools/panoramax -p 'test_*.py'             # panoramax
-python -m unittest discover -s tools/segmentation_masks -p 'test_*.py'    # masques
+PYTHON_BIN=python tests/run_all.sh                 # tout, séquentiel
+PYTHON_BIN=python tests/run_all.sh --phase masks   # une phase (tests/masks)
+python tests/libs/test_pipeline.py -k <nom>        # ciblé
+python -m unittest discover -s tests/panoramax -p 'test_*.py'   # panoramax
+python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 ```
 
 Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.
 
 ## Validation de configuration
-- `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/images_to_splat/common.sh`).
+- `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/libs/common.sh`).
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 

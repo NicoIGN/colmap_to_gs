@@ -40,7 +40,7 @@ Le proxy se configure via les variables `HTTPS_PROXY` / `HTTP_PROXY` (utilisées
 ## Tests
 
 ```bash
-python -m unittest discover -s "$GIT_ROOT/tools/vector" -p 'test_*.py'
+python -m unittest discover -s "$GIT_ROOT/tests/vector" -p 'test_*.py'
 ```
 
 Les tests simulent les réponses WFS et Overpass. Une vérification sur les services réels reste à faire.

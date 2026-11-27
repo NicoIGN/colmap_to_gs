@@ -1,16 +1,19 @@
 # COLMAP to Gaussian Splats
 
-Produire des scènes 3D Gaussian Splatting à partir d'images ou d'un modèle COLMAP,
-puis les exporter, les traiter et les visualiser.
+Ce projet regroupe les outils nécessaires pour produire des scènes 3D en *Gaussian Splatting* (3DGS) à partir de vidéos, de photographies ou de flux d'images issus des services [Panoramax](https://panoramax.fr). Il couvre quatre grandes étapes :
+
+- **La photogrammétrie (SfM)** : reconstruction des caméras et du nuage de points 3D avec HLOC, COLMAP ou Spirula.
+- **L'entraînement 3DGS** : génération et optimisation des gaussiennes avec Nerfstudio (Splatfacto) ou Spirula.
+- **L'export et le géoréférencement** : production de fichiers `.splat`, `.ply` ou 3D Tiles, avec possibilité de géoréférencer les scènes à partir des coordonnées GPS des images (EXIF), d'une trajectoire GPS au format GPX ou de fichiers externes de positions.
+- **La visualisation 3D** : un viewer web affiche les splats alignés avec des données externes : nuages LiDAR, bâtiments CityJSON (roofer), couches GeoJSON ou GeoPackage, et données COLMAP.
 
 ```text
-Images → reconstruction des caméras et points 3D → entraînement → export → visualisation
+Images → reconstruction des caméras et points 3D → entraînement 3DGS → export → visualisation
 ```
 
-## 1. Qu’est-ce que le 3DGS ?
+## 1. Qu’est-ce qu'un modèle 3DGS ?
 
-### 1.1. Qu’est-ce qu’un Gaussian Splat ?
-
+### Définition
 Un Gaussian Splat représente une scène 3D par un ensemble de gaussiennes :
 des ellipsoïdes colorés dotés d’une position, d’une taille, d’une orientation
 et d’une opacité. Depuis un point de vue, elles sont projetées sur l’image puis
@@ -41,133 +44,74 @@ pour rapprocher les vues synthétiques des images d’entrée.
 
 ![Reconstruction SfM](doc/technopitch/images/sfm.jpg)
 
-## 2. Que fait ce projet ?
 
-Ce projet fournit des outils pour préparer des images ou des données COLMAP,
-entraîner des scènes 3DGS avec différents moteurs, puis exporter et traiter
-les résultats. Le [guide utilisateur](doc/guide_utilisateur.md) aide à choisir
-le parcours adapté.
+## 3. Pipelines principaux
 
-Pour un modèle COLMAP, fournir le modèle et les images correspondantes, ou
-produire les données COLMAP depuis des images avec les
-[outil images vers COLMAP](tools/sfm/README.md). L'entraînement peut ensuite
-se faire avec [Nerfstudio / Splatfacto](doc/nerfstudio.md) ou Spirula.
+Le projet propose 3 pipelines complets : à partir d'une vidéo, d'un dossier d'images ou d'un flux Panoramax, ils calculent un modèle 3D Gaussian Splatting. Des informations de positionnement des images permettent de le géoréférencer. Chaque pipeline existe en version exécutable sur la machine courante et en version lançable sur un serveur Slurm. Le résultat est un fichier `.splat` accompagné d'un fichier JSON de métadonnées.
 
-```text
-Images → données COLMAP → entraînement → export et post-traitement
-```
+> **Pour bien démarrer, consultez le [guide utilisateur](doc/guide_utilisateur.md)** : il aide à choisir le parcours, le moteur d'entraînement et le pipeline adaptés à votre point de départ.
 
-Les moteurs d'entraînement proposés sont :
-
-- **[Nerfstudio](https://github.com/nerfstudio-project/nerfstudio)** : framework
-  Python de reconstruction et de rendu 3D, dont **Splatfacto** est la méthode
-  Gaussian Splatting utilisée ici. Développé et maintenu par l'équipe
-  **Nerfstudio**, issue de **Berkeley / KAIR (BAIR)**, et les contributeurs
-  de la communauté.
-- **[Spirula Studio](https://github.com/harry7557558/spirula-studio)** : outil
-  de reconstruction et d'entraînement Gaussian Splatting intégrant notamment
-  le SfM et les masques, avec un backend GPU Vulkan. Projet maintenu par
-  **harry7557558**, ingénieur indépendant qui le développe seul.
-
-### Pipelines complets
-
-Deux pipelines dans `scripts/` enchaînent les étapes depuis les images jusqu'à
-l'export d'un splat. `TRAIN_BACKEND` choisit Spirula ou Nerfstudio/Splatfacto :
-
-- **Bbox + flux Panoramax → splat** :
-  [téléchargement et pipeline Panoramax](tools/panoramax/README.md).
-- **Images locales → splat** : [pipeline images vers splat](tools/images_to_splat/README.md).
-
-La préparation COLMAP possède son propre outil et sa configuration :
-Spirula, COLMAP direct, `ns-process-data` ou conversion de poses caméra et LiDAR.
-Nerfstudio exige PyTorch et une carte NVIDIA utilisable via CUDA ; le lancement
-échoue explicitement s'ils sont absents.
-
-### Démarrer
-
-Les défauts sont chargés automatiquement depuis `config/defaults/*.default.sh`, puis
-`tools/<pipeline>/config.default.sh`. Un fichier de configuration ne contient que les surcharges :
+Exemples de lancement :
 
 ```bash
-cat > /chemin/config_image.sh <<'EOF'
-#!/usr/bin/env bash
-SFM_IMAGES_DIR="/chemin/images"
-OUTPUT_DIR="/chemin/sortie"
-EOF
-```
-
-Slurm (*Simple Linux Utility for Resource Management*) est un gestionnaire
-de ressources et de tâches de calcul utilisé sur les clusters.
-
-**Exécution directe, sans soumission Slurm** — les calculs tournent sur la
-machine courante et les blocs sont entraînés successivement. Ces commandes
-ne réservent aucune ressource Slurm, même si la configuration contient des
-paramètres `SLURM_*` :
-
-```bash
-# Images locales → 3DGS
 bash scripts/images_to_3dgs.sh /chemin/config_image.sh
-
-# Panoramax → 3DGS
+bash scripts/videos_to_3dgs.sh /chemin/config_video.sh
 bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
-**Soumission à un cluster Slurm** — utiliser les lanceurs `launch_*` ci-dessous
-depuis le nœud de connexion. Ils lisent les ressources `SLURM_*` de la
-configuration et appellent eux-mêmes `sbatch` : les calculs s'exécutent sur les
-nœuds alloués, avec un GPU par bloc actif et au plus
-`NUM_GPUS` blocs simultanés. Les lanceurs se démarrent avec
-`bash`, pas avec `sbatch` ; c'est le choix du script `launch_*` qui déclenche
-la soumission Slurm.
+Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depuis le nœud de connexion. Voir le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).
+
+## 4. Viewer web
+
+Le viewer web s'ouvre dans le navigateur en lançant la commande:
 
 ```bash
-# Images locales → 3DGS
-bash scripts/launch_images_to_3dgs.sh /chemin/config_image.sh
-
-# Panoramax → 3DGS
-bash scripts/launch_panoramax_to_3dgs.sh /chemin/config_panoramax.sh
+python3 tools/viewer/server.py
 ```
 
-Voir le [guide de lancement Bash / Slurm](doc/lancement_bash_slurm.md) et les
-[exemples de configuration complète](examples/pipelines.md) pour les paramètres
-commentés de chaque pipeline.
+Depuis l'interface web, on importe une scène 3DGS, à laquelle on peut ajouter des données externes alignées sur le splat : LiDAR, CityJSON, GeoJSON, GeoPackage, modèle SfM COLMAP. Détails dans la [documentation du viewer](tools/viewer/README.md).
 
-Les installations, données attendues, paramètres et sorties sont décrits dans
-le README du pipeline choisi.
 
-### Convertir et visualiser un splat en 3D Tiles
+## 5. Liste des outils
 
-Le fichier `.splat` géoréférencé (repère ENU) se convertit en tileset 3D Tiles,
-puis s'ouvre dans le viewer HTML avec fond OpenStreetMap. Prérequis, une fois :
+### Acquisition et préparation
 
-```bash
-npm install --global 3dgs-ply-3dtiles-converter
-```
-
-```bash
-# Conversion (--georef-summary est facultatif)
-python3 tools/splat_to_3dtiles/convert.py \
-  --input /chemin/vers/scene.splat \
-  --output-dir /chemin/vers/scene_tiles \
-  --no-open-inspector
-
-# Visualisation
-bash tools/viewer/3dtiles/view.sh /chemin/vers/scene_tiles/tileset.json
-```
-
-Le `--georef-summary` est facultatif si le résumé se trouve à côté du `.splat` ; les règles de recherche et les options sont dans la [documentation 3D Tiles](tools/splat_to_3dtiles/README.md). La visualisation est décrite dans la [documentation du viewer](tools/viewer/README.md).
-
-### Documentation des outils
-
-- [Exemples de commandes par usage](examples/README.md), dont la récupération d'un `.laz` IGN.
-- [Préparation des images et modèles COLMAP](tools/preprocess/README.md).
-- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
+- [Préparation des images et modèles COLMAP](tools/prepare/README.md).
 - [Poses caméra IGNF `.CON` + LiDAR `.LAZ` vers orientations](tools/con_laz_to_orientations/README.md).
-- [Installation de Spirula](tools/spirula/README.md).
-- [Masques](tools/segmentation_masks/README.md).
-- [Export, filtrage et fusion](tools/postprocess/README.md).
+
+### Reconstruction
+
+- [Images, orientations et LiDAR vers COLMAP](tools/sfm/README.md).
 - [Recalage et nettoyage des gaussiennes avec un LiDAR LAS/LAZ](tools/lidar/README.md).
-- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
-- [Nettoyage multivues du ciel](tools/clean_gs/README.md).
+- [Masques](tools/masks/README.md).
+
+### Entraînement
+
+- [Entraînement](tools/training/README.md).
+
+### Export et visualisation
+
+- [Export, filtrage et fusion](tools/export/README.md).
+- [Nettoyage multivues du ciel](tools/export/clean_gs/README.md).
+- [Conversion en 3D Tiles](tools/export/export_3dtiles.md).
 - [Visualisation](tools/viewer/README.md).
-- [Conversion en 3D Tiles](tools/splat_to_3dtiles/README.md).
+
+### Utilitaires
+- [Téléchargement Panoramax par bbox](tools/panoramax/README.md).
+- [Données vectorielles (BD TOPO, OSM) en GeoPackage](tools/vector/README.md).
+- [Rapports automatiques de durée des pipelines](tools/libs/python/PIPELINE_REPORT.md).
+
+
+## 6. Exemples
+
+- [Exemples de commandes par usage](examples/README.md)
+
+## 7. Tests
+
+Les tests Python sont dans `tests/`, en miroir de `tools/`. Depuis la racine du dépôt, venv activé :
+
+```bash
+PYTHON_BIN=python tests/run_all.sh --phase export
+```
+
+Détails dans le [README des tests](tests/README.md).

@@ -23,7 +23,7 @@ done
 command -v sbatch >/dev/null || { echo "[ERREUR] sbatch introuvable." >&2; exit 1; }
 command -v scancel >/dev/null || { echo "[ERREUR] scancel introuvable." >&2; exit 1; }
 mkdir -p "$SFM_IMAGES_DIR"
-source "$repo_root/tools/images_to_splat/common.sh"
+source "$repo_root/tools/libs/common.sh"
 load_config "$config" "$SFM_IMAGES_DIR"
 mkdir -p "$OUTPUT_DIR/logs"
 source "$repo_root/tools/libs/scripts/pipeline_slurm.sh"
@@ -36,6 +36,6 @@ args=(--parsable --wait --nodes=1 --ntasks=1 --gres=none --export=ALL
 [[ -z "${SLURM_ACCOUNT:-}" ]] || args+=("--account=$SLURM_ACCOUNT")
 [[ -z "${SLURM_QOS:-}" ]] || args+=("--qos=$SLURM_QOS")
 echo "[vidéo] Extraction sur Slurm ; attente de sa réussite avant soumission du pipeline images."
-pipeline_submit_job video-frames "${args[@]}" "$repo_root/tools/preprocess/extract_video_frames.slurm" \
+pipeline_submit_job video-frames "${args[@]}" "$repo_root/tools/prepare/extract_video_frames.slurm" \
   "$repo_root" "$config" "$VIDEO" "$SFM_IMAGES_DIR"
 exec bash "$repo_root/scripts/launch_images_to_3dgs.sh" "$config" --images "$SFM_IMAGES_DIR" "$@"

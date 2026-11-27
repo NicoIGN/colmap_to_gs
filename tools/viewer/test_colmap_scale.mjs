@@ -25,7 +25,7 @@ globalThis.testPlayCanvas = {
   Mesh: class { setPositions() {} setColors() {} update() {} destroy() {} },
   MeshInstance: class {},
 };
-const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, alignCubeToView, panoramaSphere } = await import(
+const { cameraFrustumDepth, colmapPointPixels, thickenLineSegments, colmapBounds, createColmapLayer, equirectToCubeAtlas, coversViewCenter, rayFrustumEntry, rayHitsFarFace, rayBoxHit, alignCubeToView, panoramaSphere, panoramaCube } = await import(
   `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`
 );
 delete globalThis.testPlayCanvas;
@@ -80,6 +80,35 @@ test("cube orientation stays orthonormal when the view is vertical", () => {
   const dot = (i, j) => m[i] * m[j] + m[i + 3] * m[j + 3] + m[i + 6] * m[j + 6];
   assert.ok(Math.abs(dot(0, 0) - 1) < 1e-9 && Math.abs(dot(1, 1) - 1) < 1e-9 && Math.abs(dot(2, 2) - 1) < 1e-9);
   assert.ok(Math.abs(dot(0, 1)) < 1e-9 && Math.abs(dot(1, 2)) < 1e-9 && Math.abs(dot(0, 2)) < 1e-9);
+});
+
+test("each cube triangle samples a single atlas tile, so no seam streaks across faces", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const rwc = [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7];
+  const orient = alignCubeToView([0.3, -0.5, -0.8], rwc);
+  const { uvs, indices } = panoramaCube(image, 1, orient);
+  const eps = 1e-5;
+  for (let t = 0; t < indices.length; t += 3) {
+    const v = [0, 1, 2].map((k) => [uvs[2 * indices[t + k]], uvs[2 * indices[t + k] + 1]]);
+    const cu = (v[0][0] + v[1][0] + v[2][0]) / 3;
+    const cv = (v[0][1] + v[1][1] + v[2][1]) / 3;
+    const col = Math.min(2, Math.floor(cu * 3));
+    const row = Math.min(1, Math.floor(cv * 2));
+    for (const [u, w] of v) {
+      assert.ok(u >= col / 3 - eps && u <= (col + 1) / 3 + eps, `u=${u} hors de la tuile ${col}`);
+      assert.ok(w >= row / 2 - eps && w <= (row + 1) / 2 + eps, `v=${w} hors de la tuile ${row}`);
+    }
+  }
+});
+
+test("cube mesh keeps the same vertex and index counts for any orientation", () => {
+  const image = { qvec: [1, 0, 0, 0], tvec: [0, 0, 0] };
+  const flat = panoramaCube(image, 1, null);
+  const oriented = panoramaCube(image, 1, alignCubeToView([0.3, -0.5, -0.8], [0.2, -0.9, 0.1, 0.7, 0.3, 0.6, -0.6, -0.2, 0.7]));
+  assert.equal(flat.positions.length, oriented.positions.length);
+  assert.equal(flat.uvs.length, oriented.uvs.length);
+  assert.equal(flat.indices.length, oriented.indices.length);
+  assert.ok(flat.indices.length < 65536);
 });
 
 

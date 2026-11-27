@@ -24,7 +24,7 @@ LIDAR_PLY="/chemin/ori/points.ply"
 SFM_MASKS=off
 ```
 
-Puis lancer `bash tools/sfm/run.sh CONFIG` pour le modèle COLMAP
+Puis lancer `bash tools/sfm/run_standard_images.sh CONFIG` pour le modèle COLMAP
 seul, ou `bash scripts/images_to_3dgs.sh CONFIG` pour le pipeline complet.
 
 ## Entrées
@@ -78,5 +78,5 @@ Les sorties existantes ne sont pas écrasées.
 ## Tests
 
 ```bash
-python -m unittest discover -s tools/con_laz_to_orientations -p 'test_*.py'
+python -m unittest discover -s tests/con_laz_to_orientations -p 'test_*.py'
 ```

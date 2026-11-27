@@ -1,11 +1,11 @@
 # Post-traitement et visualisation
 
-[Retour aux exemples](README.md) · [Documentation du post-traitement](../tools/postprocess/README.md)
+[Retour aux exemples](README.md) · [Documentation du post-traitement](../tools/export/README.md)
 
 ## Diagnostiquer les gaussiennes aberrantes
 
 ```bash
-python "$GIT_ROOT/tools/postprocess/filter_splats.py" \
+python "$GIT_ROOT/tools/export/filter_splats.py" \
   --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/diagnostic.splat" --mode diagnostic
 ```
 
@@ -16,7 +16,7 @@ un filtre peut aussi supprimer des éléments réels. L'entrée n'est pas écras
 ## Retirer les splats hors d'une boîte projetée
 
 ```bash
-python "$GIT_ROOT/tools/postprocess/filter_splat_by_bbox.py" --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/scene_bbox.splat" --format splat --georef "$DATA_ROOT/scene.metadata.json" --bbox "655150,6861000,656000,6861400" --zmin 30 --zmax 80 --overwrite
+python "$GIT_ROOT/tools/export/filter_splat_by_bbox.py" --input "$DATA_ROOT/scene.splat" --output "$DATA_ROOT/scene_bbox.splat" --format splat --georef "$DATA_ROOT/scene.metadata.json" --bbox "655150,6861000,656000,6861400" --zmin 30 --zmax 80 --overwrite
 ```
 
 `--georef` accepte un `metadata.json` ou un `gauge.txt` (EPSG via `--epsg`, 2154 par défaut).
@@ -27,10 +27,10 @@ que l'entrée, plus un bloc `filter` (paramètres et compteurs).
 
 ## Exporter un splat filtré avec les points COLMAP
 
-Export d'un checkpoint (`export_ply.py`, appelé par `run_spirula_block.sh`) avec filtrage :
+Export d'un checkpoint (`export_ply.py`, appelé par `train_block_spirula.sh`) avec filtrage :
 
 ```bash
-python "$GIT_ROOT/tools/postprocess/export_ply.py" \
+python "$GIT_ROOT/tools/export/export_ply.py" \
   --input "$GS_BLOCK/chkpt/chkpt_step-000040000.ply" \
   --points "$OUTPUT/sparse/0/points3D.bin" \
   --transform "$GS_BLOCK/chkpt/scene_transform.json" \
@@ -48,7 +48,7 @@ Le chemin du checkpoint est le dernier `chkpt_step-*.ply` de `chkpt/`.
 ## Convertir un splat en 3D Tiles
 
 ```bash
-python "$GIT_ROOT/tools/splat_to_3dtiles/convert.py" \
+python "$GIT_ROOT/tools/export/export_3dtiles.py" \
   --input "$DATA_ROOT/scene.splat" --georef-summary "$DATA_ROOT/georef_summary.json" \
   --output-dir "$DATA_ROOT/scene_tiles" --no-open-inspector
 ```
@@ -57,4 +57,4 @@ Le splat doit être en ENU local et le résumé de géoréférencement doit prov
 du même traitement. Adapter les entrées et choisir un dossier de sortie qui
 n'existe pas. Node.js et le convertisseur externe sont nécessaires ; pour
 leurs prérequis et la visualisation, consulter la
-[documentation 3D Tiles](../tools/splat_to_3dtiles/README.md).
+[documentation 3D Tiles](../tools/export/export_3dtiles.md).

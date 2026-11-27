@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 script_dir="$repo_root/tools/panoramax"
-source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
 
 usage() {
@@ -91,7 +91,7 @@ export PANORAMAX_MULTI_CAM="${PANORAMAX_MULTI_CAM:-false}"
 PANORAMAX_REPLACE_REQUEST="${PANORAMAX_REPLACE_REQUEST:-false}"
 SPIRULA_BIN="${SPIRULA_BIN:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
-source "$repo_root/tools/libs/scripts/georef_phase.sh"
+source "$repo_root/tools/georef/georef.sh"
 source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
 load_lidar_config
 export LIDAR_WORKSPACE="$OUTPUT_DIR"
@@ -115,7 +115,7 @@ fi
 export TRAIN_NS_TRAIN_BIN="${TRAIN_NS_TRAIN_BIN:-ns-train}"
 export TRAIN_NS_EXPORT_BIN="${TRAIN_NS_EXPORT_BIN:-ns-export}"
 export TRAIN_NS_DOWNSCALE_FACTOR="${TRAIN_NS_DOWNSCALE_FACTOR:-1}"
-# Child scripts (run_spirula_blocks.sh, masks.py) only see exported variables.
+# Child scripts (run_panoramax.sh, masks.py) only see exported variables.
 export SFM_MASKS_DIR="${SFM_MASKS_DIR:-}" TRAIN_MASKS_DIR="${TRAIN_MASKS_DIR:-}"
 if [[ "$TRAIN_BACKEND" == nerfstudio && ( "$phase" == all || "$phase" == train-block ) ]]; then
   "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
@@ -147,6 +147,7 @@ TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
 TRAIN_SP_USE_BILATERAL_GRID="${TRAIN_SP_USE_BILATERAL_GRID:-}"
 TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
 SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
+SFM_SP_METRIC_POSITIONS="${SFM_SP_METRIC_POSITIONS:-}"
 TRAIN_MASKS="${TRAIN_MASKS:-off}"
 TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
 TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
@@ -408,6 +409,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_SP_USE_BILATERAL_GRID="$TRAIN_SP_USE_BILATERAL_GRID" \
   TRAIN_SP_BILAGRID_TYPE="$TRAIN_SP_BILAGRID_TYPE" \
   SFM_SP_IMAGE_EXPOSURE="$SFM_SP_IMAGE_EXPOSURE" \
+  SFM_SP_METRIC_POSITIONS="$SFM_SP_METRIC_POSITIONS" \
   SFM_MAX_IMAGE_SIZE="$SFM_MAX_IMAGE_SIZE" \
   SFM_FILTER_DENSITY="$SFM_FILTER_DENSITY" \
   SFM_DENSITY_VOTE_FRACTION="$SFM_DENSITY_VOTE_FRACTION" \
@@ -450,7 +452,7 @@ if [[ "$phase" != merge ]]; then
   TRAIN_MASKS_MAX_FRACTION="$TRAIN_MASKS_MAX_FRACTION" \
   TRAIN_MASKS_DEVICE="$TRAIN_MASKS_DEVICE" \
   NUM_CPUS="$NUM_CPUS" \
-  bash "$repo_root/tools/libs/scripts/run_spirula_blocks.sh" "${phase_args[@]}"
+  bash "$repo_root/tools/libs/scripts/run_panoramax.sh" "${phase_args[@]}"
 fi
 if [[ "$phase" == prepare || "$phase" == train-block ]]; then
   printf '[pipeline] Étape %s terminée.\n' "$phase"

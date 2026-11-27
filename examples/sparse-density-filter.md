@@ -1,6 +1,6 @@
 # Tester le filtre de densité sparse (SFM_FILTER_DENSITY)
 
-[Retour aux exemples](README.md) · [Documentation du filtre](../tools/preprocess/README.md)
+[Retour aux exemples](README.md) · [Documentation du filtre](../tools/sfm/README.md)
 
 Le filtre retire les points COLMAP isolés et lointains. Il lit un modèle
 sparse binaire (`cameras.bin`, `images.bin`, `points3D.bin`) et écrit deux

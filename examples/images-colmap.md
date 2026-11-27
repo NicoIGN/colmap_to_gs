@@ -1,11 +1,11 @@
 # Images, vidéos et COLMAP
 
-[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/sfm/README.md) · [Images vers 3DGS](../tools/images_to_splat/README.md)
+[Retour aux exemples](README.md) · [Images vers COLMAP](../tools/sfm/README.md) · [Images vers 3DGS](../tools/libs/README.md)
 
 ## Extraire des images nettes d'une vidéo
 
 ```bash
-python "$GIT_ROOT/tools/preprocess/extract_sharp_frames.py" \
+python "$GIT_ROOT/tools/prepare/prepare_video_frames.py" \
   --video "$DATA_ROOT/video.mp4" --out "$DATA_ROOT/frames" --num-frames 200
 ```
 
@@ -18,7 +18,7 @@ Après avoir préparé un fichier `config-images.sh` avec `SFM_IMAGES_DIR`,
 `OUTPUT_DIR` et la méthode `COLMAP_METHOD` souhaitée :
 
 ```bash
-bash "$GIT_ROOT/tools/sfm/run.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/tools/sfm/run_standard_images.sh" "$DATA_ROOT/config-images.sh"
 ```
 
 Cette commande prépare le modèle sans entraîner de 3DGS. Pour produire aussi
@@ -28,10 +28,10 @@ un splat avec une configuration compatible :
 bash "$GIT_ROOT/scripts/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 ```
 
-Voir les [exemples des pipelines images et vidéo, en direct ou sur Slurm](pipelines.md).
+Voir les [exemples des pipelines images et vidéo, en direct ou sur Slurm](../scripts/README.md).
 
 Pour des images 360 équirectangulaires avec HLOC, définir
 `COLMAP_METHOD=hloc` et `HLOC_CAMERA_MODEL=EQUIRECTANGULAR`. Les vues
 perspectives sont reconstruites en `PINHOLE`. Voir les prérequis et les
 restrictions de ce mode dans la
-[documentation du pipeline images](../tools/images_to_splat/README.md).
+[documentation du pipeline images](../tools/libs/README.md).

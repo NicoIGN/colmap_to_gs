@@ -1,0 +1,655 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(cd -- "$script_dir/../../.." && pwd)"
+# shellcheck source=spirula_common.sh
+source "$script_dir/spirula_common.sh"
+source "$script_dir/pipeline_config.sh"
+source "$repo_root/tools/sfm/sparse_density.sh"
+config_errors=0
+reject_legacy_config || exit 1
+
+DIR="${DIR:-}"
+SPIRULA_BIN="${SPIRULA_BIN:-$(default_spirula_bin)}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+COLMAP_METHOD="${COLMAP_METHOD:-spirula}"
+HLOC_CAMERA_MODEL="${HLOC_CAMERA_MODEL:-OPENCV}"
+SFM_EQUIRECTANGULAR_VIEW_SIZE="${SFM_EQUIRECTANGULAR_VIEW_SIZE:-1024}"
+GEOREF_EPSG="${GEOREF_EPSG:-2154}"
+TRAIN_BACKEND="${TRAIN_BACKEND:-spirula}"
+TRAIN_NUM_ITER="${TRAIN_NUM_ITER:-30000}"
+SPLIT_NUM_BLOCKS="${SPLIT_NUM_BLOCKS:-1}"
+if [[ "$TRAIN_BACKEND" == spirula ]]; then
+  TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-1500000}"
+  TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
+  TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
+  TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
+  TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+  TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-2000}"
+  TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-3dgs}"
+  TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
+  TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-off}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-true}"
+else
+  TRAIN_SP_CAP_MAX="${TRAIN_SP_CAP_MAX:-}"
+  TRAIN_SP_SPLATS_PER_IMAGE="${TRAIN_SP_SPLATS_PER_IMAGE:-}"
+  TRAIN_SP_GROWTH_FACTOR="${TRAIN_SP_GROWTH_FACTOR:-}"
+  TRAIN_SP_REFINE_STOP_ITER="${TRAIN_SP_REFINE_STOP_ITER:-}"
+  TRAIN_SP_REFINE_STOP_NUM_ITER="${TRAIN_SP_REFINE_STOP_NUM_ITER:-}"
+  TRAIN_SP_FLOATER_SUPPRESSION="${TRAIN_SP_FLOATER_SUPPRESSION:-}"
+  TRAIN_SP_STEPS_PER_SAVE="${TRAIN_SP_STEPS_PER_SAVE:-}"
+  TRAIN_SP_PRESET="${TRAIN_SP_PRESET:-}"
+  TRAIN_SP_QUALITY="${TRAIN_SP_QUALITY:-}"
+  TRAIN_SP_DISTRACTION_ROBUSTNESS="${TRAIN_SP_DISTRACTION_ROBUSTNESS:-}"
+  TRAIN_SP_WARP_SPHERICAL="${TRAIN_SP_WARP_SPHERICAL:-}"
+fi
+TRAIN_SP_USE_PPISP="${TRAIN_SP_USE_PPISP:-}"
+TRAIN_SP_PPISP_PARAM_TYPE="${TRAIN_SP_PPISP_PARAM_TYPE:-}"
+TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF="${TRAIN_SP_PPISP_EXPOSURE_FROM_EXIF:-}"
+TRAIN_SP_USE_BILATERAL_GRID="${TRAIN_SP_USE_BILATERAL_GRID:-}"
+TRAIN_SP_BILAGRID_TYPE="${TRAIN_SP_BILAGRID_TYPE:-}"
+SFM_MAX_IMAGE_SIZE="${SFM_MAX_IMAGE_SIZE:-4096}"
+SFM_ALIKED_MAX_FEATURES="${SFM_ALIKED_MAX_FEATURES:-4096}"
+SFM_SP_PAIRS="${SFM_SP_PAIRS:-prefilter}"
+SFM_SP_PREFILTER_NEIGHBORS="${SFM_SP_PREFILTER_NEIGHBORS:-16}"
+SFM_SP_FEATURES="${SFM_SP_FEATURES:-aliked-n16rot}"
+SFM_SP_QUALITY="${SFM_SP_QUALITY:-high}"
+SFM_SP_MATCHER="${SFM_SP_MATCHER:-lightglue}"
+NUM_CPUS="${NUM_CPUS:-2}"
+export NUM_CPUS
+SFM_SP_IMAGE_EXPOSURE="${SFM_SP_IMAGE_EXPOSURE:-}"
+SFM_SP_METRIC_POSITIONS="${SFM_SP_METRIC_POSITIONS:-}"
+SFM_CAMERA_MODEL_EXPLICIT="${SFM_CAMERA_MODEL:+true}"
+SFM_CAMERA_MODEL="${SFM_CAMERA_MODEL:-}"
+init_sfm_geometry_config
+SFM_SP_PAIR_MAX_DISTANCE="${SFM_SP_PAIR_MAX_DISTANCE:-}"
+SPLIT_OVERLAP_MAX_FRACTION="${SPLIT_OVERLAP_MAX_FRACTION:-0.05}"
+TRAIN_CLEAN="${TRAIN_CLEAN:-false}"
+TRAIN_MASKS="${TRAIN_MASKS:-off}"
+TRAIN_MASKS_BACKEND="${TRAIN_MASKS_BACKEND:-segmentation}"
+TRAIN_MASKS_SPIRULA_MODEL="${TRAIN_MASKS_SPIRULA_MODEL:-}"
+SPIRULA_DEVICE="${SPIRULA_DEVICE:-auto}"
+MASKS_ACCEPT_LICENSE="${MASKS_ACCEPT_LICENSE:-false}"
+TRAIN_MASKS_PYTHON="${TRAIN_MASKS_PYTHON:-$PYTHON_BIN}"
+TRAIN_MASKS_MODEL="${TRAIN_MASKS_MODEL:-}"
+TRAIN_MASKS_LABELS="${TRAIN_MASKS_LABELS-sky}"
+TRAIN_MASKS_MODE="${TRAIN_MASKS_MODE:-empty}"
+TRAIN_MASKS_CONFIDENCE="${TRAIN_MASKS_CONFIDENCE:-0.5}"
+TRAIN_MASKS_DILATE="${TRAIN_MASKS_DILATE:-auto}"
+TRAIN_MASKS_MAX_FRACTION="${TRAIN_MASKS_MAX_FRACTION:-0.8}"
+TRAIN_MASKS_DEVICE="${TRAIN_MASKS_DEVICE:-auto}"
+SFM_MASKS="${SFM_MASKS:-off}"
+# SfM settings inherit generation settings, not the training loss mode.
+for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE MAX_FRACTION DEVICE; do
+  sfm_name="SFM_MASKS_$suffix"
+  train_name="TRAIN_MASKS_$suffix"
+  printf -v "$sfm_name" '%s' "${!sfm_name:-${!train_name}}"
+done
+SFM_MASKS_DILATE="${SFM_MASKS_DILATE:-0.002}"
+mode=all
+block_index=""
+
+usage() {
+  cat <<'EOF'
+Usage:
+  DIR=/path/to/panoramax [SPLIT_NUM_BLOCKS=1] bash run_panoramax.sh [options]
+
+Options:
+  --prepare-only            Run/reuse SfM and partition, without training
+  --block INDEX             Train only this zero-based block; requires preparation
+
+Variables:
+  DIR                       Panoramax dataset; contains images/ and metadata/
+  SPIRULA_BIN               Spirula executable (default: shared launcher logic)
+  PYTHON_BIN                Python with numpy, scipy and tqdm (default: python3)
+  TRAIN_NUM_ITER                  Training iterations (30000); the SfM workspace does not depend on it
+  SPLIT_NUM_BLOCKS                Number of COLMAP blocks (1)
+  TRAIN_SP_CAP_MAX                   Maximum splats per block (1500000)
+  TRAIN_SP_SPLATS_PER_IMAGE          Optional budget: block cap = min(TRAIN_SP_CAP_MAX, images × value)
+  TRAIN_SP_GROWTH_FACTOR             Explicit growth (> 1); empty: estimate in [1.001, 1.05]
+  TRAIN_SP_REFINE_STOP_ITER          Spirula refine_stop_iter (empty: Spirula 14000)
+  TRAIN_SP_REFINE_STOP_NUM_ITER      Spirula refine_stop_num_iter (empty: Spirula 2500)
+  TRAIN_SP_STEPS_PER_SAVE            Sauvegarde du checkpoint toutes les N itérations (Spirula steps_per_save, défaut 2000 ; seul le dernier est conservé)
+                            Growth stops at max(TRAIN_SP_REFINE_STOP_ITER, TRAIN_NUM_ITER - TRAIN_SP_REFINE_STOP_NUM_ITER)
+  TRAIN_SP_FLOATER_SUPPRESSION       Optional Spirula floater suppression: off, mild, strong
+  TRAIN_SP_PRESET              Spirula training preset (3dgs)
+  TRAIN_SP_QUALITY             Optional macro: low, medium, high, ultra;
+                            explicit cap and iterations remain authoritative
+  TRAIN_SP_DISTRACTION_ROBUSTNESS off (default), mild, strong: robust densification
+  TRAIN_SP_WARP_SPHERICAL      true (default, Spirula): 360 split into pinhole faces;
+                            false: direct equirectangular training
+  TRAIN_SP_*                Optional Spirula-only photometric training correction
+  SFM_MAX_IMAGE_SIZE        SfM extraction resolution (4096)
+  SFM_ALIKED_MAX_FEATURES   ALIKED feature budget (4096)
+  SFM_SP_PAIRS                 Spirula pair selection (prefilter)
+  SFM_SP_PREFILTER_NEIGHBORS   Neighbours kept per image by prefilter pairing (16)
+  SFM_SP_FEATURES              Feature extractor (aliked-n16rot)
+  SFM_SP_MATCHER               Matcher (lightglue; bruteforce bypasses LightGlue)
+  NUM_CPUS                  CPU count per job (SfM threads, mask jobs; default 2)
+  SFM_SP_IMAGE_EXPOSURE     Spirula SfM exposure: auto or stops (empty: omitted)
+  SFM_SP_METRIC_POSITIONS   Spirula metric positions file (image X Y Z, metres; empty: EXIF GPS)
+  SFM_MAX_ERROR             Geometry/reprojection threshold, extraction pixels (2)
+  SFM_MIN_INLIERS           Minimum geometric inliers per pair (30)
+  SFM_MIN_TRI_ANGLE         Minimum triangulation angle, degrees (6)
+  SFM_SP_BA_LOSS               Bundle adjustment loss: huber, cauchy, trivial (huber)
+  SFM_SP_BA_LOSS_PARAM         Robust loss scale, extraction pixels (2)
+  SFM_SP_PAIR_MAX_DISTANCE     Optional exclusive GPS radius before mapping (metres)
+  SPLIT_OVERLAP_MAX_FRACTION      Split overlap fraction (0.05)
+  TRAIN_CLEAN=true             Re-train blocks from scratch (destructive to GS outputs)
+  TRAIN_MASKS               off (default) or on: segmentation masks for training
+  TRAIN_MASKS_BACKEND       segmentation (default, transformers) or spirula (native SAM)
+  TRAIN_MASKS_SPIRULA_MODEL Local SAM 3 GGML checkpoint for the spirula backend
+  SPIRULA_DEVICE            Vulkan device: auto, index, name or uuid
+  MASKS_ACCEPT_LICENSE        true to explicitly accept SAM 3 license, false by default
+  TRAIN_MASKS_PYTHON        Python of tools/masks/install.sh
+  TRAIN_MASKS_MODEL         Local segmentation model directory
+  TRAIN_MASKS_LABELS        Comma-separated labels to mask (sky)
+  TRAIN_MASKS_MODE          auto (empty for sky only, else ignore), ignore, empty (défaut)
+  TRAIN_MASKS_CONFIDENCE    Minimum label probability (0.5)
+  TRAIN_MASKS_DILATE        auto (0 empty, 0.002 ignore) or fraction of image diagonal
+  TRAIN_MASKS_MAX_FRACTION  Above this masked fraction, an image is kept unmasked (0.8)
+  TRAIN_MASKS_DEVICE        auto, cuda, cuda:N, mps or cpu
+  SFM_MASKS                 off (default) or on: generate feature masks before SfM
+  SFM_MASKS_*               Same generation settings as TRAIN_MASKS_* (inherited);
+                            DILATE defaults to 0.002; no training loss mode
+  MVK_CONFIG_LOG_LEVEL      MoltenVK logging level
+
+Existing SfM and a complete matching block split are reused. Incomplete or
+mismatched split folders are never deleted automatically.
+SFM_SP_IMAGE_EXPOSURE cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
+SFM_SP_METRIC_POSITIONS (image X Y Z per line) replaces EXIF GPS; cannot be combined with SFM_SP_PAIR_MAX_DISTANCE.
+EOF
+}
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
+case "${1:-}" in
+  "") [[ $# -eq 0 ]] || die "Argument vide inattendu." ;;
+  --prepare-only)
+    [[ $# -eq 1 ]] || die "--prepare-only ne prend pas d'autre argument."
+    mode=prepare ;;
+  --block)
+    [[ $# -eq 2 && "$2" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      die "--block attend un indice entier positif ou nul."
+    mode=block
+    block_index="$2" ;;
+  *) die "Argument inattendu : $1" ;;
+esac
+[[ -n "$DIR" ]] || { usage >&2; die "Définir DIR avec le chemin du dataset Panoramax."; }
+[[ -d "$DIR" ]] || die "Dataset introuvable : $DIR"
+has_images=false
+for images_dir in "$DIR/images" "$DIR"/*/images; do
+  [[ -d "$images_dir" ]] || continue
+  if [[ "$images_dir" == "$DIR/images" || -d "${images_dir%/images}/metadata" ]]; then
+    has_images=true
+    break
+  fi
+done
+[[ "$has_images" == true ]] || die "Aucun dossier d'images Panoramax dans : $DIR (attendu : images/ ou <collection>/images avec metadata/)"
+if [[ "$COLMAP_METHOD" == hloc && "$HLOC_CAMERA_MODEL" != EQUIRECTANGULAR ]]; then
+  die "HLOC Panoramax exige HLOC_CAMERA_MODEL=EQUIRECTANGULAR."
+fi
+config_errors=0
+validate_sfm_geometry_config
+validate_spirula_photometric_config "${TRAIN_BACKEND:-spirula}" "$COLMAP_METHOD"
+if [[ -n "$SFM_SP_IMAGE_EXPOSURE" && -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+  die "SFM_SP_IMAGE_EXPOSURE n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
+fi
+if [[ -n "$SFM_SP_METRIC_POSITIONS" ]]; then
+  [[ -f "$SFM_SP_METRIC_POSITIONS" ]] ||
+    die "SFM_SP_METRIC_POSITIONS introuvable : $SFM_SP_METRIC_POSITIONS"
+  [[ -z "$SFM_SP_PAIR_MAX_DISTANCE" ]] ||
+    die "SFM_SP_METRIC_POSITIONS n'est pas disponible avec le filtrage GPS des paires (SFM_SP_PAIR_MAX_DISTANCE)."
+fi
+((config_errors == 0)) || exit 1
+
+for value_name in TRAIN_NUM_ITER SPLIT_NUM_BLOCKS SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES; do
+  value="${!value_name}"
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$value_name doit être un entier positif : $value"
+done
+[[ "$SPLIT_NUM_BLOCKS" -ge 1 ]] || die "SPLIT_NUM_BLOCKS doit être supérieur ou égal à 1."
+growth_stop="$TRAIN_NUM_ITER"
+if [[ "$TRAIN_BACKEND" == spirula ]]; then
+  for value_name in TRAIN_SP_CAP_MAX; do
+    value="${!value_name}"
+    [[ "$value" =~ ^[1-9][0-9]*$ ]] || die "$value_name doit être un entier positif : $value"
+  done
+  [[ -z "$TRAIN_SP_SPLATS_PER_IMAGE" || "$TRAIN_SP_SPLATS_PER_IMAGE" =~ ^[1-9][0-9]*$ ]] ||
+    die "TRAIN_SP_SPLATS_PER_IMAGE doit être vide ou un entier positif."
+  [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || {
+    [[ "$TRAIN_SP_GROWTH_FACTOR" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+      awk -v x="$TRAIN_SP_GROWTH_FACTOR" 'BEGIN { exit !(x > 1) }'
+  } || die "TRAIN_SP_GROWTH_FACTOR doit être vide ou un nombre > 1."
+  for value_name in TRAIN_SP_REFINE_STOP_ITER TRAIN_SP_REFINE_STOP_NUM_ITER TRAIN_SP_STEPS_PER_SAVE; do
+    value="${!value_name}"
+    [[ -z "$value" || "$value" =~ ^[0-9]+$ ]] ||
+      die "$value_name doit être vide ou un entier >= 0 : $value"
+  done
+  growth_stop=$(( ${TRAIN_SP_REFINE_STOP_ITER:-14000} > TRAIN_NUM_ITER - ${TRAIN_SP_REFINE_STOP_NUM_ITER:-2500} ?
+                  ${TRAIN_SP_REFINE_STOP_ITER:-14000} : TRAIN_NUM_ITER - ${TRAIN_SP_REFINE_STOP_NUM_ITER:-2500} ))
+  if ((growth_stop >= TRAIN_NUM_ITER)); then
+    printf '[AVERTISSEMENT] Croissance des splats jusqu’à la fin (pas %s >= TRAIN_NUM_ITER=%s) : aucune phase d’affinage seul.\n' \
+      "$growth_stop" "$TRAIN_NUM_ITER" >&2
+  fi
+  case "$TRAIN_SP_FLOATER_SUPPRESSION" in
+    ""|off|mild|strong) ;;
+    *) die "TRAIN_SP_FLOATER_SUPPRESSION doit être vide, off, mild ou strong." ;;
+  esac
+  case "$TRAIN_SP_QUALITY" in
+    ""|low|medium|high|ultra) ;;
+    *) die "TRAIN_SP_QUALITY doit être vide, low, medium, high ou ultra." ;;
+  esac
+  case "$TRAIN_SP_DISTRACTION_ROBUSTNESS" in
+    off|mild|strong) ;;
+    *) die "TRAIN_SP_DISTRACTION_ROBUSTNESS doit être off, mild ou strong." ;;
+  esac
+fi
+[[ -z "$block_index" || "$block_index" -lt "$SPLIT_NUM_BLOCKS" ]] ||
+  die "Indice de bloc $block_index hors de [0,$((SPLIT_NUM_BLOCKS - 1))]."
+[[ "$NUM_CPUS" =~ ^[1-9][0-9]*$ ]] ||
+  die "NUM_CPUS doit être un entier positif."
+if [[ -n "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+  [[ "$SFM_SP_PAIR_MAX_DISTANCE" =~ ^[0-9]+([.][0-9]+)?$ ]] &&
+    awk -v radius="$SFM_SP_PAIR_MAX_DISTANCE" 'BEGIN { exit !(radius > 0) }' ||
+    die "SFM_SP_PAIR_MAX_DISTANCE doit être vide ou un nombre positif."
+fi
+[[ "$SPLIT_OVERLAP_MAX_FRACTION" =~ ^(0([.][0-9]+)?|1([.]0+)?)$ ]] ||
+  die "SPLIT_OVERLAP_MAX_FRACTION doit être dans [0,1] : $SPLIT_OVERLAP_MAX_FRACTION"
+case "$TRAIN_CLEAN" in
+  true|1|yes|on) TRAIN_CLEAN=true ;;
+  false|0|no|off) TRAIN_CLEAN=false ;;
+  *) die "TRAIN_CLEAN invalide : $TRAIN_CLEAN" ;;
+esac
+
+case "$TRAIN_MASKS" in
+  on|true|1|yes) TRAIN_MASKS=on ;;
+  off|false|0|no) TRAIN_MASKS=off ;;
+  *) die "TRAIN_MASKS doit être on ou off : $TRAIN_MASKS" ;;
+esac
+case "$SFM_MASKS" in
+  on|true|1|yes) SFM_MASKS=on ;;
+  off|false|0|no) SFM_MASKS=off ;;
+  *) die "SFM_MASKS doit être on ou off." ;;
+esac
+case "$MASKS_ACCEPT_LICENSE" in
+  true|1|yes|on) MASKS_ACCEPT_LICENSE=true ;;
+  false|0|no|off) MASKS_ACCEPT_LICENSE=false ;;
+  *) die "MASKS_ACCEPT_LICENSE doit être true ou false." ;;
+esac
+if [[ "$TRAIN_MASKS" == on ]]; then
+  case "$TRAIN_MASKS_BACKEND" in
+    segmentation|spirula) ;;
+    *) die "TRAIN_MASKS_BACKEND doit être segmentation ou spirula." ;;
+  esac
+  case "$TRAIN_MASKS_MODE" in
+    auto)
+      TRAIN_MASKS_MODE=ignore
+      labels_lower="$(printf '%s' "$TRAIN_MASKS_LABELS" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+      [[ ! "$labels_lower" =~ ^(sky,?)+$ ]] || TRAIN_MASKS_MODE=empty ;;
+    ignore|empty) ;;
+    *) die "TRAIN_MASKS_MODE doit être auto, ignore ou empty : $TRAIN_MASKS_MODE" ;;
+  esac
+  if [[ "$TRAIN_MASKS_DILATE" == auto ]]; then
+    TRAIN_MASKS_DILATE=0
+    [[ "$TRAIN_MASKS_MODE" != ignore ]] || TRAIN_MASKS_DILATE=0.002
+  fi
+  [[ "$TRAIN_MASKS_DILATE" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+    die "TRAIN_MASKS_DILATE doit être auto ou un nombre >= 0 : $TRAIN_MASKS_DILATE"
+  if [[ "$TRAIN_MASKS_BACKEND" == spirula ]]; then
+    TRAIN_MASKS_PYTHON="$PYTHON_BIN"
+  fi
+  command -v "$TRAIN_MASKS_PYTHON" >/dev/null 2>&1 ||
+    die "Python des masques introuvable : $TRAIN_MASKS_PYTHON"
+  if [[ "$mode" != block ]]; then
+    if [[ "$TRAIN_MASKS_BACKEND" == spirula ]]; then
+      [[ -f "$TRAIN_MASKS_SPIRULA_MODEL" ]] ||
+        die "TRAIN_MASKS_SPIRULA_MODEL doit désigner un checkpoint SAM 3 GGML local."
+    else
+      [[ -n "$TRAIN_MASKS_MODEL" && -d "$TRAIN_MASKS_MODEL" ]] ||
+        die "TRAIN_MASKS_MODEL doit désigner le dossier du modèle local (voir tools/masks/install.sh)."
+    fi
+  fi
+fi
+
+command -v "$PYTHON_BIN" >/dev/null 2>&1 || die "Python introuvable : $PYTHON_BIN"
+if [[ "$COLMAP_METHOD" == spirula || "$TRAIN_BACKEND" == spirula ||
+      ( "$SFM_MASKS" == on && "$SFM_MASKS_BACKEND" == spirula ) ||
+      ( "$TRAIN_MASKS" == on && "$TRAIN_MASKS_BACKEND" == spirula ) ]]; then
+  if [[ "$SPIRULA_BIN" == */* ]]; then
+    [[ -x "$SPIRULA_BIN" ]] || die "Spirula introuvable ou non exécutable : $SPIRULA_BIN"
+  else
+    SPIRULA_BIN="$(command -v "$SPIRULA_BIN")" || die "Spirula introuvable dans le PATH."
+  fi
+fi
+
+DIR="$(cd -- "$DIR" && pwd)"
+[[ -n "${OUTPUT_DIR:-}" ]] || die "Définir OUTPUT_DIR : racine commune au pipeline images et Panoramax."
+OUTPUT_DIR="$(cd -- "$OUTPUT_DIR" && pwd)"
+SFM_DIR="$OUTPUT_DIR/sfm"
+IMAGES_DIR="$OUTPUT_DIR/images"
+SPARSE_DIR="$SFM_DIR/sparse/0"
+RAW_SPARSE_DIR="$SPARSE_DIR"
+source "$repo_root/tools/libs/scripts/pipeline_lidar.sh"
+load_lidar_config
+LIDAR_WORKSPACE="${LIDAR_WORKSPACE:-$OUTPUT_DIR}"
+[[ "$LIDAR_COLMAP_ALIGN" != true ]] || SPARSE_DIR="$LIDAR_WORKSPACE/colmap_lidar"
+source "$repo_root/tools/libs/scripts/pipeline_report.sh"
+pipeline_report_start "$LIDAR_WORKSPACE" "run_3dgs_blocks:$mode:${block_index:-all}"
+blocks_exit() {
+  local status=$?
+  trap - EXIT
+  pipeline_report_finish "$status" || { [[ "$status" != 0 ]] || status=1; }
+  exit "$status"
+}
+trap blocks_exit EXIT
+pipeline_report_phase "validation de la configuration des blocs"
+BLOCKS_DIR="$OUTPUT_DIR/blocks"
+MASKS_DIR="$OUTPUT_DIR/train_masks"
+GS_ROOT="$OUTPUT_DIR/gs"
+if [[ "${TRAIN_BACKEND:-spirula}" == nerfstudio ]]; then
+  GS_ROOT="$OUTPUT_DIR/gs-nerfstudio"
+  if [[ "$mode" != prepare ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/libs/python/nerfstudio_runtime.py"
+  fi
+  [[ "$TRAIN_MASKS" != on || "$TRAIN_MASKS_MODE" == ignore ]] ||
+    die "Nerfstudio exige TRAIN_MASKS_MODE=ignore."
+  [[ "$TRAIN_MASKS" != on || "$TRAIN_MASKS_BACKEND" == segmentation ]] ||
+    die "Nerfstudio exige les masques du tool segmentation (Mask2Former ou SegFormer)."
+fi
+SPLITTER="$repo_root/tools/sfm/colmap_split_blocks.py"
+
+if [[ "$COLMAP_METHOD" == spirula ]]; then
+  "$PYTHON_BIN" "$repo_root/tools/sfm/sfm_geometry_policy.py" "$SFM_DIR" \
+    "$SFM_MAX_ERROR" "$SFM_MIN_INLIERS" "$SFM_MIN_TRI_ANGLE" \
+    "$SFM_SP_BA_LOSS" "$SFM_SP_BA_LOSS_PARAM"
+fi
+
+export MVK_CONFIG_LOG_LEVEL="${MVK_CONFIG_LOG_LEVEL:-1}"
+if [[ "$SFM_MASKS" == on ]]; then
+  export PYTHON_BIN SPIRULA_BIN SPIRULA_DEVICE TRAIN_MASKS TRAIN_MASKS_MODE MASKS_ACCEPT_LICENSE
+  for suffix in BACKEND PYTHON MODEL SPIRULA_MODEL LABELS CONFIDENCE DILATE MAX_FRACTION DEVICE; do
+    export "SFM_MASKS_$suffix" "TRAIN_MASKS_$suffix"
+  done
+fi
+
+check_hloc_policy() {
+  "$PYTHON_BIN" - "$SFM_DIR" "${HLOC_FEATURES:-superpoint_max}" \
+    "${HLOC_MATCHER:-superpoint+lightglue}" "${HLOC_PAIRS:-retrieval}" \
+    "${HLOC_RETRIEVAL:-netvlad}" "${HLOC_NUM_NEIGHBORS:-20}" "$DIR" "$1" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+dataset = Path(sys.argv[-2])
+digest = hashlib.sha256((root / "projection.json").read_bytes() +
+                        json.dumps(sys.argv[2:-2]).encode())
+for folder in ("images", "metadata"):
+    for path in sorted((dataset / folder).rglob("*")):
+        if path.is_file():
+            digest.update(str(path.relative_to(dataset)).encode())
+            with path.open("rb") as stream:
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+signature = digest.hexdigest()
+marker = root / "hloc_policy.json"
+if marker.exists():
+    if json.loads(marker.read_text())["signature"] != signature:
+        raise SystemExit("[ERREUR] Configuration HLOC modifiée : choisir un nouveau workspace.")
+elif sys.argv[-1] == "check":
+    raise SystemExit("[ERREUR] Signature HLOC absente : lancer la préparation.")
+elif (root / "sparse").exists() or (root / "hloc").exists():
+    raise SystemExit("[ERREUR] SfM existant sans signature HLOC : choisir un nouveau workspace.")
+else:
+    marker.write_text(json.dumps({"signature": signature}) + "\n")
+PY
+}
+
+prepare_blocks() {
+  local block_count block_id block_sparse file index
+  pipeline_report_phase "reconstruction SfM"
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    [[ ! -e "$SFM_DIR/projection.json" ]] || check_hloc_policy check
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_panoramax.py" \
+      --dataset "$DIR" --output-dir "$SFM_DIR/panoramas_source"
+    "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_equirect_views.py" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
+      --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE"
+  fi
+  if [[ ( "$SFM_MASKS" == on || -n "$SFM_SP_PAIR_MAX_DISTANCE" ) &&
+        -d "$GS_ROOT" && ( ! -s "$RAW_SPARSE_DIR/cameras.bin" ||
+        ! -s "$RAW_SPARSE_DIR/images.bin" || ! -s "$RAW_SPARSE_DIR/points3D.bin" ) ]]; then
+    die "Recalcul du SfM avec d'anciens entraînements : déplacer $GS_ROOT en sauvegarde pour éviter leur réutilisation."
+  fi
+  if [[ "$COLMAP_METHOD" != hloc && -z "$(find "$IMAGES_DIR" -type f -print -quit 2>/dev/null)" ]]; then
+    # Les masques sont validés contre les images : sélection prête avant la préparation des masques.
+    printf '[pipeline] Sélection des images Panoramax vers %s.\n' "$IMAGES_DIR"
+    "$PYTHON_BIN" "$repo_root/tools/sfm/prepare_panoramax.py" \
+      --dataset "$DIR" --output-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --shell >/dev/null
+  fi
+  if [[ "$SFM_MASKS" == on ]]; then
+    mask_projection_args=()
+    [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
+    masks_done="$SFM_DIR/.masks_done"
+    if [[ "${PIPELINE_RESUME:-false}" == true && -f "$masks_done" ]]; then
+      printf '[pipeline] Masques SfM déjà préparés (%s) : étape ignorée.\n' "$masks_done"
+    else
+      rm -f -- "$masks_done"
+      printf '[pipeline] Préparation des masques SfM (%s).\n' "$OUTPUT_DIR/feature_masks"
+      "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" \
+        ${mask_projection_args[@]+"${mask_projection_args[@]}"}
+      touch -- "$masks_done"
+    fi
+  elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
+    die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
+  fi
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    local hloc_raw="$SFM_DIR/hloc/sparse/0"
+    check_hloc_policy prepare
+    if [[ ! -s "$hloc_raw/cameras.bin" || ! -s "$hloc_raw/images.bin" || ! -s "$hloc_raw/points3D.bin" ]]; then
+      [[ ! -d "$SFM_DIR/hloc" ]] || die "SfM HLOC partiel : déplacer le workspace avant de recommencer."
+      # Vues pinhole issues de l'équirectangulaire : le backend hloc lit ces paramètres de l'environnement.
+      (
+        export COLMAP_METHOD=hloc HLOC_CAMERA_MODEL=PINHOLE PYTHON_BIN OUTPUT_DIR SFM_MASKS
+        export SFM_CAMERA_MODE=single HLOC_WORK_DIR="$SFM_DIR/hloc/work"
+        export SFM_PERSPECTIVE_VIEW_SIZE="$SFM_EQUIRECTANGULAR_VIEW_SIZE"
+        export HLOC_FEATURES="${HLOC_FEATURES:-superpoint_max}" HLOC_MATCHER="${HLOC_MATCHER:-superpoint+lightglue}"
+        export HLOC_PAIRS="${HLOC_PAIRS:-retrieval}" HLOC_RETRIEVAL="${HLOC_RETRIEVAL:-netvlad}"
+        export HLOC_NUM_NEIGHBORS="${HLOC_NUM_NEIGHBORS:-20}"
+        bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$SFM_DIR/hloc" --images-dir "$IMAGES_DIR" --force
+      )
+    fi
+    "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" \
+      --projection "$SFM_DIR/projection.json" --sparse "$hloc_raw" \
+      --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata"
+  elif [[ -f "$SFM_DIR/.gps_filter_done" && -z "$SFM_SP_PAIR_MAX_DISTANCE" ]]; then
+    die "Ce SfM a été filtré par GPS ; conserver SFM_SP_PAIR_MAX_DISTANCE ou déplacer $SFM_DIR en sauvegarde pour désactiver le filtre."
+  elif [[ -z "$SFM_SP_PAIR_MAX_DISTANCE" && -s "$RAW_SPARSE_DIR/cameras.bin" &&
+        -s "$RAW_SPARSE_DIR/images.bin" &&
+        -s "$RAW_SPARSE_DIR/points3D.bin" ]]; then
+    printf '[pipeline] SfM existant : %s (ignoré).\n' "$RAW_SPARSE_DIR"
+  else
+    printf '[pipeline] Lancement du SfM.\n'
+    # Les blocs dérivent du SfM : un nouveau SfM ne doit pas réutiliser un découpage ancien.
+    if [[ -e "$BLOCKS_DIR" ]]; then
+      archive="$OUTPUT_DIR/blocks.replaced-$(date +%Y%m%d-%H%M%S)"
+      printf '[pipeline] Nouveau SfM : découpage précédent archivé dans %s\n' "$archive"
+      mv -- "$BLOCKS_DIR" "$archive"
+    fi
+    # Cœur SfM partagé avec run_standard_images.sh ; les différences Panoramax passent par l'environnement.
+    (
+      export SFM_SP_PRESET=panoramax SFM_RECONSTRUCT_SOURCE="$DIR" SFM_SP_IMAGES_DIR="$IMAGES_DIR"
+      export SFM_SP_METADATA_DIR="$DIR/metadata" SFM_SP_REUSE_MATCHES=redo
+      export SFM_CAMERA_MODE="${SFM_CAMERA_MODE:-folder}" GEOREF_GPX_FILE="${GEOREF_GPX_FILE:-}"
+      export OUTPUT_DIR COLMAP_METHOD SFM_MASKS NUM_CPUS PYTHON_BIN SPIRULA_BIN
+      export SFM_CAMERA_MODEL SFM_SP_IMAGE_EXPOSURE SFM_SP_METRIC_POSITIONS SFM_SP_PAIRS
+      export SFM_SP_QUALITY SFM_SP_FEATURES SFM_SP_MATCHER SFM_MAX_IMAGE_SIZE SFM_ALIKED_MAX_FEATURES
+      export SFM_MAX_ERROR SFM_MIN_INLIERS SFM_MIN_TRI_ANGLE SFM_SP_BA_LOSS SFM_SP_BA_LOSS_PARAM
+      export SFM_SP_PAIR_MAX_DISTANCE SFM_SP_PREFILTER_NEIGHBORS
+      [[ "$SFM_MASKS" != on ]] || export SFM_SP_REUSE_FEATURES=redo
+      bash "$repo_root/tools/sfm/sfm_run.sh" --sfm-dir "$SFM_DIR" --images-dir "$IMAGES_DIR" --force
+    )
+  fi
+
+  for file in cameras.bin images.bin points3D.bin; do
+    [[ -s "$RAW_SPARSE_DIR/$file" ]] || die "Artefact SfM absent ou vide : $RAW_SPARSE_DIR/$file"
+  done
+  [[ -d "$IMAGES_DIR" ]] || die "Images préparées par SfM absentes : $IMAGES_DIR"
+  if [[ "$LIDAR_COLMAP_ALIGN" == true ]]; then
+    [[ ! -s "$BLOCKS_DIR/manifest.json" || -f "$LIDAR_WORKSPACE/lidar/colmap_inputs.json" ]] ||
+      die "Activer LiDAR nécessite un nouveau workspace avant découpage."
+    pipeline_report_phase "recalage et enrichissement COLMAP LiDAR"
+    lidar_pipeline_hook prepare --workspace "$LIDAR_WORKSPACE" \
+      --model "$RAW_SPARSE_DIR" --images "$IMAGES_DIR"
+  fi
+
+  if [[ "$TRAIN_MASKS" == on && "$SFM_MASKS" == off ]]; then
+    pipeline_report_phase "masques d'entraînement"
+    export OUTPUT_DIR PYTHON_BIN SPIRULA_BIN SPIRULA_DEVICE NUM_CPUS MASKS_ACCEPT_LICENSE
+    export TRAIN_MASKS TRAIN_MASKS_MODE TRAIN_MASKS_DIR TRAIN_MASKS_BACKEND TRAIN_MASKS_LABELS
+    export TRAIN_MASKS_SPIRULA_MODEL TRAIN_MASKS_MODEL TRAIN_MASKS_CONFIDENCE TRAIN_MASKS_DILATE
+    export TRAIN_MASKS_MAX_FRACTION TRAIN_MASKS_DEVICE TRAIN_MASKS_PYTHON
+    "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" --policy train ||
+      die "Préparation des masques d’entraînement échouée."
+  fi
+
+  local split_input="$SPARSE_DIR"
+  if [[ "${SFM_FILTER_DENSITY:-false}" == true ]]; then
+    sparse_density_stage "$SPARSE_DIR" "$SFM_DIR/sparse" "$BLOCKS_DIR" "$GS_ROOT"
+    split_input="$SFM_DIR/sparse_clean"
+  fi
+  pipeline_report_phase "découpage COLMAP"
+  if [[ -s "$BLOCKS_DIR/manifest.json" ]]; then
+    block_count="$("$PYTHON_BIN" - "$BLOCKS_DIR/manifest.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as manifest:
+    data = json.load(manifest)
+print(len(data.get("blocks", [])))
+PY
+)" || die "Manifest de blocs invalide : $BLOCKS_DIR/manifest.json"
+    [[ "$block_count" == "$SPLIT_NUM_BLOCKS" ]] ||
+      die "$BLOCKS_DIR contient $block_count blocs, mais SPLIT_NUM_BLOCKS=$SPLIT_NUM_BLOCKS. Choisir un autre nombre ou un autre workspace."
+    for ((index = 0; index < SPLIT_NUM_BLOCKS; index++)); do
+      block_id="$(printf '%03d' "$index")"
+      block_sparse="$BLOCKS_DIR/block_$block_id"
+      for file in cameras.bin images.bin points3D.bin; do
+        [[ -s "$block_sparse/$file" ]] ||
+          die "Découpage existant incomplet : $block_sparse/$file. Il n'a pas été modifié."
+      done
+    done
+    printf '[pipeline] Découpage existant : %s (%s blocs).\n' "$BLOCKS_DIR" "$SPLIT_NUM_BLOCKS"
+  else
+    if [[ -e "$BLOCKS_DIR" ]] && [[ -n "$(ls -A "$BLOCKS_DIR" 2>/dev/null)" ]]; then
+      die "Sortie de découpage non vide sans manifest valide : $BLOCKS_DIR. Déplacer ou renommer ce dossier avant de relancer."
+    fi
+    printf '[pipeline] Découpage de %s en %s blocs.\n' "$split_input" "$SPLIT_NUM_BLOCKS"
+    "$PYTHON_BIN" "$SPLITTER" \
+      --input "$split_input" \
+      --output "$BLOCKS_DIR" \
+      --num-blocks "$SPLIT_NUM_BLOCKS" \
+      --export-binary \
+      --overlap-max-fraction "$SPLIT_OVERLAP_MAX_FRACTION"
+    [[ -s "$BLOCKS_DIR/manifest.json" ]] || die "Le découpeur n'a pas produit manifest.json."
+  fi
+}
+if [[ "$mode" != block ]]; then
+  prepare_blocks
+fi
+if [[ "$mode" == block ]]; then
+  lidar_pipeline_hook check --workspace "$LIDAR_WORKSPACE" \
+    --model "$RAW_SPARSE_DIR" --images "$IMAGES_DIR"
+fi
+
+[[ "$mode" != prepare ]] || {
+  printf '[pipeline] Préparation terminée : %s\n' "$BLOCKS_DIR"
+  exit 0
+}
+
+if [[ "$mode" == block ]]; then
+  if [[ "$COLMAP_METHOD" == hloc ]]; then
+    "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_equirect_views.py" \
+      --source "$SFM_DIR/panoramas_source/images" --output "$IMAGES_DIR" \
+      --manifest "$SFM_DIR/projection.json" --size "$SFM_EQUIRECTANGULAR_VIEW_SIZE" --check
+    check_hloc_policy check
+    "$PYTHON_BIN" "$repo_root/tools/georef/georef_gps.py" \
+      --projection "$SFM_DIR/projection.json" --sparse "$SFM_DIR/hloc/sparse/0" \
+      --output "$RAW_SPARSE_DIR" --epsg "$GEOREF_EPSG" --metadata "$DIR/metadata" --check
+  fi
+  if [[ "$SFM_MASKS" == on ]]; then
+    mask_projection_args=()
+    [[ "$COLMAP_METHOD" != hloc ]] || mask_projection_args=(--perspective)
+    "$PYTHON_BIN" "$repo_root/tools/masks/masks.py" --check \
+      ${mask_projection_args[@]+"${mask_projection_args[@]}"}
+  elif [[ -f "$SFM_DIR/sfm_mask_policy.json" ]]; then
+    die "Ce SfM utilise des masques : conserver SFM_MASKS=on ou choisir un nouveau workspace."
+  fi
+  [[ -s "$BLOCKS_DIR/manifest.json" ]] ||
+    die "Découpage absent : lancer --prepare-only avant --block."
+  for file in cameras.bin images.bin points3D.bin; do
+    [[ -s "$BLOCKS_DIR/block_$(printf '%03d' "$block_index")/$file" ]] ||
+      die "Bloc $block_index incomplet : $file absent."
+  done
+  [[ -d "$IMAGES_DIR" ]] || die "Images préparées absentes : $IMAGES_DIR"
+fi
+if [[ "$TRAIN_MASKS" == on ]]; then
+  grep -q '"status": "complete"' "$MASKS_DIR/masks.json" 2>/dev/null ||
+    die "Masques d’entraînement incomplets : $MASKS_DIR (relancer la préparation)."
+fi
+
+mkdir -p "$GS_ROOT"
+first_index="${block_index:-0}"
+last_index="$SPLIT_NUM_BLOCKS"
+[[ "$mode" != block ]] || last_index=$((block_index + 1))
+for ((index = first_index; index < last_index; index++)); do
+  block_id="$(printf '%03d' "$index")"
+  pipeline_report_phase "entraînement et export du bloc $block_id"
+  block_sparse="$BLOCKS_DIR/block_$block_id"
+  block_output="$GS_ROOT/block_$block_id"
+  splat_name="block_${block_id}.splat"
+  printf '\n[pipeline] Entraînement du bloc %s/%s.\n' "$((index + 1))" "$SPLIT_NUM_BLOCKS"
+
+  block_args=(
+    --spirula-bin "$SPIRULA_BIN"
+    --sparse-dir "$block_sparse"
+    --images-dir "$IMAGES_DIR"
+    --output-dir "$block_output"
+    --num-iterations "$TRAIN_NUM_ITER"
+    --name "$splat_name"
+    --python-bin "$PYTHON_BIN"
+    --export-filter-mode "${POSTPROCESS_FILTER_MODE:-apply}"
+  )
+  [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
+    block_args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
+  if [[ "$TRAIN_BACKEND" == spirula ]]; then
+    block_cap="$TRAIN_SP_CAP_MAX"
+    if [[ -n "$TRAIN_SP_SPLATS_PER_IMAGE" ]]; then
+      block_images="$(od -An -t u8 -N 8 "$block_sparse/images.bin" | tr -d '[:space:]')"
+      [[ "$block_images" =~ ^[1-9][0-9]*$ ]] ||
+        die "Nombre d'images illisible : $block_sparse/images.bin"
+      block_cap=$((block_images * TRAIN_SP_SPLATS_PER_IMAGE))
+      ((block_cap <= TRAIN_SP_CAP_MAX)) || block_cap="$TRAIN_SP_CAP_MAX"
+      printf '[pipeline] Budget du bloc : %s images × %s = %s splats (plafond %s).\n' \
+        "$block_images" "$TRAIN_SP_SPLATS_PER_IMAGE" "$block_cap" "$TRAIN_SP_CAP_MAX"
+    fi
+    block_args+=(--train-preset "$TRAIN_SP_PRESET" --cap-max "$block_cap")
+    [[ -z "$TRAIN_SP_QUALITY" ]] || block_args+=(--quality "$TRAIN_SP_QUALITY")
+    block_args+=(--distraction-robustness "$TRAIN_SP_DISTRACTION_ROBUSTNESS")
+    [[ -z "$TRAIN_SP_GROWTH_FACTOR" ]] || block_args+=(--growth-factor "$TRAIN_SP_GROWTH_FACTOR")
+    [[ -z "$TRAIN_SP_WARP_SPHERICAL" ]] || block_args+=(--warp-spherical-to-pinhole "$TRAIN_SP_WARP_SPHERICAL")
+    [[ -z "$TRAIN_SP_FLOATER_SUPPRESSION" ]] || block_args+=(--floater-suppression "$TRAIN_SP_FLOATER_SUPPRESSION")
+    [[ -z "$TRAIN_SP_REFINE_STOP_ITER" ]] || block_args+=(--refine-stop-iter "$TRAIN_SP_REFINE_STOP_ITER")
+    [[ -z "$TRAIN_SP_REFINE_STOP_NUM_ITER" ]] || block_args+=(--refine-stop-num-iter "$TRAIN_SP_REFINE_STOP_NUM_ITER")
+    [[ -z "$TRAIN_SP_STEPS_PER_SAVE" ]] || block_args+=(--steps-per-save "$TRAIN_SP_STEPS_PER_SAVE")
+    printf '[pipeline] Ajout de splats jusqu’au pas %s sur %s.\n' "$((growth_stop < TRAIN_NUM_ITER ? growth_stop : TRAIN_NUM_ITER))" "$TRAIN_NUM_ITER"
+  fi
+  [[ "$TRAIN_MASKS" != on ]] || block_args+=(--masks-dir "$MASKS_DIR" --mask-mode "$TRAIN_MASKS_MODE")
+  [[ "$TRAIN_CLEAN" != true ]] || block_args+=(--clean)
+  bash "$script_dir/../../training/train_block.sh" "${block_args[@]}"
+done
+
+printf '\n[pipeline] Terminé. Modèles par bloc : %s/block_*/splats/*.splat\n' "$GS_ROOT"

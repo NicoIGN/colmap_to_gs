@@ -2,7 +2,7 @@
 
 [Retour à la documentation générale](guide_utilisateur.md)
 
-Le [pipeline images](../tools/images_to_splat/README.md) et le
+Le [pipeline images](../tools/libs/README.md) et le
 [pipeline Panoramax](../tools/panoramax/README.md) acceptent
 `TRAIN_BACKEND=nerfstudio`, avec export `.splat` dans les coordonnées COLMAP
 et fusion commune. PyTorch et un GPU NVIDIA/CUDA sont obligatoires.
@@ -32,7 +32,7 @@ Exemple :
 
 ## 1. Objectif
 
-Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi [créer un dataset COLMAP à partir d'images](../tools/preprocess/README.md) et lancer un [serveur local de visualisation](../tools/viewer/README.md).
+Le pipeline transforme un modèle COLMAP en Gaussian Splat entraîné avec Splatfacto, exporté en `.ply`, puis nettoyé. Il peut aussi [créer un dataset COLMAP à partir d'images](../tools/prepare/README.md) et lancer un [serveur local de visualisation](../tools/viewer/README.md).
 
 Flux principal :
 
@@ -46,7 +46,7 @@ dossier d'images
    ├─► colmap_to_transforms.py ─► transforms.json
    ├─► estimate_planes.py      ─► near / far
    ├─► train.sh (Splatfacto)   ─► model3d/splatfacto/<run>/
-   ├─► export_splat_to_ply.sh  ─► model3d/splat.ply
+   ├─► export_nerfstudio.sh     ─► model3d/splat.ply
    └─► clean_ply.sh / clean_ply.py
            (splat.ply + points3D.bin + dataparser_transforms.json)
                  ▼
@@ -403,7 +403,7 @@ Logs SLURM :
 Commande appelée par `run.sh` :
 
 ```bash
-python3 tools/libs/python/colmap_to_transforms.py \
+python3 tools/training/colmap_to_transforms.py \
   --colmap-model <dataset-dir>/colmap/sparse/0 \
   --images-dir   <dataset-dir>/images \
   --output       <dataset-dir>/transforms.json \
@@ -472,21 +472,21 @@ Champs de transformation globale :
 3. Charge `config/config.sh`, puis le profil.
 4. Vérifie le GPU, active Conda si demandé et vérifie la version de Python.
 5. Estime `near` / `far` avec `estimate_planes.py`.
-6. Entraîne Splatfacto avec `tools/libs/scripts/train.sh`.
-7. Exporte le `.ply` avec `tools/postprocess/export_splat_to_ply.sh`.
-8. Nettoie le `.ply` avec `tools/postprocess/clean_ply.sh` et `tools/postprocess/clean_ply.py`.
+6. Entraîne Splatfacto avec `tools/training/backends/train_scene_nerfstudio.sh`.
+7. Exporte le `.ply` avec `tools/export/backends/export_nerfstudio.sh`.
+8. Nettoie le `.ply` avec `tools/export/clean_ply.sh` et `tools/export/clean_ply.py`.
 
 Export :
 
-- `tools/postprocess/export_splat_to_ply.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
+- `tools/export/backends/export_nerfstudio.sh` prend le run le plus récent dans `<output-dir>/model3d/splatfacto/`.
 - Il lance `ns-export gaussian-splat --load-config <run>/config.yml`.
 - Il écrit le `.ply` dans `<output-dir>/model3d/`.
 - Le script peut archiver le run en ZIP : `ZIP_RUN=1` par défaut ; `run.sh` désactive cette option avec `ZIP_RUN=0`.
 
-Nettoyage : `tools/postprocess/clean_ply.sh` appelle `tools/postprocess/clean_ply.py` :
+Nettoyage : `tools/export/clean_ply.sh` appelle `tools/export/clean_ply.py` :
 
 ```bash
-tools/postprocess/clean_ply.sh \
+tools/export/clean_ply.sh \
   --transform <run>/dataparser_transforms.json \
   --points <dataset-dir>/colmap/sparse/0/points3D.bin \
   --in-ply <output-dir>/model3d/splat.ply \
@@ -524,7 +524,7 @@ Tous les scripts peuvent être lancés depuis n'importe quel dossier : les chemi
 
 > ⚠️ Utilise des **chemins absolus** avec `run.sh`. Le script se place dans `tools/libs/scripts/` avant de résoudre les chemins : un chemin relatif est donc interprété depuis `tools/libs/scripts/`. C'est aussi le cas de la valeur par défaut `runs/default`.
 
-L'exécutable [Spirula](../tools/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
+L'exécutable [Spirula](../install/spirula/README.md) est choisi dans cet ordre de priorité : `--spirula-bin`, `SPIRULA_BIN`, `spirula` dans le `PATH`, puis `<dépôt>/../spirula-studio/build/spirula`.
 
 ### Visualisation locale
 
@@ -546,8 +546,8 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 
 - [Guide utilisateur](guide_utilisateur.md).
 - Télécharger des images géolocalisées : [extraction Panoramax par bbox](../tools/panoramax/README.md).
-- Images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](../tools/images_to_splat/README.md).
-- Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeline `.splat` vers 3D Tiles](../tools/splat_to_3dtiles/README.md).
+- Images locales (sous-dossiers optionnels) : [pipeline images vers splat, Bash et Slurm](../tools/libs/README.md).
+- Pour convertir un `.splat` géoréférencé en tileset 3D Tiles, voir le [pipeline `.splat` vers 3D Tiles](../tools/export/export_3dtiles.md).
 
 ### Organisation du dépôt
 
@@ -565,20 +565,18 @@ Arrêt : `Ctrl+C`. Voir le [guide des visualiseurs](../tools/viewer/README.md).
 │   └── estimate_planes.py        # estimation near / far
 ├── scripts
 │   ├── run.sh                     # point d'entrée du pipeline
-│   ├── run_spirula*.sh            # pipelines Spirula
-│   ├── run_spirula_blocks.sh      # découpe SfM et entraînement par blocs
+│   ├── run_panoramax.sh           # découpe SfM et entraînement par blocs
 │   ├── spirula_common.sh          # exécutable Spirula par défaut
 │   ├── train.sh
 │   └── torch_stack_check.sh       # validation PyTorch / CUDA
 └── tools
-    ├── preprocess/                # images, vidéo, géoréférencement, blocs COLMAP
-    ├── postprocess/               # nettoyage, export, fusion, GeoPackage
+    ├── prepare/                   # images, vidéo, blocs COLMAP
+    ├── export/                    # nettoyage, export, fusion, GeoPackage
     ├── viewer/
     │   ├── server.py              # visualiseur PLY / SPLAT
     │   ├── html/                  # interface et modules JavaScript
     │   └── 3dtiles/               # visualiseur CesiumJS + OpenStreetMap
     ├── panoramax/                 # récupération d'images par bbox et EPSG indiqué
-    ├── images_to_splat/           # images locales → splat, Bash et Slurm
     ├── spirula/                   # installation et compilation de Spirula Studio
-    └── splat_to_3dtiles/           # conversion SPLAT → 3D Tiles
+    └── export/                    # export, nettoyage et conversion 3D Tiles (export_3dtiles.py)
 ```

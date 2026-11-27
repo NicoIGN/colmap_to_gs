@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-script_dir="$repo_root/tools/images_to_splat"
-source "$repo_root/tools/libs/scripts/pipeline_postprocess.sh"
+script_dir="$repo_root/tools/libs"
+source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
-source "$repo_root/tools/libs/scripts/georef_phase.sh"
+source "$repo_root/tools/georef/georef.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
@@ -159,12 +159,12 @@ select_sparse
 check_filtered_sparse() {
   [[ -f "$lidar_input/.density_done" && -s "$lidar_input/density_report.json" ]] ||
     die "Filtrage sparse incomplet : relancer --phase prepare."
-  "$PYTHON_BIN" "$script_dir/resume.py" "$lidar_input"
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$lidar_input"
 }
 
 prepare() {
   set_stage "production COLMAP"
-  bash "$repo_root/tools/sfm/run.sh" "$config" --images "$SFM_IMAGES_DIR"
+  bash "$repo_root/tools/sfm/run_standard_images.sh" "$config" --images "$SFM_IMAGES_DIR"
   set_stage "géoréférencement"
   georef_run "$sfm_model"
   georef_lidar_env
@@ -179,7 +179,7 @@ prepare() {
     set_stage "recalage et enrichissement COLMAP LiDAR"
     lidar_pipeline_hook prepare --workspace "$OUTPUT_DIR" --model "$lidar_input" --images "$selected"
   fi
-  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition prepare
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition prepare
   if [[ ! -s "$blocks/manifest.json" ]]; then
     set_stage "découpage COLMAP"
     "$PYTHON_BIN" "$repo_root/tools/sfm/colmap_split_blocks.py" \
@@ -205,7 +205,7 @@ if [[ "$phase" == all || "$phase" == prepare ]]; then
   prepare
 elif [[ "$phase" == mask-setup ]]; then
   set_stage "préparation des entrées pour les masques"
-  "$PYTHON_BIN" "$script_dir/prepare_inputs.py"
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --phase mask-setup
   exit 0
 elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   set_stage "vérification des entrées pour les masques"
@@ -213,12 +213,12 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
     die "Entrées des masques non préparées : relancer le lanceur Slurm."
   set_stage "calcul des masques ${phase#mask-}"
   policy="${phase#mask-}"
-  "$PYTHON_BIN" "$script_dir/../segmentation_masks/masks.py" --policy "$policy"
+  "$PYTHON_BIN" "$script_dir/../masks/masks.py" --policy "$policy"
   exit 0
 else
   set_stage "vérification du workspace"
-  "$PYTHON_BIN" "$script_dir/prepare_inputs.py" --check
-  "$PYTHON_BIN" "$script_dir/resume.py" "$OUTPUT_DIR" --partition check
+  "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check --phase train
+  "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition check
   georef_check "$sfm_model"
   select_sparse
   if [[ "$SFM_FILTER_DENSITY" == true ]]; then
@@ -247,7 +247,7 @@ if [[ "$phase" == all || "$phase" == train-block ]]; then
     [[ -z "${POSTPROCESS_SHAPE_MAX_ASPECT_RATIO:-}" ]] ||
       args+=(--shape-max-aspect-ratio "$POSTPROCESS_SHAPE_MAX_ASPECT_RATIO" --shape-isolation-factor "$POSTPROCESS_SHAPE_ISOLATION_FACTOR")
     [[ "$TRAIN_MASKS" != on ]] || args+=(--masks-dir "$train_masks" --mask-mode "$TRAIN_MASKS_MODE")
-    bash "$repo_root/tools/libs/scripts/run_3dgs_block.sh" "${args[@]}"
+    bash "$repo_root/tools/training/train_block.sh" "${args[@]}"
   done
 fi
 [[ "$phase" != train-block ]] || exit 0

@@ -132,7 +132,7 @@ validate_config() {
           config_error "TRAIN_MASKS_SPIRULA_MODEL doit désigner le checkpoint SAM 3 GGML local."
       else
         [[ -n "${TRAIN_MASKS_MODEL:-}" ]] ||
-          config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/segmentation_masks/install.sh)."
+          config_error "TRAIN_MASKS_MODEL doit désigner le modèle local (tools/masks/install.sh)."
       fi
       [[ -n "$(printf '%s' "${TRAIN_MASKS_LABELS-sky}" | tr -d ',[:space:]')" ]] ||
         config_error "TRAIN_MASKS_LABELS doit contenir au moins un label."

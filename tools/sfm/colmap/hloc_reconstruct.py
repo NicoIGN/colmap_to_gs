@@ -87,8 +87,8 @@ def main():
     image_options = {"camera_model": args.camera_model}
     mapper_options = None
     if args.perspective_view_size:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "preprocess"))
-        from equirectangular_views import FOV_DEGREES
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "prepare"))
+        from prepare_equirect_views import FOV_DEGREES
         size = args.perspective_view_size
         focal = size / (2 * math.tan(math.radians(FOV_DEGREES) / 2))
         camera_mode = pycolmap.CameraMode.SINGLE

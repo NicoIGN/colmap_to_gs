@@ -813,8 +813,8 @@ export function alignCubeToView(forward, rwc) {
   return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
 }
 
-// Coordonnées UV de l'atlas (cf. equirectToCubeAtlas) pour une direction q dans le repère caméra COLMAP.
-function cubeAtlasUv(q) {
+// Face de l'atlas (cf. equirectToCubeAtlas) dont le centre est le plus proche de la direction q.
+function cubeAtlasFace(q) {
   let best = 0;
   let bestDot = -Infinity;
   CUBE_FACES.forEach((face, index) => {
@@ -824,48 +824,74 @@ function cubeAtlasUv(q) {
       best = index;
     }
   });
-  const face = CUBE_FACES[best];
-  const dot = (v) => (q[0] * v[0] + q[1] * v[1] + q[2] * v[2]) / bestDot;
-  const a = dot(face.right);
-  const b = dot(face.down);
-  return [((best % 3) + (a + 1) / 2) / 3, (Math.floor(best / 3) + (b + 1) / 2) / 2];
+  return best;
+}
+
+// UV de l'atlas pour une direction q, projetée sur une face donnée. Clampée à la tuile pour éviter
+// qu'un triangle échantillonne la tuile voisine.
+function cubeAtlasUv(q, faceIndex = cubeAtlasFace(q)) {
+  const face = CUBE_FACES[faceIndex];
+  const denom = Math.max(q[0] * face.center[0] + q[1] * face.center[1] + q[2] * face.center[2], 1e-6);
+  const dot = (v) => (q[0] * v[0] + q[1] * v[1] + q[2] * v[2]) / denom;
+  const clamp = (t) => Math.min(1, Math.max(-1, t));
+  const a = clamp(dot(face.right));
+  const b = clamp(dot(face.down));
+  return [((faceIndex % 3) + (a + 1) / 2) / 3, (Math.floor(faceIndex / 3) + (b + 1) / 2) / 2];
 }
 
 // Cube maillé (CUBE_GRID × CUBE_GRID par face). Chaque sommet reçoit l'UV de la direction de la
 // panorama vue à cet endroit du cube après rotation : la texture suit donc la rotation du cube.
-function panoramaCube(image, radius, orient = null) {
+export function panoramaCube(image, radius, orient = null) {
   const rwc = transpose3(qvecToMat3(image.qvec));
   const rotation = orient ?? rwc;
   // Passage du repère du cube tourné vers le repère caméra COLMAP d'origine (hypothèse H3 : Rᵀ·rwc).
   const toSource = mulMat3(transpose3(rotation), rwc);
   const center = getCameraCenter(image);
   const n = CUBE_GRID;
+  const stride = n + 1;
   const positions = [];
   const uvs = [];
   const indices = [];
   CUBE_FACES.forEach((face) => {
-    const base = positions.length / 3;
+    // Sommets de la grille de la face : position monde et direction source (q) de chaque sommet.
+    const worlds = [];
+    const dirs = [];
     for (let j = 0; j <= n; j++) {
       const b = -1 + (2 * j) / n;
       for (let i = 0; i <= n; i++) {
         const a = -1 + (2 * i) / n;
         const local = [0, 1, 2].map((k) => face.center[k] + a * face.right[k] + b * face.down[k]);
         applyPanoramaYawFix(local);
-        const world = mulMat3Vec3(rotation, local);
-        positions.push(world[0] * radius + center[0], world[1] * radius + center[1], world[2] * radius + center[2]);
-        // Direction de la panorama affichée à cet endroit : rwc·fix(q) = world.
+        worlds.push(mulMat3Vec3(rotation, local));
         const q = mulMat3Vec3(toSource, local);
         applyPanoramaYawFix(q);
-        uvs.push(...cubeAtlasUv(q));
+        dirs.push(q);
       }
     }
+    // Chaque triangle reçoit une seule face d'atlas (celle de son centre) : aucune interpolation
+    // entre deux tuiles, donc pas de couture. Les sommets sont dupliqués par triangle.
+    const emit = (corners) => {
+      const sum = [0, 0, 0];
+      for (const c of corners) {
+        const l = Math.hypot(...dirs[c]);
+        for (let k = 0; k < 3; k++) sum[k] += dirs[c][k] / l;
+      }
+      const atlasFace = cubeAtlasFace(sum);
+      for (const c of corners) {
+        const world = worlds[c];
+        positions.push(world[0] * radius + center[0], world[1] * radius + center[1], world[2] * radius + center[2]);
+        uvs.push(...cubeAtlasUv(dirs[c], atlasFace));
+        indices.push(indices.length);
+      }
+    };
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
-        const v00 = base + j * (n + 1) + i;
+        const v00 = j * stride + i;
         const v10 = v00 + 1;
-        const v01 = v00 + (n + 1);
+        const v01 = v00 + stride;
         const v11 = v01 + 1;
-        indices.push(v00, v10, v11, v00, v11, v01);
+        emit([v00, v10, v11]);
+        emit([v00, v11, v01]);
       }
     }
   });
@@ -1443,6 +1469,9 @@ export function createColmapLayer({
       slot.material.cull = pc.CULLFACE_NONE;
     }
     slot.material.emissiveMap = texture;
+    // Image de frustum : quad plan sans auto-recouvrement, il passe au-dessus des splats.
+    // Les panoramas gardent le test de profondeur (sphère/cube : leurs faces se recouvrent).
+    slot.material.depthTest = !isPanorama(camera);
     applySlotOpacity(slot.material);
 
     const meshInstance = new pc.MeshInstance(mesh, slot.material);

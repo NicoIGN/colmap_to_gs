@@ -18,6 +18,7 @@ import numpy as np
 import pycolmap
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "georef"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from georef_colmap_from_gpx import enu_to_wgs84
 from compare_sparse_geojson import read_gauge_origin

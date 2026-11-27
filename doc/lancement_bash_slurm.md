@@ -11,8 +11,8 @@ Les lanceurs lisent les paramètres `SLURM_*` de la configuration et appellent
 
 Ce guide concerne trois pipelines :
 
-- [Images locales vers Gaussian Splats](../tools/images_to_splat/README.md) :
-  défauts `config/defaults/*.default.sh` et `tools/images_to_splat/config.default.sh`.
+- [Images locales vers Gaussian Splats](../tools/libs/README.md) :
+  défauts `config/defaults/*.default.sh` et `tools/libs/config.default.sh`.
 - [Panoramax vers Gaussian Splats](../tools/panoramax/README.md) :
   défauts `config/defaults/*.default.sh` et `tools/panoramax/config.default.sh` (surcharges utilisateur à côté des défauts).
 - [Nerfstudio / Splatfacto](nerfstudio.md) : lanceur distinct dans
@@ -105,7 +105,7 @@ Quatre blocs simultanés peuvent réserver quatre GPU et quatre fois les CPU/RAM
 configurés. Augmenter le parallélisme ne change pas le budget de chaque bloc.
 
 Les défauts Slurm sont dans [`config/defaults/slurm.default.sh`](../config/defaults/slurm.default.sh),
-et les différences des pipelines dans [images locales](../tools/images_to_splat/config.default.sh)
+et les différences des pipelines dans [images locales](../tools/libs/config.default.sh)
 et [Panoramax](../tools/panoramax/config.default.sh).
 Les réglages Slurm ne réservent aucune ressource en exécution directe.
 `NUM_CPUS` est le même réglage pour les images locales et Panoramax ; il ne
@@ -195,7 +195,7 @@ réutilisés après validation, sans réserver de GPU pour leur génération.
 Les paramètres de ressources doivent correspondre au cluster et aux outils
 réellement installés sur les nœuds.
 
-- [Spirula](../tools/spirula/README.md) : utiliser une compilation Vulkan sous
+- [Spirula](../install/spirula/README.md) : utiliser une compilation Vulkan sous
   Linux ; la disponibilité CUDA/PyTorch seule ne suffit pas. Le pilote NVIDIA
   et son ICD Vulkan doivent être installés.
 - Isolation GPU : Slurm doit isoler les périphériques du job, par exemple par
