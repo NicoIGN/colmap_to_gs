@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Mode GRID des lanceurs launch_images_to_3dgs.sh et launch_panoramax_to_3dgs.sh (--grid).
-# Sourcé, pas exécuté. Local par défaut ; --slurm soumet le même lanceur (--grid) en job Slurm.
+# Sourcé, pas exécuté. Local par défaut ; --slurm soumet un job tableau Slurm (une tâche gpu:1 par
+# dalle, au plus NUM_GPUS tâches simultanées). Chaque tâche relance le lanceur avec --tile INDEX.
 #
 # Chaque dalle est une exécution indépendante du pipeline (images ou Panoramax), calculée avec
 # une marge puis clippée à l'emprise de la dalle. Sorties : GRID_OUTPUT_DIR/splats/<dalle>.splat,
@@ -13,7 +14,7 @@ source "$(dirname -- "${BASH_SOURCE[0]}")/pipeline_slurm.sh"
 # grid_run REPO_ROOT SOURCE CONFIG [--plan-only] [--redo] [--slurm]
 # SOURCE : panoramax | images.
 grid_run() {
-  local repo_root="$1" grid_source="$2" config plan_only=false redo=false slurm=false
+  local repo_root="$1" grid_source="$2" config plan_only=false redo=false slurm=false tile=""
   shift 2
   [[ $# -ge 1 ]] || die "CONFIG requis avec --grid."
   config="$(resolve_path "$1")"
@@ -23,6 +24,8 @@ grid_run() {
       --plan-only) plan_only=true ;;
       --redo) redo=true ;;
       --slurm) slurm=true ;;
+      --tile) [[ $# -ge 2 && "$2" =~ ^[0-9]+$ ]] || die "--tile : indice de dalle entier attendu."
+        tile="$2"; shift ;;
       *) die "Option inconnue avec --grid : $1" ;;
     esac
     shift
@@ -74,14 +77,21 @@ grid_run() {
     return 0
   fi
 
+  [[ -z "$tile" || "$slurm" != true ]] || die "--tile et --slurm sont incompatibles."
+  if [[ -n "$tile" ]]; then
+    (( tile < ${#tile_lines[@]} )) || die "--tile : indice $tile hors plage (0 à $(( ${#tile_lines[@]} - 1 )))."
+    NUM_GPUS=1
+  fi
+
+  # Fait une seule fois à la soumission (les tâches --tile reprennent ces listes).
+  if [[ "$grid_source" == images && -z "$tile" ]]; then
+    python3 "$grid_py" select-images --manifest "$manifest" --images "$SFM_IMAGES_DIR" --output-dir "$work_dir" \
+      ${GRID_POSITIONS:+--positions "$GRID_POSITIONS"} ${SFM_SP_METRIC_POSITIONS:+--global-metric "$SFM_SP_METRIC_POSITIONS"}
+  fi
+
   if [[ "$slurm" == true ]]; then
     grid_submit "$repo_root" "$grid_source" "$config" "$log_dir" "$redo" "${#tile_lines[@]}"
     return 0
-  fi
-
-  if [[ "$grid_source" == images ]]; then
-    python3 "$grid_py" select-images --manifest "$manifest" --images "$SFM_IMAGES_DIR" --output-dir "$work_dir" \
-      ${GRID_POSITIONS:+--positions "$GRID_POSITIONS"} ${SFM_SP_METRIC_POSITIONS:+--global-metric "$SFM_SP_METRIC_POSITIONS"}
   fi
 
   local redo_args=()
@@ -134,13 +144,14 @@ EOF
     echo "[OK] $id -> $splat_out"
   }
 
-  rm -f "$log_dir/failed.txt"
+  [[ -n "$tile" ]] || rm -f "$log_dir/failed.txt"
   local pids=() worker index id x0 y0 x1 y1 cx0 cy0 cx1 cy1
   for worker in $(seq 0 $((NUM_GPUS - 1))); do
     (
       export CUDA_VISIBLE_DEVICES="$worker"
       for index in "${!tile_lines[@]}"; do
         (( index % NUM_GPUS == worker )) || continue
+        [[ -z "$tile" || "$index" == "$tile" ]] || continue
         IFS=$'\t' read -r id x0 y0 x1 y1 cx0 cy0 cx1 cy1 <<< "${tile_lines[$index]}"
         mkdir -p "$work_dir/$id"
         echo "[START] $id (GPU $worker) : log $work_dir/$id/tile.log" | tee -a "$log_dir/grid.log"
@@ -162,28 +173,30 @@ EOF
   echo "[TERMINE] $(ls "$splat_dir" | wc -l) dalle(s) exportée(s) dans $splat_dir"
 }
 
-# Job Slurm : relance le lanceur --grid en local dans l'allocation (un GPU par worker).
+# Job Slurm en tableau : une tâche par dalle (gpu:1), au plus NUM_GPUS tâches simultanées.
+# Chaque tâche relance le lanceur --grid --tile <indice> en local dans son allocation.
 grid_submit() {
   local repo_root="$1" grid_source="$2" config="$3" log_dir="$4" redo="$5" tiles="$6"
-  local launcher="$repo_root/scripts/launch_${grid_source}_to_3dgs.sh" gres="gpu:$NUM_GPUS" cmd
+  local launcher="$repo_root/scripts/launch_${grid_source}_to_3dgs.sh" gres="gpu:1" cmd
   command -v sbatch >/dev/null || die "sbatch introuvable."
-  [[ -z "${SLURM_GPU_TYPE:-}" ]] || gres="gpu:$SLURM_GPU_TYPE:$NUM_GPUS"
+  [[ -z "${SLURM_GPU_TYPE:-}" ]] || gres="gpu:$SLURM_GPU_TYPE:1"
 
   printf -v cmd 'export OMP_NUM_THREADS=%q PYTHONUNBUFFERED=1; ' "$NUM_CPUS"
   [[ -z "${SLURM_ENV_SETUP:-}" ]] || printf -v cmd '%s. %q; ' "$cmd" "$SLURM_ENV_SETUP"
   printf -v cmd '%sbash %q %q --grid' "$cmd" "$launcher" "$config"
   [[ "$redo" != true ]] || cmd+=" --redo"
+  cmd+=' --tile "$SLURM_ARRAY_TASK_ID"'
 
-  local sbatch_args=(--parsable --nodes=1 --ntasks=1 --export=ALL "--job-name=grid-$grid_source"
-    "--partition=$SLURM_PARTITION" "--cpus-per-task=$((NUM_CPUS * NUM_GPUS))" "--gres=$gres"
-    "--mem=$SLURM_MEMORY" "--time=$SLURM_TIME_LIMIT" "--chdir=$PWD"
-    "--output=$log_dir/slurm-%j.out" "--error=$log_dir/slurm-%j.out")
+  local sbatch_args=(--parsable --array="0-$((tiles - 1))%$NUM_GPUS" --nodes=1 --ntasks=1 --export=ALL
+    "--job-name=grid-$grid_source" "--partition=$SLURM_PARTITION" "--cpus-per-task=$NUM_CPUS"
+    "--gres=$gres" "--mem=$SLURM_MEMORY" "--time=$SLURM_TIME_LIMIT" "--chdir=$PWD"
+    "--output=$log_dir/slurm-%A_%a.out" "--error=$log_dir/slurm-%A_%a.out")
   [[ -z "${SLURM_ACCOUNT:-}" ]] || sbatch_args+=("--account=$SLURM_ACCOUNT")
   [[ -z "${SLURM_QOS:-}" ]] || sbatch_args+=("--qos=$SLURM_QOS")
 
   PIPELINE_SUBMITTED_JOBS=()
   pipeline_submit_job "grid-$grid_source" "${sbatch_args[@]}" "--wrap=$cmd" || die "Soumission GRID échouée."
-  echo "[slurm] GRID $grid_source : job $PIPELINE_JOB_ID, $tiles dalle(s)."
+  echo "[slurm] GRID $grid_source : job tableau $PIPELINE_JOB_ID, $tiles dalle(s), $NUM_GPUS simultanée(s) au maximum."
   echo "[slurm] Progression par dalle : $log_dir/grid.log ; logs dalle : $(dirname -- "$log_dir")/work/<dalle>/tile.log"
   echo "[slurm] Suivi : squeue -j $PIPELINE_JOB_ID ; annulation : scancel $PIPELINE_JOB_ID"
 }
