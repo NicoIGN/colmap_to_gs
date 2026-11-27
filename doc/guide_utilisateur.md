@@ -27,14 +27,14 @@ Trois pipelines sont disponibles :
 - Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG`
 - Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG`
 
-Paramètres utiles :
+Paramètres utiles : la liste complète, par phase, est dans [la section 3](#3-préparer-les-données-et-lancer-un-calcul).
 
 Pour un pipeline images, seuls `SFM_IMAGES_DIR` (dossier des photos, chemin absolu) et `OUTPUT_DIR` (dossier de sortie, chemin absolu, distinct du dossier d'images) sont obligatoires. Les autres paramètres ont des valeurs par défaut, lues dans `config/defaults/*.default.sh` (et `tools/libs/config.default.sh` pour le pipeline images) ; la configuration utilisateur ne contient que les surcharges. Selon le cas, il faut aussi définir les chemins propres au site : `SPIRULA_BIN` (binaire Spirula), `TRAIN_MASKS_SPIRULA_MODEL` (masques), `EXPORT_SPLAT_NAME` (export) et `SLURM_PARTITION` (avec `--slurm`).
 
 Options communes à ces pipelines :
 
 - `--slurm` : soumet le calcul à Slurm, depuis le nœud de connexion. Sans `--slurm`, le calcul tourne sur la machine courante.
-- `--grid` : découpe une zone géoréférencée en dalles traitées indépendamment (voir `GRID_*` ci-dessous).
+- `--grid` : découpe une zone géoréférencée en dalles traitées indépendamment (voir les variables `GRID_*` dans [la section 3](#3-préparer-les-données-et-lancer-un-calcul)).
 - `--wait` : avec `--slurm`, attend la fin du calcul. Sans lui, un retour réussi confirme seulement la soumission.
 - `--prepare-only` : avec `--slurm`, arrête après la préparation des données.
 - `--redo` : refait la phase demandée ; ne s'utilise qu'avec `--phase train-block` ou `--phase merge`, sinon le script refuse.
