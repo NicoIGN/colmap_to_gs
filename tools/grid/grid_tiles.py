@@ -183,9 +183,12 @@ def select_from_metric(images_dir, epsg, tiles, metric_file):
     to_projected = Transformer.from_crs("EPSG:4978", f"EPSG:{epsg}", always_xy=True)
 
     selection = {tile["id"]: [] for tile in tiles}
-    paths = sorted(p for p in Path(images_dir).iterdir() if p.suffix in IMAGE_SUFFIXES)
-    if not paths:
-        raise ValueError(f"Aucune image JPEG dans {images_dir}")
+    if images_dir is None:
+        paths = [Path(name) for name in sorted(rows)]
+    else:
+        paths = sorted(p for p in Path(images_dir).iterdir() if p.suffix in IMAGE_SUFFIXES)
+        if not paths:
+            raise ValueError(f"Aucune image JPEG dans {images_dir}")
     skipped = 0
     step = max(1, len(paths) // 10)
     for index, path in enumerate(paths, 1):
@@ -284,11 +287,11 @@ def main():
     plan.add_argument("--margin", type=float, required=True)
     plan.add_argument("--output", required=True, type=Path)
     plan.add_argument("--out-crs", dest="out_crs", type=int, default=4326, help="EPSG de tiles.geojson (défaut 4326)")
-    plan.add_argument("--images", type=Path, default=None,
-                      help="Dossier d'images : ajoute image_count à chaque dalle (manifest et tiles.geojson)")
-    plan.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes pour --images")
     plan.add_argument("--global-metric", type=Path, default=None,
-                      help="SFM_SP_METRIC_POSITIONS global pour --images, si --positions est absent")
+                      help="SFM_SP_METRIC_POSITIONS : ajoute image_count à chaque dalle (sans --images)")
+    plan.add_argument("--images", type=Path, default=None,
+                      help="Dossier d'images : compte seulement les images présentes (avec --global-metric ou --positions)")
+    plan.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes, avec --images")
 
     tiles = sub.add_parser("tiles", help="Afficher les dalles (TSV) pour le driver shell")
     tiles.add_argument("--manifest", required=True, type=Path)
@@ -305,12 +308,19 @@ def main():
     if args.command == "plan":
         bbox = parse_bbox(args.bbox)
         tiles = plan_tiles(bbox, args.tile_size, args.overlap, args.margin)
-        if args.images is not None:
+        if args.images is not None or args.global_metric is not None:
             positions = read_positions(args.positions) if args.positions else None
-            selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric)
+            if args.images is None and positions is not None:
+                raise ValueError("--positions nécessite --images (sans lui, utiliser --global-metric)")
+            if args.images is None and args.global_metric is None:
+                raise ValueError("--images ou --global-metric requis pour compter les images")
+            if args.images is None:
+                selection = select_from_metric(None, args.epsg, tiles, args.global_metric)
+            else:
+                selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric)
             for tile in tiles:
                 tile["image_count"] = len(selection[tile["id"]])
-            print(f"[plan] images par dalle comptées depuis {args.images}", flush=True)
+            print("[plan] images par dalle comptées", flush=True)
         write_manifest(args.output, bbox, args.epsg, args.tile_size, args.overlap, args.margin, tiles)
         geojson_path = args.output.parent / "tiles.geojson"
         geojson = tiles_geojson(tiles, args.epsg, args.out_crs)

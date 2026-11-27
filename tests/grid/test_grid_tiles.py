@@ -89,6 +89,18 @@ class SelectImagesTest(unittest.TestCase):
             selection = select_images(folder, 2154, self.TILES, {"pano_1.jpg": (lat, lon, 0.0)})
             self.assertEqual([p.name for paths in selection.values() for p in paths], ["pano_1.jpg"])
 
+    def test_metric_positions_count_without_images_dir(self):
+        from tools.sfm.spirula.gps_to_metric_positions import to_enu
+        lat, lon = self._lat_lon_centre()
+        origin = (lat + 0.01, lon - 0.01, 0.0)
+        east, north, up = to_enu(lat, lon, 0.0, origin)
+        with tempfile.TemporaryDirectory() as folder:
+            metric = Path(folder) / "metric.txt"
+            metric.write_text(f"# origin_lat {origin[0]}\n# origin_lon {origin[1]}\n# origin_alt 0\n"
+                              f"pano_1.jpg {east} {north} {up}\npano_far.jpg 1e6 1e6 0\n", encoding="utf-8")
+            selection = select_from_metric(None, 2154, self.TILES, metric)
+            self.assertEqual([p.name for paths in selection.values() for p in paths], ["pano_1.jpg"])
+
     def test_metric_positions_select_without_reading_exif(self):
         from tools.sfm.spirula.gps_to_metric_positions import to_enu
         lat, lon = self._lat_lon_centre()
