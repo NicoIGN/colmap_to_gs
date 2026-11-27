@@ -6,7 +6,7 @@ emprise de calcul `compute` = core élargie de GRID_MARGIN. Le calcul utilise `c
 splat clippé sur `core` est exporté. Les dalles adjacentes se recouvrent de GRID_OVERLAP mètres.
 
 Sous-commandes :
-  plan            manifest.json : dalles, emprises core et compute ; tiles.geojson : emprises core (même dossier) dans --crs (défaut 4326)
+  plan            manifest.json : dalles, emprises core et compute ; tiles.geojson : emprises core (même dossier) dans --crs-out (défaut 4326)
   select-images   liens symboliques des images dont la position (fichier --positions, sinon GPS EXIF) est dans l'emprise compute
 """
 
@@ -267,12 +267,12 @@ def main():
 
     plan = sub.add_parser("plan", help="Écrire le manifest des dalles")
     plan.add_argument("--bbox", required=True)
-    plan.add_argument("--epsg", type=int, required=True)
+    plan.add_argument("--crs-in", dest="epsg", type=int, required=True, help="EPSG de la bbox et des dalles")
     plan.add_argument("--tile-size", type=float, required=True)
     plan.add_argument("--overlap", type=float, required=True)
     plan.add_argument("--margin", type=float, required=True)
     plan.add_argument("--output", required=True, type=Path)
-    plan.add_argument("--crs", type=int, default=4326, help="EPSG de tiles.geojson (défaut 4326)")
+    plan.add_argument("--crs-out", dest="crs_out", type=int, default=4326, help="EPSG de tiles.geojson (défaut 4326)")
 
     tiles = sub.add_parser("tiles", help="Afficher les dalles (TSV) pour le driver shell")
     tiles.add_argument("--manifest", required=True, type=Path)
@@ -291,7 +291,7 @@ def main():
         tiles = plan_tiles(bbox, args.tile_size, args.overlap, args.margin)
         write_manifest(args.output, bbox, args.epsg, args.tile_size, args.overlap, args.margin, tiles)
         geojson_path = args.output.parent / "tiles.geojson"
-        geojson = tiles_geojson(tiles, args.epsg, args.crs)
+        geojson = tiles_geojson(tiles, args.epsg, args.crs_out)
         geojson_path.write_text(json.dumps(geojson, ensure_ascii=False) + "\n", encoding="utf-8")
         print(f"[OK] {len(tiles)} dalle(s) : {args.output} ; emprises : {geojson_path}")
     elif args.command == "tiles":

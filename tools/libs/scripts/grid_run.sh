@@ -66,7 +66,7 @@ grid_run() {
   local splat_dir="$GRID_OUTPUT_DIR/splats" manifest="$GRID_OUTPUT_DIR/manifest.json"
   mkdir -p "$work_dir" "$log_dir" "$splat_dir"
 
-  python3 "$grid_py" plan --bbox "$GRID_BBOX" --epsg "$GRID_CRS" --tile-size "$GRID_TILE_SIZE" \
+  python3 "$grid_py" plan --bbox "$GRID_BBOX" --crs-in "$GRID_CRS" --tile-size "$GRID_TILE_SIZE" \
     --overlap "$GRID_OVERLAP" --margin "$GRID_MARGIN" --output "$manifest"
   local tile_lines=()
   mapfile -t tile_lines < <(python3 "$grid_py" tiles --manifest "$manifest")
