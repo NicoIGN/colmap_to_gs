@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -49,6 +50,20 @@ class GeorefPositionsTest(unittest.TestCase):
         centers = np.array([aligned.images[i + 1].projection_center() for i in range(len(self.local))])
         np.testing.assert_allclose(centers, self.target, atol=1e-6)
         self.assertEqual(check_gauge(output / "gauge.txt", self.origin), [])
+
+    def test_quasi_straight_horizontal_trajectory_uses_known_vertical(self):
+        sparse, output = self.root / "sparse", self.root / "georef"
+        along = np.arange(12) * 10.0
+        target = np.column_stack([along, 0.02 * np.sin(along), 0.01 * np.cos(along)]) + [1000, 2000, 50]
+        scale, yaw, offset = 0.5, np.radians(30), np.array([3.0, -7.0, 2.0])
+        rotation = np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
+        local = (target - offset) @ rotation / scale
+        write_sparse(sparse, local)
+        run(sparse, output, self.write_positions(target), 2154, 20.0)
+        aligned = pycolmap.Reconstruction(str(output))
+        centers = np.array([aligned.images[i + 1].projection_center() for i in range(len(local))])
+        np.testing.assert_allclose(centers, target, atol=1e-6)
+        self.assertEqual(json.loads((output / "georef_stats.json").read_text())["alignment"], "vertical")
 
     def test_inconsistent_positions_are_rejected(self):
         sparse, output = self.root / "sparse", self.root / "georef"

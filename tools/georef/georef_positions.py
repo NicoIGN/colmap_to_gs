@@ -52,6 +52,29 @@ def match_position(image_name, positions):
     return None
 
 
+# Étalement minimal (relatif au principal) des positions ENU. En dessous, roulis et tangage ne
+# sont pas observables : la verticale SfM est alors supposée égale à la verticale ENU.
+MIN_SPREAD_RATIO = 0.05
+
+
+def fit_vertical_sim(local, target):
+    """Similitude avec Z SfM = Z ENU : estime échelle, lacet et translation seulement."""
+    lxy = local[:, :2] - local[:, :2].mean(axis=0)
+    txy = target[:, :2] - target[:, :2].mean(axis=0)
+    if not np.any(lxy) or not np.any(txy):
+        raise ValueError("Positions confondues : recalage impossible.")
+    angle = math.atan2(float(np.sum(lxy[:, 0] * txy[:, 1] - lxy[:, 1] * txy[:, 0])),
+                       float(np.sum(lxy * txy)))
+    cos, sin = math.cos(angle), math.sin(angle)
+    rotation_xy = np.array([[cos, -sin], [sin, cos]])
+    scale = float(np.sum((lxy @ rotation_xy.T) * txy) / np.sum(lxy * lxy))
+    translation_xy = target[:, :2].mean(axis=0) - scale * rotation_xy @ local[:, :2].mean(axis=0)
+    translation_z = float(np.mean(target[:, 2] - scale * local[:, 2]))
+    rotation = np.eye(3)
+    rotation[:2, :2] = rotation_xy
+    return scale, rotation, np.append(translation_xy, translation_z)
+
+
 def run(sparse, output, positions_path, epsg, max_error):
     origin = read_header_origin(positions_path)
     if origin is None:
@@ -78,11 +101,19 @@ def run(sparse, output, positions_path, epsg, max_error):
         raise ValueError(f"{len(names)} image(s) du sparse trouvée(s) dans les positions (au moins 3 requises).")
     local = np.array([np.median(centers[name], axis=0) for name in names])
     target = np.array([positions[name] for name in names])
-    for points in (local, target):
-        singular = np.linalg.svd(points - points.mean(axis=0), compute_uv=False)
-        if singular[0] <= 0 or singular[1] < singular[0] * 1e-6:
-            raise ValueError("Trajectoire des positions ou du SfM quasi rectiligne : recalage ambigu.")
-    sim = robust_sim3(local, target)
+    spread = np.linalg.svd(target - target.mean(axis=0), compute_uv=False)
+    if spread[0] <= 0:
+        raise ValueError("Positions confondues : recalage impossible.")
+    if spread[1] < MIN_SPREAD_RATIO * spread[0] or spread[2] < MIN_SPREAD_RATIO * spread[0]:
+        alignment = "vertical"
+        sim = fit_vertical_sim(local, target)
+    else:
+        alignment = "sim3"
+        for points in (local, target):
+            singular = np.linalg.svd(points - points.mean(axis=0), compute_uv=False)
+            if singular[0] <= 0 or singular[1] < singular[0] * 1e-6:
+                raise ValueError("Trajectoire des positions ou du SfM quasi rectiligne : recalage ambigu.")
+        sim = robust_sim3(local, target)
     residuals = np.linalg.norm(apply_sim(local, sim) - target, axis=1)
     rmse = float(np.sqrt(np.mean(residuals ** 2)))
     maximum = float(residuals.max())
@@ -95,10 +126,11 @@ def run(sparse, output, positions_path, epsg, max_error):
     ref = {"type": "local_ENU", "units": "meters", "axes": ["East", "North", "Up"],
            "origin_lat_lon_height": list(origin), "origin_projected": projection_reference(list(origin), epsg),
            "altitude_georeferenced": True}
-    report = {"status": "georeferenced", "mode": "positions", "position_count": len(names),
-              "rmse_m": rmse, "max_error_m": maximum, "output_reference": ref}
+    report = {"status": "georeferenced", "mode": "positions", "alignment": alignment,
+              "position_count": len(names), "rmse_m": rmse, "max_error_m": maximum, "output_reference": ref}
     (output / "georef_stats.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
-    print(f"[GPS] Recalage positions : {len(names)} images, RMS {rmse:.2f} m ; repère ENU local.", flush=True)
+    print(f"[GPS] Recalage positions ({alignment}) : {len(names)} images, RMS {rmse:.2f} m ; repère ENU local.",
+          flush=True)
 
 
 def main():
