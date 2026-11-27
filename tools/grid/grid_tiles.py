@@ -223,13 +223,15 @@ def main():
             print("\t".join(str(v) for v in fields))
     else:
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+        print(f"[select-images] {len(manifest['tiles'])} dalle(s), lecture des positions...", flush=True)
         positions = read_positions(args.positions) if args.positions else None
         selection = select_images(args.images, manifest["epsg"], manifest["tiles"], positions)
+        print("[select-images] sélection faite, écriture des liens et positions...", flush=True)
         counts = link_selection(selection, args.output_dir)
         write_tile_metric(selection, manifest["tiles"], manifest["epsg"], args.output_dir,
                           positions, args.global_metric)
         for tile_id, count in counts.items():
-            print(f"[OK] {tile_id} : {count} image(s)")
+            print(f"[OK] {tile_id} : {count} image(s)", flush=True)
 
 
 if __name__ == "__main__":

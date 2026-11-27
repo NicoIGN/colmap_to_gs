@@ -207,7 +207,7 @@ grid_submit() {
       "--output=$log_dir/prep-%j.out" "--error=$log_dir/prep-%j.out" "--wrap=$prep_cmd" ||
       die "Soumission GRID (préparation) échouée."
     dependency=("--dependency=afterok:$PIPELINE_JOB_ID" --kill-on-invalid-dep=yes)
-    echo "[slurm] GRID images : préparation job $PIPELINE_JOB_ID (select-images)."
+    echo "[slurm] GRID images : préparation job $PIPELINE_JOB_ID (select-images) ; log : $log_dir/prep-$PIPELINE_JOB_ID.out"
   fi
 
   local sbatch_args=("--array=0-$((tiles - 1))%$NUM_GPUS" "--job-name=grid-$grid_source"
