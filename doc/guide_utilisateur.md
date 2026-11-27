@@ -146,7 +146,7 @@ Valeurs par défaut exactes : `bash scripts/helper.sh <PARAMÈTRE>`.
 
 **Nettoyage**
 - `POSTPROCESS_CLEANER` : `contextual` (filtres géométriques, défaut) ou `cleangs` (nettoyage du ciel par vues multiples, CUDA requis).
-- `POSTPROCESS_FILTER_MODE` : `diagnostic` (exporte les candidats rejetés sans les retirer), `apply` (les retire) ou `off`.
+- `POSTPROCESS_FILTER_MODE` : `diagnostic` (exporte les candidats rejetés sans les retirer), `apply` (les retire, défaut) ou `off`.
 
 **Export**
 - `MERGE_STRENGTH` : multiplicateur de taille des voxels de fusion (`1.0` par défaut).
