@@ -22,8 +22,8 @@ Depuis la racine du dépôt, après adaptation de la configuration :
 
 | Pipeline | Exécution directe | Soumission Slurm |
 |---|---|---|
-| Images locales | `bash scripts/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG` |
-| Panoramax | `bash scripts/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` |
+| Images locales | `bash scripts/local/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG` |
+| Panoramax | `bash scripts/local/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` |
 
 **Le lanceur Slurm se lance avec Bash, pas avec `sbatch`** :
 le lanceur soumet lui-même un job de préparation, un tableau de jobs (un par

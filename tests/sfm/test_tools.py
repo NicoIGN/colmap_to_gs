@@ -127,7 +127,7 @@ class ConversionTest(unittest.TestCase):
         )
         for script, args in (
             (ROOT / "tools/sfm/run_standard_images.sh", []),
-            (ROOT / "scripts/images_to_3dgs.sh", ["--phase", "prepare"]),
+            (ROOT / "scripts/local/images_to_3dgs.sh", ["--phase", "prepare"]),
         ):
             result = subprocess.run(["bash", str(script), str(config), *args],
                                     capture_output=True, text=True, timeout=30)

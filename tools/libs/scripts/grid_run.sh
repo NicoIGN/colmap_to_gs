@@ -133,9 +133,9 @@ EOF
 
     echo "[tile] $id : pipeline $grid_source démarré ($(date '+%F %T'))"
     if [[ "$grid_source" == panoramax ]]; then
-      bash "$repo_root/scripts/panoramax_to_3dgs.sh" "$tile_conf" all "${redo_args[@]}" || return 1
+      bash "$repo_root/scripts/local/panoramax_to_3dgs.sh" "$tile_conf" all "${redo_args[@]}" || return 1
     else
-      bash "$repo_root/scripts/images_to_3dgs.sh" "$tile_conf" --images "$tile_dir/images" "${redo_args[@]}" || return 1
+      bash "$repo_root/scripts/local/images_to_3dgs.sh" "$tile_conf" --images "$tile_dir/images" "${redo_args[@]}" || return 1
     fi
     echo "[tile] $id : pipeline terminé, export et découpe ($(date '+%F %T'))"
 

@@ -61,7 +61,7 @@ tâche relance le lanceur avec `--tile <indice>`. Il exige `SLURM_PARTITION`, `S
 Progression : `GRID_OUTPUT_DIR/logs/grid.log` ; logs par dalle : `GRID_OUTPUT_DIR/work/<dalle>/tile.log`.
 
 Une configuration qui contient des `GRID_*` est refusée par les lanceurs sans `--grid` et par
-les scripts `images_to_3dgs.sh` / `panoramax_to_3dgs.sh`. Le contrôle lit le fichier de
+les scripts `local/images_to_3dgs.sh` / `local/panoramax_to_3dgs.sh`. Le contrôle lit le fichier de
 configuration : des `GRID_*` définis dans un fichier sourcé ne sont pas détectés.
 
 Sorties, dans `GRID_OUTPUT_DIR` (défaut `OUTPUT_DIR/grid`) :

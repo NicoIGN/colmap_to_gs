@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 script_dir="$repo_root/tools/panoramax"
 source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
@@ -9,7 +9,7 @@ source "$repo_root/tools/libs/scripts/redo.sh"
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge] [--redo]
+  bash scripts/local/panoramax_to_3dgs.sh /path/to/config.sh [all|prepare|train-block INDEX|merge] [--redo]
 
 The config is a trusted Bash file. It overrides config/defaults/*.default.sh and
 tools/panoramax/config.default.sh, which are always loaded first; only set the variables you want to change.

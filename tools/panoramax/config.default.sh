@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Défauts du pipeline Panoramax : seulement les clés propres et le différentiel
 # par rapport à config/defaults/*.default.sh. Chargé après ces défauts communs.
-# Exécution locale : bash scripts/panoramax_to_3dgs.sh config.sh
+# Exécution locale : bash scripts/local/panoramax_to_3dgs.sh config.sh
 # Slurm : bash tools/panoramax/launch.sh config.sh [--wait]
 # Validation sans calcul : bash tools/panoramax/validate_config.sh config.sh slurm
 #

@@ -54,9 +54,9 @@ Le projet propose 3 pipelines complets : à partir d'une vidéo, d'un dossier d'
 Exemples de lancement :
 
 ```bash
-bash scripts/images_to_3dgs.sh /chemin/config_image.sh
-bash scripts/videos_to_3dgs.sh /chemin/config_video.sh
-bash scripts/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
+bash scripts/local/images_to_3dgs.sh /chemin/config_image.sh
+bash scripts/local/videos_to_3dgs.sh /chemin/config_video.sh
+bash scripts/local/panoramax_to_3dgs.sh /chemin/config_panoramax.sh
 ```
 
 Sur Slurm, remplacer par `scripts/launch_<pipeline>.sh`, lancé avec `bash` depuis le nœud de connexion. Voir le [guide Bash / Slurm](doc/lancement_bash_slurm.md) et [les exemples de configuration](scripts/README.md).

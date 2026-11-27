@@ -35,8 +35,8 @@ class SlurmLaunchTest(unittest.TestCase):
             'SPLIT_NUM_BLOCKS=2\nTRAIN_NUM_ITER=3\nTRAIN_SP_CAP_MAX=1000\nTRAIN_SP_PRESET=3dgs\n'
             'NUM_CPUS=16\nPYTHON_BIN=job-python\n'
         )
-        pipeline_script = self.pipeline_dir.parents[1] / "scripts/panoramax_to_3dgs.sh"
-        pipeline_script.parent.mkdir()
+        pipeline_script = self.pipeline_dir.parents[1] / "scripts/local/panoramax_to_3dgs.sh"
+        pipeline_script.parent.mkdir(parents=True)
         pipeline_script.write_text(
             '#!/usr/bin/env bash\nset -euo pipefail\nsource "$1"\n'
             'mkdir -p "$OUTPUT_DIR"\n'

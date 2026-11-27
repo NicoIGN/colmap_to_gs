@@ -25,7 +25,7 @@ Cette commande prépare le modèle sans entraîner de 3DGS. Pour produire aussi
 un splat avec une configuration compatible :
 
 ```bash
-bash "$GIT_ROOT/scripts/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/scripts/local/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 ```
 
 Voir les [exemples des pipelines images et vidéo, en direct ou sur Slurm](../scripts/README.md).

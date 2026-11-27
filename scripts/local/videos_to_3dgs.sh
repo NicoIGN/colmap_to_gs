@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 source "$repo_root/tools/libs/scripts/shell_helpers.sh"
+source "$repo_root/tools/libs/scripts/redo.sh"
 
 usage() {
-  echo "Usage : bash scripts/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
+  echo "Usage : bash scripts/local/videos_to_3dgs.sh CONFIG --video VIDEO [--video VIDEO ...] --num-frames N [--width W --height H] [--frames-dir DIR] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
-videos=(); num_frames=""; width=0; height=0; frames_dir=""; redo=false; pipeline_args=()
+videos=(); num_frames=""; width=0; height=0; frames_dir=""; redo=false; phase=all; pipeline_args=()
 while (($#)); do
   if [[ "$1" == --redo ]]; then
     redo=true; shift; continue
@@ -21,14 +22,16 @@ while (($#)); do
     --width) width="$2" ;;
     --height) height="$2" ;;
     --frames-dir) frames_dir="$2" ;;
-    --phase|--block) pipeline_args+=("$1" "$2") ;;
+    --phase) phase="$2"; pipeline_args+=("$1" "$2") ;;
+    --block) pipeline_args+=("$1" "$2") ;;
     *) usage >&2; exit 1 ;;
   esac
   shift 2
 done
-[[ "$redo" != true ]] || pipeline_args+=(--redo)
+[[ "$redo" != true ]] || { redo_check_phase "$phase"; pipeline_args+=(--redo); }
 
 [[ -f "$config" ]] || die "Configuration introuvable : $config"
+reject_grid_params "$config"
 ((${#videos[@]} > 0)) || die "Indiquer au moins une vidéo avec --video."
 for video in "${videos[@]}"; do
   [[ -f "$video" ]] || die "Vidéo introuvable : $video"
@@ -51,7 +54,7 @@ done
 
 mkdir -p "$frames_dir"
 echo "[prévalidation] vérification de la configuration et des ressources des masques avant extraction."
-bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" --validate-only
+bash "$repo_root/scripts/local/images_to_3dgs.sh" "$config" --images "$frames_dir" --validate-only
 report_workspace="$(bash -c 'source "$1" >/dev/null; printf "%s" "$OUTPUT_DIR"' _ "$config")"
 mkdir -p "$report_workspace/logs"
 frames_lock="$report_workspace/.frames.lock"
@@ -105,4 +108,4 @@ fi
 
 echo "[3dgs] lancement du pipeline images_to_3dgs"
 pipeline_report_phase "pipeline images_to_3dgs"
-bash "$repo_root/scripts/images_to_3dgs.sh" "$config" --images "$frames_dir" ${pipeline_args[@]+"${pipeline_args[@]}"}
+bash "$repo_root/scripts/local/images_to_3dgs.sh" "$config" --images "$frames_dir" ${pipeline_args[@]+"${pipeline_args[@]}"}

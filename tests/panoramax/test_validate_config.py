@@ -51,7 +51,7 @@ class ValidateConfigTest(unittest.TestCase):
         self.assertIn("HLOC_CAMERA_MODEL", result.stderr)
 
     def test_invalid_geometry_rejected_local_and_slurm(self):
-        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, """
 SFM_MAX_ERROR=0
@@ -85,7 +85,7 @@ SFM_SP_BA_LOSS_PARAM=nan
         return result, root
 
     def test_typo_stops_local_and_slurm_before_side_effects(self):
-        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
             with self.subTest(script=script):
                 result, root = self.execute(script, 'SFM_SP_MATCHER="lightblue"\n')
                 self.assertEqual(result.returncode, 1)
@@ -194,7 +194,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
         required = {"OUTPUT_DIR", "PANORAMAX_BBOX", "PANORAMAX_BBOX_EPSG", "SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER",
                     "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET", "SLURM_ENV_SETUP", "SLURM_CONDA_ENV",
                     "SLURM_CONDA_BASE", "MVK_CONFIG_LOG_LEVEL"}
-        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
             defaults = re.findall(
                 r'^([A-Z][A-Z0-9_]*)="\$\{\1:-([^}]*)\}"$',
                 (ROOT / script).read_text(), re.MULTILINE)
@@ -212,7 +212,7 @@ TRAIN_SP_REFINE_STOP_NUM_ITER=""
         for name in ("SPLIT_NUM_BLOCKS", "TRAIN_NUM_ITER", "TRAIN_SP_CAP_MAX", "TRAIN_SP_PRESET"):
             self.assertEqual(values[name], block_defaults[name], name)
         self.assertIn('NUM_CPUS="${NUM_CPUS:-2}"',
-                      (ROOT.parents[1] / "scripts/panoramax_to_3dgs.sh").read_text())
+                      (ROOT.parents[1] / "scripts/local/panoramax_to_3dgs.sh").read_text())
         self.assertEqual(values["NUM_CPUS"], "2")
 
     def test_explicit_empty_labels_never_fall_back_to_sky(self):
@@ -321,7 +321,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
         for value in ("", "low", "medium", "high", "ultra"):
             result, _ = self.execute("validate_config.sh", f'TRAIN_SP_QUALITY="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_SP_QUALITY="maximum"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_QUALITY", result.stderr)
@@ -332,7 +332,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
             result, _ = self.execute("validate_config.sh",
                                     f'TRAIN_SP_DISTRACTION_ROBUSTNESS="{value}"\n')
             self.assertEqual(result.returncode, 0, result.stderr)
-        for script in ("../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+        for script in ("../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
             result, root = self.execute(script, 'TRAIN_SP_DISTRACTION_ROBUSTNESS="invalid"\n')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("TRAIN_SP_DISTRACTION_ROBUSTNESS", result.stderr)
@@ -346,7 +346,7 @@ SFM_SP_PAIR_MAX_DISTANCE=30
                 ("PANORAMAX_BBOX_LAMBERT93", "PANORAMAX_BBOX"),
                 ("GROWTH_FACTOR", "TRAIN_SP_GROWTH_FACTOR"),
                 ("SAM_ACCEPT_LICENSE", "MASKS_ACCEPT_LICENSE")):
-            for script in ("validate_config.sh", "../../scripts/panoramax_to_3dgs.sh", "launch.sh"):
+            for script in ("validate_config.sh", "../../scripts/local/panoramax_to_3dgs.sh", "launch.sh"):
                 result, root = self.execute(script, f'{old}=""\n')
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"ancien paramètre {old} interdit", result.stderr)

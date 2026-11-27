@@ -352,7 +352,7 @@ if "--wait" in args:
 
     def run_pipeline(self, *args, slurm=False):
         return subprocess.run(
-            ["bash", str(SOURCE / "launch.sh" if slurm else SOURCE.parents[1] / "scripts" / "images_to_3dgs.sh"),
+            ["bash", str(SOURCE / "launch.sh" if slurm else SOURCE.parents[1] / "scripts" / "local" / "images_to_3dgs.sh"),
              str(self.config), *args],
             env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
 

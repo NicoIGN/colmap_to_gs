@@ -6,11 +6,11 @@
 
 Ce dossier transforme les photos Panoramax d'une bbox en un fichier `.splat`
 3D Gaussian Splatting. Il propose deux niveaux : le pipeline complet
-(`scripts/panoramax_to_3dgs.sh`) et le téléchargement seul (`download.sh`).
+(`scripts/local/panoramax_to_3dgs.sh`) et le téléchargement seul (`download.sh`).
 
 ### Pipeline complet bbox → `.splat`
 
-`scripts/panoramax_to_3dgs.sh` exécute :
+`scripts/local/panoramax_to_3dgs.sh` exécute :
 
 ```text
 Bbox + configuration
@@ -111,7 +111,7 @@ Le manifeste associe les identifiants Panoramax aux fichiers locaux.
 
 ### Entraînement Spirula ou Nerfstudio
 
-Le pipeline global est `scripts/panoramax_to_3dgs.sh`.
+Le pipeline global est `scripts/local/panoramax_to_3dgs.sh`.
 Le SfM géoréférencé utilise Spirula par défaut ; `TRAIN_BACKEND=nerfstudio` permet
 d'entraîner les mêmes blocs avec Splatfacto. PyTorch et NVIDIA/CUDA sont alors
 obligatoires, sans repli CPU/Metal. Les masques d'entraînement sont produits
@@ -507,9 +507,9 @@ processus parallèles ; sous Slurm, il sert aussi à `--cpus-per-task`.
 Les étapes sont également accessibles individuellement, avec la même config :
 
 ```bash
-bash scripts/panoramax_to_3dgs.sh config.sh prepare
-bash scripts/panoramax_to_3dgs.sh config.sh train-block 0  # indices 0 à N-1
-bash scripts/panoramax_to_3dgs.sh config.sh merge
+bash scripts/local/panoramax_to_3dgs.sh config.sh prepare
+bash scripts/local/panoramax_to_3dgs.sh config.sh train-block 0  # indices 0 à N-1
+bash scripts/local/panoramax_to_3dgs.sh config.sh merge
 ```
 
 Seule `prepare` télécharge et découpe ; chaque tâche `train-block` ne modifie

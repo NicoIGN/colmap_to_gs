@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 script_dir="$repo_root/tools/libs"
 source "$repo_root/tools/export/export.sh"
 source "$repo_root/tools/libs/scripts/redo.sh"
@@ -8,7 +8,7 @@ source "$repo_root/tools/georef/georef.sh"
 source "$repo_root/tools/sfm/sparse_density.sh"
 
 usage() {
-  echo "Usage : bash scripts/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
+  echo "Usage : bash scripts/local/images_to_3dgs.sh CONFIG [--images DIR] [--validate-only] [--phase all|prepare|mask-setup|mask-sfm|mask-train|train-block|merge] [--block INDEX] [--redo]"
 }
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
@@ -207,7 +207,7 @@ select_models_for_blocks() {
     --parent "$OUTPUT_DIR" --config "$config" --indices "$selected_models")"
   while IFS= read -r ws_config; do
     set_stage "pipeline du sous-workspace $(dirname -- "$ws_config")"
-    PIPELINE_MODEL_WORKSPACE=true bash "$repo_root/scripts/images_to_3dgs.sh" "$ws_config" \
+    PIPELINE_MODEL_WORKSPACE=true bash "$repo_root/scripts/local/images_to_3dgs.sh" "$ws_config" \
       --images "$SFM_IMAGES_DIR" --phase all
   done <<< "$configs_text"
   merge_model_splats "$selected_models"

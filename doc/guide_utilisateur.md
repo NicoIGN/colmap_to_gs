@@ -25,9 +25,9 @@ Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun e
 
 | Pipeline | Entrée | Direct | Slurm |
 |---|---|---|---|
-| Images locales | dossier de photos | `bash scripts/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --wait` |
-| Vidéo | fichier vidéo | `bash scripts/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
-| Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --wait` |
+| Images locales | dossier de photos | `bash scripts/local/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --wait` |
+| Vidéo | fichier vidéo | `bash scripts/local/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
+| Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/local/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --wait` |
 | GRID Panoramax | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --grid` | non |
 | GRID images | dossier géoréférencé découpé en dalles (`GRID_*`) | `bash scripts/launch_images_to_3dgs.sh CONFIG --grid` | non |
 
@@ -44,7 +44,7 @@ EOF
 Lancement standard, sur la machine courante :
 
 ```bash
-bash "$GIT_ROOT/scripts/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
+bash "$GIT_ROOT/scripts/local/images_to_3dgs.sh" "$DATA_ROOT/config-images.sh"
 ```
 
 Lancement Slurm, depuis le nœud de connexion : soumission puis attente de la fin.

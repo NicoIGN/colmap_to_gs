@@ -8,7 +8,7 @@ import unittest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SCRIPT = REPO_ROOT / "scripts" / "panoramax_to_3dgs.sh"
+SCRIPT = REPO_ROOT / "scripts" / "local" / "panoramax_to_3dgs.sh"
 
 
 def write_harness(root, extra_config=""):

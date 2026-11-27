@@ -25,7 +25,7 @@ SFM_MASKS=off
 ```
 
 Puis lancer `bash tools/sfm/run_standard_images.sh CONFIG` pour le modèle COLMAP
-seul, ou `bash scripts/images_to_3dgs.sh CONFIG` pour le pipeline complet.
+seul, ou `bash scripts/local/images_to_3dgs.sh CONFIG` pour le pipeline complet.
 
 ## Entrées
 

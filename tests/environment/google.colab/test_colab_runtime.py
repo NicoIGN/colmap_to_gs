@@ -414,7 +414,7 @@ class ColabRuntimeTests(unittest.TestCase):
             SPLIT_NUM_BLOCKS="1",
         )
         config.write_text("".join(f"{key}={shlex.quote(value)}\n" for key, value in settings.items()))
-        command = ["bash", str(project / "scripts/images_to_3dgs.sh"), str(config),
+        command = ["bash", str(project / "scripts/local/images_to_3dgs.sh"), str(config),
                    "--phase", "prepare"]
         for _ in range(2):
             result = subprocess.run(command, capture_output=True, text=True, timeout=60)
@@ -438,8 +438,8 @@ class ColabRuntimeTests(unittest.TestCase):
                               PROJECT=project, RUN=run, SAVE_ON_SUCCESS=False,
                               in_env=lambda command: command, run=lambda command, *args, **kw: commands.append(command)))
         self.assertEqual(commands, [
-            ["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "prepare"],
-            ["bash", "scripts/images_to_3dgs.sh", str(config), "--phase", "all"],
+            ["bash", "scripts/local/images_to_3dgs.sh", str(config), "--phase", "prepare"],
+            ["bash", "scripts/local/images_to_3dgs.sh", str(config), "--phase", "all"],
         ])
 
     def test_remove_locks_requires_resume_before_creating_workspace(self):

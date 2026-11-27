@@ -56,7 +56,7 @@ Depuis la racine du dépôt :
 
 ```bash
 # Exécution directe dans le shell : tous les blocs s'exécutent successivement.
-bash scripts/images_to_3dgs.sh /chemin/config.sh
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh
 
 # Slurm : ressources SLURM_* de la configuration, un GPU par bloc actif.
 bash scripts/launch_images_to_3dgs.sh /chemin/config.sh
@@ -117,13 +117,13 @@ Les masques SfM peuvent aussi garder une politique indépendante.
 Exemple d’invocation :
 
 ```bash
-bash scripts/images_to_3dgs.sh /chemin/config.sh
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh
 ```
 
-Depuis des vidéos, `scripts/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
+Depuis des vidéos, `scripts/local/videos_to_3dgs.sh` extrait `--num-frames` images nettes et réparties sur la durée (un sous-dossier par vidéo si plusieurs), puis lance ce pipeline :
 
 ```bash
-bash scripts/videos_to_3dgs.sh /chemin/config.sh --video a.mp4 --video b.mp4 --num-frames 200 [--width 1920 --height 1080] [--frames-dir DOSSIER] [--phase prepare]
+bash scripts/local/videos_to_3dgs.sh /chemin/config.sh --video a.mp4 --video b.mp4 --num-frames 200 [--width 1920 --height 1080] [--frames-dir DOSSIER] [--phase prepare]
 ```
 
 Les images sont écrites dans `--frames-dir` (par défaut `frames_3dgs` à côté de la première vidéo) et régénérées à chaque appel.
@@ -437,17 +437,17 @@ résolus et les dates des fichiers entrent aussi dans la comparaison.
 Ne pas supprimer `inputs.json` pour contourner ce diagnostic.
 
 ```bash
-bash scripts/images_to_3dgs.sh /chemin/config.sh --phase prepare
-bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
-bash scripts/images_to_3dgs.sh /chemin/config.sh --phase merge
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh --phase prepare
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 0
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh --phase merge
 ```
 
 Pour refaire une phase sans nettoyer à la main, ajouter `--redo` à `train-block`
 (avec `--block N` ou sans, pour tous les blocs) ou à `merge` :
 
 ```bash
-bash scripts/images_to_3dgs.sh /chemin/config.sh --phase merge --redo
-bash scripts/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 1 --redo
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh --phase merge --redo
+bash scripts/local/images_to_3dgs.sh /chemin/config.sh --phase train-block --block 1 --redo
 ```
 
 Les entrées de fusion (brut et `.export_done` de chaque bloc) sont vérifiées avant tout
