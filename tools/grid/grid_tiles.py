@@ -290,7 +290,7 @@ def main():
     plan.add_argument("--global-metric", type=Path, default=None,
                       help="SFM_SP_METRIC_POSITIONS : ajoute image_count à chaque dalle (sans --images)")
     plan.add_argument("--images", type=Path, default=None,
-                      help="Dossier d'images : compte seulement les images présentes (avec --global-metric ou --positions)")
+                      help="Dossier d'images : compte les images, positions via --positions, sinon --global-metric, sinon GPS EXIF")
     plan.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes, avec --images")
 
     tiles = sub.add_parser("tiles", help="Afficher les dalles (TSV) pour le driver shell")
