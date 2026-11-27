@@ -21,17 +21,25 @@ spécialisés liés ci-dessous.
 
 ### 2.3. Utiliser un pipeline complet
 
-Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun se lance avec `scripts/launch_*_to_3dgs.sh` (à lancer avec `bash`, pas `sbatch`) : sans `--slurm`, le calcul tourne sur la machine courante ; avec `--slurm`, il est soumis à Slurm, depuis le nœud de connexion.
+Trois pipelines sont disponibles :
 
-Pipeline images : `bash scripts/launch_images_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+- Images : `bash scripts/launch_images_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+- Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+- Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
 
-Pipeline vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+Options communes à ces pipelines :
 
-Pipeline Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+- `--slurm` : soumet le calcul à Slurm, depuis le nœud de connexion. Sans `--slurm`, le calcul tourne sur la machine courante.
+- `--grid` : découpe une zone géoréférencée en dalles traitées indépendamment (voir `GRID_*` ci-dessous).
+- `--wait` : avec `--slurm`, attend la fin du calcul. Sans lui, un retour réussi confirme seulement la soumission.
+- `--prepare-only` : avec `--slurm`, arrête après la préparation des données.
+- `--redo` : refait la phase demandée ; ne s'utilise qu'avec `--phase train-block` ou `--phase merge`, sinon le script refuse.
+
+Le lanceur, lancé avec `bash` (pas `sbatch`), choisit le mode : sans `--slurm`, le calcul tourne sur la machine courante ; avec `--slurm`, il est soumis à Slurm.
 
 `--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`.
 
-Le mode `--grid` découpe une zone géoréférencée en dalles traitées indépendamment. Il se combine avec `--slurm` comme les autres pipelines : `--grid` choisit le découpage, `--slurm` choisit où le calcul s'exécute.
+`--grid` et `--slurm` se combinent : `--grid` choisit le découpage, `--slurm` choisit où le calcul s'exécute.
 
 Exemple de configuration (images locales), qui ne contient que les surcharges :
 
