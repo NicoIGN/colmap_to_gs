@@ -41,21 +41,13 @@ EOF
 
 Pour le mode `--grid`, les variables `GRID_*` se règlent dans la configuration :
 
-```bash
-# Emprise globale xmin,ymin,xmax,ymax dans le SCR GRID_CRS.
-GRID_BBOX="651000,6864000,652000,6865000"
-GRID_CRS="2154"
-# Taille d'une dalle et recouvrement entre dalles voisines, en mètres.
-GRID_TILE_SIZE="200"
-GRID_OVERLAP="20"
-# Marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté.
-GRID_MARGIN="30"
-# Positions WGS84 externes (mode images, optionnel) : lignes `nom_image lat lon [alt]`.
-# Prioritaires sur les GPS EXIF ; sans fichier, chaque image doit avoir un GPS EXIF.
-GRID_POSITIONS=""
-# Sortie du mode GRID ; vide = $OUTPUT_DIR/grid.
-GRID_OUTPUT_DIR=""
-```
+- `GRID_BBOX` : emprise globale `xmin,ymin,xmax,ymax` dans le SCR `GRID_CRS` (ex. `"651000,6864000,652000,6865000"`).
+- `GRID_CRS` : SCR de `GRID_BBOX` et des dalles, en mètres (défaut `2154`).
+- `GRID_TILE_SIZE` : taille d'une dalle, en mètres (ex. `"200"`).
+- `GRID_OVERLAP` : recouvrement entre dalles voisines, en mètres (défaut `0`).
+- `GRID_MARGIN` : marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté (défaut `0`).
+- `GRID_POSITIONS` : positions WGS84 externes, mode images, optionnel, lignes `nom_image lat lon [alt]`. Prioritaires sur les GPS EXIF ; sans fichier, chaque image doit avoir un GPS EXIF.
+- `GRID_OUTPUT_DIR` : sortie du mode GRID ; vide = `$OUTPUT_DIR/grid`.
 
 Lancement standard, sur la machine courante :
 
