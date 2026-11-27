@@ -249,8 +249,10 @@ elif [[ "$phase" == mask-sfm || "$phase" == mask-train ]]; then
   "$PYTHON_BIN" "$script_dir/../masks/masks.py" --policy "$policy"
   exit 0
 else
-  [[ ! -f "$OUTPUT_DIR/.models_done" || "${PIPELINE_MODEL_WORKSPACE:-false}" == true ]] ||
-    die "Blocs par modèle : les phases par bloc s'appliquent aux sous-workspaces models/N (lancer --phase all sur le workspace parent)."
+  if [[ -f "$OUTPUT_DIR/.models_done" && "${PIPELINE_MODEL_WORKSPACE:-false}" != true ]]; then
+    echo "[modèles] Blocs traités dans models/N ; phase $phase sans effet sur le parent."
+    exit 0
+  fi
   set_stage "vérification du workspace"
   "$PYTHON_BIN" "$repo_root/tools/prepare/prepare_images.py" --check --phase train
   "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$OUTPUT_DIR" --partition check

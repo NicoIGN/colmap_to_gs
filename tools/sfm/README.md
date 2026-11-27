@@ -171,8 +171,9 @@ dans ]0 ; 1]). Le manifeste est `sfm/representative_models.json`.
   `inputs.json` sont partagés.
 - Pas de géoréférencement : seul le modèle le plus fourni parmi les éligibles est gardé
   (`--largest-only`).
-- Après un fan-out, le workspace parent est marqué `.models_done` ; les phases `check`,
-  `train-block` et `merge` y sont refusées : lancer `--phase all` sur le parent ou sur `models/N/`.
+- Après un fan-out, le workspace parent est marqué `.models_done`. Les phases `train-block` et
+  `merge` du parent sortent sans effet (les blocs sont dans `models/N/`) ; les jobs Slurm du
+  lanceur restent donc sans erreur. Lancer `--phase all` sur chaque `models/N/` pour l'entraînement.
 - Si `sparse/1` n'existe pas, le comportement reste celui d'un modèle unique.
 
 Outils : `representative_models.py` (sélection, `--largest-only`) et `model_workspaces.py`
