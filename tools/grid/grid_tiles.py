@@ -318,16 +318,17 @@ def main():
     if args.command == "plan":
         bbox = parse_bbox(args.bbox)
         tiles = plan_tiles(bbox, args.tile_size, args.overlap, args.margin)
-        if args.images is not None or args.global_metric is not None:
-            positions = read_positions(args.positions) if args.positions else None
+        positions_file, global_metric = args.positions, args.global_metric
+        if positions_file is not None and read_header_origin(positions_file) is not None:
+            global_metric, positions_file = global_metric or positions_file, None
+        if args.images is not None or global_metric is not None:
+            positions = read_positions(positions_file) if positions_file else None
             if args.images is None and positions is not None:
-                raise ValueError("--positions nécessite --images (sans lui, utiliser --global-metric)")
-            if args.images is None and args.global_metric is None:
-                raise ValueError("--images ou --global-metric requis pour compter les images")
+                raise ValueError("--positions WGS84 nécessite --images (ou passer le fichier SFM_SP_METRIC_POSITIONS)")
             if args.images is None:
-                selection = select_from_metric(None, args.epsg, tiles, args.global_metric, args.verbose)
+                selection = select_from_metric(None, args.epsg, tiles, global_metric, args.verbose)
             else:
-                selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric, args.verbose)
+                selection = run_selection(args.images, args.epsg, tiles, positions, global_metric, args.verbose)
             for tile in tiles:
                 tile["image_count"] = len(selection[tile["id"]])
             print("[plan] images par dalle comptées", flush=True)
