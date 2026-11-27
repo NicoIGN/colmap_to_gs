@@ -58,12 +58,13 @@ SPIRULA_IMAGE_LINE = re.compile(r"^image (\d+) : (\S+) -- ")
 SPIRULA_PER_IMAGE_LINE = re.compile(r"^\s*\d+/\d+\s+\S+\s+Points : ")
 
 
-def relay_spirula_output(stream, names, verbose=False):
+def relay_spirula_output(stream, names, verbose=False, out=None):
     """Print Spirula's output; per-image lines only in verbose mode, with the final frame index."""
+    out = out or sys.stdout
     for line in stream:
         if SPIRULA_PER_IMAGE_LINE.match(line):
             if verbose:
-                print(line, end="", flush=True)
+                print(line, end="", file=out, flush=True)
             continue
         match = SPIRULA_IMAGE_LINE.match(line)
         if match:
@@ -72,7 +73,7 @@ def relay_spirula_output(stream, names, verbose=False):
             if match.group(2) in names:
                 index, source = names[match.group(2)]
                 line = f"image {index} : {source} -- " + line[match.end():]
-        print(line, end="", flush=True)
+        print(line, end="", file=out, flush=True)
 
 
 def shard_bounds(total, jobs):
@@ -296,11 +297,12 @@ class SpirulaSegmenter:
         running = {}
         try:
             for shard, (_, _, command) in enumerate(shards):
-                process = subprocess.Popen(command, stdout=subprocess.PIPE, text=True,
-                                           encoding="utf-8", errors="replace")
-                threading.Thread(target=relay_spirula_output,
-                                 args=(process.stdout, shard_names[shard], self.args.verbose),
-                                 daemon=True).start()
+                process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                           text=True, encoding="utf-8", errors="replace")
+                for stream, out in ((process.stdout, sys.stdout), (process.stderr, sys.stderr)):
+                    threading.Thread(target=relay_spirula_output,
+                                     args=(stream, shard_names[shard], self.args.verbose, out),
+                                     daemon=True).start()
                 running[shard] = process
             while running:
                 for shard in list(running):
