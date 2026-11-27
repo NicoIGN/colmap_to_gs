@@ -23,15 +23,11 @@ spécialisés liés ci-dessous.
 
 Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun se lance avec `scripts/launch_*_to_3dgs.sh` (à lancer avec `bash`, pas `sbatch`) : sans `--slurm`, le calcul tourne sur la machine courante ; avec `--slurm`, il est soumis à Slurm, depuis le nœud de connexion.
 
-| Pipeline | Entrée | Machine courante | Slurm |
-|---|---|---|---|
-| Images locales | dossier de photos | `bash scripts/launch_images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` |
-| Vidéo | fichier vidéo | `bash scripts/launch_videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` |
-| Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` |
-| GRID Panoramax | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --grid` | `... --grid --slurm` |
-| GRID images | dossier géoréférencé découpé en dalles (`GRID_*`) | `bash scripts/launch_images_to_3dgs.sh CONFIG --grid` | `... --grid --slurm` |
+Exemples de lancement : `bash scripts/launch_images_to_3dgs.sh CONFIG` (machine courante) ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` (Slurm). Même schéma pour `launch_videos_to_3dgs.sh` et `launch_panoramax_to_3dgs.sh`.
 
-`--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`. `--grid` et `--slurm` sont indépendants : le premier découpe la zone en dalles, le second choisit où le calcul s'exécute.
+`--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`.
+
+Le mode `--grid` découpe une zone géoréférencée en dalles traitées indépendamment. Il se combine avec `--slurm` comme les autres pipelines : `--grid` choisit le découpage, `--slurm` choisit où le calcul s'exécute.
 
 Exemple de configuration (images locales), qui ne contient que les surcharges :
 
@@ -41,6 +37,24 @@ cat > "$DATA_ROOT/config-images.sh" <<'EOF'
 SFM_IMAGES_DIR="/chemin/images"
 OUTPUT_DIR="/chemin/sortie"
 EOF
+```
+
+Pour le mode `--grid`, les variables `GRID_*` se règlent dans la configuration :
+
+```bash
+# Emprise globale xmin,ymin,xmax,ymax dans le SCR GRID_CRS.
+GRID_BBOX="651000,6864000,652000,6865000"
+GRID_CRS="2154"
+# Taille d'une dalle et recouvrement entre dalles voisines, en mètres.
+GRID_TILE_SIZE="200"
+GRID_OVERLAP="20"
+# Marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté.
+GRID_MARGIN="30"
+# Positions WGS84 externes (mode images, optionnel) : lignes `nom_image lat lon [alt]`.
+# Prioritaires sur les GPS EXIF ; sans fichier, chaque image doit avoir un GPS EXIF.
+GRID_POSITIONS=""
+# Sortie du mode GRID ; vide = $OUTPUT_DIR/grid.
+GRID_OUTPUT_DIR=""
 ```
 
 Lancement standard, sur la machine courante :
