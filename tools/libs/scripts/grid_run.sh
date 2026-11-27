@@ -195,7 +195,7 @@ grid_submit() {
   [[ -z "${SLURM_QOS:-}" ]] || common+=("--qos=$SLURM_QOS")
 
   PIPELINE_SUBMITTED_JOBS=()
-  local dependency=()
+  local dependency=() prep_job=""
   if [[ "$grid_source" == images ]]; then
     local prep_cmd select_cmd
     printf -v select_cmd 'python3 %q select-images --manifest %q --images %q --output-dir %q' \
@@ -208,10 +208,12 @@ grid_submit() {
     pipeline_submit_job "grid-prep" "${common[@]}" --job-name=grid-prep --cpus-per-task=1 --gres=none \
       "--output=$log_dir/prep-%j.out" "--error=$log_dir/prep-%j.out" "--wrap=$prep_cmd" ||
       die "Soumission GRID (préparation) échouée."
-    dependency=("--dependency=afterok:$PIPELINE_JOB_ID" --kill-on-invalid-dep=yes)
-    echo "[slurm] GRID images : préparation job $PIPELINE_JOB_ID (select-images) ; log : $log_dir/prep-$PIPELINE_JOB_ID.out"
+    prep_job="$PIPELINE_JOB_ID"
+    dependency=("--dependency=afterok:$prep_job" --kill-on-invalid-dep=yes)
+    echo "[slurm] GRID images : préparation job $prep_job (select-images) ; log : $log_dir/prep-$prep_job.out"
   fi
 
+  touch "$log_dir/grid.log"
   local sbatch_args=("--array=0-$((tiles - 1))%$NUM_GPUS" "--job-name=grid-$grid_source"
     "--cpus-per-task=$NUM_CPUS" "--gres=$gres" "${dependency[@]}"
     "--output=$log_dir/slurm-%A_%a.out" "--error=$log_dir/slurm-%A_%a.out")
@@ -219,7 +221,11 @@ grid_submit() {
     die "Soumission GRID échouée."
   local job_array="$PIPELINE_JOB_ID"
   echo "[slurm] GRID $grid_source : job tableau $job_array, $tiles dalle(s), $NUM_GPUS simultanée(s) au maximum."
-  echo "[slurm] Progression par dalle : $log_dir/grid.log ; logs dalle : $(dirname -- "$log_dir")/work/<dalle>/tile.log"
-  echo "[slurm] Suivi : squeue -j $job_array ; annulation : scancel $job_array"
+  echo "[slurm] Progression par dalle : $log_dir/grid.log (rempli au démarrage des dalles) ; logs dalle : $work_dir/<dalle>/tile.log"
+  if [[ -n "$prep_job" ]]; then
+    echo "[slurm] Suivi : squeue -j $prep_job,$job_array ; annulation : scancel $prep_job $job_array"
+  else
+    echo "[slurm] Suivi : squeue -j $job_array ; annulation : scancel $job_array"
+  fi
 }
 
