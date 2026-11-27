@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import tempfile
 import unittest
@@ -50,6 +52,24 @@ class GeorefPositionsTest(unittest.TestCase):
         centers = np.array([aligned.images[i + 1].projection_center() for i in range(len(self.local))])
         np.testing.assert_allclose(centers, self.target, atol=1e-6)
         self.assertEqual(check_gauge(output / "gauge.txt", self.origin), [])
+        self.assertFalse(json.loads((output / "georef_stats.json").read_text())["method_gap_alert"])
+
+    def test_tilted_sfm_triggers_method_gap_alert(self):
+        sparse, output = self.root / "sparse", self.root / "georef"
+        target = np.array([[0, 0, 0], [20, 0, 3], [40, 10, -2], [30, 30, 4], [5, 25, 1], [10, 5, 6]], float)
+        target += [1000, 2000, 50]
+        angle = np.radians(10)
+        tilt = np.array([[1, 0, 0], [0, np.cos(angle), -np.sin(angle)], [0, np.sin(angle), np.cos(angle)]])
+        local = ((target - [1000, 2000, 50]) / 2.0) @ tilt
+        write_sparse(sparse, local)
+        positions = self.write_positions(target)
+        with contextlib.redirect_stdout(io.StringIO()) as printed:
+            run(sparse, output, positions, 2154, 100.0)
+        stats = json.loads((output / "georef_stats.json").read_text())
+        self.assertEqual(stats["alignment"], "sim3")
+        self.assertTrue(stats["method_gap_alert"])
+        self.assertGreater(stats["vertical_tilt_deg"], 5)
+        self.assertIn("[GPS][ALERTE]", printed.getvalue())
 
     def test_quasi_straight_horizontal_trajectory_uses_known_vertical(self):
         sparse, output = self.root / "sparse", self.root / "georef"

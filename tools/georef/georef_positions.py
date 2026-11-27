@@ -55,6 +55,16 @@ def match_position(image_name, positions):
 # Étalement minimal (relatif au principal) des positions ENU. En dessous, roulis et tangage ne
 # sont pas observables : la verticale SfM est alors supposée égale à la verticale ENU.
 MIN_SPREAD_RATIO = 0.05
+# Écart maximal (relatif à l'étalement principal) entre le recalage libre et le recalage à verticale
+# imposée. Au-delà, la verticale du SfM n'est pas celle de l'ENU ou le recalage libre est instable.
+MAX_METHOD_GAP_RATIO = 0.05
+
+
+def method_gap(local, free_sim, vertical_sim):
+    """Écart maximal (m) entre les deux recalages appliqués aux centres SfM, et inclinaison de la verticale SfM."""
+    gap = float(np.max(np.linalg.norm(apply_sim(local, free_sim) - apply_sim(local, vertical_sim), axis=1)))
+    tilt = math.degrees(math.acos(min(1.0, max(-1.0, float(free_sim[1][2, 2])))))
+    return gap, tilt
 
 
 def fit_vertical_sim(local, target):
@@ -114,6 +124,12 @@ def run(sparse, output, positions_path, epsg, max_error):
             if singular[0] <= 0 or singular[1] < singular[0] * 1e-6:
                 raise ValueError("Trajectoire des positions ou du SfM quasi rectiligne : recalage ambigu.")
         sim = robust_sim3(local, target)
+    report_check = {}
+    if alignment == "sim3":
+        gap, tilt = method_gap(local, sim, fit_vertical_sim(local, target))
+        gap_ratio = float(gap / spread[0])
+        report_check = {"method_gap_m": gap, "method_gap_ratio": gap_ratio, "vertical_tilt_deg": tilt,
+                        "method_gap_alert": bool(gap_ratio > MAX_METHOD_GAP_RATIO)}
     residuals = np.linalg.norm(apply_sim(local, sim) - target, axis=1)
     rmse = float(np.sqrt(np.mean(residuals ** 2)))
     maximum = float(residuals.max())
@@ -127,10 +143,16 @@ def run(sparse, output, positions_path, epsg, max_error):
            "origin_lat_lon_height": list(origin), "origin_projected": projection_reference(list(origin), epsg),
            "altitude_georeferenced": True}
     report = {"status": "georeferenced", "mode": "positions", "alignment": alignment,
-              "position_count": len(names), "rmse_m": rmse, "max_error_m": maximum, "output_reference": ref}
+              "position_count": len(names), "rmse_m": rmse, "max_error_m": maximum, "output_reference": ref,
+              **report_check}
     (output / "georef_stats.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
     print(f"[GPS] Recalage positions ({alignment}) : {len(names)} images, RMS {rmse:.2f} m ; repère ENU local.",
           flush=True)
+    if report_check.get("method_gap_alert"):
+        print(f"[GPS][ALERTE] Recalage libre et recalage à verticale imposée divergent : écart "
+              f"{report_check['method_gap_m']:.2f} m ({report_check['method_gap_ratio'] * 100:.1f} % de l'étalement), "
+              f"verticale SfM inclinée de {report_check['vertical_tilt_deg']:.1f}° par rapport à l'ENU. "
+              f"Vérifier que le SfM est gravité-aligné et que les positions sont cohérentes.", flush=True)
 
 
 def main():

@@ -151,7 +151,9 @@ Si l'étalement des positions est inférieur à 5 % sur un axe (trajectoire quas
 roulis et tangage ne sont pas observables : le recalage suppose alors que l'axe Z du sparse est la
 verticale (Z SfM = Z ENU) et n'estime que échelle, lacet et translation (`"alignment": "vertical"`
 dans `georef_stats.json`, `"sim3"` sinon). Cette hypothèse n'est valable que si le sparse est
-gravité-aligné.
+gravité-aligné. Dans le cas `sim3`, le recalage à verticale imposée est aussi calculé : si l'écart entre les deux
+dépasse 5 % de l'étalement, une alerte `[GPS][ALERTE]` est affichée et `method_gap_alert` vaut `true`
+dans `georef_stats.json` (écart en m, ratio et inclinaison de la verticale SfM sont aussi enregistrés).
 Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_DIR`.
 
 ## 4. Fonctionnement interne
