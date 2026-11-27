@@ -27,9 +27,19 @@ Trois pipelines sont disponibles :
 - Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG`
 - Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG`
 
-Paramètres obligatoires :
+Paramètres utiles :
 
 Pour un pipeline images, seuls `SFM_IMAGES_DIR` (dossier des photos, chemin absolu) et `OUTPUT_DIR` (dossier de sortie, chemin absolu, distinct du dossier d'images) sont obligatoires. Les autres paramètres ont des valeurs par défaut, lues dans `config/defaults/*.default.sh` (et `tools/libs/config.default.sh` pour le pipeline images) ; la configuration utilisateur ne contient que les surcharges. Selon le cas, il faut aussi définir les chemins propres au site : `SPIRULA_BIN` (binaire Spirula), `TRAIN_MASKS_SPIRULA_MODEL` (masques), `EXPORT_SPLAT_NAME` (export) et `SLURM_PARTITION` (avec `--slurm`).
+
+Pour le mode `--grid`, les variables `GRID_*` se règlent dans la configuration :
+
+- `GRID_BBOX` : emprise globale `xmin,ymin,xmax,ymax` dans le SCR `GRID_CRS` (ex. `"651000,6864000,652000,6865000"`).
+- `GRID_CRS` : SCR de `GRID_BBOX` et des dalles, en mètres (défaut `2154`).
+- `GRID_TILE_SIZE` : taille d'une dalle, en mètres (ex. `"200"`).
+- `GRID_OVERLAP` : recouvrement entre dalles voisines, en mètres (défaut `0`).
+- `GRID_MARGIN` : marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté (défaut `0`).
+- `GRID_POSITIONS` : positions WGS84 externes, mode images, optionnel, lignes `nom_image lat lon [alt]`. Prioritaires sur les GPS EXIF ; sans fichier, chaque image doit avoir un GPS EXIF.
+- `GRID_OUTPUT_DIR` : sortie du mode GRID ; vide = `$OUTPUT_DIR/grid`.
 
 Options communes à ces pipelines :
 
@@ -54,16 +64,6 @@ SFM_IMAGES_DIR="/chemin/images"
 OUTPUT_DIR="/chemin/sortie"
 EOF
 ```
-
-Pour le mode `--grid`, les variables `GRID_*` se règlent dans la configuration :
-
-- `GRID_BBOX` : emprise globale `xmin,ymin,xmax,ymax` dans le SCR `GRID_CRS` (ex. `"651000,6864000,652000,6865000"`).
-- `GRID_CRS` : SCR de `GRID_BBOX` et des dalles, en mètres (défaut `2154`).
-- `GRID_TILE_SIZE` : taille d'une dalle, en mètres (ex. `"200"`).
-- `GRID_OVERLAP` : recouvrement entre dalles voisines, en mètres (défaut `0`).
-- `GRID_MARGIN` : marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté (défaut `0`).
-- `GRID_POSITIONS` : positions WGS84 externes, mode images, optionnel, lignes `nom_image lat lon [alt]`. Prioritaires sur les GPS EXIF ; sans fichier, chaque image doit avoir un GPS EXIF.
-- `GRID_OUTPUT_DIR` : sortie du mode GRID ; vide = `$OUTPUT_DIR/grid`.
 
 Lancement standard, sur la machine courante :
 
