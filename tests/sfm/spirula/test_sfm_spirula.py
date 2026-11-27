@@ -126,8 +126,32 @@ class MetricPositionsFormatTest(unittest.TestCase):
                     float(value)
             origin = {line.split()[1]: float(line.split()[2])
                       for line in output.read_text().splitlines() if line.startswith("# origin_")}
-            self.assertAlmostEqual(origin["origin_lat"], 48.880204272)
-            self.assertAlmostEqual(origin["origin_lon"], 2.351204386)
+            self.assertAlmostEqual(origin["origin_lat"], (48.880204272 + 48.880204265) / 2, places=8)
+            self.assertAlmostEqual(origin["origin_lon"], (2.351204386 + 2.351204295) / 2, places=8)
+
+    def test_gauge_written_by_converter_passes_check_and_rejects_wrong_origin(self):
+        converter = Path(__file__).resolve().parents[3] / "tools/sfm/spirula/gps_to_metric_positions.py"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            images = root / "panoramas"
+            images.mkdir()
+            (images / "stream_00001-000000_01819_0029020.jpg").touch()
+            (root / "events.txt").write_text("29020 290762.3325332\n")
+            (root / "traj.pos").write_text("290762.3325 48.880204272 2.351204386 54.294 0 0 0\n"
+                                           "290762.9992 48.880204268 2.351204239 54.294 0 0 0\n")
+            output = root / "SFM_SP_METRIC_POSITIONS.txt"
+            gauge = root / "gauge.txt"
+            base = [sys.executable, str(converter), "--events", str(root / "events.txt"),
+                    "--pos", str(root / "traj.pos"), "--images-dir", str(images), "--output", str(output)]
+            written = subprocess.run(base + ["--gauge", str(gauge)], capture_output=True, text=True)
+            self.assertEqual(written.returncode, 0, written.stderr)
+            check = [sys.executable, str(converter), "--check-gauge", str(gauge), "--output", str(output)]
+            self.assertEqual(subprocess.run(check, capture_output=True, text=True).returncode, 0)
+
+            gauge.write_text(gauge.read_text().replace("origin_lat ", "origin_lat 1"))
+            rejected = subprocess.run(check, capture_output=True, text=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("origine lat/lon", rejected.stderr)
 
 
 if __name__ == "__main__":

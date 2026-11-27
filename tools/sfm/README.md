@@ -130,7 +130,13 @@ apparaître deux fois. Les images absentes du fichier restent sans position ;
 l'option est incompatible avec `SFM_SP_PAIR_MAX_DISTANCE`. Pour le produire depuis un
 GPS externe (événements et `.pos`), voir `spirula/gps_to_metric_positions.py`, qui
 écrit ce format et peut filtrer par bbox (`--bbox`, `--crs`, `--links-dir`).
-Le test `MetricPositionsFormatTest` de `spirula/test_sfm_spirula.py` contrôle ce format.
+Le fichier commence par `# origin_lat`, `# origin_lon`, `# origin_alt` : moyenne des
+positions retenues, qui est l'origine GPS du repère. `--gauge gauge.txt` écrit alors un
+`gauge.txt` au format de Spirula (`writeGauge`), lisible comme des EXIF GPS (`up`/`scale`
+= `positions`, origine et `alt_source pos`). `--check-gauge gauge.txt --output positions.txt`
+valide un `gauge.txt` existant et vérifie sa cohérence avec l'en-tête du fichier de positions.
+Le comportement réel de Spirula Studio sur ce `gauge.txt` n'a pas été vérifié ici (binaire absent).
+Les tests `MetricPositionsFormatTest` de `spirula/test_sfm_spirula.py` contrôlent ce format.
 
 ## 4. Fonctionnement interne
 
