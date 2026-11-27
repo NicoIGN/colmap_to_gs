@@ -156,6 +156,29 @@ dépasse 5 % de l'étalement, une alerte `[GPS][ALERTE]` est affichée et `metho
 dans `georef_stats.json` (écart en m, ratio et inclinaison de la verticale SfM sont aussi enregistrés).
 Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_DIR`.
 
+**Modèles partiels Spirula (sélection par bloc).** Spirula peut écrire plusieurs modèles
+(`sparse/0`, `sparse/1`, …) et signaler un résultat « partiel » (code 3). Le wrapper
+`spirula/sfm_spirula.sh` accepte alors ce résultat si `sparse/0` contient `images.bin` et
+`points3D.bin` non vides. Ensuite `scripts/images_to_3dgs.sh` (`select_models_for_blocks`)
+retient les modèles éligibles : au moins `SFM_PARTIAL_MIN_IMAGES` images (30 par défaut)
+et une fraction d'au moins `SFM_PARTIAL_MIN_FRACTION` des images sélectionnées (0.05 par défaut,
+dans ]0 ; 1]). Le manifeste est `sfm/representative_models.json`.
+
+- Géoréférencement disponible (mode `positions`, `gpx` ou `exif`) : un sous-workspace
+  `models/N/` par modèle éligible, traité indépendamment jusqu'à `--phase all`.
+  Chaque `models/N/config.sh` reprend la configuration parent avec `OUTPUT_DIR` redéfini ;
+  `sfm/sparse/0` y pointe vers le modèle N (lien symbolique) et les images, masques et
+  `inputs.json` sont partagés.
+- Pas de géoréférencement : seul le modèle le plus fourni parmi les éligibles est gardé
+  (`--largest-only`).
+- Après un fan-out, le workspace parent est marqué `.models_done` ; les phases `check`,
+  `train-block` et `merge` y sont refusées : lancer `--phase all` sur le parent ou sur `models/N/`.
+- Si `sparse/1` n'existe pas, le comportement reste celui d'un modèle unique.
+
+Outils : `representative_models.py` (sélection, `--largest-only`) et `model_workspaces.py`
+(création des sous-workspaces). Les launchers Slurm par bloc ne gèrent pas encore plusieurs
+modèles au niveau du parent.
+
 ## 4. Fonctionnement interne
 
 **Organisation.** Tout le code SfM est regroupé ici, avec une interface commune

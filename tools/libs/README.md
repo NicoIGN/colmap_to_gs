@@ -177,6 +177,10 @@ images.
   `SFM_CAMERA_SPLIT=true` relance le SfM avec une caméra par modèle quand
   Spirula en produit plusieurs d'au moins `SFM_CAMERA_SPLIT_MIN_IMAGES` images
   (changement d'objectif dans une vidéo, par exemple).
+  Si Spirula produit plusieurs modèles dont l'un est partiel (code 3), les modèles
+  représentatifs (`SFM_PARTIAL_MIN_IMAGES`, `SFM_PARTIAL_MIN_FRACTION`) deviennent un bloc
+  chacun si le géoréférencement est disponible, sinon seul le plus fourni est gardé ;
+  voir [le SfM](../sfm/README.md#3-configuration-et-utilisation).
 - `SFM_*` : reconstruction et contrôles géométriques ; valeurs et unités dans
   [`config/defaults/sfm.default.sh`](../../config/defaults/sfm.default.sh).
   Le seuil d'angle cible les profondeurs mal contraintes ; augmenter ces exigences peut aussi éliminer
