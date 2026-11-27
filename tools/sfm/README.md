@@ -174,6 +174,10 @@ dans ]0 ; 1]). Le manifeste est `sfm/representative_models.json`.
 - Après un fan-out, le workspace parent est marqué `.models_done`. Les phases `train-block` et
   `merge` du parent sortent sans effet (les blocs sont dans `models/N/`) ; les jobs Slurm du
   lanceur restent donc sans erreur. Lancer `--phase all` sur chaque `models/N/` pour l'entraînement.
+- Splat final : une fois tous les modèles traités, `$OUTPUT_DIR/$EXPORT_SPLAT_NAME` concatène
+  les splats `models/N/$EXPORT_SPLAT_NAME` (`merge_splats.py`). La fusion n'a lieu que si tous les
+  modèles ont le même `georef/0/gauge.txt` (même repère) ; sinon elle s'arrête et les splats restent
+  séparés dans `models/N/`.
 - Si `sparse/1` n'existe pas, le comportement reste celui d'un modèle unique.
 
 Outils : `representative_models.py` (sélection, `--largest-only`) et `model_workspaces.py`

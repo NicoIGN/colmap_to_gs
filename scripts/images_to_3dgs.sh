@@ -164,6 +164,29 @@ check_filtered_sparse() {
   "$PYTHON_BIN" "$repo_root/tools/sfm/resume.py" "$lidar_input"
 }
 
+merge_model_splats() {
+  local models_text="$1" index ws gauge reference="" splat
+  local -a indices splats=()
+  IFS=, read -ra indices <<< "$models_text"
+  for index in "${indices[@]}"; do
+    ws="$OUTPUT_DIR/models/$index"
+    splat="$ws/$EXPORT_SPLAT_NAME"
+    [[ -s "$splat" ]] || die "Splat absent pour le modèle $index : $splat"
+    splats+=("$splat")
+    (( ${#indices[@]} > 1 )) || continue
+    gauge="$ws/georef/0/gauge.txt"
+    [[ -f "$gauge" ]] || die "Repère absent pour le modèle $index : fusion impossible."
+    if [[ -z "$reference" ]]; then
+      reference="$gauge"
+    else
+      cmp -s "$reference" "$gauge" ||
+        die "Modèles dans des repères différents : fusion impossible (splats conservés dans models/N/)."
+    fi
+  done
+  set_stage "fusion des splats des modèles"
+  merge_pipeline_splats "$OUTPUT_DIR/$EXPORT_SPLAT_NAME" "$MERGE_STRENGTH" "${splats[@]}"
+}
+
 select_models_for_blocks() {
   rm -f -- "$OUTPUT_DIR/.models_done"
   [[ -d "$sfm/sparse/1" ]] || return 0
@@ -187,6 +210,7 @@ select_models_for_blocks() {
     PIPELINE_MODEL_WORKSPACE=true bash "$repo_root/scripts/images_to_3dgs.sh" "$ws_config" \
       --images "$SFM_IMAGES_DIR" --phase all
   done <<< "$configs_text"
+  merge_model_splats "$selected_models"
   touch "$OUTPUT_DIR/.models_done"
   echo "[modèles] Terminé : $OUTPUT_DIR/models/{$selected_models}"
   exit 0
