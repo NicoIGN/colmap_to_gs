@@ -147,6 +147,11 @@ de 20 m. Sorties : `georef/0` (sparse recalé en ENU local), `gauge.txt` à l'or
 l'en-tête, et `georef_stats.json` avec `"status": "georeferenced"`. Les noms d'images
 sont appariés sans extension, puis par nom de fichier. Toute image posée du sparse doit
 avoir une position, sinon erreur (pas de géoréférencement partiel). Au moins 3 images sont requises.
+Si l'étalement des positions est inférieur à 5 % sur un axe (trajectoire quasi rectiligne ou plate),
+roulis et tangage ne sont pas observables : le recalage suppose alors que l'axe Z du sparse est la
+verticale (Z SfM = Z ENU) et n'estime que échelle, lacet et translation (`"alignment": "vertical"`
+dans `georef_stats.json`, `"sim3"` sinon). Cette hypothèse n'est valable que si le sparse est
+gravité-aligné.
 Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_DIR`.
 
 ## 4. Fonctionnement interne
