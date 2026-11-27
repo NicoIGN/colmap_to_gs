@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Défauts du mode GRID (dalles indépendantes, clippées à l'emprise de chaque dalle).
 
-# Emprise globale xmin,ymin,xmax,ymax dans le SCR GRID_CRS.
+# Emprise globale xmin,ymin,xmax,ymax dans le CRS GRID_CRS.
 GRID_BBOX=""
 GRID_CRS="2154"
-# Taille d'une dalle et recouvrement entre dalles voisines, en unités du SCR (mètres).
+# Taille d'une dalle et recouvrement entre dalles voisines, en unités du CRS (mètres).
 GRID_TILE_SIZE=""
 GRID_OVERLAP="0"
 # Marge de calcul autour de chaque dalle ; seul le résultat dans la dalle est exporté.

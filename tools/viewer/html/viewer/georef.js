@@ -138,7 +138,7 @@ export function parseGeoref(json) {
     definition.units !== "m"
   ) {
     throw new Error(
-      `${projectedCrs} doit être un SCR projeté en mètres.`
+      `${projectedCrs} doit être un CRS projeté en mètres.`
     );
   }
 
@@ -172,7 +172,7 @@ export function parseGeoref(json) {
 
   let origin;
   let originGeographic = null;
-  // Passage d’un point de la couche (repère local, origine propre) vers le SCR et le géographique.
+  // Passage d’un point de la couche (repère local, origine propre) vers le CRS et le géographique.
   let localToGeographic;
   let localToProjected;
 
@@ -308,7 +308,7 @@ export function parseGeoref(json) {
     };
   }
 
-  // Repère de la vue : origine projetée commune, axes de la grille du SCR (E, N, hauteur).
+  // Repère de la vue : origine projetée commune, axes de la grille du CRS (E, N, hauteur).
   // Toute couche (splat, LiDAR, vecteurs) y est ramenée par sa projection.
   const projectedToWorld = (x, y, h) => {
     const point = coordinates(x, y, h);
@@ -369,7 +369,7 @@ export function parseGeoref(json) {
 
 /**
  * Repère propre d’une couche projetée (LiDAR, vecteurs) : son origine est `origin` [x, y, h]
- * dans le SCR `epsg`, et ses coordonnées locales sont relatives à cette origine.
+ * dans le CRS `epsg`, et ses coordonnées locales sont relatives à cette origine.
  */
 export function createProjectedFrame(epsg, origin) {
   return parseGeoref({
@@ -384,7 +384,7 @@ export function createProjectedFrame(epsg, origin) {
 
 /**
  * Pose d’une couche dans le repère de la vue : p_vue = linear · p_local + origin.
- * Le passage se fait par coordonnées géographiques : il reste exact quand les SCR diffèrent.
+ * Le passage se fait par coordonnées géographiques : il reste exact quand les CRS diffèrent.
  * `linear` est exact à la convergence des méridiens près (axes E, N, U du repère local).
  */
 export function layerPlacement(view, layer) {

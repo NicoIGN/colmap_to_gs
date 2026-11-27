@@ -788,7 +788,7 @@ export function createSceneTools({
       return true;
     }
 
-  // La vue se règle sur la grille du SCR (E, N selon l’EPSG). Une référence ENU locale
+  // La vue se règle sur la grille du CRS (E, N selon l’EPSG). Une référence ENU locale
   // (axes tangents, décalés de la convergence des méridiens) est donc ramenée à son origine projetée.
   function viewFrameOf(reference) {
     if (reference.type === "projected") return reference;

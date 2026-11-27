@@ -2,7 +2,7 @@
 """Retire les splats dont le support sort d'une boîte projetée et/ou d'une plage de z.
 
 Le repère des splats est le repère ENU du géoréférencement (gauge.txt ou metadata.json).
-La boîte (xmin,ymin,xmax,ymax) et zmin/zmax sont exprimés dans le SCR projeté de ce
+La boîte (xmin,ymin,xmax,ymax) et zmin/zmax sont exprimés dans le CRS projeté de ce
 géoréférencement (EPSG:2154 par défaut). Le support d'un splat est son ellipsoïde à
 --sigma écarts-types, encadré par sa boîte axis-aligned en ENU puis projeté par ses 8 coins.
 """
@@ -58,7 +58,7 @@ def load_georef(path, epsg_override):
     projected = ref.get("origin_projected") or {}
     epsg = epsg_override or projected.get("epsg")
     if not epsg:
-        raise ValueError(f"{path.name} : EPSG du SCR projeté absent (utiliser --epsg)")
+        raise ValueError(f"{path.name} : EPSG du CRS projeté absent (utiliser --epsg)")
     if ref.get("type") not in ("local_ENU", "projected"):
         raise ValueError(f"{path.name} : type de référence non géré : {ref.get('type')}")
     return stats, ref, int(epsg)
@@ -227,10 +227,10 @@ def main():
     parser.add_argument("--georef", required=True, type=Path,
                         help="gauge.txt ou metadata.json du même repère que les splats")
     parser.add_argument("--epsg", type=int,
-                        help="SCR projeté ; défaut : celui du géoréférencement (2154 pour gauge.txt)")
-    parser.add_argument("--bbox", help="xmin,ymin,xmax,ymax dans le SCR projeté")
-    parser.add_argument("--zmin", type=float, help="Altitude minimale du support (SCR projeté)")
-    parser.add_argument("--zmax", type=float, help="Altitude maximale du support (SCR projeté)")
+                        help="CRS projeté ; défaut : celui du géoréférencement (2154 pour gauge.txt)")
+    parser.add_argument("--bbox", help="xmin,ymin,xmax,ymax dans le CRS projeté")
+    parser.add_argument("--zmin", type=float, help="Altitude minimale du support (CRS projeté)")
+    parser.add_argument("--zmax", type=float, help="Altitude maximale du support (CRS projeté)")
     parser.add_argument("--sigma", type=float, default=3.0,
                         help="Rayon du support en écarts-types (défaut : 3)")
     parser.add_argument("--batch-size", type=int, default=200000)

@@ -372,7 +372,7 @@ def enu_to_wgs84(points, origin):
 
 def projection_reference(origin, epsg):
     """
-    Décrit le repère ENU local dans un SCR projeté.
+    Décrit le repère ENU local dans un CRS projeté.
     - origin: [lat, lon, h] WGS84 (issu du GPX)
     - epsg: code EPSG projeté (ex: 2154)
     """

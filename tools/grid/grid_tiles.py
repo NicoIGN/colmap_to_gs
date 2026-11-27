@@ -46,7 +46,7 @@ def _axis_starts(low, high, size, step):
 
 
 def plan_tiles(bbox, tile_size, overlap, margin):
-    """Retourne la liste des dalles ; emprises en tuples (xmin, ymin, xmax, ymax) dans le SCR de la bbox."""
+    """Retourne la liste des dalles ; emprises en tuples (xmin, ymin, xmax, ymax) dans le CRS de la bbox."""
     if tile_size <= 0:
         raise ValueError("GRID_TILE_SIZE doit être > 0")
     if overlap < 0 or overlap >= tile_size:

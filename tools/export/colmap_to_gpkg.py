@@ -167,7 +167,7 @@ def main():
     parser.add_argument(
         "--epsg",
         type=int,
-        help="SCR des coordonnées existantes ; aucune reprojection",
+        help="CRS des coordonnées existantes ; aucune reprojection",
     )
     args = parser.parse_args()
 
@@ -185,7 +185,7 @@ def main():
         srs.ImportFromEPSG(args.epsg)
         srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
     else:
-        print("Attention : SCR non défini ; coordonnées COLMAP conservées.")
+        print("Attention : CRS non défini ; coordonnées COLMAP conservées.")
 
     dataset = ogr.GetDriverByName("GPKG").CreateDataSource(str(args.output))
     if dataset is None:
