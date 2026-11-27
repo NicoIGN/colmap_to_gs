@@ -41,7 +41,11 @@ Le lanceur, lancé avec `bash` (pas `sbatch`), choisit le mode : sans `--slurm`,
 
 `--grid` et `--slurm` se combinent : `--grid` choisit le découpage, `--slurm` choisit où le calcul s'exécute.
 
-Exemple de configuration (images locales), qui ne contient que les surcharges :
+Paramètres obligatoires pour un pipeline images : `SFM_IMAGES_DIR` (dossier des photos, chemin absolu) et `OUTPUT_DIR` (dossier de sortie, chemin absolu, distinct du dossier d'images). Les autres paramètres ont des valeurs par défaut, lues dans `config/defaults/*.default.sh` (et `tools/libs/config.default.sh` pour le pipeline images). La configuration utilisateur ne contient que les surcharges.
+
+Selon le cas, il faut aussi définir les chemins propres au site : `SPIRULA_BIN` (binaire Spirula), `TRAIN_MASKS_SPIRULA_MODEL` (masques), `EXPORT_SPLAT_NAME` (export) et `SLURM_PARTITION` (avec `--slurm`).
+
+Exemple de configuration (images locales) :
 
 ```bash
 cat > "$DATA_ROOT/config-images.sh" <<'EOF'
