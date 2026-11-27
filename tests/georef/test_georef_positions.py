@@ -59,6 +59,14 @@ class GeorefPositionsTest(unittest.TestCase):
             run(sparse, output, self.write_positions(bad), 2154, 20.0)
         self.assertFalse((output / "georef_stats.json").exists())
 
+    def test_sparse_image_without_position_is_rejected(self):
+        sparse, output = self.root / "sparse", self.root / "georef"
+        write_sparse(sparse, self.local)
+        partial = self.write_positions(self.target[:4])
+        with self.assertRaisesRegex(ValueError, "sans position"):
+            run(sparse, output, partial, 2154, 20.0)
+        self.assertFalse((output / "georef_stats.json").exists())
+
     def test_positions_file_without_origin_header_is_rejected(self):
         path = self.root / "positions.txt"
         path.write_text("p0.jpg 0 0 0\n")

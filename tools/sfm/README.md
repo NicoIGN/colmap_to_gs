@@ -145,7 +145,8 @@ et que `SFM_SP_METRIC_POSITIONS` existe (`georef_positions.py`). Le recalage est
 similitude 3D robuste sur les centres caméra (médiane par image), avec erreur maximale
 de 20 m. Sorties : `georef/0` (sparse recalé en ENU local), `gauge.txt` à l'origine de
 l'en-tête, et `georef_stats.json` avec `"status": "georeferenced"`. Les noms d'images
-sont appariés sans extension, puis par nom de fichier. Au moins 3 images doivent correspondre.
+sont appariés sans extension, puis par nom de fichier. Toute image posée du sparse doit
+avoir une position, sinon erreur (pas de géoréférencement partiel). Au moins 3 images sont requises.
 Le mode est figé dans `.georef_mode` : changer de mode exige un nouvel `OUTPUT_DIR`.
 
 ## 4. Fonctionnement interne

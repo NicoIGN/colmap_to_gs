@@ -61,13 +61,18 @@ def run(sparse, output, positions_path, epsg, max_error):
         return
     positions = read_positions(positions_path)
     model = pycolmap.Reconstruction(str(sparse))
-    centers = {}
+    centers, missing = {}, []
     for image in model.images.values():
         if not image.has_pose:
             continue
         name = match_position(image.name, positions)
-        if name is not None:
+        if name is None:
+            missing.append(image.name)
+        else:
             centers.setdefault(name, []).append(image.projection_center())
+    if missing:
+        raise ValueError(f"{len(missing)} image(s) du sparse sans position dans {positions_path.name} "
+                         f"(exemples : {', '.join(missing[:3])}). Toutes les images doivent être géoréférencées.")
     names = sorted(centers)
     if len(names) < 3:
         raise ValueError(f"{len(names)} image(s) du sparse trouvée(s) dans les positions (au moins 3 requises).")
