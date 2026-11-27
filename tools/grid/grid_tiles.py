@@ -131,7 +131,7 @@ def read_positions(path):
     return positions
 
 
-def select_images(images_dir, epsg, tiles, positions=None):
+def select_images(images_dir, epsg, tiles, positions=None, verbose=False):
     """Retourne {tile_id: [images]}.
 
     La position vient du fichier externe `positions` (prioritaire, clé = nom de fichier) ou, à défaut,
@@ -153,13 +153,17 @@ def select_images(images_dir, epsg, tiles, positions=None):
         if lat is None or lon is None:
             raise ValueError(f"{path.name} : aucune position (ni GPS EXIF, ni GRID_POSITIONS)")
         point = to_projected.transform(lon, lat)
+        hits = [tile["id"] for tile in tiles if inside(point, tile["compute"])]
         for tile in tiles:
-            if inside(point, tile["compute"]):
+            if tile["id"] in hits:
                 selection[tile["id"]].append(path)
+        if verbose:
+            source = "GRID_POSITIONS" if positions and path.name in positions else "EXIF"
+            print(f"[verbose] {path.name} {source} lat={lat:.8f} lon={lon:.8f} -> {hits or 'aucune dalle'}", flush=True)
     return selection
 
 
-def select_from_metric(images_dir, epsg, tiles, metric_file):
+def select_from_metric(images_dir, epsg, tiles, metric_file, verbose=False):
     """Sélection à partir de SFM_SP_METRIC_POSITIONS (ENU en mètres autour de l'origine d'en-tête), sans lire les EXIF.
 
     Les images absentes du fichier métrique sont ignorées et comptées dans le message.
@@ -203,19 +207,23 @@ def select_from_metric(images_dir, epsg, tiles, metric_file):
         dz = cp * north + sp * up
         x, y, _ = to_projected.transform(ox + dx, oy + dy, oz + dz)
         point = (x, y)
+        hits = [tile["id"] for tile in tiles if inside(point, tile["compute"])]
         for tile in tiles:
-            if inside(point, tile["compute"]):
+            if tile["id"] in hits:
                 selection[tile["id"]].append(path)
+        if verbose:
+            print(f"[verbose] {path.name} METRIC enu=({east:.3f}, {north:.3f}, {up:.3f}) "
+                  f"x={x:.3f} y={y:.3f} -> {hits or 'aucune dalle'}", flush=True)
     if skipped:
         print(f"[select-images] {skipped} image(s) absente(s) de SFM_SP_METRIC_POSITIONS, ignorée(s)", flush=True)
     return selection
 
 
-def run_selection(images_dir, epsg, tiles, positions=None, global_metric=None):
+def run_selection(images_dir, epsg, tiles, positions=None, global_metric=None, verbose=False):
     """Sélection par dalle : positions externes, sinon fichier métrique global si fourni, sinon EXIF GPS."""
     if positions is None and global_metric is not None:
-        return select_from_metric(images_dir, epsg, tiles, global_metric)
-    return select_images(images_dir, epsg, tiles, positions)
+        return select_from_metric(images_dir, epsg, tiles, global_metric, verbose)
+    return select_images(images_dir, epsg, tiles, positions, verbose)
 
 
 def write_tile_metric(selection, tiles, epsg, output_dir, positions=None, global_metric=None):
@@ -292,6 +300,7 @@ def main():
     plan.add_argument("--images", type=Path, default=None,
                       help="Dossier d'images : compte les images, positions via --positions, sinon --global-metric, sinon GPS EXIF")
     plan.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes, avec --images")
+    plan.add_argument("--verbose", action="store_true", help="Journal par image : source de position et dalles trouvées")
 
     tiles = sub.add_parser("tiles", help="Afficher les dalles (TSV) pour le driver shell")
     tiles.add_argument("--manifest", required=True, type=Path)
@@ -303,6 +312,7 @@ def main():
     select.add_argument("--positions", type=Path, default=None, help="Positions WGS84 externes (prioritaires sur EXIF)")
     select.add_argument("--global-metric", type=Path, default=None,
                         help="SFM_SP_METRIC_POSITIONS global, filtré par dalle si --positions est absent")
+    select.add_argument("--verbose", action="store_true", help="Journal par image : source de position et dalles trouvées")
 
     args = parser.parse_args()
     if args.command == "plan":
@@ -315,9 +325,9 @@ def main():
             if args.images is None and args.global_metric is None:
                 raise ValueError("--images ou --global-metric requis pour compter les images")
             if args.images is None:
-                selection = select_from_metric(None, args.epsg, tiles, args.global_metric)
+                selection = select_from_metric(None, args.epsg, tiles, args.global_metric, args.verbose)
             else:
-                selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric)
+                selection = run_selection(args.images, args.epsg, tiles, positions, args.global_metric, args.verbose)
             for tile in tiles:
                 tile["image_count"] = len(selection[tile["id"]])
             print("[plan] images par dalle comptées", flush=True)
@@ -335,7 +345,7 @@ def main():
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         print(f"[select-images] {len(manifest['tiles'])} dalle(s), lecture des positions...", flush=True)
         positions = read_positions(args.positions) if args.positions else None
-        selection = run_selection(args.images, manifest["epsg"], manifest["tiles"], positions, args.global_metric)
+        selection = run_selection(args.images, manifest["epsg"], manifest["tiles"], positions, args.global_metric, args.verbose)
         print("[select-images] sélection faite, écriture des liens et positions...", flush=True)
         counts = link_selection(selection, args.output_dir)
         write_tile_metric(selection, manifest["tiles"], manifest["epsg"], args.output_dir,
