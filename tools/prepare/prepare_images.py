@@ -330,9 +330,13 @@ def prepare(check=False, phase="prepare"):
                 details = "\n".join(f"  - {item}" for item in differences[:12])
                 if len(differences) > 12:
                     details += "\n  - Autres différences non affichées."
-                raise ValueError("Images ou paramètres SfM/masques/GPX modifiés : "
-                                 "choisir un nouvel OUTPUT_DIR. TRAIN_CLEAN ne recalcule pas le SfM."
-                                 f"\nSignature comparée : {marker}"
+                hint = ("TRAIN_CLEAN ne recalcule pas le SfM : rétablir les valeurs enregistrées "
+                        "ou choisir un nouvel OUTPUT_DIR pour refaire le SfM."
+                        if phase == "train" else
+                        "rétablir les valeurs enregistrées ou choisir un nouvel OUTPUT_DIR "
+                        "pour refaire le SfM.")
+                raise ValueError("Images ou paramètres SfM/masques/GPX modifiés : " + hint
+                                 + f"\nSignature comparée : {marker}"
                                  f"\nPIPELINE_RESUME={'true' if resume else 'false'}"
                                  f" ; contrôle seul={'true' if check else 'false'}"
                                  f"\nDifférences enregistrées / actuelles :\n{details}")
