@@ -3,6 +3,7 @@ set -euo pipefail
 [[ $# -eq 4 ]] || { echo "[ERREUR] Utiliser launch_videos_to_3dgs.sh CONFIG" >&2; exit 1; }
 : "${SLURM_JOB_ID:?Allocation Slurm requise}"
 repo_root="$1"; config="$2"; video="$3"; frames="$4"
+width="${VIDEO_WIDTH:-0}"; height="${VIDEO_HEIGHT:-0}"
 source "$config"
 if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
   [[ -f "$SLURM_ENV_SETUP" ]] || { echo "[ERREUR] SLURM_ENV_SETUP absent" >&2; exit 1; }
@@ -10,6 +11,7 @@ if [[ -n "${SLURM_ENV_SETUP:-}" ]]; then
 fi
 export OMP_NUM_THREADS="${NUM_CPUS:-8}"
 export PYTHONUNBUFFERED=1
+extract_args=(--video "$video" --out "$frames" --num-frames "$NUM_FRAMES")
+if ((width > 0)); then extract_args+=(--width "$width" --height "$height"); fi
 srun --unbuffered --export=ALL "${PYTHON_BIN:-python3}" \
-  "$repo_root/tools/prepare/prepare_video_frames.py" \
-  --video "$video" --out "$frames" --num-frames "$NUM_FRAMES"
+  "$repo_root/tools/prepare/prepare_video_frames.py" "${extract_args[@]}"

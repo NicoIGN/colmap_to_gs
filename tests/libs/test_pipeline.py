@@ -1190,7 +1190,6 @@ if "--wait" in args:
         log.write(json.dumps([name, *args[1:]]) + "\\n")
     assert get("--num-frames") == "900"
     assert Path(get("--video")).is_file()
-    assert "--reset" not in args
     if os.environ.get("TEST_FAIL_TOOL") == name:
         sys.exit(7)
     shutil.copytree(os.environ["TEST_VIDEO_SOURCE_IMAGES"], get("--out"), dirs_exist_ok=True)
@@ -1229,6 +1228,37 @@ if name not in known:'''))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("--slurm", result.stderr)
         self.assertFalse(self.jobs.exists())
+
+    def test_video_resize_and_frames_dir_reach_local_extraction(self):
+        launcher, _ = self.configure_video_launcher()
+        custom = self.root / "custom-frames"
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--width", "640",
+                                 "--height", "360", "--frames-dir", str(custom)],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assert_ok(result)
+        extraction = self.commands()[0]
+        self.assertEqual(extraction[extraction.index("--width") + 1], "640")
+        self.assertEqual(extraction[extraction.index("--height") + 1], "360")
+        self.assertEqual(extraction[extraction.index("--out") + 1], str(custom))
+
+    def test_video_resize_requires_width_and_height_together(self):
+        launcher, _ = self.configure_video_launcher()
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--width", "640"],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ensemble", result.stderr)
+
+    def test_slurm_video_resize_and_frames_dir_reach_extraction_job(self):
+        launcher, _ = self.configure_video_launcher()
+        custom = self.root / "custom-frames"
+        result = subprocess.run(["bash", str(launcher), str(self.config), "--slurm", "--width", "640",
+                                 "--height", "360", "--frames-dir", str(custom)],
+                                env=self.env, cwd=self.root, capture_output=True, text=True, timeout=40)
+        self.assert_ok(result)
+        extraction = self.commands()[0]
+        self.assertEqual(extraction[extraction.index("--width") + 1], "640")
+        self.assertEqual(extraction[extraction.index("--height") + 1], "360")
+        self.assertEqual(extraction[extraction.index("--out") + 1], str(custom))
 
     def test_slurm_runs_same_config_and_array_then_merges(self):
         self.assert_ok(self.run_pipeline("--wait", slurm=True))

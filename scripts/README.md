@@ -140,7 +140,12 @@ bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh"
 
 # Avec --slurm : extraction sur le cluster, puis soumission du pipeline images.
 bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" --slurm --wait
+
+# Redimensionnement et dossier des frames (sans --slurm ou avec) :
+bash "$GIT_ROOT/scripts/launch_videos_to_3dgs.sh" "$DATA_ROOT/config-video.sh" --width 1920 --height 1080 --frames-dir "$DATA_ROOT/frames"
 ```
+
+Options du lanceur vidéo : `--width W --height H` (redimensionnement des frames, à fournir ensemble ; absent = taille source) et `--frames-dir DIR` (dossier absolu des frames, défaut `SFM_IMAGES_DIR`).
 
 Configuration avec des paramètres supplémentaires :
 
