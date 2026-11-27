@@ -23,7 +23,6 @@ Configuration (uniquement les surcharges) :
 ```bash
 cat > "$DATA_ROOT/config-grid.sh" <<'EOF'
 #!/usr/bin/env bash
-GRID_SOURCE="panoramax"
 GRID_BBOX="651000,6861000,653000,6863000"
 GRID_CRS="2154"
 GRID_TILE_SIZE="500"
@@ -36,21 +35,27 @@ NUM_GPUS="2"
 EOF
 ```
 
-Pour une source images, remplacer `GRID_SOURCE` par `images` et ajouter
-`GRID_IMAGES_DIR="/chemin/photos"`. Les positions peuvent venir d'un fichier externe :
-`GRID_POSITIONS="/chemin/positions.txt"` (lignes `nom_image lat lon [alt]`, WGS84).
+La source est choisie par le lanceur, pas par la configuration :
+
+- Panoramax : `launch_panoramax_to_3dgs.sh CONFIG --grid`
+- Images : `launch_images_to_3dgs.sh CONFIG --grid`, avec `SFM_IMAGES_DIR="/chemin/photos"` dans
+  la configuration. Les positions peuvent venir d'un fichier externe :
+  `GRID_POSITIONS="/chemin/positions.txt"` (lignes `nom_image lat lon [alt]`, WGS84).
 
 Vérifier le découpage sans calcul :
 
 ```bash
-bash "$GIT_ROOT/scripts/grid_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --plan-only
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --grid --plan-only
 ```
 
 Lancer les calculs :
 
 ```bash
-bash "$GIT_ROOT/scripts/grid_to_3dgs.sh" "$DATA_ROOT/config-grid.sh"
+bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh" --grid
 ```
+
+Le lanceur appelle `scripts/grid_to_3dgs.sh CONFIG --source <panoramax|images>`, qui peut aussi
+être lancé directement avec la même option `--source`.
 
 Sorties, dans `GRID_OUTPUT_DIR` (défaut `OUTPUT_DIR/grid`) :
 

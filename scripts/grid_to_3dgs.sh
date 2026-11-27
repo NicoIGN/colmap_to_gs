@@ -10,14 +10,16 @@ load_pipeline_defaults "$repo_root" libs
 usage() {
   cat <<'EOF'
 Usage:
-  bash scripts/grid_to_3dgs.sh /path/to/config.sh [--plan-only] [--redo]
+  bash scripts/grid_to_3dgs.sh /path/to/config.sh --source panoramax|images [--plan-only] [--redo]
 
+Appelé par scripts/launch_panoramax_to_3dgs.sh CONFIG --grid (source panoramax) ou
+scripts/launch_images_to_3dgs.sh CONFIG --grid (source images).
 Mode GRID : chaque dalle est une exécution indépendante du pipeline (Panoramax ou images
 géoréférencées), calculée avec une marge puis clippée à l'emprise de la dalle.
 Sorties : GRID_OUTPUT_DIR/splats/<dalle>.splat (pas d'export fusionné), manifest.json.
 
-Variables : GRID_SOURCE (panoramax|images), GRID_BBOX (xmin,ymin,xmax,ymax), GRID_CRS (EPSG),
-GRID_TILE_SIZE, GRID_OVERLAP, GRID_MARGIN (mètres), GRID_IMAGES_DIR (mode images),
+Variables : GRID_BBOX (xmin,ymin,xmax,ymax), GRID_CRS (EPSG),
+GRID_TILE_SIZE, GRID_OVERLAP, GRID_MARGIN (mètres), SFM_IMAGES_DIR (mode images),
 GRID_OUTPUT_DIR (défaut : $OUTPUT_DIR/grid).
 Contraintes : SPLIT_NUM_BLOCKS=1 et NUM_CPUS x NUM_GPUS < 64.
 Parallélisme : NUM_GPUS workers, worker w utilise CUDA_VISIBLE_DEVICES=w et les dalles d'indice i avec i % NUM_GPUS = w.
@@ -30,10 +32,14 @@ config="$(resolve_path "$1")"
 shift
 plan_only=false
 redo=false
+grid_source=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --plan-only) plan_only=true ;;
     --redo) redo=true ;;
+    --source)
+      [[ $# -ge 2 ]] || die "--source requiert panoramax ou images."
+      grid_source="$2"; shift ;;
     *) die "Option inconnue : $1" ;;
   esac
   shift
@@ -41,6 +47,7 @@ done
 
 [[ -f "$config" ]] || die "Configuration introuvable : $config"
 source "$config"
+GRID_SOURCE="$grid_source"
 
 [[ "$SPLIT_NUM_BLOCKS" == 1 ]] || die "Mode GRID : SPLIT_NUM_BLOCKS doit valoir 1 (actuel : $SPLIT_NUM_BLOCKS)."
 is_positive_integer "$NUM_CPUS" || die "NUM_CPUS doit être un entier >= 1."
@@ -51,7 +58,7 @@ case "$GRID_SOURCE" in
     [[ -z "${GRID_POSITIONS:-}" ]] || die "Mode GRID panoramax : les positions viennent de l'EXIF ; GRID_POSITIONS n'est pas utilisé."
     [[ -z "${SFM_SP_METRIC_POSITIONS:-}" ]] || die "Mode GRID panoramax : SFM_SP_METRIC_POSITIONS global n'est pas compatible avec les dalles ; les positions viennent de l'EXIF."
     ;;
-  images) [[ -d "${GRID_IMAGES_DIR:-}" ]] || die "Mode GRID images : GRID_IMAGES_DIR doit être un dossier existant."
+  images) [[ -d "${SFM_IMAGES_DIR:-}" ]] || die "Mode GRID images : SFM_IMAGES_DIR doit être un dossier existant."
     [[ -z "${GRID_POSITIONS:-}" || -f "$GRID_POSITIONS" ]] || die "GRID_POSITIONS doit être un fichier existant." ;;
   *) die "GRID_SOURCE doit valoir panoramax ou images." ;;
 esac
@@ -81,7 +88,7 @@ if [[ "$plan_only" == true ]]; then
 fi
 
 if [[ "$GRID_SOURCE" == images ]]; then
-  python3 "$grid_py" select-images --manifest "$manifest" --images "$GRID_IMAGES_DIR" --output-dir "$work_dir" \
+  python3 "$grid_py" select-images --manifest "$manifest" --images "$SFM_IMAGES_DIR" --output-dir "$work_dir" \
     ${GRID_POSITIONS:+--positions "$GRID_POSITIONS"} ${SFM_SP_METRIC_POSITIONS:+--global-metric "$SFM_SP_METRIC_POSITIONS"}
 fi
 

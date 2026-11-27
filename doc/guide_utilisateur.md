@@ -28,7 +28,8 @@ Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun e
 | Images locales | dossier de photos | `bash scripts/images_to_3dgs.sh CONFIG` | `bash scripts/launch_images_to_3dgs.sh CONFIG --wait` |
 | Vidéo | fichier vidéo | `bash scripts/videos_to_3dgs.sh CONFIG` | `bash scripts/launch_videos_to_3dgs.sh CONFIG --wait` |
 | Panoramax | emprise (`PANORAMAX_BBOX`) | `bash scripts/panoramax_to_3dgs.sh CONFIG` | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --wait` |
-| GRID | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/grid_to_3dgs.sh CONFIG` | non |
+| GRID Panoramax | emprise géoréférencée découpée en dalles (`GRID_*`) | `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --grid` | non |
+| GRID images | dossier géoréférencé découpé en dalles (`GRID_*`) | `bash scripts/launch_images_to_3dgs.sh CONFIG --grid` | non |
 
 Exemple de configuration (images locales), qui ne contient que les surcharges :
 
