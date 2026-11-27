@@ -67,7 +67,7 @@ configuration : des `GRID_*` définis dans un fichier sourcé ne sont pas détec
 Sorties, dans `GRID_OUTPUT_DIR` (défaut `OUTPUT_DIR/grid`) :
 
 - `manifest.json` : emprises de chaque dalle (`core` exporté, `compute` calculé).
-- `tiles.geojson` : emprises `core` des dalles, dans le CRS `--crs-out` de `grid_tiles.py plan` (défaut EPSG:4326 ; ex. `--crs-out 2154` pour Lambert 93) (propriétés `id`, `row`, `col`, `epsg_native`, `core_native`), à charger dans un SIG.
+- `tiles.geojson` : emprises `core` des dalles, dans le CRS `--out-crs` de `grid_tiles.py plan` (défaut EPSG:4326 ; ex. `--out-crs 2154` pour Lambert 93) (propriétés `id`, `row`, `col`, `epsg_native`, `core_native`), à charger dans un SIG.
 - `splats/<dalle>.splat` : résultat clippé à l'emprise `core`.
 - `logs/<dalle>.log` et `logs/failed.txt` en cas d'échec.
 - `work/<dalle>/` : calcul intermédiaire, avec `tile.conf` et les liens d'images en mode images.
