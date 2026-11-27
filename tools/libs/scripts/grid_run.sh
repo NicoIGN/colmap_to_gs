@@ -131,11 +131,13 @@ PANORAMAX_BBOX_EPSG="$GRID_CRS"
 $metric_line
 EOF
 
+    echo "[tile] $id : pipeline $grid_source démarré ($(date '+%F %T'))"
     if [[ "$grid_source" == panoramax ]]; then
       bash "$repo_root/scripts/panoramax_to_3dgs.sh" "$tile_conf" all "${redo_args[@]}" || return 1
     else
       bash "$repo_root/scripts/images_to_3dgs.sh" "$tile_conf" --images "$tile_dir/images" "${redo_args[@]}" || return 1
     fi
+    echo "[tile] $id : pipeline terminé, export et découpe ($(date '+%F %T'))"
 
     python3 "$repo_root/tools/export/filter_splat_by_bbox.py" \
       --input "$run_dir/$id.splat" --output "$splat_out" --format splat \
