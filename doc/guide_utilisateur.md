@@ -23,7 +23,11 @@ spécialisés liés ci-dessous.
 
 Trois pipelines enchaînent production COLMAP, entraînement et export. Chacun se lance avec `scripts/launch_*_to_3dgs.sh` (à lancer avec `bash`, pas `sbatch`) : sans `--slurm`, le calcul tourne sur la machine courante ; avec `--slurm`, il est soumis à Slurm, depuis le nœud de connexion.
 
-Exemples de lancement : `bash scripts/launch_images_to_3dgs.sh CONFIG` (machine courante) ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` (Slurm). Même schéma pour `launch_videos_to_3dgs.sh` et `launch_panoramax_to_3dgs.sh`.
+Pipeline images : `bash scripts/launch_images_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+
+Pipeline vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+
+Pipeline Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
 
 `--wait` et `--prepare-only` ne s'utilisent qu'avec `--slurm`.
 
