@@ -116,7 +116,10 @@ def select_images(images_dir, epsg, tiles, positions=None):
     paths = sorted(p for p in Path(images_dir).iterdir() if p.suffix in IMAGE_SUFFIXES)
     if not paths:
         raise ValueError(f"Aucune image JPEG dans {images_dir}")
-    for path in paths:
+    step = max(1, len(paths) // 10)
+    for index, path in enumerate(paths, 1):
+        if index % step == 0 or index == len(paths):
+            print(f"[select-images] positions lues : {index}/{len(paths)}", flush=True)
         if positions and path.name in positions:
             lat, lon, _ = positions[path.name]
         else:
