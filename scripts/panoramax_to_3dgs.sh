@@ -66,6 +66,8 @@ case "$phase" in
 esac
 [[ "$redo" != true ]] || redo_check_phase "$phase"
 [[ -f "$config_path" ]] || die "Configuration introuvable : $config_path"
+source "$repo_root/tools/libs/scripts/shell_helpers.sh"
+reject_grid_params "$config_path"
 source "$repo_root/tools/libs/scripts/pipeline_config.sh"
 load_pipeline_defaults "$repo_root" panoramax
 source "$config_path"

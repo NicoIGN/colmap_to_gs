@@ -9,4 +9,6 @@ done
 if [[ "$grid" == true ]]; then
   exec bash "$repo_root/scripts/grid_to_3dgs.sh" "${args[@]}" --source images
 fi
+source "$repo_root/tools/libs/scripts/shell_helpers.sh"
+reject_grid_params "${args[0]:-}"
 exec bash "$repo_root/tools/libs/launch.sh" "$@"

@@ -13,6 +13,8 @@ usage() {
 [[ "${1:-}" != --help && "${1:-}" != -h ]] || { usage; exit 0; }
 [[ $# -ge 1 ]] || { usage >&2; exit 1; }
 config="$1"; shift
+source "$repo_root/tools/libs/scripts/shell_helpers.sh"
+reject_grid_params "$config"
 images=""; phase=all; block=""; validate_only=false; redo=false
 while (($#)); do
   case "$1" in

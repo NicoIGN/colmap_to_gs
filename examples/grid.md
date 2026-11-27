@@ -57,6 +57,10 @@ bash "$GIT_ROOT/scripts/launch_panoramax_to_3dgs.sh" "$DATA_ROOT/config-grid.sh"
 Le lanceur appelle `scripts/grid_to_3dgs.sh CONFIG --source <panoramax|images>`, qui peut aussi
 être lancé directement avec la même option `--source`.
 
+Une configuration qui contient des `GRID_*` est refusée par les lanceurs sans `--grid` et par
+les scripts `images_to_3dgs.sh` / `panoramax_to_3dgs.sh`. Le contrôle lit le fichier de
+configuration : des `GRID_*` définis dans un fichier sourcé ne sont pas détectés.
+
 Sorties, dans `GRID_OUTPUT_DIR` (défaut `OUTPUT_DIR/grid`) :
 
 - `manifest.json` : emprises de chaque dalle (`core` exporté, `compute` calculé).
