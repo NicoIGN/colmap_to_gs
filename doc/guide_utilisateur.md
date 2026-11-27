@@ -23,9 +23,9 @@ spécialisés liés ci-dessous.
 
 Trois pipelines sont disponibles :
 
-- Images : `bash scripts/launch_images_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_images_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
-- Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_videos_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
-- Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG` sur la machine courante, ou `bash scripts/launch_panoramax_to_3dgs.sh CONFIG --slurm --wait` avec Slurm.
+- Images : `bash scripts/launch_images_to_3dgs.sh CONFIG`
+- Vidéo : `bash scripts/launch_videos_to_3dgs.sh CONFIG`
+- Panoramax : `bash scripts/launch_panoramax_to_3dgs.sh CONFIG`
 
 Options communes à ces pipelines :
 
