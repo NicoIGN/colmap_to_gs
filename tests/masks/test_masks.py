@@ -154,7 +154,7 @@ class MaskResumeTests(unittest.TestCase):
             prepare_masks.validate_masks(self.images, self.masks)
         self.assertIn("Vérification des masques", output.getvalue())
         self.assertIn("2/2 (100.0%)", output.getvalue())
-        self.assertIn("[reprise] 2 masques vérifiés", output.getvalue())
+        self.assertIn("Vérification des masques terminée : 2 masques vérifiés", output.getvalue())
 
     def test_shared_policies_link_feature_masks_to_training_masks(self):
         prepare_masks.prepare()

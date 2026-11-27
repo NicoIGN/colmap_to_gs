@@ -11,10 +11,12 @@ sharing and validation all live here, so pipelines only call this CLI.
 """
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 import hashlib
 import json
 import math
 import os
+from functools import partial
 from pathlib import Path
 import shutil
 import subprocess
@@ -128,9 +130,31 @@ def record_inputs(directory, digest):
     write_json(directory / "masks.json", report)
 
 
-def validate_masks(images, output, *, allow_missing=False):
+def check_mask(source, images, output, allow_missing):
+    """Return the expected mask path when it is absent and allowed to be missing, else None."""
     from PIL import Image
 
+    mask_path = output / (source.relative_to(images).as_posix() + ".png")
+    if not mask_path.is_file():
+        if allow_missing:
+            return mask_path
+        raise MissingMaskError(
+            f"Masque attendu absent : {mask_path} (image {source.relative_to(images).as_posix()} "
+            f"non couverte par {output})"
+        )
+    with Image.open(source) as image, Image.open(mask_path) as mask:
+        mask.load()
+        if mask.format != "PNG" or mask.mode != "L" or mask.size != image.size:
+            raise ValueError(
+                f"Masque invalide (PNG monochrome aux dimensions de l'image requis) : {mask_path}"
+            )
+        histogram = mask.histogram()
+        if sum(histogram[1:255]):
+            raise ValueError(f"Masque non binaire (0/255 requis) : {mask_path}")
+    return None
+
+
+def validate_masks(images, output, *, allow_missing=False):
     sources = sorted(
         path for path in images.rglob("*")
         if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
@@ -142,29 +166,18 @@ def validate_masks(images, output, *, allow_missing=False):
             f"Dossier de masques introuvable : {output}. "
             "Vérifier SFM_MASKS_DIR / TRAIN_MASKS_DIR dans la config (ou SFM_MASKS / TRAIN_MASKS = off)."
         )
+    jobs = max(1, min(int(os.environ.get("NUM_CPUS") or os.cpu_count() or 1), len(sources)))
+    label = "Vérification des masques"
     missing = []
-    progress(0, len(sources), None, "Vérification des masques")
-    for index, source in enumerate(sources, 1):
-        progress(index, len(sources), None, "Vérification des masques")
-        mask_path = output / (source.relative_to(images).as_posix() + ".png")
-        if not mask_path.is_file():
-            if allow_missing:
-                missing.append(mask_path)
-                continue
-            raise MissingMaskError(
-                f"Masque attendu absent : {mask_path} (image {source.relative_to(images).as_posix()} "
-                f"non couverte par {output})"
-            )
-        with Image.open(source) as image, Image.open(mask_path) as mask:
-            mask.load()
-            if mask.format != "PNG" or mask.mode != "L" or mask.size != image.size:
-                raise ValueError(
-                    f"Masque invalide (PNG monochrome aux dimensions de l'image requis) : {mask_path}"
-                )
-            histogram = mask.histogram()
-            if sum(histogram[1:255]):
-                raise ValueError(f"Masque non binaire (0/255 requis) : {mask_path}")
-    print(f"[reprise] {len(sources)-len(missing)} masques vérifiés dans {output}.", flush=True)
+    progress(0, len(sources), None, label)
+    check = partial(check_mask, images=images, output=output, allow_missing=allow_missing)
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        for done, result in enumerate(pool.map(check, sources, chunksize=16), 1):
+            if result is not None:
+                missing.append(result)
+            progress(done, len(sources), None, label)
+    print(f"[masques] {label} terminée : {len(sources) - len(missing)} masques vérifiés "
+          f"({len(missing)} absents) dans {output}.", flush=True)
     return missing
 
 
