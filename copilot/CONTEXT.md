@@ -30,7 +30,7 @@ source ~/.venvs/colmap_to_gs/bin/activate
 Environnement de référence de l'agent : `copilot/conda_env_copilot.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
 
 ```bash
-conda env create --yes --file "$GIT_ROOT/copilot/conda_env_copilot.yml"
+conda env create --yes --file "$GIT_ROOT/copilot/conda_env.yml"
 conda activate colmap_to_gs_copilot
 ```
 
