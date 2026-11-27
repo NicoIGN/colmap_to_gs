@@ -21,7 +21,7 @@ from pyproj import Transformer
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "georef"))
 from georef_gps import image_gps  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "sfm" / "spirula"))
-from gps_to_metric_positions import to_enu  # noqa: E402
+from gps_to_metric_positions import read_header_origin, to_enu  # noqa: E402
 
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".JPG", ".JPEG"}
 
@@ -133,6 +133,55 @@ def select_images(images_dir, epsg, tiles, positions=None):
     return selection
 
 
+def select_from_metric(images_dir, epsg, tiles, metric_file):
+    """Sélection à partir de SFM_SP_METRIC_POSITIONS (ENU en mètres autour de l'origine d'en-tête), sans lire les EXIF.
+
+    Les images absentes du fichier métrique sont ignorées et comptées dans le message.
+    """
+    origin = read_header_origin(Path(metric_file))
+    if origin is None:
+        raise ValueError(f"{metric_file} : en-tête `# origin_lat/lon/alt` absent")
+    rows = {}
+    for raw in Path(metric_file).read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if not line:
+            continue
+        name, x, y, z = line.split()
+        rows[name] = (float(x), float(y), float(z))
+
+    lat0, lon0, h0 = origin
+    to_ecef = Transformer.from_crs("EPSG:4326", "EPSG:4978", always_xy=True)
+    ox, oy, oz = to_ecef.transform(lon0, lat0, h0)
+    phi, lam = math.radians(lat0), math.radians(lon0)
+    sp, cp, sl, cl = math.sin(phi), math.cos(phi), math.sin(lam), math.cos(lam)
+    to_projected = Transformer.from_crs("EPSG:4978", f"EPSG:{epsg}", always_xy=True)
+
+    selection = {tile["id"]: [] for tile in tiles}
+    paths = sorted(p for p in Path(images_dir).iterdir() if p.suffix in IMAGE_SUFFIXES)
+    if not paths:
+        raise ValueError(f"Aucune image JPEG dans {images_dir}")
+    skipped = 0
+    step = max(1, len(paths) // 10)
+    for index, path in enumerate(paths, 1):
+        if index % step == 0 or index == len(paths):
+            print(f"[select-images] positions lues : {index}/{len(paths)}", flush=True)
+        if path.name not in rows:
+            skipped += 1
+            continue
+        east, north, up = rows[path.name]
+        dx = -sl * east - sp * cl * north + cp * cl * up
+        dy = cl * east - sp * sl * north + cp * sl * up
+        dz = cp * north + sp * up
+        x, y, _ = to_projected.transform(ox + dx, oy + dy, oz + dz)
+        point = (x, y)
+        for tile in tiles:
+            if inside(point, tile["compute"]):
+                selection[tile["id"]].append(path)
+    if skipped:
+        print(f"[select-images] {skipped} image(s) absente(s) de SFM_SP_METRIC_POSITIONS, ignorée(s)", flush=True)
+    return selection
+
+
 def write_tile_metric(selection, tiles, epsg, output_dir, positions=None, global_metric=None):
     """Écrit work/<dalle>/metric_positions.txt (SFM_SP_METRIC_POSITIONS) pour chaque dalle non vide.
 
@@ -228,7 +277,10 @@ def main():
         manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
         print(f"[select-images] {len(manifest['tiles'])} dalle(s), lecture des positions...", flush=True)
         positions = read_positions(args.positions) if args.positions else None
-        selection = select_images(args.images, manifest["epsg"], manifest["tiles"], positions)
+        if positions is None and args.global_metric is not None:
+            selection = select_from_metric(args.images, manifest["epsg"], manifest["tiles"], args.global_metric)
+        else:
+            selection = select_images(args.images, manifest["epsg"], manifest["tiles"], positions)
         print("[select-images] sélection faite, écriture des liens et positions...", flush=True)
         counts = link_selection(selection, args.output_dir)
         write_tile_metric(selection, manifest["tiles"], manifest["epsg"], args.output_dir,

@@ -5,7 +5,14 @@ from pathlib import Path
 from PIL import Image
 from pyproj import Transformer
 
-from tools.grid.grid_tiles import parse_bbox, plan_tiles, read_positions, select_images, write_tile_metric
+from tools.grid.grid_tiles import (
+    parse_bbox,
+    plan_tiles,
+    read_positions,
+    select_from_metric,
+    select_images,
+    write_tile_metric,
+)
 
 
 class PlanTilesTest(unittest.TestCase):
@@ -50,6 +57,19 @@ class SelectImagesTest(unittest.TestCase):
             Image.new("RGB", (8, 8)).save(Path(folder) / "pano_1.jpg")
             selection = select_images(folder, 2154, self.TILES, {"pano_1.jpg": (lat, lon, 0.0)})
             self.assertEqual([p.name for paths in selection.values() for p in paths], ["pano_1.jpg"])
+
+    def test_metric_positions_select_without_reading_exif(self):
+        from tools.sfm.spirula.gps_to_metric_positions import to_enu
+        lat, lon = self._lat_lon_centre()
+        origin = (lat + 0.01, lon - 0.01, 0.0)
+        east, north, up = to_enu(lat, lon, 0.0, origin)
+        with tempfile.TemporaryDirectory() as folder:
+            Image.new("RGB", (8, 8)).save(Path(folder) / "pano_1.jpg")
+            metric = Path(folder) / "metric.txt"
+            metric.write_text(f"# origin_lat {origin[0]}\n# origin_lon {origin[1]}\n# origin_alt 0\n"
+                              f"pano_1.jpg {east} {north} {up}\n", encoding="utf-8")
+            selection = select_from_metric(folder, 2154, self.TILES, metric)
+        self.assertEqual([p.name for paths in selection.values() for p in paths], ["pano_1.jpg"])
 
     def test_positions_file_format_is_checked(self):
         with tempfile.TemporaryDirectory() as folder:
