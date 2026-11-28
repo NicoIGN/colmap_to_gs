@@ -11,6 +11,11 @@ from scipy.spatial.transform import Rotation
 from tools.georef.georef_gps import horizontal_fit, apply_sim, run, geodetic_to_ecef, enu_rotation
 from tools.sfm.resume import validate_sparse
 
+if not hasattr(pycolmap.Reconstruction, "add_camera_with_trivial_rig"):
+    raise RuntimeError(
+        f"pycolmap {getattr(pycolmap, '__version__', '?')} trop ancien pour ces tests : "
+        "installer pycolmap==4.2.1 (wheels macOS 14+ arm64 ; Python >= 3.10)")
+
 
 class HorizontalGpsTest(unittest.TestCase):
     def test_horizontal_alignment_without_height(self):

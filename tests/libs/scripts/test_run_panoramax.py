@@ -18,6 +18,10 @@ def write_valid_sparse(folder):
     """Écrit un petit modèle COLMAP valide (lu par resume.py après reconstruction)."""
     import numpy as np
     import pycolmap
+    if not hasattr(pycolmap.Reconstruction, "add_camera_with_trivial_rig"):
+        raise RuntimeError(
+            f"pycolmap {getattr(pycolmap, '__version__', '?')} trop ancien pour ces tests : "
+            "installer pycolmap==4.2.1 (wheels macOS 14+ arm64 ; Python >= 3.10)")
     model = pycolmap.Reconstruction()
     model.add_camera_with_trivial_rig(pycolmap.Camera(
         model="PINHOLE", width=16, height=16, params=[8, 8, 8, 8], camera_id=1))

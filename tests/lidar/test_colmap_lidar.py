@@ -17,6 +17,11 @@ from scipy.spatial.transform import Rotation
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/lidar"))
 import align_colmap_to_lidar as tool
 
+if not hasattr(pycolmap.Reconstruction, "add_camera_with_trivial_rig"):
+    raise RuntimeError(
+        f"pycolmap {getattr(pycolmap, '__version__', '?')} trop ancien pour ces tests : "
+        "installer pycolmap==4.2.1 (wheels macOS 14+ arm64 ; Python >= 3.10)")
+
 
 def reconstruction():
     model = pycolmap.Reconstruction()
