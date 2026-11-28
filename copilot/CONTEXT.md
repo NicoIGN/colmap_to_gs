@@ -55,18 +55,15 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 ### pyproj (projections CRS)
 - Rôle : conversions WGS84 ↔ projection (Lambert-93 EPSG:2154 par défaut, ou CRS GRID/Panoramax). Import `from pyproj import Transformer`, parfois `CRS`, `Geod`, `ProjError`.
 - Utilisé par : `tools/georef/georef_gps.py` et `tools/georef/positions_to_geojson.py`, `tools/sfm/spirula/gps_to_metric_positions.py` (ENU), `tools/georef/georef_colmap_from_gpx.py` (import tardif, avec fiona), `tools/grid/grid_tiles.py` (emprises GRID), `tools/export/filter_splat_by_bbox.py` (clip), `tools/panoramax/download.py` et `sfm_filter_matches_gps.py`, `tools/lidar/*`, `tools/vector/fetch_vector.py`, `tools/prepare/prepare_image_info.py`.
-- Installation : `copilot/setup_env.sh` l'installe avec `laspy lazrs fiona`. Version épinglée dans `tools/panoramax/requirements.txt` (`pyproj>=3.4,<4`). Dans les environnements conda, `copilot/conda_env.yml` fixe `pyproj==3.8.0`.
+- Version : `pyproj>=3.4,<4` (`tools/panoramax/requirements.txt`) ; `pyproj==3.8.0` dans `copilot/conda_env.yml`.
 - Pièges : les modules qui l'importent en tête (ex. `tools/grid/grid_tiles.py`, `tools/sfm/spirula/gps_to_metric_positions.py`) échouent dès l'import si `pyproj` manque, même pour une commande qui n'en a pas besoin à l'exécution. Les imports tardifs (`georef_colmap_from_gpx.py`, `tools/lidar/pipeline_options.py`) ne l'exigent que pour leur option.
 - Ordre des axes : `Transformer.from_crs(..., always_xy=True)` donne (lon, lat) → (x, y). Sans `always_xy`, EPSG:4326 est lu en (lat, lon) et les points tombent au mauvais endroit.
-- Tests qui exigent pyproj : `tests/panoramax/test_download.py`, `tests/panoramax/test_sfm_filter_matches_gps.py`, `tests/lidar/test_colmap_lidar.py`, `tests/grid/test_grid_tiles.py`.
 - Vérification : `python -c "import pyproj; print(pyproj.__version__)"` dans `~/.venvs/colmap_to_gs`.
-
-- Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
 
 ## Mode grille (`--grid`)
 - Variables `GRID_*` dans la configuration, défauts dans `config/defaults/grid.default.sh` : `GRID_BBOX` (requis, `xmin,ymin,xmax,ymax` dans `GRID_CRS`), `GRID_CRS` (2154), `GRID_TILE_SIZE`, `GRID_OVERLAP` (0), `GRID_MARGIN` (0, seul le résultat dans la dalle est exporté), `GRID_POSITIONS` (mode images, prioritaire sur les GPS EXIF), `GRID_OUTPUT_DIR` (vide = `$OUTPUT_DIR/grid`).
-- Panoramax : `PANORAMAX_BBOX` est calculé par tuile (`tools/libs/scripts/grid_run.sh:129-130`), donc inutile en grille ; `GRID_POSITIONS` y est refusé (`grid_run.sh:43`).
-- Arrêt : Ctrl+C tue les sous-jobs locaux (un groupe de processus par worker, `grid_run.sh`), testé en isolé seulement. En Slurm, annuler la job array `grid-<source>` et le job `grid-prep` avec `scancel`.
+- Panoramax : `GRID_POSITIONS` est refusé en grille (`grid_run.sh:43`) ; `PANORAMAX_BBOX` est calculé par tuile (`grid_run.sh:129-130`).
+- Arrêt : Ctrl+C tue les sous-jobs locaux (un groupe de processus par worker, `grid_run.sh`). En Slurm, annuler la job array `grid-<source>` et le job `grid-prep` avec `scancel`.
 
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
@@ -93,7 +90,7 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 - Format `points3D.bin` : lecteur/écrivain dans `mvs_densify.py` (`read_points3d`, `write_points3d`). Tracks = tableau `(k, 2)` uint32 `(image_id, point2D_idx)`.
 
 ## Pièges généraux
-- Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
+- Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests ; ne restaurer que les fichiers de ses propres tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
 - `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
 - `colmap_split_blocks.py` ignore ou refuse les points sans track.
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
@@ -117,21 +114,16 @@ python -m unittest discover -s tests/panoramax -p 'test_*.py'   # panoramax
 python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 ```
 
-Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant et après les tests et ne restaurer que les fichiers modifiés par ses propres tests, sans écraser d'éventuelles modifications préexistantes.
-
 ## Validation de configuration
 - `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/libs/common.sh`).
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend.
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
-## Annexe Docker
-- Docker : daemon non lancé par défaut. Vérifier `docker info` ; sinon `nohup dockerd >/tmp/dockerd.log 2>&1 </dev/null &`.
-
 ## Panoramas HLOC
 - `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
-- Panoramas HLOC : les réglages de reprise `inputs.json`, `projection.json` et `hloc_policy.json` doivent rester contrôlés si on les modifie.
 - GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
 - Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
+- Modifier ces réglages : préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
 
 ## Documentation (README et `doc/`)
 - Structure obligatoire, dans cet ordre : d'abord l'objectif de l'outil, du script ou du pipeline (une ou deux phrases, puis le pipeline ou le flux en bref), ensuite les entrées et sorties, la configuration, le fonctionnement interne et les notes. Les détails vont dans des sous-sections (`###`) après l'objectif, jamais avant.
