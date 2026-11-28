@@ -13,7 +13,13 @@ phase=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --phase) phase="${2:?--phase demande un nom}"; shift 2 ;;
-    -h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; exit 0 ;;
+    -h|--help)
+      sed -n '2,4p' "${BASH_SOURCE[0]}"
+      echo "Phases disponibles :"
+      for dir in "$tests_dir"/*/; do
+        [[ -n "$(find "$dir" -name 'test_*.py' -print -quit)" ]] && basename "$dir"
+      done | sed 's/^/  - /'
+      exit 0 ;;
     *) echo "[ERREUR] Option inconnue : $1" >&2; exit 2 ;;
   esac
 done
