@@ -61,7 +61,6 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 ## Mode grille (`--grid`)
 - Variables `GRID_*` dans la configuration, défauts dans `config/defaults/grid.default.sh` : `GRID_BBOX` (requis, `xmin,ymin,xmax,ymax` dans `GRID_CRS`), `GRID_CRS` (2154), `GRID_TILE_SIZE`, `GRID_OVERLAP` (0), `GRID_MARGIN` (0, seul le résultat dans la dalle est exporté), `GRID_POSITIONS` (mode images, prioritaire sur les GPS EXIF), `GRID_OUTPUT_DIR` (vide = `$OUTPUT_DIR/grid`).
 - Panoramax : `PANORAMAX_BBOX` est calculé par tuile (`tools/libs/scripts/grid_run.sh:129-130`), donc inutile en grille ; `GRID_POSITIONS` y est refusé (`grid_run.sh:43`).
-- Exemple : `config/grid-panoramax-place-de-la-nation.sh`. Vérifier le découpage avec `--plan-only`.
 - Arrêt : Ctrl+C tue les sous-jobs locaux (un groupe de processus par worker, `grid_run.sh`), testé en isolé seulement. En Slurm, annuler la job array `grid-<source>` et le job `grid-prep` avec `scancel`.
 
 ## Viewer (`tools/viewer`)
