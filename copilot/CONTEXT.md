@@ -13,7 +13,7 @@ Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans
 
 ## Projet
 - Pipeline images/vidéos → 3DGS (SfM HLOC / Spirula / COLMAP / Nerfstudio, entraînement Spirula, export `.splat`).
-- Point d'entrée vidéo : `scripts/launch_videos_to_3dgs.sh <config.sh>` (`VIDEO`, `NUM_FRAMES` dans la configuration).
+- Points d'entrée : `scripts/launch_images_to_3dgs.sh`, `scripts/launch_videos_to_3dgs.sh` (`VIDEO`, `NUM_FRAMES` dans la configuration), `scripts/launch_panoramax_to_3dgs.sh`. Chacun prend un `<config.sh>`.
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
 - Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
