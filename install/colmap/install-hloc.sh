@@ -55,18 +55,8 @@ fi
 # Sur macOS, torch et pycolmap (wheels pip) embarquent chacun leur libomp : deux runtimes
 # OpenMP dans le même processus provoquent un SIGSEGV. On pointe les copies pip vers la libomp conda.
 if [[ "$(uname -s)" == Darwin ]]; then
-  conda_omp="$("$python_bin" -c 'import sys; print(sys.prefix)')/lib/libomp.dylib"
-  purelib="$("$python_bin" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
-  if [[ -f "$conda_omp" ]]; then
-    while IFS= read -r lib; do
-      [[ -L "$lib" ]] && continue
-      rm -f "$lib"
-      ln -s "$conda_omp" "$lib"
-      echo "[HLOC] libomp pip remplacée par un lien vers $conda_omp : $lib"
-    done < <(find "$purelib" -path '*/.dylibs/libomp*.dylib' 2>/dev/null)
-  else
-    echo "[HLOC] attention : $conda_omp introuvable, libomp pip non dédupliquée."
-  fi
+  bash "$script_dir/../../environment/macos/fix-libomp.sh" --python "$python_bin" \
+    || echo "[HLOC] attention : libomp non dédupliquée (voir environment/macos/fix-libomp.sh)."
 fi
 
 "$python_bin" - <<'PY' || die "Imports HLOC incomplets (voir erreur ci-dessus). Pour h5py : mamba install -c conda-forge h5py"
