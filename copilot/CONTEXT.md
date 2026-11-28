@@ -106,12 +106,6 @@ python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend.
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
-## Panoramas HLOC
-- `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
-- GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
-- Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
-- Modifier ces réglages : préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
-
 ## Documentation (README et `doc/`)
 - Structure obligatoire, dans cet ordre : d'abord l'objectif de l'outil, du script ou du pipeline (une ou deux phrases, puis le pipeline ou le flux en bref), ensuite les entrées et sorties, la configuration, le fonctionnement interne et les notes. Les détails vont dans des sous-sections (`###`) après l'objectif, jamais avant.
 - Ne pas éparpiller une même notion (ex. paramètres de téléchargement) sur plusieurs sections : une section la décrit en entier, les autres renvoient vers elle.
