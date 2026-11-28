@@ -11,6 +11,11 @@ import pycolmap
 from tools.georef.georef_positions import run, read_positions
 from tools.sfm.spirula.gps_to_metric_positions import check_gauge
 
+if not hasattr(pycolmap.Reconstruction, "add_camera_with_trivial_rig"):
+    raise RuntimeError(
+        f"pycolmap {getattr(pycolmap, '__version__', '?')} trop ancien pour ces tests : "
+        "installer pycolmap==4.2.1 (wheels macOS 14+ arm64 ; Python >= 3.10)")
+
 
 def write_sparse(folder, centers):
     camera = pycolmap.Camera(model="PINHOLE", width=16, height=16, params=[8, 8, 8, 8], camera_id=1)

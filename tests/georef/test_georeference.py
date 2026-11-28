@@ -10,6 +10,13 @@ import unittest
 
 import numpy as np
 
+for _module in ("fiona", "pyproj"):
+    try:
+        __import__(_module)
+    except ImportError as error:
+        raise RuntimeError(
+            f"Module '{_module}' absent : pip install fiona pyproj") from error
+
 
 SOURCE = Path(__file__).resolve().parents[2] / "tools/georef"
 SPEC = importlib.util.spec_from_file_location(
