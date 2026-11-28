@@ -55,8 +55,6 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Vérification : `python -c "import pyproj; print(pyproj.__version__)"` dans `~/.venvs/colmap_to_gs`.
 
 - Test rapide sans polluer le venv : `python3 -m venv /tmp/x && /tmp/x/bin/pip install -q numpy scipy plyfile`.
-- Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_panoramax.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
-- Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
 ## Mode grille (`--grid`)
 - Variables `GRID_*` dans la configuration, défauts dans `config/defaults/grid.default.sh` : `GRID_BBOX` (requis, `xmin,ymin,xmax,ymax` dans `GRID_CRS`), `GRID_CRS` (2154), `GRID_TILE_SIZE`, `GRID_OVERLAP` (0), `GRID_MARGIN` (0, seul le résultat dans la dalle est exporté), `GRID_POSITIONS` (mode images, prioritaire sur les GPS EXIF), `GRID_OUTPUT_DIR` (vide = `$OUTPUT_DIR/grid`).
@@ -90,7 +88,6 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 ## Pièges généraux
 - Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
 - `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
-- Suffixes `.Jpg`/`.PNG` : ignorés silencieusement (`IMAGE_SUFFIXES`). Question ouverte, non tranchée.
 - `colmap_split_blocks.py` ignore ou refuse les points sans track.
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
 
@@ -117,7 +114,7 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 
 ## Validation de configuration
 - `validate_sfm_geometry_config` (`tools/libs/scripts/pipeline_config.sh`) et `validate_config` (`tools/libs/common.sh`).
-- Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
+- Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend.
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
 ## Annexe Docker
@@ -125,7 +122,7 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 
 ## Panoramas HLOC
 - `COLMAP_METHOD=hloc` + `HLOC_CAMERA_MODEL=EQUIRECTANGULAR` : six vues pinhole 110° pour SfM pycolmap et entraînement ; focale fixée. Panoramax exige `PANORAMAX_PICTURE_TYPE=360`.
-- L'ancien paramètre `SFM_EQUIRECTANGULAR_VIEWS` est refusé dans les nouvelles configurations ; les signatures locales où il valait `true` restent compatibles avec le mode `EQUIRECTANGULAR`. En modifiant ces réglages, préserver les contrôles de reprise `inputs.json`, `projection.json` et `hloc_policy.json`.
+- Panoramas HLOC : les réglages de reprise `inputs.json`, `projection.json` et `hloc_policy.json` doivent rester contrôlés si on les modifie.
 - GPS EXIF ou métadonnées Panoramax conservés, puis modèle recalé en ENU local. Altitudes manquantes : recalage horizontal et verticale supposant les panoramas redressés ; contrôler les résidus et `georef_stats.json`.
 - Local : sans trois GPS exploitables, le modèle reste explicitement non géoréférencé ; Panoramax refuse. GPX, MVS, LiDAR et masques externes ne sont pas pris en charge dans ce mode.
 
