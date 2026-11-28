@@ -20,6 +20,13 @@ Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans
 - Avant de continuer, toujours mettre le projet à jour avec `git pull` sur la branche (`review_copilot`).
 - Chemins du projet : `$GIT_ROOT/...` ; données et résultats : `$DATA_ROOT/...`. Ne pas utiliser de chemin absolu dans les réponses.
 
+## Structure du dépôt
+- `scripts/` : points d'entrée (`launch_images_to_3dgs.sh`, `launch_videos_to_3dgs.sh`, `launch_panoramax_to_3dgs.sh`), paramètres dans `scripts/helper.sh`, scripts locaux dans `scripts/local/`.
+- `tools/` : code métier par domaine (sfm, georef, grid, panoramax, lidar, export, viewer, libs).
+- `config/defaults/` : défauts par domaine (`*.default.sh`) ; `config/` : configurations utilisateur.
+- `tests/` : miroir de `tools/` (voir `tests/README.md`).
+- Ajouter une clé de configuration : défaut dans `config/defaults/`, validation dans `tools/libs/common.sh` ou `tools/libs/scripts/pipeline_config.sh`, documentation dans `doc/guide_utilisateur.md`.
+
 ## Dépendances Python (venv dédié)
 Un venv évite l'erreur PEP 668 (`externally-managed-environment`) et les `No module named ...` :
 
@@ -137,4 +144,5 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - Commits : message en anglais, trailer `Co-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>`.
 - Terminologie : écrire CRS (et non SCR) dans le code, la doc et les messages.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
+- Avant un commit : lancer les tests du domaine modifié, puis `git pull --rebase` et `git push` sur la branche de travail.
 - Une correction = tests ciblés qui échouent sans le correctif.
