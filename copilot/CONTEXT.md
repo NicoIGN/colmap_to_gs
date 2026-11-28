@@ -17,6 +17,7 @@ Avant tout test, active ~/.venvs/colmap_to_gs (« Dépendances Python ») : sans
 - Config : `config/defaults/*.default.sh` (défauts, chargés en premier) puis `config.sh` utilisateur (a le dernier mot).
 - Avant d'ajouter un paramètre, vérifier si les paramètres existants permettent déjà de satisfaire le besoin ; privilégier leur réutilisation et éviter les réglages redondants.
 - Branche de travail : `review_copilot`. Pousser les changements terminés sur la branche (pas de merge direct).
+- Avant de continuer, toujours mettre le projet à jour avec `git pull` sur la branche (`review_copilot`).
 - Chemins du projet : `$GIT_ROOT/...` ; données et résultats : `$DATA_ROOT/...`. Ne pas utiliser de chemin absolu dans les réponses.
 
 ## Dépendances Python (venv dédié)
