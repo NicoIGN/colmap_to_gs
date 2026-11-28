@@ -59,8 +59,14 @@ def run_live(command, log_dir, name, *, cwd=None, env=None):
 def configure_nvidia_vulkan(library_dir, work, log_dir):
     """Expose Colab's mounted NVIDIA libraries without installing a driver."""
     library_dir = Path(library_dir)
-    glx = (library_dir / "libGLX_nvidia.so.0").resolve(strict=True)
-    egl = (library_dir / "libEGL_nvidia.so.0").resolve(strict=True)
+    names = ("libGLX_nvidia.so.0", "libEGL_nvidia.so.0")
+    missing = [name for name in names if not (library_dir / name).exists()]
+    if missing:
+        raise RuntimeError(
+            f"GPU NVIDIA indisponible : bibliothèques absentes de {library_dir} ({', '.join(missing)}). "
+            "Vérifier que le runtime Colab a un GPU NVIDIA (T4 ou équivalent).")
+    glx = (library_dir / names[0]).resolve(strict=True)
+    egl = (library_dir / names[1]).resolve(strict=True)
     destination = Path(work) / "nvidia-vulkan"
     destination.mkdir(parents=True, exist_ok=True)
     icd = destination / "nvidia_icd.json"

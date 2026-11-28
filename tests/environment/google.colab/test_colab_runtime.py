@@ -26,7 +26,7 @@ class ColabRuntimeTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
 
     def test_live_output_before_exit_and_progress_without_newline(self):
         finished = self.root / "finished"
@@ -511,7 +511,7 @@ class ColabRuntimeTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 configure_nvidia_vulkan(libraries, self.root, self.root)
             self.assertEqual(os.environ, before)
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaisesRegex(RuntimeError, "GPU NVIDIA indisponible"):
             configure_nvidia_vulkan(self.root / "missing", self.root, self.root)
 
     def test_vulkan_diagnostic_retains_failures_without_changing_environment(self):
