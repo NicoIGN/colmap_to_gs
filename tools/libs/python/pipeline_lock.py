@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import subprocess
 import sys
 
 
@@ -32,31 +33,53 @@ def alive(owner):
     return current == owner.get("start") if current is not None else True
 
 
+def list_processes():
+    """Yield (pid, ppid, command, proc_dir); proc_dir is None when /proc is unavailable (macOS)."""
+    if Path("/proc/self/stat").is_file():
+        for process in Path("/proc").glob("[0-9]*"):
+            try:
+                ppid = int(Path(process / "stat").read_text().rsplit(")", 1)[1].split()[1])
+                command = (process / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            except PermissionError as error:
+                raise ValueError(f"Impossible de vérifier le processus {process.name}.") from error
+            yield int(process.name), ppid, command, process
+        return
+    output = subprocess.run(["ps", "-axww", "-o", "pid=,ppid=,command="],
+                            capture_output=True, text=True, check=True).stdout
+    for line in output.splitlines():
+        pid, ppid, command = line.split(None, 2)
+        yield int(pid), int(ppid), command, None
+
+
 def legacy_active(workspace):
-    if not Path("/proc/self/stat").is_file():
-        raise ValueError("Ancien verrou sans propriétaire : vérifier et retirer manuellement.")
+    processes = list(list_processes())
+    parents = {pid: ppid for pid, ppid, _, _ in processes}
     ancestors = set()
     pid = os.getpid()
-    while pid:
+    while pid and pid not in ancestors:
         ancestors.add(pid)
-        pid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
-    for process in Path("/proc").glob("[0-9]*"):
-        if int(process.name) in ancestors:
+        pid = parents.get(pid, 0)
+    for pid, _, command, process in processes:
+        if pid in ancestors:
+            continue
+        if not any(name in command for name in
+                   ("images_to_3dgs", "images_to_colmap", "run_3dgs_block",
+                    "run_spirula", "spirula", "colmap", "ns-train")):
+            continue
+        if str(workspace) in command:
+            return True
+        if process is None:
             continue
         try:
-            command = (process / "cmdline").read_bytes().replace(b"\0", b" ").decode(errors="replace")
-            if not any(name in command for name in
-                       ("images_to_3dgs", "images_to_colmap", "run_3dgs_block",
-                        "run_spirula", "spirula", "colmap", "ns-train")):
-                continue
             environment = (process / "environ").read_bytes().split(b"\0")
-            if (str(workspace) in command or
-                    f"OUTPUT_DIR={workspace}".encode() in environment):
-                return True
         except (FileNotFoundError, ProcessLookupError):
             continue
         except PermissionError as error:
-            raise ValueError(f"Impossible de vérifier le processus {process.name}.") from error
+            raise ValueError(f"Impossible de vérifier le processus {pid}.") from error
+        if f"OUTPUT_DIR={workspace}".encode() in environment:
+            return True
     return False
 
 
