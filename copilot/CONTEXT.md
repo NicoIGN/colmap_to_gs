@@ -35,15 +35,14 @@ bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
-Environnement de référence de l'agent : `copilot/conda_env.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
+Environnement de référence de l'agent : `copilot/conda_env.yml` (Python 3.12.3, versions épinglées, exporté depuis `~/.venvs/colmap_to_gs`) :
 
 ```bash
 conda env create --yes --file "$GIT_ROOT/copilot/conda_env.yml"
 conda activate colmap_to_gs_copilot
 ```
 
-Il ne contient pas `fiona` (requis par `tools/georef/georef_colmap_from_gpx.py`, test `georeference`) : `pip install fiona` si ce test est lancé.
-Il ne contient pas `pyogrio` (requis par `tools/vector/requirements.txt` et `tests/vector/test_fetch_vector.py`) : `pip install pyogrio` si ce test est lancé.
+Il contient `fiona` (requis par `tools/georef/georef_colmap_from_gpx.py`) mais pas `pyogrio` (requis par `tools/vector/requirements.txt` et `tests/vector/test_fetch_vector.py`) : `pip install pyogrio` si ce test est lancé.
 
 Paquets utilisés par les tests et le pipeline :
 - Tests images/Spirula : `pillow numpy opencv-python-headless tqdm scipy plyfile`
@@ -70,17 +69,7 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Prérequis : `georef.js` importe `proj4` sans `package.json`. Installer `proj4` hors dépôt (`npm i --prefix /tmp/proj4mod proj4`), puis lier `tools/viewer/node_modules` vers `/tmp/proj4mod/node_modules` et supprimer le lien après les tests.
 - Syntaxe seule : `node --check html/viewer/colmap.js`.
 - Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/sfm/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
-- Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
-
-## Annexe macOS : HLOC et OpenMP
-- HLOC s'installe avec `install/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
-- LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
-- macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
-- HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
-- Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
-
-## Bash : `set -u` et tableaux vides
-Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/sfm/backends/*.sh`.
+- Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur avant de conclure.
 
 ## Densification MVS (`COLMAP_USE_MVS`, défaut `false`)
 - Clés : `COLMAP_USE_MVS`, `MVS_MAX_IMAGE_SIZE` (2000), `MVS_GPU_INDEX` (0) dans `config/defaults/sfm.default.sh`.
@@ -101,8 +90,6 @@ Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier
 ```bash
 python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
 ```
-
-Sans ces imports, voir « Dépendances Python » ci-dessus : les échecs `ModuleNotFoundError` ne sont pas une régression du code.
 
 Tous les tests sont dans `tests/`, en miroir de `tools/` : `tests/<domaine>/test_X.py` teste `tools/<domaine>/X.py` (voir `tests/README.md`).
 
@@ -132,9 +119,19 @@ python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 - Les commandes exécutables vont dans `examples/*.md`, pas dans les README d'outils.
 - Après une modification : vérifier que les liens et ancres existent, et que les blocs de code sont équilibrés.
 
+## Annexe macOS : HLOC et OpenMP
+- HLOC s'installe avec `install/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
+- LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
+- macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
+- HLOC ne sélectionne que `cuda` ou `cpu` (jamais `mps`). Les runs Mac sont donc CPU. Pour le GPU, passer par Slurm (`scripts/launch_videos_to_3dgs.sh CONFIG`, variables `SLURM_*`).
+- Vérifier le backend réel : `python -c "import torch; print(torch.cuda.is_available(), torch.backends.mps.is_available())"`.
+
+## Annexe Bash : `set -u` et tableaux vides
+Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound variable`). Utiliser `${arr[@]+"${arr[@]}"}`. Cas présents : `videos_to_3dgs.sh`, `tools/sfm/backends/*.sh`.
+
 ## Conventions
 - Commits : message en anglais, trailer `Co-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>`.
 - Terminologie : écrire CRS (et non SCR) dans le code, la doc et les messages.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
-- Avant un commit : lancer les tests du domaine modifié, puis `git pull --rebase` et `git push` sur la branche de travail.
+- Avant un commit : lancer les tests du domaine modifié.
 - Une correction = tests ciblés qui échouent sans le correctif.
