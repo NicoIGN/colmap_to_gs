@@ -61,6 +61,7 @@ def legacy_active(workspace):
     while pid and pid not in ancestors:
         ancestors.add(pid)
         pid = parents.get(pid, 0)
+    candidates = {os.path.abspath(workspace), os.path.realpath(workspace)}
     for pid, _, command, process in processes:
         if pid in ancestors:
             continue
@@ -68,7 +69,7 @@ def legacy_active(workspace):
                    ("images_to_3dgs", "images_to_colmap", "run_3dgs_block",
                     "run_spirula", "spirula", "colmap", "ns-train")):
             continue
-        if str(workspace) in command:
+        if any(path in command for path in candidates):
             return True
         if process is None:
             continue
@@ -78,7 +79,7 @@ def legacy_active(workspace):
             continue
         except PermissionError as error:
             raise ValueError(f"Impossible de vérifier le processus {pid}.") from error
-        if f"OUTPUT_DIR={workspace}".encode() in environment:
+        if any(f"OUTPUT_DIR={path}".encode() in environment for path in candidates):
             return True
     return False
 
@@ -87,7 +88,7 @@ def stage_lock(path, pid, resume, release=False, workspace=None, ignore=False):
     path = Path(path)
     if ignore and not resume and not release:
         raise ValueError("REMOVE_LOCKS=true exige PIPELINE_RESUME=true.")
-    workspace = Path(workspace or path.parent).resolve()
+    workspace = Path(workspace or path.parent)
     guards = path.parent / ".lock-guards"
     guards.mkdir(parents=True, exist_ok=True)
     with (guards / f"{path.name}.guard").open("a") as guard:
