@@ -28,7 +28,7 @@ bash "$GIT_ROOT/copilot/setup_env.sh"           # crée ~/.venvs/colmap_to_gs et
 source ~/.venvs/colmap_to_gs/bin/activate
 ```
 
-Environnement de référence de l'agent : `copilot/conda_env_copilot.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
+Environnement de référence de l'agent : `copilot/conda_env.yml` (Python 3.12.3, versions épinglées, testé avec `~/.venvs/colmap_to_gs`). Pour une prochaine session, créer et utiliser cet env en priorité :
 
 ```bash
 conda env create --yes --file "$GIT_ROOT/copilot/conda_env.yml"
@@ -58,6 +58,12 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Sans numpy, `test_lidar_recalage_precedes_partition_and_block_jobs_check_it` (`test_run_panoramax.py`) échoue. D'autres échecs préexistants sont indépendants de numpy : `test_validate_config` refuse `KMP_DUPLICATE_LIB_OK` pourtant présent dans les défauts, et `tools/sfm/test_tools.py` référence `script/images_to_3dgs.sh` au lieu de `scripts/images_to_3dgs.sh`.
 - Quatre tests `test_run_pipeline` liés au verrou `.download.lock` ont aussi échoué dans un environnement sans numpy.
 
+## Mode grille (`--grid`)
+- Variables `GRID_*` dans la configuration, défauts dans `config/defaults/grid.default.sh` : `GRID_BBOX` (requis, `xmin,ymin,xmax,ymax` dans `GRID_CRS`), `GRID_CRS` (2154), `GRID_TILE_SIZE`, `GRID_OVERLAP` (0), `GRID_MARGIN` (0, seul le résultat dans la dalle est exporté), `GRID_POSITIONS` (mode images, prioritaire sur les GPS EXIF), `GRID_OUTPUT_DIR` (vide = `$OUTPUT_DIR/grid`).
+- Panoramax : `PANORAMAX_BBOX` est calculé par tuile (`tools/libs/scripts/grid_run.sh:129-130`), donc inutile en grille ; `GRID_POSITIONS` y est refusé (`grid_run.sh:43`).
+- Exemple : `config/grid-panoramax-place-de-la-nation.sh`. Vérifier le découpage avec `--plan-only`.
+- Arrêt : Ctrl+C tue les sous-jobs locaux (un groupe de processus par worker, `grid_run.sh`), testé en isolé seulement. En Slurm, annuler la job array `grid-<source>` et le job `grid-prep` avec `scancel`.
+
 ## Viewer (`tools/viewer`)
 - Tests Node (pas `unittest`) : `cd tools/viewer && node --test test_*.mjs`.
 - Prérequis : `georef.js` importe `proj4` sans `package.json`. Installer `proj4` hors dépôt (`npm i --prefix /tmp/proj4mod proj4`), puis lier `tools/viewer/node_modules` vers `/tmp/proj4mod/node_modules` et supprimer le lien après les tests.
@@ -65,7 +71,7 @@ Sans `numpy`, `scipy`, `plyfile`, `cv2`, `PIL`, `tqdm`, `pyproj` : les suites et
 - Caméras COLMAP : le modèle `17` (`EQUIRECTANGULAR`, 2 paramètres `width, height`) est écrit par `tools/sfm/colmap_split_blocks.py` et lu par `html/viewer/colmap.js`. Garder les deux synchronisés.
 - Les tests ne vérifient pas le rendu réel. Pour une modif visuelle, lancer le viewer dans un navigateur (Playwright dispo) avant de conclure.
 
-## macOS : HLOC et OpenMP
+## Annexe macOS : HLOC et OpenMP
 - HLOC s'installe avec `install/colmap/install-hloc.sh` (contraintes : torch/torchvision figés, `numpy<2`, pins dans `environment/macos/conda_env.yml`). Ne pas installer hloc à la main avec pip : il réécrit numpy/torch et casse les imports (`torchvision::nms`, numpy 2.x).
 - LiDAR macOS : même env PDAL que Slurm, défini par `environment/ign.slurm/pdal_env.yml`. Créer une fois : `conda env create --yes --name lidar-pdal --file $GIT_ROOT/environment/ign.slurm/pdal_env.yml`, puis `conda activate lidar-pdal` et lancer `python $GIT_ROOT/tools/lidar/fetch_ign_lidar.py ...`. `tools/lidar/pdal_runtime.py` crée aussi cet env automatiquement dans `~/.cache/colmap_to_gs/lidar-pdal` pour les sous-processus PDAL.
 - macOS : plusieurs `libomp.dylib` (torch, pycolmap, conda) provoquent un SIGSEGV dans `hloc_reconstruct.py`. Correctif : `install-hloc.sh` remplace les `*/.dylibs/libomp*.dylib` pip par des liens vers `$CONDA_PREFIX/lib/libomp.dylib`. `KMP_DUPLICATE_LIB_OK` ne fait que masquer le problème. Un venv ou un conteneur ne règle rien : hloc importe torch et pycolmap dans le même processus.
@@ -85,6 +91,7 @@ Le bash 3.2 de macOS échoue sur `"${arr[@]}"` quand `arr` est vide (`unbound va
 ## Pièges généraux
 - Commits : exclure les `.pyc` (suivis dans le dépôt, modifiés à chaque lancement de tests). Ajouter les fichiers par chemin explicite (`git add <fichiers>`), jamais `git add -A` ni `git add .`.
 - `SFM_FILTER_DENSITY` est basé sur les tracks ; combinaison avec MVS non testée.
+- Suffixes `.Jpg`/`.PNG` : ignorés silencieusement (`IMAGE_SUFFIXES`). Question ouverte, non tranchée.
 - `colmap_split_blocks.py` ignore ou refuse les points sans track.
 - `resume.py` valide le sparse et doit être appelé après chaque modification de `sparse/0`.
 
@@ -95,14 +102,14 @@ Depuis la racine du dépôt, venv activé. Avant de lancer les suites, vérifier
 python -c "import numpy, scipy, plyfile, tqdm, cv2, PIL, pyproj" && echo "imports OK"
 ```
 
-Sans ces imports, attendre 2 erreurs (`ModuleNotFoundError: numpy` ou `pyproj`) dans `test_run_panoramax.py` et `tools/panoramax` (`test_download`, `test_filter_matches_gps`). Ne pas les traiter comme une régression du code : les corriger en installant les paquets, puis relancer.
+Sans ces imports, voir « Dépendances Python » ci-dessus : les échecs `ModuleNotFoundError` ne sont pas une régression du code.
 
 Tous les tests sont dans `tests/`, en miroir de `tools/` : `tests/<domaine>/test_X.py` teste `tools/<domaine>/X.py` (voir `tests/README.md`).
 
 ```bash
 PYTHON_BIN=python tests/run_all.sh                 # tout, séquentiel
 PYTHON_BIN=python tests/run_all.sh --phase masks   # une phase (tests/masks)
-python tests/libs/test_pipeline.py -k <nom>        # ciblé
+PYTHONPATH=. python -m unittest tests.libs.test_pipeline   # ciblé, environ 5 min (ajouter -k <nom> pour filtrer)
 python -m unittest discover -s tests/panoramax -p 'test_*.py'   # panoramax
 python -m unittest discover -s tests/masks -p 'test_*.py'       # masques
 ```
@@ -114,7 +121,7 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - Les `SFM_SP_*` ont toujours une valeur par défaut (`config/defaults/sfm.default.sh`) : ne jamais les contrôler comme « absentes » pour un autre backend. Les contrôles « ne s'applique qu'à spirula » ont été retirés (commit `c808dfd`).
 - Vérification sans calcul : `bash "$GIT_ROOT/tools/panoramax/validate_config.sh" config.sh slurm`.
 
-## Environnement
+## Annexe Docker
 - Docker : daemon non lancé par défaut. Vérifier `docker info` ; sinon `nohup dockerd >/tmp/dockerd.log 2>&1 </dev/null &`.
 
 ## Panoramas HLOC
@@ -131,6 +138,7 @@ Les tests écrivent des `__pycache__` suivis par git : vérifier l'état avant e
 - Après une modification : vérifier que les liens et ancres existent, et que les blocs de code sont équilibrés.
 
 ## Conventions
-- Commits : message en anglais, trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>`.
+- Commits : message en anglais, trailer `Co-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>`.
+- Terminologie : écrire CRS (et non SCR) dans le code, la doc et les messages.
 - Commentaires de code : seulement si nécessaires. Messages utilisateur et logs en français.
 - Une correction = tests ciblés qui échouent sans le correctif.
