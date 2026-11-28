@@ -15,6 +15,12 @@ import masks as prepare_masks
 
 
 class MaskResumeTests(unittest.TestCase):
+    def enterContext(self, cm):
+        # unittest.TestCase.enterContext n'existe qu'à partir de Python 3.11 (macOS env : 3.10).
+        value = cm.__enter__()
+        self.addCleanup(cm.__exit__, None, None, None)
+        return value
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
